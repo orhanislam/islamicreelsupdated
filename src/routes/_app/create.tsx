@@ -1,0 +1,853 @@
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { useServerFn } from "@tanstack/react-start";
+import { useState, useRef } from "react";
+import { fetchAyah, type AyahData } from "@/lib/quran.functions";
+import { fetchHadith, listHadiths, type HadithData } from "@/lib/hadith.functions";
+import { fetchSunnahHadith, randomSahihHadith, type SunnahCollection } from "@/lib/sunnah.functions";
+import { translateToBulgarian } from "@/lib/translate.functions";
+import { suggestBackgrounds, generateBackground } from "@/lib/backgrounds.functions";
+import { searchPexelsPhotos, searchPexelsVideos } from "@/lib/pexels.functions";
+import { suggestViral } from "@/lib/suggestions.functions";
+import { createSameOriginDownloadUrl, createSameOriginMediaUrl, cleanMediaMimeType, isIOSMediaDevice, sanitizeFilename, saveMediaBlob, saveMediaFromUrl } from "@/lib/download-media";
+import { renderPhoto, blobToBase64, type RenderOptions } from "@/lib/render-photo";
+import { renderVideo } from "@/lib/render-video";
+import { synthesizeHadithNarration } from "@/lib/tts.functions";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Card } from "@/components/ui/card";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
+import { Badge } from "@/components/ui/badge";
+import { toast } from "sonner";
+import { Loader2, Sparkles, Image as ImageIcon, Wand2, Upload, Download, Flame, BookOpen, ScrollText, Film, Mic } from "lucide-react";
+
+type BgSuggestion = { label: string; prompt: string };
+type ViralItem = { kind: string; ref: string; title_bg: string; reason_bg: string; score: number };
+type Content = {
+  source_type: "ayah" | "hadith";
+  source_ref: string;
+  arabic: string;
+  english: string;
+  audioUrl?: string;
+  wordSegments?: { start: number; end: number }[];
+  arabicWordCount?: number;
+};
+
+export const Route = createFileRoute("/_app/create")({
+  head: () => ({ meta: [{ title: "Създай — Nur Studio" }] }),
+  component: CreatePage,
+});
+
+function CreatePage() {
+  const navigate = useNavigate();
+  const runFetchAyah = useServerFn(fetchAyah);
+  const runFetchHadith = useServerFn(fetchHadith);
+  const runListHadiths = useServerFn(listHadiths);
+  const runFetchSunnah = useServerFn(fetchSunnahHadith);
+  const runRandomSahih = useServerFn(randomSahihHadith);
+  const runTranslate = useServerFn(translateToBulgarian);
+  const runSuggest = useServerFn(suggestBackgrounds);
+  const runGenerate = useServerFn(generateBackground);
+  const runPexels = useServerFn(searchPexelsPhotos);
+  const runPexelsVideos = useServerFn(searchPexelsVideos);
+  const runSuggestViral = useServerFn(suggestViral);
+  const runNarrate = useServerFn(synthesizeHadithNarration);
+
+  // sources
+  const [tab, setTab] = useState<"ayah" | "hadith" | "viral">("ayah");
+  const [surah, setSurah] = useState(2);
+  const [ayah, setAyah] = useState(255);
+  const [hadithNum, setHadithNum] = useState(1);
+  const [hadithList, setHadithList] = useState<HadithData[]>([]);
+  const [hadithSource, setHadithSource] = useState<"nawawi40" | SunnahCollection>("bukhari");
+  const [sunnahNum, setSunnahNum] = useState(1);
+  const [theme, setTheme] = useState("надежда и спокойствие в трудни моменти");
+  const [viral, setViral] = useState<ViralItem[]>([]);
+  const [suggestingViral, setSuggestingViral] = useState(false);
+
+  // current content
+  const [content, setContent] = useState<Content | null>(null);
+  const [bulgarian, setBulgarian] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [translating, setTranslating] = useState(false);
+
+  // background
+  const [suggestions, setSuggestions] = useState<BgSuggestion[]>([]);
+  const [suggesting, setSuggesting] = useState(false);
+  const [generatingIdx, setGeneratingIdx] = useState<number | null>(null);
+  const [bgUrl, setBgUrl] = useState<string | null>(null);
+  const [bgPrompt, setBgPrompt] = useState<string>("");
+  const [bgVideoUrl, setBgVideoUrl] = useState<string | null>(null);
+  const [pexelsPhotos, setPexelsPhotos] = useState<{ id: number; url: string; full: string; photographer: string }[]>([]);
+  const [pexelsVideos, setPexelsVideos] = useState<{ id: number; link: string; poster: string; photographer: string }[]>([]);
+  const [pexelsQuery, setPexelsQuery] = useState<string>("");
+  const [pexelsTheme, setPexelsTheme] = useState<string>("");
+  const [pexelsTried, setPexelsTried] = useState<string[]>([]);
+  const [pexelsAvoid, setPexelsAvoid] = useState<string[]>([]);
+  const [pexelsLoading, setPexelsLoading] = useState(false);
+  const [pexelsVideosLoading, setPexelsVideosLoading] = useState(false);
+
+  // audio: custom upload
+  const [customAudioUrl, setCustomAudioUrl] = useState<string | null>(null);
+
+  // caption style + output format
+  const [captionStyle, setCaptionStyle] = useState<RenderOptions["style"]>("centered");
+  const [format, setFormat] = useState<"photo" | "video">("photo");
+  // Bulgarian male narration (hadiths)
+  const [useBgNarration, setUseBgNarration] = useState(true);
+  const [narrationUrl, setNarrationUrl] = useState<string | null>(null);
+  const [narrationTimings, setNarrationTimings] = useState<{ start: number; end: number; word?: string }[] | null>(null);
+  const [narrating, setNarrating] = useState(false);
+
+  // render
+  const [rendering, setRendering] = useState(false);
+  const [renderedUrl, setRenderedUrl] = useState<string | null>(null);
+  const [renderedBlob, setRenderedBlob] = useState<Blob | null>(null);
+  const [renderedKind, setRenderedKind] = useState<"photo" | "video" | null>(null);
+  const [renderedExt, setRenderedExt] = useState<"png" | "webm" | "mp4">("png");
+  const [renderedMime, setRenderedMime] = useState<string>("image/png");
+
+  const fileRef = useRef<HTMLInputElement>(null);
+  const previewRef = useRef<HTMLDivElement>(null);
+
+  const clearRendered = () => {
+    setRenderedUrl((current) => {
+      if (current) URL.revokeObjectURL(current);
+      return null;
+    });
+    setRenderedBlob(null);
+  };
+
+  const reset = () => {
+    setContent(null); setBulgarian(""); setSuggestions([]); setBgUrl(null);
+    setBgVideoUrl(null); setBgPrompt(""); clearRendered(); setCustomAudioUrl(null);
+    setNarrationUrl(null); setNarrationTimings(null);
+    setPexelsPhotos([]); setPexelsVideos([]); setPexelsTheme(""); setPexelsTried([]); setPexelsAvoid([]);
+  };
+
+  const loadAyah = async (s: number, a: number) => {
+    setLoading(true); reset();
+    try {
+      const d: AyahData = await runFetchAyah({ data: { surah: s, ayah: a } });
+      const c: Content = {
+        source_type: "ayah",
+        source_ref: `Quran ${d.surah}:${d.ayah} (${d.surahName})`,
+        arabic: d.arabic, english: d.english, audioUrl: d.audioUrl,
+        wordSegments: d.wordSegments, arabicWordCount: d.arabicWordCount,
+      };
+      setContent(c);
+      setTranslating(true);
+      const t = await runTranslate({ data: { english: d.english, sourceRef: c.source_ref } });
+      setBulgarian(t.bulgarian);
+      toast.success(t.cached ? "От кеша" : "Преведено");
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : "Грешка");
+    } finally { setLoading(false); setTranslating(false); }
+  };
+
+  const loadHadith = async (n: number) => {
+    setLoading(true); reset();
+    try {
+      const h = await runFetchHadith({ data: { number: n } });
+      const c: Content = {
+        source_type: "hadith",
+        source_ref: `${h.reference}`,
+        arabic: h.arabic, english: h.english,
+      };
+      setContent(c);
+      setTranslating(true);
+      const t = await runTranslate({ data: { english: h.english, sourceRef: h.reference } });
+      setBulgarian(t.bulgarian);
+      toast.success(t.cached ? "От кеша" : "Преведено");
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : "Грешка");
+    } finally { setLoading(false); setTranslating(false); }
+  };
+
+  const loadHadithIndex = async () => {
+    if (hadithList.length) return;
+    try { setHadithList(await runListHadiths()); } catch { /* ignore */ }
+  };
+
+  const loadSunnah = async (collection: SunnahCollection, number: number, requireSahih = true) => {
+    setLoading(true); reset();
+    try {
+      const h = await runFetchSunnah({ data: { collection, number, requireSahih } });
+      const c: Content = {
+        source_type: "hadith",
+        source_ref: `${h.reference}`,
+        arabic: h.arabic, english: h.english,
+      };
+      setContent(c);
+      setTranslating(true);
+      const t = await runTranslate({ data: { english: h.english, sourceRef: h.reference } });
+      setBulgarian(t.bulgarian);
+      toast.success(`${h.reference} · ${h.grade ?? "Sahih"}`);
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : "Грешка");
+    } finally { setLoading(false); setTranslating(false); }
+  };
+
+  const loadRandomSahih = async (collection: SunnahCollection) => {
+    setLoading(true); reset();
+    try {
+      const h = await runRandomSahih({ data: { collection } });
+      setSunnahNum(h.number);
+      const c: Content = {
+        source_type: "hadith",
+        source_ref: `${h.reference}`,
+        arabic: h.arabic, english: h.english,
+      };
+      setContent(c);
+      setTranslating(true);
+      const t = await runTranslate({ data: { english: h.english, sourceRef: h.reference } });
+      setBulgarian(t.bulgarian);
+      toast.success(`${h.reference} · ${h.grade ?? "Sahih"}`);
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : "Грешка");
+    } finally { setLoading(false); setTranslating(false); }
+  };
+
+  const runViral = async () => {
+    setSuggestingViral(true);
+    try {
+      const r = await runSuggestViral({ data: { theme, kind: "any" } });
+      setViral(r.items);
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : "Грешка");
+    } finally { setSuggestingViral(false); }
+  };
+
+  const approveViral = async (item: ViralItem) => {
+    if (item.kind === "ayah") {
+      const m = item.ref.match(/(\d+)\s*[:.\s-]\s*(\d+)/);
+      if (!m) return toast.error("Невалидна препратка");
+      setTab("ayah");
+      setSurah(+m[1]); setAyah(+m[2]);
+      await loadAyah(+m[1], +m[2]);
+    } else {
+      const m = item.ref.match(/(\d+)/);
+      const n = m ? +m[1] : 1;
+      setTab("hadith");
+      setHadithNum(n);
+      await loadHadith(n);
+    }
+  };
+
+  const onSuggest = async () => {
+    if (!content) return;
+    setSuggesting(true); setSuggestions([]);
+    try {
+      const r = await runSuggest({
+        data: { text: `${content.english}\n\nБългарски: ${bulgarian}`, sourceRef: content.source_ref },
+      });
+      setSuggestions(r.suggestions);
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : "Грешка");
+    } finally { setSuggesting(false); }
+  };
+
+  const onGenerateBg = async (idx: number, prompt: string) => {
+    setGeneratingIdx(idx);
+    try {
+      const r = await runGenerate({ data: { prompt } });
+      setBgUrl(`data:${r.mimeType};base64,${r.base64}`); setBgVideoUrl(null); setBgPrompt(prompt); clearRendered();
+      toast.success("Фонът е готов");
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : "Грешка");
+    } finally { setGeneratingIdx(null); }
+  };
+
+  const onPexelsSearch = async (overrideQuery?: string) => {
+    if (!content) return;
+    setPexelsLoading(true);
+    try {
+      const r = await runPexels({ data: { text: `${content.english}\n${bulgarian}`, query: overrideQuery ?? pexelsQuery, avoid: pexelsAvoid } });
+      setPexelsPhotos(r.photos);
+      setPexelsQuery(r.query);
+      setPexelsTheme(r.theme ?? "");
+      setPexelsTried(r.queriesTried ?? []);
+      if (!r.photos.length) toast.message("Няма резултати — опитай друга тема");
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : "Грешка");
+    } finally { setPexelsLoading(false); }
+  };
+
+  const onPexelsVideoSearch = async (overrideQuery?: string) => {
+    if (!content) return;
+    setPexelsVideosLoading(true);
+    try {
+      const r = await runPexelsVideos({ data: { text: `${content.english}\n${bulgarian}`, query: overrideQuery ?? pexelsQuery, avoid: pexelsAvoid } });
+      setPexelsVideos(r.videos);
+      setPexelsQuery(r.query);
+      setPexelsTheme(r.theme ?? "");
+      setPexelsTried(r.queriesTried ?? []);
+      if (!r.videos.length) toast.message("Няма видеа — опитай друга тема");
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : "Грешка");
+    } finally { setPexelsVideosLoading(false); }
+  };
+
+  const onAutoPickPexelsVideo = async () => {
+    if (!content) return;
+    setPexelsVideosLoading(true);
+    try {
+      const r = await runPexelsVideos({ data: { text: `${content.english}\n${bulgarian}`, avoid: pexelsAvoid } });
+      setPexelsVideos(r.videos);
+      setPexelsQuery(r.query);
+      setPexelsTheme(r.theme ?? "");
+      setPexelsTried(r.queriesTried ?? []);
+      const best = r.videos[0];
+      if (best) {
+        setBgVideoUrl(best.link);
+        setBgUrl(best.poster || null);
+        setBgPrompt(`Pexels stock video by ${best.photographer} — ${r.theme || r.query}`);
+        clearRendered();
+        setFormat("video");
+        toast.success(`Авто-избор: ${r.theme || r.query}`);
+      } else {
+        toast.message("Няма подходящи видеа");
+      }
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : "Грешка");
+    } finally { setPexelsVideosLoading(false); }
+  };
+
+  const onRotateTheme = () => {
+    const next = pexelsTheme ? [...new Set([...pexelsAvoid, pexelsTheme])].slice(-5) : pexelsAvoid;
+    setPexelsAvoid(next);
+    setTimeout(() => { onPexelsVideoSearch(); }, 0);
+  };
+
+  const onPickPexels = (photo: { url: string; full: string; photographer: string }) => {
+    setBgUrl(photo.full); setBgVideoUrl(null);
+    setBgPrompt(`Pexels stock photo by ${photo.photographer}`);
+    clearRendered();
+    toast.success("Стоковият фон е избран");
+  };
+
+  const onPickPexelsVideo = (v: { link: string; poster: string; photographer: string }) => {
+    setBgVideoUrl(v.link);
+    setBgUrl(v.poster || null);
+    setBgPrompt(`Pexels stock video by ${v.photographer}`);
+    clearRendered();
+    if (format !== "video") {
+      setFormat("video");
+      toast.message("Превключих на видео — стоковите видеа работят само във видео режим.");
+    } else {
+      toast.success("Стоковото видео е избрано");
+    }
+  };
+
+  const onAudioUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    if (f.size > 25 * 1024 * 1024) return toast.error("Файлът е твърде голям (макс 25MB)");
+    setCustomAudioUrl(URL.createObjectURL(f));
+    toast.success("Аудио заредено");
+  };
+
+  const onRender = async () => {
+    if (!content || !bulgarian) return;
+    setRendering(true);
+    try {
+      if (format === "photo") {
+        const blob = await renderPhoto({
+          backgroundUrl: bgUrl,
+          arabic: content.arabic,
+          bulgarian,
+          reference: content.source_ref,
+          style: captionStyle,
+        });
+        if (renderedUrl) URL.revokeObjectURL(renderedUrl);
+        setRenderedUrl(URL.createObjectURL(blob));
+        setRenderedBlob(blob);
+        setRenderedKind("photo");
+        setRenderedExt("png");
+        setRenderedMime("image/png");
+        toast.success("Снимката е готова");
+      } else {
+        let narration = narrationUrl;
+        let timings = narrationTimings;
+        if (
+          content.source_type === "hadith" &&
+          useBgNarration &&
+          !customAudioUrl &&
+          !narration &&
+          bulgarian.trim().length > 0
+        ) {
+          setNarrating(true);
+          try {
+            toast.message("Генерирам български глас…");
+            const r = await runNarrate({ data: { text: bulgarian, reference: content.source_ref } });
+            narration = `data:${r.mimeType};base64,${r.base64}`;
+            timings = r.wordTimings ?? null;
+            setNarrationUrl(narration);
+            setNarrationTimings(timings);
+          } catch (e: unknown) {
+            throw new Error(e instanceof Error ? e.message : "Не успях да генерирам глас");
+          } finally { setNarrating(false); }
+        }
+        const audio = customAudioUrl ?? narration ?? content.audioUrl ?? null;
+        if (content.source_type === "hadith" && useBgNarration && !audio) {
+          throw new Error("Първо генерирай гласа с „Чуй гласа“, за да не стане нямо или отрязано видео.");
+        } else if (!audio) {
+          toast.message("Без аудио — ще се рендира 8s видео.");
+        }
+        toast.message("Рендирам видео в реално време — изчакай края на аудиото.");
+        console.info("[create] video render started", {
+          sourceType: content.source_type,
+          hasAudio: Boolean(audio),
+          hasBackgroundVideo: Boolean(bgVideoUrl),
+          ios: isIOSMediaDevice(),
+        });
+        const { blob, mimeType } = await renderVideo({
+          backgroundUrl: bgUrl,
+          backgroundVideoUrl: bgVideoUrl,
+          arabic: content.arabic,
+          bulgarian,
+          reference: content.source_ref,
+          style: captionStyle,
+          audioUrl: audio,
+          requireAudio: Boolean(audio),
+          fallbackDuration: 8,
+          wordSegments: customAudioUrl || narration ? undefined : content.wordSegments,
+          arabicWordCount: customAudioUrl || narration ? undefined : content.arabicWordCount,
+          bulgarianWordTimings: narration && timings && timings.length ? timings : undefined,
+        });
+        if (renderedUrl) URL.revokeObjectURL(renderedUrl);
+        setRenderedUrl(URL.createObjectURL(blob));
+        setRenderedBlob(blob);
+        setRenderedKind("video");
+        const ext = mimeType.includes("mp4") ? "mp4" : "webm";
+        setRenderedExt(ext);
+        setRenderedMime(cleanMediaMimeType(mimeType));
+        console.info("[create] video render finished", { size: blob.size, mimeType, ext });
+        toast.success("Видеото е готово");
+      }
+      window.setTimeout(() => {
+        previewRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+      }, 80);
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : "Грешка при рендиране");
+    } finally { setRendering(false); }
+  };
+
+  const onDownload = async () => {
+    if (!renderedUrl) return;
+    const filename = sanitizeFilename(`${content?.source_ref ?? "post"}.${renderedExt}`);
+    try {
+      let result: Awaited<ReturnType<typeof saveMediaBlob>>;
+      result = renderedBlob
+        ? await saveMediaBlob(renderedBlob, filename, renderedMime)
+        : await saveMediaFromUrl(renderedUrl, filename, renderedMime);
+      if (result === "shared") toast.success("Избери Save to Files, за да го запазиш директно във Files");
+      else if (result === "opened") toast.message("Отворено е като файл — избери Share/Сподели → Save to Files.");
+      else toast.success("Свалянето започна");
+    } catch (e) {
+      toast.error(e instanceof Error ? `Сваляне: ${e.message}` : "Грешка при сваляне");
+    }
+  };
+
+  return (
+    <div className="mx-auto max-w-5xl px-4 py-8">
+      <h1 className="text-4xl">Създай пост</h1>
+      <p className="font-ui text-sm text-muted-foreground">Избери източник, преведи, добави фон и каптион, рендирай.</p>
+
+      <Tabs value={tab} onValueChange={(v) => setTab(v as typeof tab)} className="mt-6">
+        <TabsList>
+          <TabsTrigger value="ayah"><BookOpen className="size-4 mr-1" /> Аят</TabsTrigger>
+          <TabsTrigger value="hadith" onClick={loadHadithIndex}><ScrollText className="size-4 mr-1" /> Хадис</TabsTrigger>
+          <TabsTrigger value="viral"><Flame className="size-4 mr-1" /> AI вирални</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="ayah">
+          <Card className="p-6">
+            <div className="font-ui flex flex-wrap items-end gap-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="surah">Сура</Label>
+                <Input id="surah" type="number" min={1} max={114} value={surah} onChange={(e) => setSurah(+e.target.value)} className="w-24" />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="ayah">Аят</Label>
+                <Input id="ayah" type="number" min={1} value={ayah} onChange={(e) => setAyah(+e.target.value)} className="w-24" />
+              </div>
+              <Button onClick={() => loadAyah(surah, ayah)} disabled={loading}>
+                {loading ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4 mr-1" />}
+                Извлечи и преведи
+              </Button>
+            </div>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="hadith">
+          <Card className="p-6 space-y-4">
+            <p className="font-ui text-sm text-muted-foreground">Сахих хадиси директно от sunnah.com.</p>
+            <div className="font-ui flex flex-wrap items-end gap-3">
+              <div className="space-y-1.5">
+                <Label>Колекция</Label>
+                <Select value={hadithSource} onValueChange={(v) => setHadithSource(v as typeof hadithSource)}>
+                  <SelectTrigger className="w-64"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="bukhari">Sahih al-Bukhari (1–7563)</SelectItem>
+                    <SelectItem value="muslim">Sahih Muslim (1–7563)</SelectItem>
+                    <SelectItem value="tirmidhi">Jami` at-Tirmidhi — само сахих</SelectItem>
+                    <SelectItem value="nawawi40">40 Hadith Nawawi (куриран)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {hadithSource === "nawawi40" ? (
+                <>
+                  <div className="space-y-1.5">
+                    <Label>Номер (1–40)</Label>
+                    <Select value={String(hadithNum)} onValueChange={(v) => setHadithNum(+v)}>
+                      <SelectTrigger className="w-64"><SelectValue /></SelectTrigger>
+                      <SelectContent className="max-h-72">
+                        {(hadithList.length ? hadithList : [{ number: 1, reference: "40 Hadith Nawawi 1" }]).map((h) => (
+                          <SelectItem key={h.number} value={String(h.number)}>{h.reference}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <Button onClick={() => loadHadith(hadithNum)} disabled={loading}>
+                    {loading ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4 mr-1" />}
+                    Извлечи и преведи
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <div className="space-y-1.5">
+                    <Label>Номер</Label>
+                    <Input
+                      type="number"
+                      min={1}
+                      value={sunnahNum}
+                      onChange={(e) => setSunnahNum(Math.max(1, parseInt(e.target.value || "1", 10)))}
+                      className="w-32"
+                    />
+                  </div>
+                  <Button onClick={() => loadSunnah(hadithSource as SunnahCollection, sunnahNum)} disabled={loading}>
+                    {loading ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4 mr-1" />}
+                    Извлечи и преведи
+                  </Button>
+                  <Button variant="outline" onClick={() => loadRandomSahih(hadithSource as SunnahCollection)} disabled={loading}>
+                    <Wand2 className="size-4 mr-1" /> Случаен сахих
+                  </Button>
+                </>
+              )}
+            </div>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="viral">
+          <Card className="p-6 space-y-3">
+            <Label className="font-ui">Тема или настроение</Label>
+            <div className="flex gap-2">
+              <Input value={theme} onChange={(e) => setTheme(e.target.value)} placeholder="напр. търпение в труден момент" />
+              <Button onClick={runViral} disabled={suggestingViral}>
+                {suggestingViral ? <Loader2 className="size-4 animate-spin" /> : <Flame className="size-4 mr-1" />}
+                AI вирални
+              </Button>
+            </div>
+            {viral.length > 0 && (
+              <div className="grid gap-3 mt-3">
+                {viral.map((v, i) => (
+                  <Card key={i} className="p-4 flex items-start gap-3">
+                    <div className="grid place-items-center size-12 rounded-full bg-accent text-accent-foreground font-bold">{v.score}</div>
+                    <div className="flex-1 font-ui">
+                      <div className="flex items-center gap-2"><Badge variant="secondary">{v.kind}</Badge><Badge>{v.ref}</Badge></div>
+                      <p className="font-semibold mt-1">{v.title_bg}</p>
+                      <p className="text-sm text-muted-foreground">{v.reason_bg}</p>
+                    </div>
+                    <Button size="sm" onClick={() => approveViral(v)}>Одобри</Button>
+                  </Card>
+                ))}
+              </div>
+            )}
+          </Card>
+        </TabsContent>
+      </Tabs>
+
+      {content && (
+        <div className="mt-6 grid gap-6 md:grid-cols-2">
+          <Card className="p-6 space-y-4">
+            <div>
+              <p className="font-ui text-xs uppercase tracking-wider text-muted-foreground">{content.source_ref}</p>
+              <p className="font-arabic text-3xl leading-loose mt-2 text-right" dir="rtl">{content.arabic}</p>
+            </div>
+            <div>
+              <p className="font-ui text-xs uppercase tracking-wider text-muted-foreground">Английски (оригинал)</p>
+              <p className="font-ui text-sm mt-1 text-muted-foreground">{content.english}</p>
+            </div>
+            {content.source_type === "ayah" && content.audioUrl && (
+              <div>
+                <p className="font-ui text-xs uppercase tracking-wider text-muted-foreground">Рецитация — Ясер ал-Досари</p>
+                <audio controls src={customAudioUrl ?? content.audioUrl} className="mt-2 w-full" />
+              </div>
+            )}
+            <div className="rounded-lg border p-3 space-y-2">
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <Mic className="size-4 text-primary" />
+                  <Label htmlFor="bg-narr" className="font-ui cursor-pointer">
+                    {content.source_type === "hadith" ? "Български глас (мъжки) при видео" : "Български глас за превода (по избор при видео)"}
+                  </Label>
+                </div>
+                <Switch id="bg-narr" checked={useBgNarration} onCheckedChange={(v) => { setUseBgNarration(v); setNarrationUrl(null); clearRendered(); }} />
+              </div>
+              <p className="font-ui text-xs text-muted-foreground">
+                Естествен мъжки глас на български (ElevenLabs · George). Натисни „Чуй гласа", за да го генерираш и прослушаш преди рендиране.
+              </p>
+              <div className="flex items-center gap-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="secondary"
+                  disabled={narrating || !bulgarian.trim()}
+                  onClick={async () => {
+                    if (!content) return;
+                    setNarrating(true);
+                    clearRendered();
+                    try {
+                      toast.message("Генерирам български глас…");
+                      const r = await runNarrate({ data: { text: bulgarian, reference: content.source_ref } });
+                      setNarrationUrl(`data:${r.mimeType};base64,${r.base64}`);
+                      setNarrationTimings(r.wordTimings ?? null);
+                      if (!useBgNarration) setUseBgNarration(true);
+                      toast.success("Гласът е готов — пусни плейъра по-долу.");
+                    } catch (e: unknown) {
+                      toast.error(e instanceof Error ? e.message : "Не успях да генерирам глас");
+                    } finally { setNarrating(false); }
+                  }}
+                >
+                  {narrating ? <><Loader2 className="size-3 animate-spin mr-1" /> Генерирам…</> : <><Mic className="size-3 mr-1" /> Чуй гласа</>}
+                </Button>
+              </div>
+              {narrationUrl && !narrating && (
+                <audio controls src={narrationUrl} className="w-full" />
+              )}
+            </div>
+
+            <div className="space-y-2">
+              <Label className="font-ui">Собствено аудио (по избор)</Label>
+              <div className="flex gap-2 items-center">
+                <Input ref={fileRef} type="file" accept="audio/*" onChange={onAudioUpload} />
+              </div>
+              {customAudioUrl && content.source_type === "hadith" && (
+                <audio controls src={customAudioUrl} className="w-full" />
+              )}
+            </div>
+          </Card>
+
+          <Card className="p-6 space-y-4">
+            <Label className="font-ui" htmlFor="bg">Български превод (можеш да редактираш)</Label>
+            {translating ? (
+              <div className="flex items-center gap-2 text-muted-foreground"><Loader2 className="size-4 animate-spin" /> Превеждам…</div>
+            ) : (
+              <Textarea id="bg" rows={10} value={bulgarian} onChange={(e) => setBulgarian(e.target.value)} className="text-base leading-relaxed" />
+            )}
+            <div className="grid grid-cols-2 gap-2">
+              <div className="space-y-2">
+                <Label className="font-ui">Формат</Label>
+                <Select value={format} onValueChange={(v) => { setFormat(v as "photo" | "video"); clearRendered(); }}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="photo">Снимка (PNG)</SelectItem>
+                    <SelectItem value="video">Видео със синхронизиран превод</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label className="font-ui">Стил на каптион</Label>
+                <Select value={captionStyle} onValueChange={(v) => { setCaptionStyle(v as RenderOptions["style"]); clearRendered(); }}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="centered">Центриран</SelectItem>
+                    <SelectItem value="lower-third">Долна трета</SelectItem>
+                    <SelectItem value="minimal">Минимал (само превод)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          </Card>
+        </div>
+      )}
+
+      {content && bulgarian && !translating && (
+        <Card className="mt-6 p-6 space-y-4">
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <div>
+              <h2 className="text-2xl">Фон, подходящ за текста</h2>
+              <p className="font-ui text-sm text-muted-foreground">AI предлага 3 идеи (без хора и животни). Избери и генерирай.</p>
+            </div>
+            <Button variant="secondary" onClick={onSuggest} disabled={suggesting}>
+              {suggesting ? <Loader2 className="size-4 animate-spin mr-1" /> : <Wand2 className="size-4 mr-1" />}
+              {suggestions.length ? "Нови идеи" : "Предложи идеи"}
+            </Button>
+          </div>
+
+          {suggestions.length > 0 && (
+            <div className="grid gap-3 md:grid-cols-3">
+              {suggestions.map((s, i) => {
+                const isActive = bgPrompt === s.prompt;
+                return (
+                  <Card key={i} className={`p-4 space-y-3 ${isActive ? "ring-2 ring-primary" : ""}`}>
+                    <p className="font-ui font-medium">{s.label}</p>
+                    <p className="font-ui text-xs text-muted-foreground line-clamp-4">{s.prompt}</p>
+                    <Button size="sm" className="w-full" variant={isActive ? "default" : "outline"} onClick={() => onGenerateBg(i, s.prompt)} disabled={generatingIdx !== null}>
+                      {generatingIdx === i ? <><Loader2 className="size-4 animate-spin mr-1" /> Генерирам…</> : <><ImageIcon className="size-4 mr-1" /> {isActive ? "Регенерирай" : "Генерирай"}</>}
+                    </Button>
+                  </Card>
+                );
+              })}
+            </div>
+          )}
+
+          <div className="border-t pt-4 space-y-3">
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+              <div>
+                <h3 className="text-lg">Стокови снимки/видеа от Pexels</h3>
+                <p className="font-ui text-xs text-muted-foreground">AI чете текста и подбира визуално подходящи кадри. Без хора, животни или религиозни символи.</p>
+              </div>
+              <div className="flex gap-2 items-center flex-wrap">
+                <Input
+                  value={pexelsQuery}
+                  onChange={(e) => setPexelsQuery(e.target.value)}
+                  placeholder="напр. mountain sunset"
+                  className="w-48 font-ui"
+                />
+                <Button variant="secondary" onClick={() => onPexelsSearch()} disabled={pexelsLoading}>
+                  {pexelsLoading ? <Loader2 className="size-4 animate-spin mr-1" /> : <ImageIcon className="size-4 mr-1" />}
+                  {pexelsPhotos.length ? "Снимки отново" : "Стокови снимки"}
+                </Button>
+                <Button variant="secondary" onClick={() => onPexelsVideoSearch()} disabled={pexelsVideosLoading}>
+                  {pexelsVideosLoading ? <Loader2 className="size-4 animate-spin mr-1" /> : <Film className="size-4 mr-1" />}
+                  {pexelsVideos.length ? "Видеа отново" : "Стокови видеа"}
+                </Button>
+                <Button onClick={onAutoPickPexelsVideo} disabled={pexelsVideosLoading}>
+                  {pexelsVideosLoading ? <Loader2 className="size-4 animate-spin mr-1" /> : <Sparkles className="size-4 mr-1" />}
+                  Авто-избор
+                </Button>
+              </div>
+            </div>
+
+            {(pexelsTheme || pexelsTried.length > 0) && (
+              <div className="flex items-center gap-2 flex-wrap text-xs font-ui">
+                {pexelsTheme && <Badge variant="secondary">Тема: {pexelsTheme}</Badge>}
+                {pexelsTried.map((q) => (
+                  <Badge key={q} variant={q === pexelsQuery ? "default" : "outline"} className="font-mono">{q}</Badge>
+                ))}
+                {pexelsTheme && (
+                  <Button size="sm" variant="ghost" onClick={onRotateTheme} disabled={pexelsVideosLoading} className="h-6">
+                    Друга тема
+                  </Button>
+                )}
+              </div>
+            )}
+
+
+            {pexelsPhotos.length > 0 && (
+              <div className="grid grid-cols-3 gap-2">
+                {pexelsPhotos.map((p) => {
+                  const isActive = bgUrl === p.full;
+                  return (
+                    <button
+                      key={p.id}
+                      type="button"
+                      onClick={() => onPickPexels(p)}
+                      className={`relative aspect-[9/16] overflow-hidden rounded-md border transition ${isActive ? "ring-2 ring-primary border-primary" : "hover:border-primary/60"}`}
+                    >
+                      <img src={p.url} alt="" className="size-full object-cover" loading="lazy" />
+                      <span className="absolute bottom-0 inset-x-0 bg-black/60 text-white text-[10px] px-1 py-0.5 truncate text-left">{p.photographer}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+            {pexelsVideos.length > 0 && (
+              <div className="grid grid-cols-3 gap-2 pt-2">
+                {pexelsVideos.map((v) => {
+                  const isActive = bgVideoUrl === v.link;
+                  return (
+                    <button
+                      key={v.id}
+                      type="button"
+                      onClick={() => onPickPexelsVideo(v)}
+                      className={`relative aspect-[9/16] overflow-hidden rounded-md border transition ${isActive ? "ring-2 ring-primary border-primary" : "hover:border-primary/60"}`}
+                    >
+                      {v.poster ? <img src={v.poster} alt="" className="size-full object-cover" loading="lazy" /> : <div className="size-full bg-muted" />}
+                      <span className="absolute top-1 left-1 bg-black/70 text-white text-[10px] px-1.5 py-0.5 rounded flex items-center gap-1"><Film className="size-3" />MP4</span>
+                      <span className="absolute bottom-0 inset-x-0 bg-black/60 text-white text-[10px] px-1 py-0.5 truncate text-left">{v.photographer}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+
+          </div>
+        </Card>
+      )}
+
+      {content && bulgarian && !translating && (
+        <Card className="mt-6 p-6 space-y-4">
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <div>
+              <h2 className="text-2xl">Преглед и рендиране</h2>
+              <p className="font-ui text-sm text-muted-foreground">TikTok формат 1080×1920 — {format === "video" ? "видео с word-by-word превод" : "статична снимка"}.</p>
+            </div>
+            <div className="flex gap-2">
+              <Button variant="secondary" onClick={onRender} disabled={rendering}>
+                {rendering ? <Loader2 className="size-4 animate-spin mr-1" /> : (format === "video" ? <Film className="size-4 mr-1" /> : <Wand2 className="size-4 mr-1" />)}
+                {renderedUrl ? "Рендирай отново" : (format === "video" ? "Рендирай видео" : "Рендирай снимка")}
+              </Button>
+              {renderedUrl ? (
+                <Button variant="outline" onClick={onDownload}>
+                  <Download className="size-4 mr-1" />
+                  Свали .{renderedExt}
+                </Button>
+              ) : null}
+            </div>
+          </div>
+          {(renderedUrl || bgUrl) && (
+            <div ref={previewRef} className="grid gap-4 md:grid-cols-[300px_1fr] items-start scroll-mt-24">
+              <div className="aspect-[9/16] overflow-hidden rounded-lg border bg-muted">
+                {renderedUrl && renderedKind === "video" ? (
+                  <video
+                    key={renderedUrl}
+                    src={renderedUrl}
+                    controls
+                    playsInline
+                    preload="metadata"
+                    className="size-full object-cover"
+                  />
+                ) : renderedUrl ? (
+                  <img key={renderedUrl} src={renderedUrl} alt="Готова снимка" className="size-full object-cover" />
+                ) : bgUrl ? (
+                  <img src={bgUrl} alt="Избран фон" className="size-full object-cover" />
+                ) : null}
+              </div>
+              <div className="font-ui text-sm space-y-2">
+                <p className="text-xs uppercase tracking-wider text-muted-foreground">
+                  {renderedUrl ? "Финална композиция" : "Избран фон"}
+                </p>
+                {bgPrompt && <p className="text-muted-foreground">{bgPrompt}</p>}
+                <p className="text-xs text-muted-foreground">
+                  {renderedKind === "video"
+                    ? "Ако на iPhone не се сваля автоматично, натисни Share и избери Save to Files."
+                    : "Сваляй PNG и постни директно."}
+                </p>
+              </div>
+            </div>
+          )}
+          {!bgUrl && !renderedUrl && (
+            <p className="font-ui text-sm text-muted-foreground flex items-center gap-2"><Upload className="size-4" /> Без избран фон ще се ползва изумруден градиент.</p>
+          )}
+        </Card>
+      )}
+    </div>
+  );
+}

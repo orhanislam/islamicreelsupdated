@@ -1,0 +1,1 @@
+ALTER TABLE public.posts ADD COLUMN IF NOT EXISTS scheduled_at timestamptz; CREATE INDEX IF NOT EXISTS posts_scheduled_idx ON public.posts (status, scheduled_at) WHERE status = 'scheduled';

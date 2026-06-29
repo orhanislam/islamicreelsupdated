@@ -1,0 +1,113 @@
+@import "tailwindcss" source(none);
+@source "../src";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --radius-2xl: calc(var(--radius) + 8px);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-gold: var(--gold);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+}
+
+:root {
+  --radius: 0.75rem;
+  /* Cream + deep emerald + gold */
+  --background: oklch(0.985 0.012 95);
+  --foreground: oklch(0.22 0.03 160);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.22 0.03 160);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.22 0.03 160);
+  --primary: oklch(0.38 0.09 165);
+  --primary-foreground: oklch(0.98 0.01 95);
+  --secondary: oklch(0.94 0.02 95);
+  --secondary-foreground: oklch(0.3 0.05 165);
+  --muted: oklch(0.95 0.015 95);
+  --muted-foreground: oklch(0.5 0.03 160);
+  --accent: oklch(0.78 0.13 85);
+  --accent-foreground: oklch(0.22 0.05 60);
+  --gold: oklch(0.78 0.13 85);
+  --destructive: oklch(0.58 0.22 27);
+  --destructive-foreground: oklch(0.98 0.01 95);
+  --border: oklch(0.9 0.02 95);
+  --input: oklch(0.9 0.02 95);
+  --ring: oklch(0.55 0.09 165);
+  --sidebar: oklch(0.97 0.015 95);
+  --sidebar-foreground: oklch(0.22 0.03 160);
+  --sidebar-primary: oklch(0.38 0.09 165);
+  --sidebar-primary-foreground: oklch(0.98 0.01 95);
+  --sidebar-accent: oklch(0.94 0.02 95);
+  --sidebar-accent-foreground: oklch(0.3 0.05 165);
+  --sidebar-border: oklch(0.9 0.02 95);
+  --sidebar-ring: oklch(0.55 0.09 165);
+}
+
+.dark {
+  --background: oklch(0.18 0.025 165);
+  --foreground: oklch(0.96 0.015 95);
+  --card: oklch(0.22 0.03 165);
+  --card-foreground: oklch(0.96 0.015 95);
+  --popover: oklch(0.22 0.03 165);
+  --popover-foreground: oklch(0.96 0.015 95);
+  --primary: oklch(0.78 0.13 85);
+  --primary-foreground: oklch(0.2 0.04 165);
+  --secondary: oklch(0.28 0.04 165);
+  --secondary-foreground: oklch(0.96 0.015 95);
+  --muted: oklch(0.26 0.03 165);
+  --muted-foreground: oklch(0.72 0.03 95);
+  --accent: oklch(0.78 0.13 85);
+  --accent-foreground: oklch(0.2 0.04 165);
+  --gold: oklch(0.82 0.14 85);
+  --destructive: oklch(0.7 0.19 22);
+  --destructive-foreground: oklch(0.98 0.01 95);
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 15%);
+  --ring: oklch(0.78 0.13 85);
+  --sidebar: oklch(0.2 0.03 165);
+  --sidebar-foreground: oklch(0.96 0.015 95);
+  --sidebar-primary: oklch(0.78 0.13 85);
+  --sidebar-primary-foreground: oklch(0.2 0.04 165);
+  --sidebar-accent: oklch(0.28 0.04 165);
+  --sidebar-accent-foreground: oklch(0.96 0.015 95);
+  --sidebar-border: oklch(1 0 0 / 10%);
+  --sidebar-ring: oklch(0.78 0.13 85);
+}
+
+@layer base {
+  * { border-color: var(--color-border); }
+  body { background-color: var(--color-background); color: var(--color-foreground); font-family: 'Cormorant Garamond', 'Georgia', serif; }
+  h1, h2, h3, h4 { font-family: 'Cormorant Garamond', 'Georgia', serif; letter-spacing: -0.01em; }
+  .font-arabic { font-family: 'Amiri', 'Scheherazade New', 'Traditional Arabic', serif; }
+  .font-ui { font-family: 'Inter', system-ui, sans-serif; }
+}

@@ -1,0 +1,947 @@
+// Client-side TikTok-format video renderer.
+// Composites background + word-by-word Bulgarian captions synced to audio,
+// records via MediaRecorder. Returns an MP4 (when supported) or WebM Blob.
+// Arabic is intentionally omitted from video output so the Bulgarian text
+// always fits the 1080x1920 safe area at a comfortable size.
+
+import type { RenderOptions } from "./render-photo";
+
+export type WordSegment = { start: number; end: number };
+
+export type VideoOptions = RenderOptions & {
+  audioUrl?: string | null;
+  /** When true, fail rendering instead of silently creating a muted video. */
+  requireAudio?: boolean;
+  /** Optional looping background video (e.g. Pexels stock MP4). Overrides backgroundUrl. */
+  backgroundVideoUrl?: string | null;
+  /** seconds; used when no audio is provided */
+  fallbackDuration?: number;
+  /** Per-Arabic-word timing in seconds, aligned to audioUrl. */
+  wordSegments?: WordSegment[];
+  /** Total Arabic words — used with wordSegments to derive reveal progress. */
+  arabicWordCount?: number;
+  /** Per-Bulgarian-word timings (from ElevenLabs with-timestamps), aligned to audioUrl. */
+  bulgarianWordTimings?: WordSegment[];
+};
+
+let W = 1080;
+let H = 1920;
+let SAFE = { top: 320, bottom: 280, side: 130 };
+
+function configureCanvasSize(ios: boolean) {
+  // Mobile Safari's MP4 MediaRecorder cannot reliably record 1080x1920 canvas streams.
+  // It results in unplayable files, zero-byte chunks, or completely black frames. We MUST downscale to 720p (2/3).
+  const scale = ios ? 2 / 3 : 1;
+  W = Math.round(1080 * scale);
+  H = Math.round(1920 * scale);
+  SAFE = {
+    top: Math.round(320 * scale),
+    bottom: Math.round(280 * scale),
+    side: Math.round(130 * scale),
+  };
+  return scale;
+}
+
+async function loadImage(src: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const timer = window.setTimeout(() => reject(new Error("Фоновото изображение се зарежда твърде бавно")), 10_000);
+    img.crossOrigin = "anonymous";
+    img.onload = () => { window.clearTimeout(timer); resolve(img); };
+    img.onerror = () => { window.clearTimeout(timer); reject(new Error("Не успях да заредя фоновото изображение")); };
+    img.src = src;
+  });
+}
+
+function isIOSDevice() {
+  return /iPad|iPhone|iPod/i.test(navigator.userAgent) ||
+    (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+}
+
+function waitForVideoReady(video: HTMLVideoElement, timeoutMs = 8_000): Promise<boolean> {
+  if (video.readyState >= 2) return Promise.resolve(true);
+  return new Promise((resolve) => {
+    let done = false;
+    const finish = (ok: boolean) => {
+      if (done) return;
+      done = true;
+      window.clearTimeout(timer);
+      video.onloadeddata = null;
+      video.oncanplay = null;
+      video.onerror = null;
+      resolve(ok);
+    };
+    const timer = window.setTimeout(() => finish(false), timeoutMs);
+    video.onloadeddata = () => finish(true);
+    video.oncanplay = () => finish(true);
+    video.onerror = () => finish(false);
+  });
+}
+
+function keepBackgroundVideoLooping(video: HTMLVideoElement) {
+  let loopSeeking = false;
+  const replay = () => {
+    if (loopSeeking) return;
+    try {
+      loopSeeking = true;
+      if (Number.isFinite(video.duration) && video.duration > 0) video.currentTime = 0.01;
+      void video.play().catch(() => undefined).finally(() => { loopSeeking = false; });
+    } catch { loopSeeking = false; }
+  };
+  video.onended = replay;
+  video.onpause = () => {
+    if (!video.src || loopSeeking) return;
+    void video.play().catch(() => undefined);
+  };
+  return replay;
+}
+
+function withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timer = window.setTimeout(() => reject(new Error(message)), ms);
+    promise.then(
+      (value) => { window.clearTimeout(timer); resolve(value); },
+      (error) => { window.clearTimeout(timer); reject(error); },
+    );
+  });
+}
+
+function drawCover(
+  ctx: CanvasRenderingContext2D,
+  img: CanvasImageSource,
+  iw: number,
+  ih: number,
+  t: number,
+) {
+  // gentle Ken Burns zoom 1.0 -> 1.06
+  const zoom = 1 + 0.06 * t;
+  const r = Math.max(W / iw, H / ih) * zoom;
+  const w = iw * r;
+  const h = ih * r;
+  ctx.drawImage(img, (W - w) / 2, (H - h) / 2, w, h);
+}
+
+function wrapWords(ctx: CanvasRenderingContext2D, words: string[], maxWidth: number): string[][] {
+  const lines: string[][] = [];
+  let cur: string[] = [];
+  for (const w of words) {
+    const test = [...cur, w].join(" ");
+    if (ctx.measureText(test).width > maxWidth && cur.length) {
+      lines.push(cur);
+      cur = [w];
+    } else cur.push(w);
+  }
+  if (cur.length) lines.push(cur);
+  return lines;
+}
+
+/**
+ * Pick a single font size that fits the FULL Bulgarian text in the available
+ * area. We use the full text (not just the revealed portion) so the layout
+ * stays stable as words progressively appear.
+ */
+function chooseFontSize(
+  ctx: CanvasRenderingContext2D,
+  fullText: string,
+  maxWidth: number,
+  maxHeight: number,
+): { fontSize: number; lineHeight: number } {
+  const words = fullText.split(/\s+/).filter(Boolean);
+  // Long hadiths cannot fit professionally as one giant block. Pick a readable
+  // size, then paginate the wrapped lines so every part of the text appears.
+  const wordCount = words.length;
+  const readableMax = wordCount > 180 ? 58 : wordCount > 120 ? 64 : wordCount > 75 ? 70 : 78;
+  const maxSize = Math.round(readableMax * (W / 1080));
+  const minSize = Math.round(38 * (W / 1080));
+  for (let size = maxSize; size >= minSize; size -= 2) {
+    ctx.font = `700 ${size}px 'Cormorant Garamond', Georgia, serif`;
+    const lines = wrapWords(ctx, words, maxWidth);
+    const lh = Math.round(size * 1.34);
+    const maxLinesPerPage = Math.max(1, Math.floor(maxHeight / lh));
+    if (maxLinesPerPage >= 5 || lines.length <= maxLinesPerPage) return { fontSize: size, lineHeight: lh };
+  }
+  const size = minSize;
+  return { fontSize: size, lineHeight: Math.round(size * 1.34) };
+}
+
+type CaptionPage = {
+  lines: string[][];
+  startWord: number;
+  endWord: number;
+  baseYStart: number;
+};
+
+function buildCaptionPages(
+  lines: string[][],
+  lineHeight: number,
+  style: RenderOptions["style"],
+): CaptionPage[] {
+  const verticalForText = H - SAFE.top - SAFE.bottom;
+  const maxLinesPerPage = Math.max(1, Math.floor(verticalForText / lineHeight));
+  const pages: CaptionPage[] = [];
+  let lineIndex = 0;
+  let wordIndex = 0;
+
+  while (lineIndex < lines.length) {
+    const pageLines = lines.slice(lineIndex, lineIndex + maxLinesPerPage);
+    const count = pageLines.reduce((sum, line) => sum + line.length, 0);
+    const blockH = pageLines.length * lineHeight;
+    const baseYStart =
+      style === "lower-third" ? H - SAFE.bottom - blockH + lineHeight * 0.75 :
+      /* centered/minimal */      (H - blockH) / 2 + lineHeight * 0.75;
+    pages.push({ lines: pageLines, startWord: wordIndex, endWord: wordIndex + count, baseYStart });
+    lineIndex += pageLines.length;
+    wordIndex += count;
+  }
+
+  return pages.length ? pages : [{ lines: [], startWord: 0, endWord: 0, baseYStart: H / 2 }];
+}
+
+function pickMimeType(ios: boolean): string {
+  // iOS Safari can preview/save MP4, but cannot reliably play WebM. Also,
+  // asking Safari for an exact codec string often reports support but creates
+  // files that the native player refuses to open. Prefer the plain container.
+  const candidates = ios ? [
+    "video/mp4",
+    "video/mp4;codecs=avc1.42E01F",
+    "video/mp4;codecs=avc1.42E01F,mp4a.40.2",
+  ] : [
+    "video/mp4;codecs=avc1.42E01F,mp4a.40.2",
+    "video/mp4;codecs=avc1.42E01F",
+    "video/mp4",
+    "video/webm;codecs=vp9,opus",
+    "video/webm;codecs=vp8,opus",
+    "video/webm",
+  ];
+  for (const c of candidates) {
+    if (typeof MediaRecorder !== "undefined" && MediaRecorder.isTypeSupported(c)) return c;
+  }
+  return ios ? "" : "video/webm";
+}
+
+function normalizeRecordedMime(type: string | undefined, fallback: string) {
+  const out = (type || fallback || "video/webm").split(";")[0].trim().toLowerCase();
+  return out || "video/webm";
+}
+
+function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + w - r, y);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+  ctx.lineTo(x + w, y + h - r);
+  ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+  ctx.lineTo(x + r, y + h);
+  ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+  ctx.lineTo(x, y + r);
+  ctx.quadraticCurveTo(x, y, x + r, y);
+  ctx.closePath();
+}
+
+function drawReferencePill(ctx: CanvasRenderingContext2D, text: string) {
+  ctx.save();
+  const scale = W / 1080;
+  const fontPx = Math.round(28 * scale);
+  ctx.font = `500 ${fontPx}px 'Inter', system-ui, sans-serif`;
+  const tw = ctx.measureText(text).width;
+  const padX = 28 * scale, padY = 14 * scale;
+  const pillW = tw + padX * 2;
+  const pillH = fontPx + padY * 2;
+  const x = (W - pillW) / 2;
+  const y = H - 160 * scale - pillH / 2;
+  ctx.shadowBlur = 0;
+  ctx.fillStyle = "rgba(0, 0, 0, 0.55)";
+  roundRect(ctx, x, y, pillW, pillH, pillH / 2);
+  ctx.fill();
+  ctx.strokeStyle = "rgba(212, 175, 55, 0.65)";
+  ctx.lineWidth = 1.5;
+  roundRect(ctx, x, y, pillW, pillH, pillH / 2);
+  ctx.stroke();
+  ctx.fillStyle = "#f4c95d";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText(text, W / 2, y + pillH / 2 + 1);
+  ctx.restore();
+}
+
+export async function renderVideo(opts: VideoOptions): Promise<{ blob: Blob; mimeType: string }> {
+  if (typeof MediaRecorder === "undefined") {
+    throw new Error("Този браузър не поддържа видео рендиране. На iPhone използвай последната версия на Safari/Chrome.");
+  }
+
+  const ios = isIOSDevice();
+  const scale = configureCanvasSize(ios);
+
+  const canvas = document.createElement("canvas");
+  canvas.width = W;
+  canvas.height = H;
+  const ctx = canvas.getContext("2d")!;
+  let attachedCanvas: HTMLCanvasElement | null = null;
+  const detachCanvas = () => {
+    if (attachedCanvas?.isConnected) attachedCanvas.remove();
+    attachedCanvas = null;
+  };
+  if (ios) {
+    // iOS can suspend MediaRecorder tracks from canvases that are never
+    // attached to the page. Keep a tiny live canvas mounted during render.
+    canvas.style.cssText = [
+      "position:fixed",
+      "top:0",
+      "left:0",
+      `width:${W}px`,
+      `height:${H}px`,
+    ].join(";");
+    
+    const wrapper = document.createElement("div");
+    wrapper.style.cssText = [
+      "position:fixed",
+      "top:0",
+      "left:0",
+      "width:20px",
+      "height:20px",
+      "overflow:hidden",
+      "z-index:9999",
+      "pointer-events:none",
+      "opacity:0.02"
+    ].join(";");
+    
+    wrapper.appendChild(canvas);
+    document.body.appendChild(wrapper);
+    attachedCanvas = wrapper as any;
+  }
+
+  try {
+    await Promise.all([
+      document.fonts.load("700 72px 'Cormorant Garamond'"),
+      document.fonts.load("500 28px 'Inter'"),
+    ]);
+  } catch { /* best-effort */ }
+
+  // background — video has priority on desktop. On iOS Safari, recording a
+  // canvas that is continuously fed by an HTMLVideoElement is still unreliable:
+  // the visual track can freeze or the recorder can fail around the source
+  // clip's loop boundary while audio keeps going. For iPhone/iPad we render
+  // from the selected poster/image with Ken Burns movement instead, which keeps
+  // the subtitle/video timeline deterministic until the narration ends.
+  let bgVideo: HTMLVideoElement | null = null;
+  const useBackgroundVideo = Boolean(opts.backgroundVideoUrl);
+  if (useBackgroundVideo && opts.backgroundVideoUrl) {
+    bgVideo = document.createElement("video");
+    bgVideo.crossOrigin = "anonymous";
+    let videoSrc = opts.backgroundVideoUrl;
+    try {
+      // Preload the entire video into RAM to prevent network buffering
+      // from pausing the video during the real-time render.
+      const res = await fetch(videoSrc, { cache: "force-cache" });
+      if (res.ok) {
+        const b = await res.blob();
+        videoSrc = URL.createObjectURL(b);
+      }
+    } catch { /* ignore, use original URL */ }
+    bgVideo.src = videoSrc;
+    bgVideo.muted = true;
+    // Do not use native loop on iOS/stock clips: the loop boundary can pause
+    // canvas capture around ~15–20s. We control looping manually in drawFrame.
+    bgVideo.loop = false;
+    bgVideo.playsInline = true;
+    bgVideo.preload = "auto";
+    keepBackgroundVideoLooping(bgVideo);
+    const ready = await waitForVideoReady(bgVideo, 10_000);
+    if (!ready) {
+      console.warn("[render-video] background video unavailable, falling back to image");
+      bgVideo.src = "";
+      bgVideo = null;
+    }
+  }
+  const bg = !bgVideo && opts.backgroundUrl ? await loadImage(opts.backgroundUrl).catch(() => null) : null;
+
+  // audio — decoded into an AudioBuffer so it is guaranteed to be captured by
+  // MediaRecorder. createMediaElementSource silently outputs silence when the
+  // audio URL is cross-origin without permissive CORS, which previously
+  // produced muted videos. We also keep the AudioContext as the master clock
+  // so the text reveal stays perfectly in sync with the narration.
+  let audioCtx: AudioContext | null = null;
+  let audioDest: MediaStreamAudioDestinationNode | null = null;
+  let audioSource: AudioBufferSourceNode | null = null;
+  let audioStartCtxTime = 0;
+  let audioEndedAtWall: number | null = null;
+  let renderStartedAt = 0;
+  let duration = opts.fallbackDuration ?? 8;
+  if (opts.audioUrl) {
+    try {
+      const res = await withTimeout(
+        fetch(opts.audioUrl, { mode: "cors", credentials: "omit", cache: "no-store" }),
+        15_000,
+        "Аудиото се зарежда твърде бавно",
+      );
+      if (!res.ok) throw new Error(`audio fetch ${res.status}`);
+      const arr = await withTimeout(res.arrayBuffer(), 15_000, "Аудио файлът не се изтегли докрай");
+      if (arr.byteLength < 512) throw new Error("audio payload too small");
+      const AC: typeof AudioContext =
+        window.AudioContext ?? (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+      audioCtx = new AC();
+      const buf = await withTimeout(audioCtx.decodeAudioData(arr.slice(0)), 15_000, "Аудиото не можа да се декодира");
+      
+      // Analyze PCM data to dynamically strip trailing silence (especially useful for Quran reciter MP3s)
+      let realDuration = buf.duration;
+      try {
+        const threshold = 0.015; // Noise floor
+        let lastSampleIndex = 0;
+        for (let c = 0; c < buf.numberOfChannels; c++) {
+          const data = buf.getChannelData(c);
+          for (let i = data.length - 1; i >= 0; i--) {
+            if (Math.abs(data[i]) > threshold) {
+              if (i > lastSampleIndex) lastSampleIndex = i;
+              break;
+            }
+          }
+        }
+        if (lastSampleIndex > 0) {
+          // Set duration to the EXACT moment the voice stops. 
+          // Do not add any padding, as the user wants the video to finish exactly with the audio.
+          realDuration = lastSampleIndex / buf.sampleRate;
+        }
+      } catch (e) { console.warn("Failed to analyze audio PCM:", e); }
+      
+      duration = realDuration;
+      audioDest = audioCtx.createMediaStreamDestination();
+      audioSource = audioCtx.createBufferSource();
+      audioSource.buffer = buf;
+      audioSource.onended = () => {
+        audioEndedAtWall = renderStartedAt ? (performance.now() - renderStartedAt) / 1000 : duration;
+      };
+      // Route audio only to the recorder. The separate “Чуй гласа” preview
+      // button is for listening; playing the narration live during render can
+      // make iPhone look like the audio is continuing while no video is shown.
+      audioSource.connect(audioDest);
+      console.log("[render-video] audio decoded:", buf.duration.toFixed(2), "s,", audioDest.stream.getAudioTracks().length, "track(s)");
+    } catch (err) {
+      console.error("[render-video] AUDIO FAILED — silent video:", err);
+      if (opts.requireAudio) {
+        throw new Error("Аудиото не можа да се зареди за видеото. Опитай пак с бутона „Чуй гласа“ и после рендирай.");
+      }
+      audioCtx = null; audioDest = null; audioSource = null;
+    }
+  }
+
+  // stream — add audio onto the existing video stream so tracks share lifetime.
+  const fps = ios ? 24 : 30;
+  // Keep a normal fixed-FPS canvas stream on iOS. `captureStream(0)` manual
+  // mode is inconsistently implemented in mobile Safari and can make the
+  // recorder never produce a playable final file. We still call requestFrame()
+  // every draw as an extra nudge where browsers support it.
+  const manualCanvasCapture = false;
+  let videoStream: MediaStream;
+  try {
+    videoStream = canvas.captureStream(manualCanvasCapture ? 0 : fps);
+  } catch {
+    // Some browsers reject captureStream(0); fall back to a normal fixed-FPS
+    // stream and still manually request frames below when possible.
+    videoStream = canvas.captureStream(fps);
+  }
+  let canvasVideoTrack = videoStream.getVideoTracks()[0] as (MediaStreamTrack & { requestFrame?: () => void }) | undefined;
+  if (manualCanvasCapture && !canvasVideoTrack?.requestFrame) {
+    // Manual streams need requestFrame(). If the browser lacks it, recreate a
+    // normal FPS stream so the video track cannot stay stuck on the first frame.
+    videoStream.getTracks().forEach((track) => track.stop());
+    videoStream = canvas.captureStream(fps);
+    canvasVideoTrack = videoStream.getVideoTracks()[0] as (MediaStreamTrack & { requestFrame?: () => void }) | undefined;
+  }
+  canvasVideoTrack?.addEventListener?.("ended", () => console.warn("[render-video] canvas video track ended before recorder stopped"));
+  const requestCanvasFrame = () => {
+    try { canvasVideoTrack?.requestFrame?.(); } catch { /* ignore */ }
+  };
+  const forceCanvasCommit = () => {
+    // iOS Safari can delay committing 2D canvas updates into the captured
+    // stream unless layout/painting notices the canvas changed. Reading a tiny
+    // pixel is cheap at 720p and forces the backing store to stay current.
+    if (!ios) return;
+    try { ctx.getImageData(0, 0, 1, 1); } catch { /* ignore */ }
+  };
+  if (audioDest) {
+    for (const t of audioDest.stream.getAudioTracks()) videoStream.addTrack(t);
+  }
+
+  const requestedMimeType = pickMimeType(ios);
+  if (ios && !requestedMimeType.includes("mp4")) {
+    throw new Error("iPhone не поддържа MP4 рендиране в този браузър. Обнови iOS/Safari и опитай отново.");
+  }
+  const recorder = new MediaRecorder(videoStream, {
+    mimeType: requestedMimeType,
+    // Higher desktop bitrate for 1080p, let iOS pick its native optimal bitrate for HD
+    ...(ios ? {} : { videoBitsPerSecond: 5_000_000 }),
+    // Safari's MP4 recorder is more reliable when it chooses the audio bitrate.
+    ...(ios ? {} : { audioBitsPerSecond: 128_000 }),
+  });
+  const recordedMimeType = normalizeRecordedMime(recorder.mimeType, requestedMimeType);
+  const chunks: Blob[] = [];
+  recorder.ondataavailable = (e) => { if (e.data.size) chunks.push(e.data); };
+  recorder.onerror = (e) => console.error("[render-video] recorder error", e);
+
+  // Split the Bulgarian text into subtitle-style PHRASES (one chunk shown
+  // at a time, like real subtitles). Phrases break on punctuation, with a
+  // soft cap on words per phrase so nothing overflows the safe area.
+  const allWords = opts.bulgarian.split(/\s+/).filter(Boolean);
+  const maxW = W - SAFE.side * 2;
+  const verticalForText = H - SAFE.top - SAFE.bottom;
+
+  const MAX_WORDS_PER_PHRASE = 7;
+  const MIN_WORDS_PER_PHRASE = 3;
+  type Phrase = { words: string[]; startWord: number; endWord: number };
+  const phrases: Phrase[] = [];
+  {
+    let cur: string[] = [];
+    let curStart = 0;
+    const flush = () => {
+      if (!cur.length) return;
+      phrases.push({ words: cur, startWord: curStart, endWord: curStart + cur.length });
+      curStart += cur.length;
+      cur = [];
+    };
+    for (let i = 0; i < allWords.length; i++) {
+      const w = allWords[i];
+      cur.push(w);
+      const endsPunct = /[.!?…]$/.test(w) || (/[,;:—]$/.test(w) && cur.length >= MIN_WORDS_PER_PHRASE);
+      if ((endsPunct && cur.length >= MIN_WORDS_PER_PHRASE) || cur.length >= MAX_WORDS_PER_PHRASE) {
+        flush();
+      }
+    }
+    flush();
+  }
+
+  // Per-word timings.
+  //   1) Bulgarian per-word timings from ElevenLabs (best accuracy)
+  //   2) Arabic per-word timings from Quran.com (for ayah recitations)
+  //   3) Weighted-cost heuristic distributed across the audio duration
+  const bgSegs = (opts.bulgarianWordTimings ?? [])
+    .filter((s) => Number.isFinite(s.start) && Number.isFinite(s.end))
+    .slice(0, allWords.length);
+  const hasBgSegments = bgSegs.length > 0;
+  if (hasBgSegments && bgSegs.length < allWords.length) {
+    console.warn(
+      "[render-video] Bulgarian word timings are incomplete; remaining words use fallback timing",
+      { timings: bgSegs.length, words: allWords.length },
+    );
+  }
+  const segs = opts.wordSegments ?? [];
+  const arCount = opts.arabicWordCount ?? segs.length;
+  const hasArSegments = !hasBgSegments && segs.length > 0 && arCount > 0;
+
+  // Reserve a small tail so the last subtitle is fully on screen before audio ends.
+  const REVEAL_END_OFFSET = 0.4;
+  const revealDuration = Math.max(0.5, duration - REVEAL_END_OFFSET);
+
+  const speechCost = (w: string) => 1 + w.replace(/[^\p{L}\p{N}]/gu, "").length * 0.55;
+  const costs = allWords.map(speechCost);
+  const cumCost: number[] = [0];
+  for (let i = 0; i < costs.length; i++) cumCost.push(cumCost[i] + costs[i]);
+  const totalCost = cumCost[cumCost.length - 1] || 1;
+  void arCount;
+
+  // Build per-word [start,end] times.
+  const wordTimes: { start: number; end: number }[] = new Array(allWords.length);
+  if (hasBgSegments) {
+    const lastEnd = bgSegs[bgSegs.length - 1].end || duration;
+    const missing = Math.max(0, allWords.length - bgSegs.length);
+    const fallbackWindow = missing
+      ? Math.min(revealDuration * 0.55, Math.max(1.2, revealDuration - lastEnd))
+      : 0;
+    const timedEnd = missing ? Math.max(0.2, revealDuration - fallbackWindow) : revealDuration;
+    // Only scale if timestamps exceed the audio duration; never artificially stretch them if they finish early.
+    const scl = lastEnd > 0 && lastEnd > timedEnd ? timedEnd / lastEnd : 1;
+    for (let i = 0; i < bgSegs.length; i++) {
+      wordTimes[i] = { start: bgSegs[i].start * scl, end: bgSegs[i].end * scl };
+    }
+    if (missing) {
+      const fromCost = cumCost[bgSegs.length];
+      const remainingCost = Math.max(0.001, totalCost - fromCost);
+      const fromTime = bgSegs[bgSegs.length - 1].end * scl;
+      const toTime = revealDuration;
+      const span = Math.max(0.08, toTime - fromTime);
+      for (let i = bgSegs.length; i < allWords.length; i++) {
+        const s = fromTime + ((cumCost[i] - fromCost) / remainingCost) * span;
+        const e = fromTime + ((cumCost[i + 1] - fromCost) / remainingCost) * span;
+        wordTimes[i] = { start: s, end: e };
+      }
+    }
+  } else if (hasArSegments) {
+    const lastArEnd = segs[segs.length - 1].end || duration;
+    for (let i = 0; i < allWords.length; i++) {
+      const fracS = cumCost[i] / totalCost;
+      const fracE = cumCost[i + 1] / totalCost;
+      wordTimes[i] = { start: fracS * lastArEnd, end: fracE * lastArEnd };
+    }
+  } else {
+    for (let i = 0; i < allWords.length; i++) {
+      const s = (cumCost[i] / totalCost) * revealDuration;
+      const e = (cumCost[i + 1] / totalCost) * revealDuration;
+      wordTimes[i] = { start: s, end: e };
+    }
+  }
+
+  // Compute each phrase's [start,end] from word timings, plus pre-wrapped lines.
+  type RenderPhrase = Phrase & { start: number; end: number; fontSize: number; lineHeight: number; lines: string[][] };
+  const phraseRender: RenderPhrase[] = phrases.map((p) => {
+    const start = wordTimes[p.startWord]?.start ?? 0;
+    const end = wordTimes[p.endWord - 1]?.end ?? revealDuration;
+    const text = p.words.join(" ");
+    const { fontSize: fs, lineHeight: lh } = chooseFontSize(ctx, text, maxW, verticalForText);
+    ctx.font = `700 ${fs}px 'Cormorant Garamond', Georgia, serif`;
+    const lines = wrapWords(ctx, p.words, maxW);
+    return { ...p, start, end, fontSize: fs, lineHeight: lh, lines };
+  });
+  if (phraseRender.length) {
+    phraseRender[0].start = 0;
+    phraseRender[phraseRender.length - 1].end = revealDuration;
+  }
+
+  // Snapshot canvas for fallback when the background video is seeking/buffering.
+  let bgSnapshot: ImageData | null = null;
+  const saveBgSnapshot = () => {
+    try { bgSnapshot = ctx.getImageData(0, 0, W, H); } catch { /* ignore */ }
+  };
+
+  // Track which subtitle phrases have been drawn at least once.
+  const shownPhrases = new Set<number>();
+  // Minimum display time per subtitle phrase (seconds).
+  const MIN_PHRASE_DISPLAY = 0.4;
+  // Track how long the current phrase has been on-screen.
+  let currentPhraseShownSince = -1;
+  let lastPhraseIdx = -1;
+
+  const drawFrame = (elapsed: number) => {
+    const t = Math.min(1, elapsed / duration);
+
+    // Pick the active phrase, enforcing minimum display time.
+    let activePhraseIdx = -1;
+    for (let i = 0; i < phraseRender.length; i++) {
+      if (phraseRender[i].start <= elapsed + 0.02) activePhraseIdx = i; else break;
+    }
+    // If we'd jump past phrases that were never shown, force-show them first.
+    if (activePhraseIdx > lastPhraseIdx + 1) {
+      for (let skip = lastPhraseIdx + 1; skip < activePhraseIdx; skip++) {
+        if (!shownPhrases.has(skip)) {
+          activePhraseIdx = skip;
+          break;
+        }
+      }
+    }
+    // Enforce minimum display time for current phrase.
+    if (lastPhraseIdx >= 0 && activePhraseIdx > lastPhraseIdx && currentPhraseShownSince >= 0) {
+      const displayedFor = elapsed - currentPhraseShownSince;
+      if (displayedFor < MIN_PHRASE_DISPLAY) {
+        activePhraseIdx = lastPhraseIdx;
+      }
+    }
+    // Track phrase transitions.
+    if (activePhraseIdx !== lastPhraseIdx) {
+      currentPhraseShownSince = elapsed;
+      lastPhraseIdx = activePhraseIdx;
+    }
+    if (activePhraseIdx >= 0) shownPhrases.add(activePhraseIdx);
+    const activePhrase = activePhraseIdx >= 0 ? phraseRender[activePhraseIdx] : null;
+    // Caption is done only when ALL phrases have been shown at least once
+    // AND we've reached the end timing of the last phrase.
+    const allPhrasesShown = phraseRender.length === 0 || shownPhrases.size >= phraseRender.length;
+    const lastPhraseTimingDone =
+      phraseRender.length === 0 ||
+      (activePhraseIdx === phraseRender.length - 1 && elapsed >= phraseRender[phraseRender.length - 1].end - 0.01);
+    const captionDone = allPhrasesShown && lastPhraseTimingDone;
+
+    // background — pre-emptively loop video before it reaches the end to avoid
+    // the freeze that occurs when the video element enters "ended" state.
+    let backgroundDrawn = false;
+    if (bgVideo) {
+      const ready = bgVideo.readyState >= 2 && !bgVideo.seeking;
+      // Pre-emptive loop: seek back before the video reaches its natural end.
+      if (ready && Number.isFinite(bgVideo.duration) && bgVideo.duration > 0) {
+        if (bgVideo.currentTime >= bgVideo.duration - 0.5) {
+          saveBgSnapshot();
+          bgVideo.currentTime = 0.01;
+          void bgVideo.play().catch(() => undefined);
+        }
+      }
+      if (ready) {
+        try {
+          if ((bgVideo.paused || bgVideo.ended) && !bgVideo.seeking) {
+            void bgVideo.play().catch(() => undefined);
+          }
+          drawCover(ctx, bgVideo, bgVideo.videoWidth || 1080, bgVideo.videoHeight || 1920, t);
+          backgroundDrawn = true;
+          // Save a snapshot for fallback during future seeks.
+          saveBgSnapshot();
+        } catch (err) {
+          console.warn("[render-video] background video frame skipped", err);
+        }
+      }
+      // When the video element is seeking/buffering, draw the last known frame.
+      if (!backgroundDrawn && bgSnapshot) {
+        try {
+          ctx.putImageData(bgSnapshot, 0, 0);
+          backgroundDrawn = true;
+        } catch { /* ignore */ }
+      }
+    }
+    if (!backgroundDrawn && bg) {
+      drawCover(ctx, bg, bg.width, bg.height, t);
+      backgroundDrawn = true;
+    }
+    if (!backgroundDrawn) {
+      const g = ctx.createLinearGradient(0, 0, 0, H);
+      g.addColorStop(0, "#0d2a24");
+      g.addColorStop(1, "#1a4d3e");
+      ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+    }
+
+    // overlay + vignette
+    const ov = ctx.createLinearGradient(0, 0, 0, H);
+    ov.addColorStop(0, "rgba(0,0,0,0.55)");
+    ov.addColorStop(0.5, "rgba(0,0,0,0.2)");
+    ov.addColorStop(1, "rgba(0,0,0,0.78)");
+    ctx.fillStyle = ov; ctx.fillRect(0, 0, W, H);
+    const vig = ctx.createRadialGradient(W / 2, H / 2, H * 0.35, W / 2, H / 2, H * 0.7);
+    vig.addColorStop(0, "rgba(0,0,0,0)");
+    vig.addColorStop(1, "rgba(0,0,0,0.45)");
+    ctx.fillStyle = vig; ctx.fillRect(0, 0, W, H);
+
+    // corner accents (skip for minimal)
+    if (opts.style !== "minimal") {
+      ctx.strokeStyle = "rgba(212,175,55,0.55)";
+      ctx.lineWidth = 2 * scale;
+      const m = 80 * scale, cl = 70 * scale;
+      ctx.beginPath();
+      ctx.moveTo(m, m + cl); ctx.lineTo(m, m); ctx.lineTo(m + cl, m);
+      ctx.moveTo(W - m - cl, m); ctx.lineTo(W - m, m); ctx.lineTo(W - m, m + cl);
+      ctx.moveTo(m, H - m - cl); ctx.lineTo(m, H - m); ctx.lineTo(m + cl, H - m);
+      ctx.moveTo(W - m - cl, H - m); ctx.lineTo(W - m, H - m); ctx.lineTo(W - m, H - m - cl);
+      ctx.stroke();
+    }
+
+    if (activePhrase) {
+      const FADE_IN = 0.22;
+      const sinceStart = elapsed - activePhrase.start;
+      const tillEnd = activePhrase.end - elapsed;
+      const alphaIn = Math.max(0, Math.min(1, sinceStart / FADE_IN));
+      // Allow the last subtitle to fade out normally when its end time is reached
+      const alphaOut = Math.max(0, Math.min(1, tillEnd / 0.18));
+      const alpha = Math.min(alphaIn, alphaOut);
+
+      ctx.font = `700 ${activePhrase.fontSize}px 'Cormorant Garamond', Georgia, serif`;
+      ctx.textBaseline = "alphabetic";
+      ctx.lineJoin = "round";
+      ctx.shadowColor = "rgba(0,0,0,0.55)";
+      ctx.shadowBlur = 18;
+      ctx.shadowOffsetY = 2;
+
+      const blockH = activePhrase.lines.length * activePhrase.lineHeight;
+      const baseY =
+        opts.style === "lower-third"
+          ? H - SAFE.bottom - blockH + activePhrase.lineHeight * 0.75
+          : (H - blockH) / 2 + activePhrase.lineHeight * 0.75;
+
+      ctx.globalAlpha = alpha;
+      ctx.textAlign = "center";
+      ctx.strokeStyle = "rgba(0,0,0,0.45)";
+      ctx.lineWidth = 2;
+      for (let i = 0; i < activePhrase.lines.length; i++) {
+        const text = activePhrase.lines[i].join(" ");
+        const y = baseY + i * activePhrase.lineHeight;
+        ctx.strokeText(text, W / 2, y);
+        ctx.fillStyle = "#ffffff";
+        ctx.fillText(text, W / 2, y);
+      }
+      ctx.globalAlpha = 1;
+      ctx.shadowBlur = 0;
+      ctx.shadowOffsetY = 0;
+    }
+    ctx.textAlign = "center";
+
+    drawReferencePill(ctx, opts.reference);
+    // Safari/iOS can stop emitting canvas frames during long recordings if the
+    // canvas appears static around a background-video loop boundary. A tiny,
+    // visually-imperceptible heartbeat pixel keeps the captured video track
+    // active while subtitles/audio continue.
+    ctx.save();
+    ctx.globalAlpha = 0.012;
+    ctx.fillStyle = Math.floor(elapsed * fps) % 2 ? "#000" : "#fff";
+    ctx.fillRect(0, 0, 1, 1);
+    ctx.restore();
+    forceCanvasCommit();
+    requestCanvasFrame();
+    return { captionDone };
+  };
+
+  // Start the moving background before the recorder/audio, then draw a real
+  // first frame. This prevents iOS from recording audio over a black/blank
+  // video track at the beginning.
+  if (bgVideo) {
+    try { await withTimeout(bgVideo.play(), 3_000, "Фоновото видео не стартира навреме"); } catch { /* ignore */ }
+    await new Promise<void>((resolve) => {
+      if (ios) setTimeout(resolve, 15); else requestAnimationFrame(() => resolve());
+    });
+  }
+  drawFrame(0);
+
+  // Pass a 1000ms timeslice to constantly flush the iOS hardware encoder.
+  // Without a timeslice, the internal AVAssetWriter buffer fills up after 
+  // exactly 15 seconds at 720p, causing it to silently drop the video track
+  // while the audio track continues.
+  recorder.start(1000);
+
+  await new Promise<void>((resolve) => {
+    if (ios) setTimeout(() => { drawFrame(0); resolve(); }, 15);
+    else requestAnimationFrame(() => { drawFrame(0); resolve(); });
+  });
+
+  const startedAt = performance.now();
+  renderStartedAt = startedAt;
+  if (audioCtx && audioSource) {
+    if (audioCtx.state === "suspended") {
+      try { await withTimeout(audioCtx.resume(), 3_000, "Аудио системата не стартира навреме"); } catch { /* ignore */ }
+    }
+    audioStartCtxTime = audioCtx.currentTime;
+    try { audioSource.start(0); } catch { /* ignore */ }
+  }
+
+  await new Promise<void>((resolveDraw) => {
+    let done = false;
+    let lastAudioElapsed = 0;
+    let lastAudioProgressWall = 0;
+    let rafId: number | null = null;
+    let lastFrameTime = 0;
+    const frameInterval = 1000 / fps;
+    let draw: () => void;
+    const scheduleDraw = () => {
+      if (ios) {
+        rafId = window.setTimeout(draw, frameInterval) as any;
+      } else {
+        rafId = requestAnimationFrame(draw);
+      }
+    };
+    const finish = () => {
+      if (!done) {
+        done = true;
+        if (rafId !== null) cancelAnimationFrame(rafId);
+        clearTimeout(safety);
+        resolveDraw();
+      }
+    };
+    // Hard safety cap — only for broken browser encoders. Normal completion is
+    // gated below by BOTH full caption reveal and full audio playback.
+    const safety = setTimeout(() => {
+      console.warn("[render-video] safety timeout reached, finishing render");
+      finish();
+    }, (duration + 45) * 1000);
+
+    draw = () => {
+      if (done) return;
+      const now = performance.now();
+      lastFrameTime = now;
+
+      // Wall clock drives the loop end (reliable). Audio clock drives text
+      // reveal sync when it's actually advancing; otherwise fall back to
+      // wall clock so a stuck AudioContext can't hang the render.
+      const wall = (now - startedAt) / 1000;
+      const audioElapsed = audioCtx ? Math.max(0, audioCtx.currentTime - audioStartCtxTime) : 0;
+      if (!audioCtx || audioElapsed > lastAudioElapsed + 0.015) {
+        lastAudioElapsed = audioElapsed;
+        lastAudioProgressWall = wall;
+      }
+      const audioClockStale = Boolean(audioCtx) && wall > 1.25 && wall - lastAudioProgressWall > 1.25;
+      const clockElapsed = audioCtx && audioElapsed > 0.05 && !audioClockStale ? audioElapsed : wall;
+      // Even if the audio clock stalls, the written text must continue and
+      // finish before the video finalizes.
+      // Clamp the visual timeline to the real decoded audio duration. This
+      // avoids black/freezing frames if a mobile audio clock briefly overshoots,
+      // while still allowing the last subtitle to remain visible during tail.
+      const elapsed = Math.min(duration, Math.max(clockElapsed, Math.min(wall, revealDuration)));
+      const { captionDone } = drawFrame(elapsed);
+
+      // Trigger finish exactly when the audio stops. The MediaRecorder finish() timeout 
+      // (350ms) will naturally provide just enough buffer flush time without extending the video.
+      const audioTailDone = audioDest && audioEndedAtWall !== null && wall >= audioEndedAtWall;
+      const isStuck = audioClockStale && wall >= lastAudioProgressWall + 5;
+      const audioFallbackDone = audioDest && audioEndedAtWall === null && (audioElapsed >= duration || isStuck);
+      const silentVideoDone = !audioDest && wall >= duration + 0.5;
+      const playbackDone = Boolean(audioTailDone || audioFallbackDone || silentVideoDone);
+      if (!captionDone || !playbackDone) {
+        scheduleDraw();
+      } else {
+        finish();
+      }
+    };
+    draw();
+  });
+
+  const blob = await new Promise<Blob>((resolve, reject) => {
+    let resolved = false;
+    let stopRequested = false;
+    let keepPainting = true;
+    let finalPaintTimer: number | null = null;
+    const finalize = () => {
+      if (resolved) return;
+      resolved = true;
+      keepPainting = false;
+      if (finalPaintTimer !== null) window.clearTimeout(finalPaintTimer);
+      window.clearTimeout(fallbackTimer);
+      if (!chunks.length) {
+        reject(new Error("Браузърът не върна видео данни. Опитай пак след refresh."));
+        return;
+      }
+      resolve(new Blob(chunks, { type: recordedMimeType }));
+    };
+
+    const paintFinalFrame = () => {
+      if (!keepPainting) return;
+      const wall = (performance.now() - startedAt) / 1000;
+      drawFrame(wall);
+      finalPaintTimer = window.setTimeout(paintFinalFrame, Math.round(1000 / fps));
+    };
+    paintFinalFrame();
+
+    recorder.onstop = finalize;
+    recorder.onerror = (e) => { console.error("[render-video] recorder error", e); finalize(); };
+    recorder.ondataavailable = (e) => {
+      if (e.data.size) chunks.push(e.data);
+      // Some iOS builds emit the final MP4 data but never dispatch `stop`.
+      // Give the native muxer a short beat, then finalize the complete chunk.
+      if (ios && stopRequested && e.data.size) window.setTimeout(finalize, 600);
+    };
+
+    const fallbackTimer = window.setTimeout(() => {
+      if (chunks.length) finalize();
+      else reject(new Error("iPhone не финализира видеото. Опитай по-кратък текст или друг фон."));
+    }, ios ? 20_000 : 5_000);
+
+    window.setTimeout(() => {
+      stopRequested = true;
+      try {
+        // Important: do NOT call requestData() before stop for Safari MP4.
+        // It can create a partial fMP4 chunk before the final moov atom, and
+        // concatenating that chunk makes a file that iPhone says cannot play.
+        if (!ios && !recordedMimeType.includes("mp4")) {
+          try { recorder.requestData(); } catch { /* ignore */ }
+        }
+        if (recorder.state !== "inactive") recorder.stop();
+        else finalize();
+      } catch (e) {
+        console.error("[render-video] recorder stop failed", e);
+        finalize();
+      }
+    }, ios ? 1800 : 350);
+  });
+  if (blob.size < 1024) {
+    detachCanvas();
+    throw new Error("Видеото не се записа правилно. Опитай пак, без стоково видео фон или с по-кратък текст.");
+  }
+  if (ios && !recordedMimeType.includes("mp4")) {
+    detachCanvas();
+    throw new Error("iPhone получи неподдържан видео формат. Обнови iOS/Safari и рендирай отново.");
+  }
+  if (audioSource && audioEndedAtWall === null) { try { audioSource.stop(); } catch { /* ignore */ } }
+  if (bgVideo) { bgVideo.pause(); bgVideo.src = ""; }
+  if (audioCtx) await audioCtx.close().catch(() => undefined);
+  detachCanvas();
+  return { blob, mimeType: recordedMimeType };
+}
+
