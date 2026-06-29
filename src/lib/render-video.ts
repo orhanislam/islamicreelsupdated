@@ -800,7 +800,9 @@ export async function renderVideo(opts: VideoOptions): Promise<{ blob: Blob; mim
       try { await withTimeout(audioCtx.resume(), 3_000, "Аудио системата не стартира навреме"); } catch { /* ignore */ }
     }
     audioStartCtxTime = audioCtx.currentTime;
-    try { audioSource.start(0); } catch { /* ignore */ }
+    // Start audio with the trimmed duration so it stops exactly when the
+    // reciter's voice ends, not when the trailing silence of the MP3 ends.
+    try { audioSource.start(0, 0, duration); } catch { /* ignore */ }
   }
 
   await new Promise<void>((resolveDraw) => {
@@ -857,9 +859,10 @@ export async function renderVideo(opts: VideoOptions): Promise<{ blob: Blob; mim
       const elapsed = Math.min(duration, Math.max(clockElapsed, Math.min(wall, revealDuration)));
       const { captionDone } = drawFrame(elapsed);
 
-      // Trigger finish exactly when the audio stops. The MediaRecorder finish() timeout 
-      // (350ms) will naturally provide just enough buffer flush time without extending the video.
-      const audioTailDone = audioDest && audioEndedAtWall !== null && wall >= audioEndedAtWall;
+      // On iOS, the hardware MP4 encoder needs ~0.3s to flush the final audio
+      // samples from the MediaStreamDestinationNode into the MP4 container.
+      // On desktop this is near-instant, so no padding is needed.
+      const audioTailDone = audioDest && audioEndedAtWall !== null && wall >= audioEndedAtWall + (ios ? 0.3 : 0);
       const isStuck = audioClockStale && wall >= lastAudioProgressWall + 5;
       const audioFallbackDone = audioDest && audioEndedAtWall === null && (audioElapsed >= duration || isStuck);
       const silentVideoDone = !audioDest && wall >= duration + 0.5;
