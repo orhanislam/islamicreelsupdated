@@ -385,7 +385,8 @@ export async function renderVideo(opts: VideoOptions): Promise<{ blob: Blob; mim
       // Analyze PCM data to dynamically strip trailing silence (especially useful for Quran reciter MP3s)
       let realDuration = buf.duration;
       try {
-        const threshold = 0.015; // Noise floor
+        // Use a very low threshold to catch the natural tail/reverb of the last word
+        const threshold = 0.005;
         let lastSampleIndex = 0;
         for (let c = 0; c < buf.numberOfChannels; c++) {
           const data = buf.getChannelData(c);
@@ -397,9 +398,9 @@ export async function renderVideo(opts: VideoOptions): Promise<{ blob: Blob; mim
           }
         }
         if (lastSampleIndex > 0) {
-          // Set duration to the EXACT moment the voice stops. 
-          // Do not add any padding, as the user wants the video to finish exactly with the audio.
-          realDuration = lastSampleIndex / buf.sampleRate;
+          // Add 0.15s after the last audible sample so the final syllable
+          // naturally fades out instead of being hard-cut mid-sound.
+          realDuration = Math.min(buf.duration, (lastSampleIndex / buf.sampleRate) + 0.15);
         }
       } catch (e) { console.warn("Failed to analyze audio PCM:", e); }
       
