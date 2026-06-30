@@ -41,7 +41,13 @@ export const synthesizeHadithNarration = createServerFn({ method: "POST" })
     const apiKey = process.env.ELEVENLABS_API_KEY;
     if (!apiKey) throw new Error("ELEVENLABS_API_KEY не е конфигуриран в .env");
 
-    const cleaned = data.text.replace(/\s+/g, " ").trim();
+    // Strip pause-inducing punctuation (commas, dashes, ellipses) which cause 
+    // ElevenLabs to insert unnaturally long pauses in the middle of sentences.
+    // We leave periods/question marks so it still pauses correctly at the end of sentences.
+    const cleaned = data.text
+      .replace(/[,;:\-—_…]+/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
     // Add an explicit pause to the end of the text. ElevenLabs often trims 
     // the trailing audio too aggressively, causing the last word to be cut off.
     const speech = cleaned + " ...";
@@ -57,11 +63,10 @@ export const synthesizeHadithNarration = createServerFn({ method: "POST" })
           text: speech,
           model_id: "eleven_multilingual_v2",
           voice_settings: {
-            stability: 0.72,
+            stability: 0.50, // Lower stability makes the voice faster and more expressive
             similarity_boost: 0.85,
             style: 0.05,
             use_speaker_boost: true,
-            speed: 0.92,
           },
         }),
       },
