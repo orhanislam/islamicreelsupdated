@@ -429,11 +429,6 @@ export async function renderVideo(opts: VideoOptions): Promise<{ blob: Blob; mim
       }
       audioCtx = null; audioDest = null; audioSource = null;
     }
-  }new Error("Аудиото не можа да се зареди за видеото. Опитай пак с бутона „Чуй гласа“ и после рендирай.");
-      }
-      audioCtx = null; audioDest = null; audioSource = null; iosAudioEl = null; iosAudioStream = null;
-    }
-  }
 
   // stream — add audio onto the existing video stream so tracks share lifetime.
   const fps = ios ? 24 : 30;
