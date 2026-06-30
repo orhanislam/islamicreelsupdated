@@ -458,7 +458,7 @@ function CreatePage() {
       result = renderedBlob
         ? await saveMediaBlob(renderedBlob, filename, renderedMime)
         : await saveMediaFromUrl(renderedUrl, filename, renderedMime);
-      if (result === "shared") toast.success("Избери Save to Files, за да го запазиш директно във Files");
+      if (result === "shared") toast.success("Избери 'Save Video' (Запази видео), за да го запазиш в Снимки/Photos");
       else if (result === "opened") toast.message("Отворено е като файл — избери Share/Сподели → Save to Files.");
       else toast.success("Свалянето започна");
     } catch (e) {

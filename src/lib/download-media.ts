@@ -101,6 +101,30 @@ export async function saveMediaBlob(
   const type = cleanMediaMimeType(blob.type || mimeHint || "application/octet-stream");
   const normalizedBlob = blob.type === type ? blob : new Blob([blob], { type });
   
+  // On iOS, the best way to allow saving directly to Photos (Camera Roll)
+  // is to use the native Web Share API with a File object.
+  if (isIOSMediaDevice() && !shareInFlight) {
+    const nav = navigator as NavigatorWithFileShare;
+    if (nav.canShare && nav.share) {
+      try {
+        shareInFlight = true;
+        const file = new File([normalizedBlob], filename, { type });
+        if (nav.canShare({ files: [file] })) {
+          await nav.share({
+            title: "Видео",
+            files: [file]
+          });
+          return "shared";
+        }
+      } catch (e: any) {
+        // AbortError means user cancelled the share sheet, which is fine.
+        if (e.name !== "AbortError") console.error("Share failed", e);
+      } finally {
+        shareInFlight = false;
+      }
+    }
+  }
+
   const objectUrl = URL.createObjectURL(normalizedBlob);
   const a = document.createElement("a");
   a.href = objectUrl;
