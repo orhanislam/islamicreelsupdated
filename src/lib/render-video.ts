@@ -428,6 +428,7 @@ export async function renderVideo(opts: VideoOptions): Promise<{ blob: Blob; mim
       }
       audioCtx = null; audioDest = null; audioSource = null;
     }
+  }
 
   // stream — add audio onto the existing video stream so tracks share lifetime.
   const fps = ios ? 24 : 30;
