@@ -61,58 +61,31 @@ function pickBlock(html: string, className: string): string | null {
 }
 
 async function scrape(collection: SunnahCollection, number: number): Promise<SunnahHadith> {
-  const url = `https://sunnah.com/${collection}:${number}`;
-  const res = await fetch(url, {
-    headers: {
-      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-      "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
-      "Accept-Language": "en-US,en;q=0.5",
-      "Sec-Fetch-Dest": "document",
-      "Sec-Fetch-Mode": "navigate",
-      "Sec-Fetch-Site": "none",
-      "Sec-Fetch-User": "?1",
-      "Upgrade-Insecure-Requests": "1",
-    },
-    redirect: "follow",
-  });
-  if (!res.ok) throw new Error(`sunnah.com ${res.status}`);
-  const html = await res.text();
+  // Use reliable open-source JSON CDN instead of scraping sunnah.com to avoid Cloudflare 403 blocks
+  const apiCollection = collection === "nawawi40" ? "nawawi" : collection;
+  
+  const [araRes, engRes] = await Promise.all([
+    fetch(`https://cdn.jsdelivr.net/gh/fawazahmed0/hadith-api@1/editions/ara-${apiCollection}/${number}.json`),
+    fetch(`https://cdn.jsdelivr.net/gh/fawazahmed0/hadith-api@1/editions/eng-${apiCollection}/${number}.json`)
+  ]);
 
-  const arabicRaw = pickBlock(html, "arabic_hadith_full");
-  const englishRaw = pickBlock(html, "english_hadith_full");
-  if (!arabicRaw || !englishRaw) throw new Error("Не успях да извлека текста (страница без хадис).");
+  if (!araRes.ok || !engRes.ok) {
+    if (araRes.status === 404) throw new Error(`Хадис номер ${number} не съществува в тази колекция.`);
+    throw new Error(`Грешка при изтегляне на хадиса: ${araRes.status} / ${engRes.status}`);
+  }
 
-  const arabic = stripHtml(arabicRaw);
-  const english = stripHtml(englishRaw);
+  const araJson = await araRes.json();
+  const engJson = await engRes.json();
 
-  // In-book reference & translation reference
-  const refMatch = html.match(/<table[^>]*class=hadith_reference[^>]*>([\s\S]*?)<\/table>/i);
+  if (!araJson.hadiths?.[0]?.text || !engJson.hadiths?.[0]?.text) {
+    throw new Error("Не успях да извлека текста (празен хадис).");
+  }
+
+  // The API sometimes includes HTML tags, so we strip them just in case
+  const arabic = stripHtml(araJson.hadiths[0].text);
+  const english = stripHtml(engJson.hadiths[0].text);
+
   let reference = `${COLLECTIONS[collection].label} ${number}`;
-  let inBookReference: string | null = null;
-  if (refMatch) {
-    const text = stripHtml(refMatch[1]);
-    const refLine = text.match(/Reference\s*:\s*([^\n:]+?\d+)/i);
-    const inBook = text.match(/In-book reference\s*:\s*([^\n]+?)(?:English|$)/i);
-    if (refLine) reference = refLine[1].trim();
-    if (inBook) inBookReference = inBook[1].trim();
-  }
-
-  // Grade: sunnah.com renders grades in two adjacent <td class="english_grade">
-  // cells per row — the first holds the label ("Grade :"), the second holds
-  // the value ("Sahih (Darussalam)"). Collect ALL such cells and pick the one
-  // that doesn't look like a label.
-  let grade: string | null = null;
-  const gradeCells: string[] = [];
-  const cellRe = /<td[^>]*class=(?:"[^"]*english_grade[^"]*"|english_grade)[^>]*>([\s\S]*?)<\/td>/gi;
-  let cm: RegExpExecArray | null;
-  while ((cm = cellRe.exec(html)) !== null) {
-    const v = stripHtml(cm[1]).replace(/^grade\s*:?\s*/i, "").trim();
-    if (v) gradeCells.push(v);
-  }
-  // Prefer the first cell whose text actually mentions a grade verdict.
-  const verdict = gradeCells.find((v) => /sahih|hasan|da'?if|daeef|weak|mawdu|munkar|saheeh|sahīh/i.test(v));
-  if (verdict) grade = verdict;
-  if (!grade && COLLECTIONS[collection].allSahih) grade = "Sahih";
 
   return {
     collection,
@@ -121,9 +94,9 @@ async function scrape(collection: SunnahCollection, number: number): Promise<Sun
     arabic,
     english,
     reference,
-    inBookReference,
-    grade,
-    sourceUrl: url,
+    inBookReference: null,
+    grade: COLLECTIONS[collection].allSahih ? "Sahih" : null,
+    sourceUrl: `https://sunnah.com/${collection}:${number}`, // Keep sunnah.com as the UI source reference
   };
 }
 
