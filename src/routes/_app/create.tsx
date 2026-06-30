@@ -419,14 +419,28 @@ function CreatePage() {
           bulgarianWordTimings: narration && timings && timings.length ? timings : undefined,
         });
         if (renderedUrl) URL.revokeObjectURL(renderedUrl);
-        setRenderedUrl(URL.createObjectURL(blob));
+        const blobUrl = URL.createObjectURL(blob);
+        setRenderedUrl(blobUrl);
         setRenderedBlob(blob);
         setRenderedKind("video");
         const ext = mimeType.includes("mp4") ? "mp4" : "webm";
         setRenderedExt(ext);
         setRenderedMime(cleanMediaMimeType(mimeType));
         console.info("[create] video render finished", { size: blob.size, mimeType, ext });
-        toast.success("Видеото е готово");
+        
+        // On iOS, auto-download immediately — skip preview to avoid Safari
+        // re-encoding or playback issues that can truncate audio.
+        if (isIOSMediaDevice()) {
+          const filename = sanitizeFilename(`${content?.source_ref ?? "post"}.${ext}`);
+          try {
+            await saveMediaBlob(blob, filename, cleanMediaMimeType(mimeType));
+            toast.success("Видеото е свалено!");
+          } catch {
+            toast.success("Видеото е готово — натисни Свали");
+          }
+        } else {
+          toast.success("Видеото е готово");
+        }
       }
       window.setTimeout(() => {
         previewRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
