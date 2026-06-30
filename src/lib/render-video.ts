@@ -835,10 +835,12 @@ export async function renderVideo(opts: VideoOptions): Promise<{ blob: Blob; mim
       const elapsed = Math.min(duration, Math.max(clockElapsed, Math.min(wall, revealDuration)));
       const { captionDone } = drawFrame(elapsed);
 
-      // On iOS, the hardware MP4 encoder needs ~0.3s to flush the final audio
-      // samples from the MediaStreamDestinationNode into the MP4 container.
-      // On desktop this is near-instant, so no padding is needed.
-      const audioTailDone = audioDest && audioEndedAtWall !== null && wall >= audioEndedAtWall + (ios ? 0.3 : 0);
+      // iOS Safari's MediaStreamDestinationNode has ~0.5-1.0s of internal latency.
+      // When audioSource.onended fires, there is still audio sitting in Safari's
+      // pipeline that hasn't been written to the MP4 yet. We must keep recording
+      // for 1.0s after onended to capture every last sample. On desktop this
+      // latency is negligible so we stop immediately.
+      const audioTailDone = audioDest && audioEndedAtWall !== null && wall >= audioEndedAtWall + (ios ? 1.0 : 0);
       const isStuck = audioClockStale && wall >= lastAudioProgressWall + 5;
       const audioFallbackDone = audioDest && audioEndedAtWall === null && (audioElapsed >= duration || isStuck);
       const silentVideoDone = !audioDest && wall >= duration + 0.5;
