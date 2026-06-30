@@ -872,7 +872,7 @@ export async function renderVideo(opts: VideoOptions): Promise<{ blob: Blob; mim
         }
       }
 
-      const iosTail = 0.4; // Extremely tight tail to minimize the visual pause at the end
+      const iosTail = 0.0; // User requested exact ending, no tail pause
       const audioTailDone = hasAudio && audioEndedAtWall !== null && wall >= audioEndedAtWall + (ios ? iosTail : 0);
       const isStuck = audioClockStale && wall >= lastAudioProgressWall + 5;
       // Fallback: if even manual detection fails, use wall time with generous padding
