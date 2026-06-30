@@ -358,9 +358,7 @@ export async function renderVideo(opts: VideoOptions): Promise<{ blob: Blob; mim
   // audio — decoded into an AudioBuffer so it is guaranteed to be captured by
   // MediaRecorder. createMediaElementSource silently outputs silence when the
   // audio URL is cross-origin without permissive CORS, which previously
-  // produced muted videos. We also keep the AudioContext as the master clock
-  // so the text reveal stays perfectly in sync with the narration.
-  let audioCtx: AudioContext | null = null;
+   let audioCtx: AudioContext | null = null;
   let audioDest: MediaStreamAudioDestinationNode | null = null;
   let audioSource: AudioBufferSourceNode | null = null;
   let audioStartCtxTime = 0;
@@ -368,8 +366,7 @@ export async function renderVideo(opts: VideoOptions): Promise<{ blob: Blob; mim
   let renderStartedAt = 0;
   let duration = opts.fallbackDuration ?? 8;
   let audioBufDuration = 0;
-  let iosAudioEl: HTMLAudioElement | null = null;
-  let iosAudioStream: MediaStream | null = null;
+  
   if (opts.audioUrl) {
     try {
       const res = await withTimeout(
@@ -381,51 +378,58 @@ export async function renderVideo(opts: VideoOptions): Promise<{ blob: Blob; mim
       const arr = await withTimeout(res.arrayBuffer(), 15_000, "Аудио файлът не се изтегли докрай");
       if (arr.byteLength < 512) throw new Error("audio payload too small");
 
-      if (ios) {
-        // iOS: Use HTMLAudioElement + captureStream() to completely bypass
-        // Safari's broken AudioContext -> MediaStreamDestinationNode pipeline
-        // which truncates the last seconds of audio in the recorded MP4.
-        const audioBlob = new Blob([arr], { type: "audio/mpeg" });
-        const audioBlobUrl = URL.createObjectURL(audioBlob);
-        iosAudioEl = new Audio(audioBlobUrl);
-        iosAudioEl.preload = "auto";
-        await new Promise<void>((resolve, reject) => {
-          const el = iosAudioEl!;
-          const onReady = () => { el.removeEventListener("canplaythrough", onReady); el.removeEventListener("error", onErr); resolve(); };
-          const onErr = () => { el.removeEventListener("canplaythrough", onReady); el.removeEventListener("error", onErr); reject(new Error("iOS audio load failed")); };
-          el.addEventListener("canplaythrough", onReady);
-          el.addEventListener("error", onErr);
-          el.load();
-        });
-        duration = iosAudioEl.duration;
-        audioBufDuration = iosAudioEl.duration;
-        iosAudioStream = (iosAudioEl as any).captureStream() as MediaStream;
-        iosAudioEl.onended = () => {
-          audioEndedAtWall = renderStartedAt ? (performance.now() - renderStartedAt) / 1000 : duration;
-          console.log("[render-video] iOS audio element ended at wall=" + (audioEndedAtWall?.toFixed(2) ?? "?") + "s");
-        };
-        console.log("[render-video] iOS audio element ready:", iosAudioEl.duration.toFixed(2), "s, tracks:", iosAudioStream.getAudioTracks().length);
-      } else {
-        // Desktop: AudioContext (reliable on Chrome/Edge/Firefox)
-        const AC: typeof AudioContext =
-          window.AudioContext ?? (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-        audioCtx = new AC();
-        const buf = await withTimeout(audioCtx.decodeAudioData(arr.slice(0)), 15_000, "Аудиото не можа да се декодира");
-        duration = buf.duration;
-        audioBufDuration = buf.duration;
-        audioDest = audioCtx.createMediaStreamDestination();
-        audioSource = audioCtx.createBufferSource();
-        audioSource.buffer = buf;
-        audioSource.onended = () => {
-          audioEndedAtWall = renderStartedAt ? (performance.now() - renderStartedAt) / 1000 : duration;
-        };
-        audioSource.connect(audioDest);
-        console.log("[render-video] audio decoded:", buf.duration.toFixed(2), "s,", audioDest.stream.getAudioTracks().length, "track(s)");
+      const AC: typeof AudioContext =
+        window.AudioContext ?? (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+      audioCtx = new AC();
+      
+      const originalBuf = await withTimeout(audioCtx.decodeAudioData(arr.slice(0)), 15_000, "Аудиото не можа да се декодира");
+      
+      // THE FIX for iOS Safari audio truncation:
+      // Safari's MediaStreamDestinationNode has a massive internal latency buffer. 
+      // If we stop the video when the real audio ends, the last ~1 second of audio 
+      // is lost in the buffer. To fix this, we create a new AudioBuffer that is 
+      // exactly 2 seconds longer than the original, and fill the end with silence. 
+      // This physically forces Safari to flush the real audio into the MP4 file 
+      // while it plays the "silence".
+      const silencePadding = 2.0; 
+      const paddedBuf = audioCtx.createBuffer(
+        originalBuf.numberOfChannels,
+        originalBuf.length + (originalBuf.sampleRate * silencePadding),
+        originalBuf.sampleRate
+      );
+      
+      // Copy original audio into the new buffer (the rest remains silent 0s)
+      for (let channel = 0; channel < originalBuf.numberOfChannels; channel++) {
+        paddedBuf.copyToChannel(originalBuf.getChannelData(channel), channel, 0);
       }
+
+      // The video duration is based on the REAL audio, not the silence padding
+      duration = originalBuf.duration;
+      audioBufDuration = originalBuf.duration;
+      
+      audioDest = audioCtx.createMediaStreamDestination();
+      audioSource = audioCtx.createBufferSource();
+      audioSource.buffer = paddedBuf; // Play the padded buffer
+      
+      // We manually detect completion in the draw loop, so we don't strictly 
+      // rely on onended, but we leave it as a fallback.
+      audioSource.onended = () => {
+        // onended will now fire 2 seconds AFTER the real audio finishes
+        if (audioEndedAtWall === null) {
+          audioEndedAtWall = renderStartedAt ? (performance.now() - renderStartedAt) / 1000 : duration;
+        }
+      };
+      
+      audioSource.connect(audioDest);
+      console.log("[render-video] audio decoded:", originalBuf.duration.toFixed(2), "s, padded to:", paddedBuf.duration.toFixed(2), "s");
     } catch (err) {
       console.error("[render-video] AUDIO FAILED - silent video:", err);
       if (opts.requireAudio) {
-        throw new Error("Аудиото не можа да се зареди за видеото. Опитай пак с бутона „Чуй гласа“ и после рендирай.");
+        throw new Error("Аудиото не можа да се зареди за видеото. Опитай пак с бутона 'Чуй гласа' и после рендирай.");
+      }
+      audioCtx = null; audioDest = null; audioSource = null;
+    }
+  }new Error("Аудиото не можа да се зареди за видеото. Опитай пак с бутона „Чуй гласа“ и после рендирай.");
       }
       audioCtx = null; audioDest = null; audioSource = null; iosAudioEl = null; iosAudioStream = null;
     }
@@ -465,9 +469,7 @@ export async function renderVideo(opts: VideoOptions): Promise<{ blob: Blob; mim
     if (!ios) return;
     try { ctx.getImageData(0, 0, 1, 1); } catch { /* ignore */ }
   };
-  if (iosAudioStream) {
-    for (const t of iosAudioStream.getAudioTracks()) videoStream.addTrack(t);
-  } else if (audioDest) {
+  if (audioDest) {
     for (const t of audioDest.stream.getAudioTracks()) videoStream.addTrack(t);
   }
 
@@ -804,13 +806,9 @@ export async function renderVideo(opts: VideoOptions): Promise<{ blob: Blob; mim
 
   const startedAt = performance.now();
   renderStartedAt = startedAt;
-  const hasAudio = Boolean(iosAudioEl || (audioCtx && audioSource));
-  if (iosAudioEl) {
-    // iOS: unmute and play the audio element. captureStream() feeds audio to recorder.
-    iosAudioEl.muted = false;
-    try { await iosAudioEl.play(); } catch { /* ignore */ }
-    console.log("[render-video] iOS audio element playing");
-  } else if (audioCtx && audioSource) {
+  const hasAudio = Boolean(audioCtx && audioSource);
+  
+  if (audioCtx && audioSource) {
     if (audioCtx.state === "suspended") {
       try { await withTimeout(audioCtx.resume(), 3_000, "Аудио системата не стартира навреме"); } catch { /* ignore */ }
     }
@@ -858,37 +856,24 @@ export async function renderVideo(opts: VideoOptions): Promise<{ blob: Blob; mim
       // wall clock so a stuck AudioContext can't hang the render.
       const wall = (now - startedAt) / 1000;
       // --- Audio elapsed calculation ---
-      // iOS: use HTMLAudioElement.currentTime directly (bypasses AudioContext entirely)
-      // Desktop: use AudioContext clock
-      const audioElapsed = iosAudioEl
-        ? iosAudioEl.currentTime
-        : (audioCtx ? Math.max(0, audioCtx.currentTime - audioStartCtxTime) : 0);
-      if ((!audioCtx && !iosAudioEl) || audioElapsed > lastAudioElapsed + 0.015) {
+      const audioElapsed = audioCtx ? Math.max(0, audioCtx.currentTime - audioStartCtxTime) : 0;
+      if (!audioCtx || audioElapsed > lastAudioElapsed + 0.015) {
         lastAudioElapsed = audioElapsed;
         lastAudioProgressWall = wall;
       }
       const audioClockStale = hasAudio && wall > 1.25 && wall - lastAudioProgressWall > 1.25;
       const clockElapsed = hasAudio && audioElapsed > 0.05 && !audioClockStale ? audioElapsed : wall;
-      // Even if the audio clock stalls, the written text must continue and
-      // finish before the video finalizes.
-      // Clamp the visual timeline to the real decoded audio duration. This
-      // avoids black/freezing frames if a mobile audio clock briefly overshoots,
-      // while still allowing the last subtitle to remain visible during tail.
+      
       const elapsed = Math.min(duration, Math.max(clockElapsed, Math.min(wall, revealDuration)));
       const { captionDone } = drawFrame(elapsed);
 
       // --- Audio completion detection ---
-      // iOS: HTMLAudioElement.ended is 100% reliable
-      if (iosAudioEl && iosAudioEl.ended && audioEndedAtWall === null) {
-        audioEndedAtWall = wall;
-        console.log(`[render-video] iOS audioEl.ended detected at wall=${wall.toFixed(2)}s`);
-      }
-      // Desktop: manual polling fallback for unreliable onended
-      if (!iosAudioEl && audioDest && audioEndedAtWall === null && audioCtx && audioBufDuration > 0) {
+      // We manually poll audioCtx.currentTime against the REAL audio duration (not the silence padding)
+      if (audioDest && audioEndedAtWall === null && audioCtx && audioBufDuration > 0) {
         const ctxElapsed = audioCtx.currentTime - audioStartCtxTime;
         if (ctxElapsed >= audioBufDuration - 0.05) {
           audioEndedAtWall = wall;
-          console.log(`[render-video] manual onended detection at wall=${wall.toFixed(2)}s, ctxElapsed=${ctxElapsed.toFixed(2)}s, bufDuration=${audioBufDuration.toFixed(2)}s`);
+          console.log(`[render-video] real audio ended at wall=${wall.toFixed(2)}s`);
         }
       }
 
@@ -907,7 +892,7 @@ export async function renderVideo(opts: VideoOptions): Promise<{ blob: Blob; mim
         scheduleDraw();
       } else {
         // Diagnostic: log which path triggered the finish
-        console.log(`[render-video] FINISH: wall=${wall.toFixed(2)}s duration=${duration.toFixed(2)}s audioEndedAtWall=${audioEndedAtWall?.toFixed(2) ?? 'null'} audioTail=${String(audioTailDone)} fallback=${String(audioFallbackDone)} silent=${String(silentVideoDone)} iosAudioEl=${String(!!iosAudioEl)} caption=${String(captionDone)}`);
+        console.log(`[render-video] FINISH: wall=${wall.toFixed(2)}s duration=${duration.toFixed(2)}s audioEndedAtWall=${audioEndedAtWall?.toFixed(2) ?? 'null'} audioTail=${String(audioTailDone)} fallback=${String(audioFallbackDone)} silent=${String(silentVideoDone)} caption=${String(captionDone)}`);
         finish();
       }
     };
