@@ -384,14 +384,13 @@ export async function renderVideo(opts: VideoOptions): Promise<{ blob: Blob; mim
       
       const originalBuf = await withTimeout(audioCtx.decodeAudioData(arr.slice(0)), 15_000, "Аудиото не можа да се декодира");
       
-      // THE FIX for iOS Safari audio truncation:
-      // Safari's MediaStreamDestinationNode has a massive internal latency buffer. 
-      // If we stop the video when the real audio ends, the last ~1 second of audio 
-      // is lost in the buffer. To fix this, we create a new AudioBuffer that is 
-      // exactly 2 seconds longer than the original, and fill the end with silence. 
-      // This physically forces Safari to flush the real audio into the MP4 file 
-      // while it plays the "silence".
-      const silencePadding = 2.0; 
+      // The fix for iOS Safari audio truncation:
+      // Safari's MediaStreamDestinationNode has massive internal latency. 
+      // If we stop the video when the real audio ends, the last 1-2 seconds of audio 
+      // is completely dropped. To fix this, we create a new AudioBuffer that is 
+      // 4 seconds longer than the original, and fill the end with silence. 
+      // This physically forces Safari to flush the real audio into the MP4 file.
+      const silencePadding = 4.0; 
       const paddedBuf = audioCtx.createBuffer(
         originalBuf.numberOfChannels,
         originalBuf.length + (originalBuf.sampleRate * silencePadding),
@@ -872,7 +871,7 @@ export async function renderVideo(opts: VideoOptions): Promise<{ blob: Blob; mim
         }
       }
 
-      const iosTail = 1.5; // seconds after audio "ends" to keep recording for pipeline flush
+      const iosTail = 4.0; // Wait a massive 4 seconds on iOS to guarantee the encoder flushes
       const audioTailDone = hasAudio && audioEndedAtWall !== null && wall >= audioEndedAtWall + (ios ? iosTail : 0);
       const isStuck = audioClockStale && wall >= lastAudioProgressWall + 5;
       // Fallback: if even manual detection fails, use wall time with generous padding
@@ -949,7 +948,7 @@ export async function renderVideo(opts: VideoOptions): Promise<{ blob: Blob; mim
         console.error("[render-video] recorder stop failed", e);
         finalize();
       }
-    }, ios ? 2500 : 350);
+    }, ios ? 3500 : 350);
   });
   if (blob.size < 1024) {
     detachCanvas();
