@@ -58,12 +58,12 @@ function CreatePage() {
 
   // sources
   const [tab, setTab] = useState<"ayah" | "hadith" | "viral">("ayah");
-  const [surah, setSurah] = useState(2);
-  const [ayah, setAyah] = useState(255);
-  const [hadithNum, setHadithNum] = useState(1);
+  const [surah, setSurah] = useState<number | "">("");
+  const [ayah, setAyah] = useState<number | "">("");
+  const [hadithNum, setHadithNum] = useState<number | "">("");
   const [hadithList, setHadithList] = useState<HadithData[]>([]);
   const [hadithSource, setHadithSource] = useState<"nawawi40" | SunnahCollection>("bukhari");
-  const [sunnahNum, setSunnahNum] = useState(1);
+  const [sunnahNum, setSunnahNum] = useState<number | "">("");
   const [theme, setTheme] = useState("надежда и спокойствие в трудни моменти");
   const [viral, setViral] = useState<ViralItem[]>([]);
   const [suggestingViral, setSuggestingViral] = useState(false);
@@ -483,13 +483,13 @@ function CreatePage() {
             <div className="font-ui flex flex-wrap items-end gap-3">
               <div className="space-y-1.5">
                 <Label htmlFor="surah">Сура</Label>
-                <Input id="surah" type="number" min={1} max={114} value={surah} onChange={(e) => setSurah(+e.target.value)} className="w-24" />
+                <Input id="surah" type="number" min={1} max={114} placeholder="Напр. 2" value={surah} onChange={(e) => setSurah(e.target.value ? +e.target.value : "")} className="w-24" />
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="ayah">Аят</Label>
-                <Input id="ayah" type="number" min={1} value={ayah} onChange={(e) => setAyah(+e.target.value)} className="w-24" />
+                <Input id="ayah" type="number" min={1} placeholder="Напр. 255" value={ayah} onChange={(e) => setAyah(e.target.value ? +e.target.value : "")} className="w-24" />
               </div>
-              <Button onClick={() => loadAyah(surah, ayah)} disabled={loading}>
+              <Button onClick={() => loadAyah(surah as number, ayah as number)} disabled={loading || !surah || !ayah}>
                 {loading ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4 mr-1" />}
                 Извлечи и преведи
               </Button>
@@ -518,8 +518,8 @@ function CreatePage() {
                 <>
                   <div className="space-y-1.5">
                     <Label>Номер (1–40)</Label>
-                    <Select value={String(hadithNum)} onValueChange={(v) => setHadithNum(+v)}>
-                      <SelectTrigger className="w-64"><SelectValue /></SelectTrigger>
+                    <Select value={String(hadithNum || "")} onValueChange={(v) => setHadithNum(+v)}>
+                      <SelectTrigger className="w-64"><SelectValue placeholder="Избери хадис" /></SelectTrigger>
                       <SelectContent className="max-h-72">
                         {(hadithList.length ? hadithList : [{ number: 1, reference: "40 Hadith Nawawi 1" }]).map((h) => (
                           <SelectItem key={h.number} value={String(h.number)}>{h.reference}</SelectItem>
@@ -527,7 +527,7 @@ function CreatePage() {
                       </SelectContent>
                     </Select>
                   </div>
-                  <Button onClick={() => loadHadith(hadithNum)} disabled={loading}>
+                  <Button onClick={() => loadHadith(hadithNum as number)} disabled={loading || !hadithNum}>
                     {loading ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4 mr-1" />}
                     Извлечи и преведи
                   </Button>
@@ -539,12 +539,13 @@ function CreatePage() {
                     <Input
                       type="number"
                       min={1}
+                      placeholder="Напр. 1"
                       value={sunnahNum}
-                      onChange={(e) => setSunnahNum(Math.max(1, parseInt(e.target.value || "1", 10)))}
+                      onChange={(e) => setSunnahNum(e.target.value ? Math.max(1, parseInt(e.target.value, 10)) : "")}
                       className="w-32"
                     />
                   </div>
-                  <Button onClick={() => loadSunnah(hadithSource as SunnahCollection, sunnahNum)} disabled={loading}>
+                  <Button onClick={() => loadSunnah(hadithSource as SunnahCollection, sunnahNum as number)} disabled={loading || !sunnahNum}>
                     {loading ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4 mr-1" />}
                     Извлечи и преведи
                   </Button>

@@ -154,7 +154,7 @@ function chooseFontSize(
   const maxSize = Math.round(readableMax * (W / 1080));
   const minSize = Math.round(38 * (W / 1080));
   for (let size = maxSize; size >= minSize; size -= 2) {
-    ctx.font = `700 ${size}px 'Cormorant Garamond', Georgia, serif`;
+    ctx.font = `800 ${size}px 'Inter', 'Roboto', 'Montserrat', sans-serif`;
     const lines = wrapWords(ctx, words, maxWidth);
     const lh = Math.round(size * 1.34);
     const maxLinesPerPage = Math.max(1, Math.floor(maxHeight / lh));
@@ -249,15 +249,24 @@ function drawReferencePill(ctx: CanvasRenderingContext2D, text: string) {
   const pillH = fontPx + padY * 2;
   const x = (W - pillW) / 2;
   const y = H - 160 * scale - pillH / 2;
-  ctx.shadowBlur = 0;
-  ctx.fillStyle = "rgba(0, 0, 0, 0.55)";
+  ctx.shadowBlur = 15;
+  ctx.shadowColor = "rgba(0, 0, 0, 0.6)";
+  ctx.fillStyle = "rgba(0, 0, 0, 0.65)";
   roundRect(ctx, x, y, pillW, pillH, pillH / 2);
   ctx.fill();
-  ctx.strokeStyle = "rgba(212, 175, 55, 0.65)";
-  ctx.lineWidth = 1.5;
+  
+  // Glowing golden border
+  ctx.shadowBlur = 10;
+  ctx.shadowColor = "rgba(212, 175, 55, 0.4)";
+  ctx.strokeStyle = "rgba(212, 175, 55, 0.8)";
+  ctx.lineWidth = 2.0;
   roundRect(ctx, x, y, pillW, pillH, pillH / 2);
   ctx.stroke();
+  
+  // Premium typography for the reference
+  ctx.shadowBlur = 0;
   ctx.fillStyle = "#f4c95d";
+  ctx.font = `bold ${24 * scale}px 'Inter', 'Roboto', sans-serif`;
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
   ctx.fillText(text, W / 2, y + pillH / 2 + 1);
@@ -431,7 +440,7 @@ export async function renderVideo(opts: VideoOptions): Promise<{ blob: Blob; mim
   }
 
   // stream — add audio onto the existing video stream so tracks share lifetime.
-  const fps = ios ? 24 : 30;
+  const fps = ios ? 30 : 60; // 60 FPS for ultra-smooth TikToks on desktop, 30 on iOS to avoid crashes
   // Keep a normal fixed-FPS canvas stream on iOS. `captureStream(0)` manual
   // mode is inconsistently implemented in mobile Safari and can make the
   // recorder never produce a playable final file. We still call requestFrame()
@@ -474,10 +483,8 @@ export async function renderVideo(opts: VideoOptions): Promise<{ blob: Blob; mim
   }
   const recorder = new MediaRecorder(videoStream, {
     mimeType: requestedMimeType,
-    // Higher desktop bitrate for 1080p, let iOS pick its native optimal bitrate for HD
-    ...(ios ? {} : { videoBitsPerSecond: 5_000_000 }),
-    // Safari's MP4 recorder is more reliable when it chooses the audio bitrate.
-    ...(ios ? {} : { audioBitsPerSecond: 128_000 }),
+    videoBitsPerSecond: 8_000_000,
+    audioBitsPerSecond: 192_000,
   });
   const recordedMimeType = normalizeRecordedMime(recorder.mimeType, requestedMimeType);
   const chunks: Blob[] = [];
@@ -732,12 +739,14 @@ export async function renderVideo(opts: VideoOptions): Promise<{ blob: Blob; mim
       const alphaOut = Math.max(0, Math.min(1, tillEnd / 0.18));
       const alpha = Math.min(alphaIn, alphaOut);
 
-      ctx.font = `700 ${activePhrase.fontSize}px 'Cormorant Garamond', Georgia, serif`;
+      // Premium modern TikTok font (bold, sans-serif)
+      ctx.font = `800 ${activePhrase.fontSize}px 'Inter', 'Roboto', 'Montserrat', sans-serif`;
       ctx.textBaseline = "alphabetic";
       ctx.lineJoin = "round";
-      ctx.shadowColor = "rgba(0,0,0,0.55)";
-      ctx.shadowBlur = 18;
-      ctx.shadowOffsetY = 2;
+      // Premium TikTok text glow & shadow
+      ctx.shadowColor = "rgba(0, 0, 0, 0.85)";
+      ctx.shadowBlur = 12;
+      ctx.shadowOffsetY = 4;
 
       const blockH = activePhrase.lines.length * activePhrase.lineHeight;
       const baseY =
