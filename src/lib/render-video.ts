@@ -386,11 +386,11 @@ export async function renderVideo(opts: VideoOptions): Promise<{ blob: Blob; mim
       
       // The fix for iOS Safari audio truncation:
       // Safari's MediaStreamDestinationNode has massive internal latency. 
-      // If we stop the video when the real audio ends, the last 1-2 seconds of audio 
+      // If we stop the video when the real audio ends, the last ~1 second of audio 
       // is completely dropped. To fix this, we create a new AudioBuffer that is 
-      // 4 seconds longer than the original, and fill the end with silence. 
+      // longer than the original, and fill the end with silence. 
       // This physically forces Safari to flush the real audio into the MP4 file.
-      const silencePadding = 4.0; 
+      const silencePadding = 2.0; 
       const paddedBuf = audioCtx.createBuffer(
         originalBuf.numberOfChannels,
         originalBuf.length + (originalBuf.sampleRate * silencePadding),
@@ -872,7 +872,7 @@ export async function renderVideo(opts: VideoOptions): Promise<{ blob: Blob; mim
         }
       }
 
-      const iosTail = 4.0; // Wait a massive 4 seconds on iOS to guarantee the encoder flushes
+      const iosTail = 0.8; // Sweet spot to capture the audio flush without adding too much video pause
       const audioTailDone = hasAudio && audioEndedAtWall !== null && wall >= audioEndedAtWall + (ios ? iosTail : 0);
       const isStuck = audioClockStale && wall >= lastAudioProgressWall + 5;
       // Fallback: if even manual detection fails, use wall time with generous padding
