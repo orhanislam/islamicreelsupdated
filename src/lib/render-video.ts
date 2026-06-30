@@ -381,30 +381,7 @@ export async function renderVideo(opts: VideoOptions): Promise<{ blob: Blob; mim
         window.AudioContext ?? (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
       audioCtx = new AC();
       const buf = await withTimeout(audioCtx.decodeAudioData(arr.slice(0)), 15_000, "Аудиото не можа да се декодира");
-      
-      // Analyze PCM data to dynamically strip trailing silence (especially useful for Quran reciter MP3s)
-      let realDuration = buf.duration;
-      try {
-        // Use a very low threshold to catch the natural tail/reverb of the last word
-        const threshold = 0.005;
-        let lastSampleIndex = 0;
-        for (let c = 0; c < buf.numberOfChannels; c++) {
-          const data = buf.getChannelData(c);
-          for (let i = data.length - 1; i >= 0; i--) {
-            if (Math.abs(data[i]) > threshold) {
-              if (i > lastSampleIndex) lastSampleIndex = i;
-              break;
-            }
-          }
-        }
-        if (lastSampleIndex > 0) {
-          // Add 0.15s after the last audible sample so the final syllable
-          // naturally fades out instead of being hard-cut mid-sound.
-          realDuration = Math.min(buf.duration, (lastSampleIndex / buf.sampleRate) + 0.15);
-        }
-      } catch (e) { console.warn("Failed to analyze audio PCM:", e); }
-      
-      duration = realDuration;
+      duration = buf.duration;
       audioDest = audioCtx.createMediaStreamDestination();
       audioSource = audioCtx.createBufferSource();
       audioSource.buffer = buf;
@@ -801,9 +778,7 @@ export async function renderVideo(opts: VideoOptions): Promise<{ blob: Blob; mim
       try { await withTimeout(audioCtx.resume(), 3_000, "Аудио системата не стартира навреме"); } catch { /* ignore */ }
     }
     audioStartCtxTime = audioCtx.currentTime;
-    // Start audio with the trimmed duration so it stops exactly when the
-    // reciter's voice ends, not when the trailing silence of the MP3 ends.
-    try { audioSource.start(0, 0, duration); } catch { /* ignore */ }
+    try { audioSource.start(0); } catch { /* ignore */ }
   }
 
   await new Promise<void>((resolveDraw) => {
