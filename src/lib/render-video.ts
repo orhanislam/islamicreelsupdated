@@ -367,6 +367,7 @@ export async function renderVideo(opts: VideoOptions): Promise<{ blob: Blob; mim
   let audioEndedAtWall: number | null = null;
   let renderStartedAt = 0;
   let duration = opts.fallbackDuration ?? 8;
+  let audioBufDuration = 0; // raw AudioBuffer.duration for manual onended detection
   if (opts.audioUrl) {
     try {
       const res = await withTimeout(
@@ -382,6 +383,7 @@ export async function renderVideo(opts: VideoOptions): Promise<{ blob: Blob; mim
       audioCtx = new AC();
       const buf = await withTimeout(audioCtx.decodeAudioData(arr.slice(0)), 15_000, "Аудиото не можа да се декодира");
       duration = buf.duration;
+      audioBufDuration = buf.duration;
       audioDest = audioCtx.createMediaStreamDestination();
       audioSource = audioCtx.createBufferSource();
       audioSource.buffer = buf;
@@ -835,19 +837,37 @@ export async function renderVideo(opts: VideoOptions): Promise<{ blob: Blob; mim
       const elapsed = Math.min(duration, Math.max(clockElapsed, Math.min(wall, revealDuration)));
       const { captionDone } = drawFrame(elapsed);
 
-      // iOS Safari's MediaStreamDestinationNode has ~0.5-1.0s of internal latency.
-      // When audioSource.onended fires, there is still audio sitting in Safari's
-      // pipeline that hasn't been written to the MP4 yet. We must keep recording
-      // for 1.0s after onended to capture every last sample. On desktop this
-      // latency is negligible so we stop immediately.
-      const audioTailDone = audioDest && audioEndedAtWall !== null && wall >= audioEndedAtWall + (ios ? 1.0 : 0);
+      // --- iOS Safari audio completion detection ---
+      // Area 1 fix: audioSource.onended does NOT reliably fire on iOS Safari
+      // when routed through MediaStreamDestinationNode. Manually detect audio
+      // completion by polling audioCtx.currentTime against the buffer duration.
+      if (audioDest && audioEndedAtWall === null && audioCtx && audioBufDuration > 0) {
+        const ctxElapsed = audioCtx.currentTime - audioStartCtxTime;
+        if (ctxElapsed >= audioBufDuration - 0.05) {
+          audioEndedAtWall = wall;
+          console.log(`[render-video] manual onended detection at wall=${wall.toFixed(2)}s, ctxElapsed=${ctxElapsed.toFixed(2)}s, bufDuration=${audioBufDuration.toFixed(2)}s`);
+        }
+      }
+
+      // Area 2 fix: On iOS, use wall clock time exclusively. The AudioContext
+      // clock advances ahead of the actual MediaStream audio output, so we
+      // cannot trust audioElapsed for termination.
+      const iosTail = 1.5; // seconds after audio "ends" to keep recording for pipeline flush
+      const audioTailDone = audioDest && audioEndedAtWall !== null && wall >= audioEndedAtWall + (ios ? iosTail : 0);
       const isStuck = audioClockStale && wall >= lastAudioProgressWall + 5;
-      const audioFallbackDone = audioDest && audioEndedAtWall === null && (audioElapsed >= duration || isStuck);
+      // Fallback: if even manual detection fails, use wall time with generous padding
+      const audioFallbackDone = audioDest && audioEndedAtWall === null && (
+        ios ? (wall >= duration + iosTail + 1.0)
+            : (audioElapsed >= duration)
+        || isStuck
+      );
       const silentVideoDone = !audioDest && wall >= duration + 0.5;
       const playbackDone = Boolean(audioTailDone || audioFallbackDone || silentVideoDone);
       if (!captionDone || !playbackDone) {
         scheduleDraw();
       } else {
+        // Diagnostic: log which path triggered the finish
+        console.log(`[render-video] FINISH: wall=${wall.toFixed(2)}s duration=${duration.toFixed(2)}s audioEndedAtWall=${audioEndedAtWall?.toFixed(2) ?? 'null'} audioTail=${String(audioTailDone)} fallback=${String(audioFallbackDone)} silent=${String(silentVideoDone)} caption=${String(captionDone)}`);
         finish();
       }
     };
@@ -909,7 +929,7 @@ export async function renderVideo(opts: VideoOptions): Promise<{ blob: Blob; mim
         console.error("[render-video] recorder stop failed", e);
         finalize();
       }
-    }, ios ? 1800 : 350);
+    }, ios ? 2500 : 350);
   });
   if (blob.size < 1024) {
     detachCanvas();
