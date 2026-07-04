@@ -835,7 +835,11 @@ export async function renderVideo(opts: VideoOptions): Promise<{ blob: Blob; mim
     const frameInterval = 1000 / fps;
     let draw: () => void;
     const scheduleDraw = () => {
-      rafId = requestAnimationFrame(draw);
+      if (ios) {
+        rafId = window.setTimeout(draw, 15) as any;
+      } else {
+        rafId = requestAnimationFrame(draw);
+      }
     };
     const finish = () => {
       if (!done) {
