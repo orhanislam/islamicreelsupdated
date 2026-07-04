@@ -16,6 +16,7 @@ export const runServerRender = createServerFn({ method: "POST" })
     const fsSync = await import("fs");
     const os = await import("os");
     const path = await import("path");
+    const { execSync } = await import("child_process");
     
     const ffmpegMod = await import("fluent-ffmpeg");
     const ffmpeg = ffmpegMod.default || ffmpegMod;
@@ -29,20 +30,33 @@ export const runServerRender = createServerFn({ method: "POST" })
         console.warn("[server-render] @ffmpeg-installer failed on win32:", e);
       }
     } else {
-      const candidates = [
-        "/usr/bin/ffmpeg",
-        "/usr/local/bin/ffmpeg",
-        path.resolve(process.cwd(), "node_modules/@ffmpeg-installer/linux-x64/ffmpeg"),
-        path.resolve(process.cwd(), "../node_modules/@ffmpeg-installer/linux-x64/ffmpeg"),
-        "ffmpeg"
-      ];
-      for (const c of candidates) {
-        if (c === "ffmpeg" || fsSync.existsSync(c)) {
-          ffmpegPath = c;
-          break;
+      // Try to locate ffmpeg using 'which' command first
+      try {
+        const which = execSync("which ffmpeg", { encoding: "utf8" }).trim();
+        if (which) ffmpegPath = which;
+      } catch {
+        // 'which' failed, check common paths manually
+        const candidates = [
+          "/usr/bin/ffmpeg",
+          "/usr/local/bin/ffmpeg",
+          "/snap/bin/ffmpeg",
+        ];
+        let found = false;
+        for (const c of candidates) {
+          if (fsSync.existsSync(c)) {
+            ffmpegPath = c;
+            found = true;
+            break;
+          }
+        }
+        if (!found) {
+          throw new Error(
+            "FFmpeg не е инсталиран на сървъра! Изпълнете: sudo apt-get install -y ffmpeg"
+          );
         }
       }
     }
+    console.log(`[server-render] Using ffmpeg at: ${ffmpegPath}`);
     ffmpeg.setFfmpegPath(ffmpegPath);
 
     const sessionId = Date.now().toString() + Math.floor(Math.random() * 10000);
