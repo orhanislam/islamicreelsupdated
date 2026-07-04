@@ -1,18 +1,28 @@
 import { createServerFn } from "@tanstack/react-start";
 import type { Buffer } from "node:buffer";
 
+// Polyfill __dirname and __filename for bundled CommonJS modules in ESM environments
+try {
+  if (typeof globalThis !== "undefined" && !(globalThis as any).__dirname) {
+    (globalThis as any).__dirname = process.cwd();
+    (globalThis as any).__filename = process.cwd() + "/index.mjs";
+  }
+} catch { /* ignore */ }
+
 export const runServerRender = createServerFn({ method: "POST" })
   .validator((opts: any) => opts)
   .handler(async ({ data }) => {
     const ffmpegMod = await import("fluent-ffmpeg");
     const ffmpeg = ffmpegMod.default || ffmpegMod;
     let ffmpegPath = "ffmpeg";
-    try {
-      const installerMod = await import("@ffmpeg-installer/ffmpeg");
-      const installer = installerMod.default || installerMod;
-      if (installer?.path) ffmpegPath = installer.path;
-    } catch (e) {
-      console.warn("[server-render] @ffmpeg-installer failed, using system ffmpeg binary:", e);
+    if (process.platform === "win32") {
+      try {
+        const installerMod = await import("@ffmpeg-installer/ffmpeg");
+        const installer = installerMod.default || installerMod;
+        if (installer?.path) ffmpegPath = installer.path;
+      } catch (e) {
+        console.warn("[server-render] @ffmpeg-installer failed, using system ffmpeg binary:", e);
+      }
     }
     const fs = (await import("fs")).promises;
     const os = await import("os");
