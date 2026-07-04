@@ -22,22 +22,22 @@ export type VideoOptions = RenderOptions & {
   arabicWordCount?: number;
   /** Per-Bulgarian-word timings (from ElevenLabs with-timestamps), aligned to audioUrl. */
   bulgarianWordTimings?: WordSegment[];
+  /** Video quality. 1080p uses high bitrate but may crash iPhone Safari. */
+  quality?: "1080p" | "720p";
 };
 
 let W = 1080;
 let H = 1920;
 let SAFE = { top: 320, bottom: 280, side: 130 };
 
-function configureCanvasSize(ios: boolean) {
-  // Mobile Safari's MP4 MediaRecorder cannot reliably record 1080x1920 canvas streams.
-  // It results in unplayable files, zero-byte chunks, or completely black frames. We MUST downscale to 720p (2/3).
-  const scale = ios ? 2 / 3 : 1;
-  W = Math.round(1080 * scale);
-  H = Math.round(1920 * scale);
+function configureCanvasSize(ios: boolean, quality?: "1080p" | "720p") {
+  const scale = 1; // Strictly 1080p (1080x1920) as requested
+  W = 1080;
+  H = 1920;
   SAFE = {
-    top: Math.round(320 * scale),
-    bottom: Math.round(280 * scale),
-    side: Math.round(130 * scale),
+    top: 320,
+    bottom: 280,
+    side: 130,
   };
   return scale;
 }
@@ -52,6 +52,8 @@ async function loadImage(src: string): Promise<HTMLImageElement> {
     img.src = src;
   });
 }
+
+
 
 function isIOSDevice() {
   return /iPad|iPhone|iPod/i.test(navigator.userAgent) ||
@@ -206,6 +208,9 @@ function pickMimeType(ios: boolean): string {
     "video/mp4;codecs=avc1.42E01F",
     "video/mp4;codecs=avc1.42E01F,mp4a.40.2",
   ] : [
+    "video/webm;codecs=vp9,opus",
+    "video/webm;codecs=vp8,opus",
+    "video/webm",
     "video/mp4;codecs=avc1.42E01F,mp4a.40.2",
     "video/mp4;codecs=avc1.42E01F",
     "video/mp4",
@@ -279,7 +284,8 @@ export async function renderVideo(opts: VideoOptions): Promise<{ blob: Blob; mim
   }
 
   const ios = isIOSDevice();
-  const scale = configureCanvasSize(ios);
+  const scale = configureCanvasSize(ios, opts.quality);
+  const videoBitsPerSecond = opts.quality === "1080p" ? 4_500_000 : 2_500_000;
 
   const canvas = document.createElement("canvas");
   canvas.width = W;
@@ -399,7 +405,7 @@ export async function renderVideo(opts: VideoOptions): Promise<{ blob: Blob; mim
       // is completely dropped. To fix this, we create a new AudioBuffer that is 
       // longer than the original, and fill the end with silence. 
       // This physically forces Safari to flush the real audio into the MP4 file.
-      const silencePadding = 2.0; 
+      const silencePadding = 1.0; 
       const paddedBuf = audioCtx.createBuffer(
         originalBuf.numberOfChannels,
         originalBuf.length + (originalBuf.sampleRate * silencePadding),
@@ -440,7 +446,7 @@ export async function renderVideo(opts: VideoOptions): Promise<{ blob: Blob; mim
   }
 
   // stream — add audio onto the existing video stream so tracks share lifetime.
-  const fps = ios ? 30 : 60; // 60 FPS for ultra-smooth TikToks on desktop, 30 on iOS to avoid crashes
+  const fps = 30; // Strictly 30 FPS as requested
   // Keep a normal fixed-FPS canvas stream on iOS. `captureStream(0)` manual
   // mode is inconsistently implemented in mobile Safari and can make the
   // recorder never produce a playable final file. We still call requestFrame()
@@ -483,8 +489,8 @@ export async function renderVideo(opts: VideoOptions): Promise<{ blob: Blob; mim
   }
   const recorder = new MediaRecorder(videoStream, {
     mimeType: requestedMimeType,
-    videoBitsPerSecond: 8_000_000,
-    audioBitsPerSecond: 192_000,
+    videoBitsPerSecond,
+    audioBitsPerSecond: 128_000,
   });
   const recordedMimeType = normalizeRecordedMime(recorder.mimeType, requestedMimeType);
   const chunks: Blob[] = [];
@@ -706,15 +712,15 @@ export async function renderVideo(opts: VideoOptions): Promise<{ blob: Blob; mim
       ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
     }
 
-    // overlay + vignette
+    // overlay + vignette (lightened to keep stock videos vibrant and colorful)
     const ov = ctx.createLinearGradient(0, 0, 0, H);
-    ov.addColorStop(0, "rgba(0,0,0,0.55)");
-    ov.addColorStop(0.5, "rgba(0,0,0,0.2)");
-    ov.addColorStop(1, "rgba(0,0,0,0.78)");
+    ov.addColorStop(0, "rgba(0,0,0,0.25)");
+    ov.addColorStop(0.5, "rgba(0,0,0,0.05)");
+    ov.addColorStop(1, "rgba(0,0,0,0.45)");
     ctx.fillStyle = ov; ctx.fillRect(0, 0, W, H);
     const vig = ctx.createRadialGradient(W / 2, H / 2, H * 0.35, W / 2, H / 2, H * 0.7);
     vig.addColorStop(0, "rgba(0,0,0,0)");
-    vig.addColorStop(1, "rgba(0,0,0,0.45)");
+    vig.addColorStop(1, "rgba(0,0,0,0.20)");
     ctx.fillStyle = vig; ctx.fillRect(0, 0, W, H);
 
     // corner accents (skip for minimal)
@@ -740,13 +746,13 @@ export async function renderVideo(opts: VideoOptions): Promise<{ blob: Blob; mim
       const alpha = Math.min(alphaIn, alphaOut);
 
       // Premium modern TikTok font (bold, sans-serif)
-      ctx.font = `800 ${activePhrase.fontSize}px 'Inter', 'Roboto', 'Montserrat', sans-serif`;
+      ctx.font = `800 ${activePhrase.fontSize}px 'Outfit', 'Inter', sans-serif`;
       ctx.textBaseline = "alphabetic";
       ctx.lineJoin = "round";
       // Premium TikTok text glow & shadow
-      ctx.shadowColor = "rgba(0, 0, 0, 0.85)";
-      ctx.shadowBlur = 12;
-      ctx.shadowOffsetY = 4;
+      ctx.shadowColor = "rgba(0, 0, 0, 0.9)";
+      ctx.shadowBlur = 18;
+      ctx.shadowOffsetY = 6;
 
       const blockH = activePhrase.lines.length * activePhrase.lineHeight;
       const baseY =
@@ -844,11 +850,13 @@ export async function renderVideo(opts: VideoOptions): Promise<{ blob: Blob; mim
       }
     };
     // Hard safety cap — only for broken browser encoders. Normal completion is
-    // gated below by BOTH full caption reveal and full audio playback.
+    // Failsafe timeout in case the MediaRecorder drops frames indefinitely
+    const isHeadless = navigator.userAgent.includes("HeadlessChrome");
+    const timeoutSeconds = isHeadless ? 600 : duration + 45; // Allow 10 minutes for server-side rendering
     const safety = setTimeout(() => {
       console.warn("[render-video] safety timeout reached, finishing render");
       finish();
-    }, (duration + 45) * 1000);
+    }, timeoutSeconds * 1000);
 
     draw = () => {
       if (done) return;

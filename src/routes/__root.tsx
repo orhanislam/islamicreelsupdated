@@ -78,14 +78,14 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "Islamic Reels Studio" },
-      { name: "description", content: "Islamic Reels Studio creates professional Islamic photos and videos for social media." },
-      { property: "og:title", content: "Islamic Reels Studio" },
-      { property: "og:description", content: "Islamic Reels Studio creates professional Islamic photos and videos for social media." },
+      { title: "Nur Studio | Създай ислямски видеа" },
+      { name: "description", content: "Професионално студио за създаване на ислямски видеа (Reels) и снимки с автоматичен превод и озвучаване." },
+      { property: "og:title", content: "Nur Studio | Създай ислямски видеа" },
+      { property: "og:description", content: "Професионално студио за създаване на ислямски видеа (Reels) и снимки с автоматичен превод и озвучаване." },
       { property: "og:type", content: "website" },
-      { name: "twitter:card", content: "summary" },
-      { name: "twitter:title", content: "Islamic Reels Studio" },
-      { name: "twitter:description", content: "Islamic Reels Studio creates professional Islamic photos and videos for social media." },
+      { name: "twitter:card", content: "summary_large_image" },
+      { name: "twitter:title", content: "Nur Studio | Ислямски Видеа" },
+      { name: "twitter:description", content: "Създавай красиви ислямски видеа лесно и бързо." },
     ],
     links: [
       {
@@ -102,7 +102,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
 
 function RootShell({ children }: { children: ReactNode }) {
   return (
-    <html lang="en">
+    <html lang="bg" className="dark">
       <head>
         <HeadContent />
       </head>

@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as AppRouteRouteImport } from './routes/_app/route'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as InternalRenderRouteImport } from './routes/internal/render'
 import { Route as AppCreateRouteImport } from './routes/_app/create'
 
 const AppRouteRoute = AppRouteRouteImport.update({
@@ -22,6 +23,11 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const InternalRenderRoute = InternalRenderRouteImport.update({
+  id: '/internal/render',
+  path: '/internal/render',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AppCreateRoute = AppCreateRouteImport.update({
   id: '/create',
   path: '/create',
@@ -31,28 +37,32 @@ const AppCreateRoute = AppCreateRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/create': typeof AppCreateRoute
+  '/internal/render': typeof InternalRenderRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/create': typeof AppCreateRoute
+  '/internal/render': typeof InternalRenderRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/_app': typeof AppRouteRouteWithChildren
   '/_app/create': typeof AppCreateRoute
+  '/internal/render': typeof InternalRenderRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/create'
+  fullPaths: '/' | '/create' | '/internal/render'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/create'
-  id: '__root__' | '/' | '/_app' | '/_app/create'
+  to: '/' | '/create' | '/internal/render'
+  id: '__root__' | '/' | '/_app' | '/_app/create' | '/internal/render'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AppRouteRoute: typeof AppRouteRouteWithChildren
+  InternalRenderRoute: typeof InternalRenderRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -69,6 +79,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/internal/render': {
+      id: '/internal/render'
+      path: '/internal/render'
+      fullPath: '/internal/render'
+      preLoaderRoute: typeof InternalRenderRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_app/create': {
@@ -96,6 +113,7 @@ const AppRouteRouteWithChildren = AppRouteRoute._addFileChildren(
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AppRouteRoute: AppRouteRouteWithChildren,
+  InternalRenderRoute: InternalRenderRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

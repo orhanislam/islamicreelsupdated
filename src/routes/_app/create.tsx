@@ -12,6 +12,7 @@ import { createSameOriginDownloadUrl, createSameOriginMediaUrl, cleanMediaMimeTy
 import { renderPhoto, blobToBase64, type RenderOptions } from "@/lib/render-photo";
 import { renderVideo } from "@/lib/render-video";
 import { synthesizeHadithNarration } from "@/lib/tts.functions";
+import { runServerRender } from "@/lib/render.functions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -82,20 +83,23 @@ function CreatePage() {
   const [bgPrompt, setBgPrompt] = useState<string>("");
   const [bgVideoUrl, setBgVideoUrl] = useState<string | null>(null);
   const [pexelsPhotos, setPexelsPhotos] = useState<{ id: number; url: string; full: string; photographer: string }[]>([]);
-  const [pexelsVideos, setPexelsVideos] = useState<{ id: number; link: string; poster: string; photographer: string }[]>([]);
+  const [pexelsVideos, setPexelsVideos] = useState<{ id: number; link: string; poster: string; photographer: string; duration: number }[]>([]);
   const [pexelsQuery, setPexelsQuery] = useState<string>("");
   const [pexelsTheme, setPexelsTheme] = useState<string>("");
   const [pexelsTried, setPexelsTried] = useState<string[]>([]);
   const [pexelsAvoid, setPexelsAvoid] = useState<string[]>([]);
   const [pexelsLoading, setPexelsLoading] = useState(false);
   const [pexelsVideosLoading, setPexelsVideosLoading] = useState(false);
+  const [minPexelsDuration, setMinPexelsDuration] = useState<number>(30);
 
   // audio: custom upload
   const [customAudioUrl, setCustomAudioUrl] = useState<string | null>(null);
 
   // caption style + output format
   const [captionStyle, setCaptionStyle] = useState<RenderOptions["style"]>("centered");
-  const [format, setFormat] = useState<"photo" | "video">("photo");
+  const [format, setFormat] = useState<"photo" | "video">("video");
+  const [videoQuality, setVideoQuality] = useState<"1080p" | "720p">("1080p");
+  const [renderMode, setRenderMode] = useState<"client" | "server">("server");
   // Bulgarian male narration (hadiths)
   const [useBgNarration, setUseBgNarration] = useState(true);
   const [narrationUrl, setNarrationUrl] = useState<string | null>(null);
@@ -229,11 +233,30 @@ function CreatePage() {
       setSurah(+m[1]); setAyah(+m[2]);
       await loadAyah(+m[1], +m[2]);
     } else {
+      const collMatch = item.ref.toLowerCase().match(/(bukhari|muslim|dawud|tirmidhi|nasai|majah|nawawi)/);
       const m = item.ref.match(/(\d+)/);
       const n = m ? +m[1] : 1;
+      
       setTab("hadith");
-      setHadithNum(n);
-      await loadHadith(n);
+      if (collMatch) {
+         let coll = collMatch[1] as string;
+         if (coll === 'dawud') coll = 'abudawud';
+         
+         if (coll === 'nawawi') {
+           setHadithSource("nawawi40");
+           setHadithNum(n);
+           await loadHadith(n);
+         } else {
+           setHadithSource(coll as SunnahCollection);
+           setSunnahNum(n);
+           await loadSunnah(coll as SunnahCollection, n, false); // Don't require sahih strict filter just in case AI recommended a hasan one
+         }
+      } else {
+         // Fallback to Bukhari if collection not recognizable
+         setHadithSource("bukhari");
+         setSunnahNum(n);
+         await loadSunnah("bukhari", n, false);
+      }
     }
   };
 
@@ -280,7 +303,7 @@ function CreatePage() {
     if (!content) return;
     setPexelsVideosLoading(true);
     try {
-      const r = await runPexelsVideos({ data: { text: `${content.english}\n${bulgarian}`, query: overrideQuery ?? pexelsQuery, avoid: pexelsAvoid } });
+      const r = await runPexelsVideos({ data: { text: `${content.english}\n${bulgarian}`, query: overrideQuery ?? pexelsQuery, avoid: pexelsAvoid, minDuration: minPexelsDuration } });
       setPexelsVideos(r.videos);
       setPexelsQuery(r.query);
       setPexelsTheme(r.theme ?? "");
@@ -295,7 +318,7 @@ function CreatePage() {
     if (!content) return;
     setPexelsVideosLoading(true);
     try {
-      const r = await runPexelsVideos({ data: { text: `${content.english}\n${bulgarian}`, avoid: pexelsAvoid } });
+      const r = await runPexelsVideos({ data: { text: `${content.english}\n${bulgarian}`, avoid: pexelsAvoid, minDuration: minPexelsDuration } });
       setPexelsVideos(r.videos);
       setPexelsQuery(r.query);
       setPexelsTheme(r.theme ?? "");
@@ -398,13 +421,8 @@ function CreatePage() {
           toast.message("Без аудио — ще се рендира 8s видео.");
         }
         toast.message("Рендирам видео в реално време — изчакай края на аудиото.");
-        console.info("[create] video render started", {
-          sourceType: content.source_type,
-          hasAudio: Boolean(audio),
-          hasBackgroundVideo: Boolean(bgVideoUrl),
-          ios: isIOSMediaDevice(),
-        });
-        const { blob, mimeType } = await renderVideo({
+        
+        const opts = {
           backgroundUrl: bgUrl,
           backgroundVideoUrl: bgVideoUrl,
           arabic: content.arabic,
@@ -417,7 +435,28 @@ function CreatePage() {
           wordSegments: customAudioUrl || narration ? undefined : content.wordSegments,
           arabicWordCount: customAudioUrl || narration ? undefined : content.arabicWordCount,
           bulgarianWordTimings: narration && timings && timings.length ? timings : undefined,
-        });
+          quality: videoQuality,
+        };
+
+        let blob: Blob;
+        let mimeType: string;
+
+        if (renderMode === "server") {
+          toast.message("Изпращане към сървъра за рендиране... Моля, изчакайте (до 60 секунди).");
+          try {
+            const base64Data = await runServerRender({ data: opts });
+            const res = await fetch(`data:video/mp4;base64,${base64Data}`);
+            blob = await res.blob();
+            mimeType = "video/mp4";
+          } catch (e: any) {
+            throw new Error(`Сървърна грешка: ${e.message || e}`);
+          }
+        } else {
+          const result = await renderVideo(opts);
+          blob = result.blob;
+          mimeType = result.mimeType;
+        }
+
         if (renderedUrl) URL.revokeObjectURL(renderedUrl);
         const blobUrl = URL.createObjectURL(blob);
         setRenderedUrl(blobUrl);
@@ -479,7 +518,7 @@ function CreatePage() {
         </TabsList>
 
         <TabsContent value="ayah">
-          <Card className="p-6">
+          <Card className="glass-card p-6">
             <div className="font-ui flex flex-wrap items-end gap-3">
               <div className="space-y-1.5">
                 <Label htmlFor="surah">Сура</Label>
@@ -498,7 +537,7 @@ function CreatePage() {
         </TabsContent>
 
         <TabsContent value="hadith">
-          <Card className="p-6 space-y-4">
+          <Card className="glass-card p-6 space-y-4 animate-fade-up">
             <p className="font-ui text-sm text-muted-foreground">Сахих хадиси директно от sunnah.com.</p>
             <div className="font-ui flex flex-wrap items-end gap-3">
               <div className="space-y-1.5">
@@ -559,7 +598,7 @@ function CreatePage() {
         </TabsContent>
 
         <TabsContent value="viral">
-          <Card className="p-6 space-y-3">
+          <Card className="glass-card p-6 space-y-3 animate-fade-up">
             <Label className="font-ui">Тема или настроение</Label>
             <div className="flex gap-2">
               <Input value={theme} onChange={(e) => setTheme(e.target.value)} placeholder="напр. търпение в труден момент" />
@@ -589,7 +628,7 @@ function CreatePage() {
 
       {content && (
         <div className="mt-6 grid gap-6 md:grid-cols-2">
-          <Card className="p-6 space-y-4">
+          <Card className="glass-card p-6 space-y-4 animate-fade-up">
             <div>
               <p className="font-ui text-xs uppercase tracking-wider text-muted-foreground">{content.source_ref}</p>
               <p className="font-arabic text-3xl leading-loose mt-2 text-right" dir="rtl">{content.arabic}</p>
@@ -658,21 +697,31 @@ function CreatePage() {
             </div>
           </Card>
 
-          <Card className="p-6 space-y-4">
+          <Card className="glass-card p-6 space-y-4 animate-fade-up">
             <Label className="font-ui" htmlFor="bg">Български превод (можеш да редактираш)</Label>
             {translating ? (
               <div className="flex items-center gap-2 text-muted-foreground"><Loader2 className="size-4 animate-spin" /> Превеждам…</div>
             ) : (
-              <Textarea id="bg" rows={10} value={bulgarian} onChange={(e) => setBulgarian(e.target.value)} className="text-base leading-relaxed" />
+              <Textarea 
+                id="bg" 
+                rows={10} 
+                value={bulgarian} 
+                onChange={(e) => {
+                  setBulgarian(e.target.value);
+                  setNarrationUrl(null);
+                  clearRendered();
+                }} 
+                className="text-base leading-relaxed" 
+              />
             )}
             <div className="grid grid-cols-2 gap-2">
               <div className="space-y-2">
-                <Label className="font-ui">Формат</Label>
-                <Select value={format} onValueChange={(v) => { setFormat(v as "photo" | "video"); clearRendered(); }}>
+                <Label className="font-ui">Метод на рендиране</Label>
+                <Select value={renderMode} onValueChange={(v) => { setRenderMode(v as "client" | "server"); clearRendered(); }}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="photo">Снимка (PNG)</SelectItem>
-                    <SelectItem value="video">Видео със синхронизиран превод</SelectItem>
+                    <SelectItem value="client">В браузъра (Бързо, безплатно, за PC/Mac)</SelectItem>
+                    <SelectItem value="server">На сървъра (Clouding.io, за iPhone)</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -688,136 +737,97 @@ function CreatePage() {
                 </Select>
               </div>
             </div>
+            <div className="flex items-center gap-2 pt-1 text-xs text-muted-foreground font-ui">
+              <Badge variant="outline" className="font-mono bg-primary/5 text-primary border-primary/20">
+                1080p • 30 FPS • Видео формат
+              </Badge>
+              <span>Автоматично синхронизирано със стоково видео</span>
+            </div>
           </Card>
         </div>
       )}
 
       {content && bulgarian && !translating && (
-        <Card className="mt-6 p-6 space-y-4">
+        <Card className="glass-card mt-6 p-6 space-y-4 animate-fade-up">
           <div className="flex items-center justify-between gap-3 flex-wrap">
             <div>
-              <h2 className="text-2xl">Фон, подходящ за текста</h2>
-              <p className="font-ui text-sm text-muted-foreground">AI предлага 3 идеи (без хора и животни). Избери и генерирай.</p>
+              <h2 className="text-2xl">Стокови видеа от Pexels (1080p / 30 FPS)</h2>
+              <p className="font-ui text-sm text-muted-foreground">AI чете текста и подбира визуално подходящи вертикални видео кадри. Без хора, животни или религиозни символи.</p>
             </div>
-            <Button variant="secondary" onClick={onSuggest} disabled={suggesting}>
-              {suggesting ? <Loader2 className="size-4 animate-spin mr-1" /> : <Wand2 className="size-4 mr-1" />}
-              {suggestions.length ? "Нови идеи" : "Предложи идеи"}
-            </Button>
+            <div className="flex gap-2 items-center flex-wrap">
+              <Input
+                value={pexelsQuery}
+                onChange={(e) => setPexelsQuery(e.target.value)}
+                placeholder="напр. mountain sunset"
+                className="w-48 font-ui"
+              />
+              <Select value={String(minPexelsDuration)} onValueChange={(v) => setMinPexelsDuration(Number(v))}>
+                <SelectTrigger className="w-[140px] font-ui"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="15">Мин. 15 сек.</SelectItem>
+                  <SelectItem value="30">Мин. 30 сек.</SelectItem>
+                  <SelectItem value="45">Мин. 45 сек.</SelectItem>
+                  <SelectItem value="60">Мин. 60 сек.</SelectItem>
+                </SelectContent>
+              </Select>
+              <Button variant="secondary" onClick={() => onPexelsVideoSearch()} disabled={pexelsVideosLoading}>
+                {pexelsVideosLoading ? <Loader2 className="size-4 animate-spin mr-1" /> : <Film className="size-4 mr-1" />}
+                {pexelsVideos.length ? "Видеа отново" : "Търси видеа"}
+              </Button>
+              <Button onClick={onAutoPickPexelsVideo} disabled={pexelsVideosLoading}>
+                {pexelsVideosLoading ? <Loader2 className="size-4 animate-spin mr-1" /> : <Sparkles className="size-4 mr-1" />}
+                Авто-избор
+              </Button>
+            </div>
           </div>
 
-          {suggestions.length > 0 && (
-            <div className="grid gap-3 md:grid-cols-3">
-              {suggestions.map((s, i) => {
-                const isActive = bgPrompt === s.prompt;
+          {(pexelsTheme || pexelsTried.length > 0) && (
+            <div className="flex items-center gap-2 flex-wrap text-xs font-ui">
+              {pexelsTheme && <Badge variant="secondary">Тема: {pexelsTheme}</Badge>}
+              {pexelsTried.map((q) => (
+                <Badge key={q} variant={q === pexelsQuery ? "default" : "outline"} className="font-mono">{q}</Badge>
+              ))}
+              {pexelsTheme && (
+                <Button size="sm" variant="ghost" onClick={onRotateTheme} disabled={pexelsVideosLoading} className="h-6">
+                  Друга тема
+                </Button>
+              )}
+            </div>
+          )}
+
+          {pexelsVideos.length > 0 && (
+            <div className="grid grid-cols-3 gap-2 pt-2">
+              {pexelsVideos.map((v) => {
+                const isActive = bgVideoUrl === v.link;
                 return (
-                  <Card key={i} className={`p-4 space-y-3 ${isActive ? "ring-2 ring-primary" : ""}`}>
-                    <p className="font-ui font-medium">{s.label}</p>
-                    <p className="font-ui text-xs text-muted-foreground line-clamp-4">{s.prompt}</p>
-                    <Button size="sm" className="w-full" variant={isActive ? "default" : "outline"} onClick={() => onGenerateBg(i, s.prompt)} disabled={generatingIdx !== null}>
-                      {generatingIdx === i ? <><Loader2 className="size-4 animate-spin mr-1" /> Генерирам…</> : <><ImageIcon className="size-4 mr-1" /> {isActive ? "Регенерирай" : "Генерирай"}</>}
-                    </Button>
-                  </Card>
+                  <button
+                    key={v.id}
+                    type="button"
+                    onClick={() => onPickPexelsVideo(v)}
+                    className={`relative aspect-[9/16] overflow-hidden rounded-md border transition ${isActive ? "ring-2 ring-primary border-primary" : "hover:border-primary/60"}`}
+                  >
+                    {v.poster ? <img src={v.poster} alt="" className="size-full object-cover" loading="lazy" /> : <div className="size-full bg-muted" />}
+                    <span className="absolute top-1 left-1 bg-black/70 text-white text-[10px] px-1.5 py-0.5 rounded flex items-center gap-1"><Film className="size-3" />{v.duration}s</span>
+                    <span className="absolute bottom-0 inset-x-0 bg-black/60 text-white text-[10px] px-1 py-0.5 truncate text-left">{v.photographer}</span>
+                  </button>
                 );
               })}
             </div>
           )}
-
-          <div className="border-t pt-4 space-y-3">
-            <div className="flex items-center justify-between gap-3 flex-wrap">
-              <div>
-                <h3 className="text-lg">Стокови снимки/видеа от Pexels</h3>
-                <p className="font-ui text-xs text-muted-foreground">AI чете текста и подбира визуално подходящи кадри. Без хора, животни или религиозни символи.</p>
-              </div>
-              <div className="flex gap-2 items-center flex-wrap">
-                <Input
-                  value={pexelsQuery}
-                  onChange={(e) => setPexelsQuery(e.target.value)}
-                  placeholder="напр. mountain sunset"
-                  className="w-48 font-ui"
-                />
-                <Button variant="secondary" onClick={() => onPexelsSearch()} disabled={pexelsLoading}>
-                  {pexelsLoading ? <Loader2 className="size-4 animate-spin mr-1" /> : <ImageIcon className="size-4 mr-1" />}
-                  {pexelsPhotos.length ? "Снимки отново" : "Стокови снимки"}
-                </Button>
-                <Button variant="secondary" onClick={() => onPexelsVideoSearch()} disabled={pexelsVideosLoading}>
-                  {pexelsVideosLoading ? <Loader2 className="size-4 animate-spin mr-1" /> : <Film className="size-4 mr-1" />}
-                  {pexelsVideos.length ? "Видеа отново" : "Стокови видеа"}
-                </Button>
-                <Button onClick={onAutoPickPexelsVideo} disabled={pexelsVideosLoading}>
-                  {pexelsVideosLoading ? <Loader2 className="size-4 animate-spin mr-1" /> : <Sparkles className="size-4 mr-1" />}
-                  Авто-избор
-                </Button>
-              </div>
-            </div>
-
-            {(pexelsTheme || pexelsTried.length > 0) && (
-              <div className="flex items-center gap-2 flex-wrap text-xs font-ui">
-                {pexelsTheme && <Badge variant="secondary">Тема: {pexelsTheme}</Badge>}
-                {pexelsTried.map((q) => (
-                  <Badge key={q} variant={q === pexelsQuery ? "default" : "outline"} className="font-mono">{q}</Badge>
-                ))}
-                {pexelsTheme && (
-                  <Button size="sm" variant="ghost" onClick={onRotateTheme} disabled={pexelsVideosLoading} className="h-6">
-                    Друга тема
-                  </Button>
-                )}
-              </div>
-            )}
-
-
-            {pexelsPhotos.length > 0 && (
-              <div className="grid grid-cols-3 gap-2">
-                {pexelsPhotos.map((p) => {
-                  const isActive = bgUrl === p.full;
-                  return (
-                    <button
-                      key={p.id}
-                      type="button"
-                      onClick={() => onPickPexels(p)}
-                      className={`relative aspect-[9/16] overflow-hidden rounded-md border transition ${isActive ? "ring-2 ring-primary border-primary" : "hover:border-primary/60"}`}
-                    >
-                      <img src={p.url} alt="" className="size-full object-cover" loading="lazy" />
-                      <span className="absolute bottom-0 inset-x-0 bg-black/60 text-white text-[10px] px-1 py-0.5 truncate text-left">{p.photographer}</span>
-                    </button>
-                  );
-                })}
-              </div>
-            )}
-            {pexelsVideos.length > 0 && (
-              <div className="grid grid-cols-3 gap-2 pt-2">
-                {pexelsVideos.map((v) => {
-                  const isActive = bgVideoUrl === v.link;
-                  return (
-                    <button
-                      key={v.id}
-                      type="button"
-                      onClick={() => onPickPexelsVideo(v)}
-                      className={`relative aspect-[9/16] overflow-hidden rounded-md border transition ${isActive ? "ring-2 ring-primary border-primary" : "hover:border-primary/60"}`}
-                    >
-                      {v.poster ? <img src={v.poster} alt="" className="size-full object-cover" loading="lazy" /> : <div className="size-full bg-muted" />}
-                      <span className="absolute top-1 left-1 bg-black/70 text-white text-[10px] px-1.5 py-0.5 rounded flex items-center gap-1"><Film className="size-3" />MP4</span>
-                      <span className="absolute bottom-0 inset-x-0 bg-black/60 text-white text-[10px] px-1 py-0.5 truncate text-left">{v.photographer}</span>
-                    </button>
-                  );
-                })}
-              </div>
-            )}
-
-          </div>
         </Card>
       )}
 
       {content && bulgarian && !translating && (
-        <Card className="mt-6 p-6 space-y-4">
+        <Card className="glass-card mt-6 p-6 space-y-4 animate-fade-up">
           <div className="flex items-center justify-between gap-3 flex-wrap">
             <div>
               <h2 className="text-2xl">Преглед и рендиране</h2>
-              <p className="font-ui text-sm text-muted-foreground">TikTok формат 1080×1920 — {format === "video" ? "видео с word-by-word превод" : "статична снимка"}.</p>
+              <p className="font-ui text-sm text-muted-foreground">TikTok / Reels формат 1080×1920 (30 FPS) — видео със синхронизиран караоке превод.</p>
             </div>
             <div className="flex gap-2">
               <Button variant="secondary" onClick={onRender} disabled={rendering}>
-                {rendering ? <Loader2 className="size-4 animate-spin mr-1" /> : (format === "video" ? <Film className="size-4 mr-1" /> : <Wand2 className="size-4 mr-1" />)}
-                {renderedUrl ? "Рендирай отново" : (format === "video" ? "Рендирай видео" : "Рендирай снимка")}
+                {rendering ? <Loader2 className="size-4 animate-spin mr-1" /> : <Film className="size-4 mr-1" />}
+                {renderedUrl ? "Рендирай отново" : "Рендирай видео"}
               </Button>
               {renderedUrl ? (
                 <Button variant="outline" onClick={onDownload}>
@@ -827,7 +837,7 @@ function CreatePage() {
               ) : null}
             </div>
           </div>
-          {(renderedUrl || bgUrl) && (
+          {(renderedUrl || bgVideoUrl || bgUrl) && (
             <div ref={previewRef} className="grid gap-4 md:grid-cols-[300px_1fr] items-start scroll-mt-24">
               <div className="aspect-[9/16] overflow-hidden rounded-lg border bg-muted">
                 {renderedUrl && renderedKind === "video" ? (
@@ -841,25 +851,34 @@ function CreatePage() {
                   />
                 ) : renderedUrl ? (
                   <img key={renderedUrl} src={renderedUrl} alt="Готова снимка" className="size-full object-cover" />
+                ) : bgVideoUrl ? (
+                  <video
+                    key={bgVideoUrl}
+                    src={bgVideoUrl}
+                    controls
+                    playsInline
+                    loop
+                    autoPlay
+                    muted
+                    className="size-full object-cover"
+                  />
                 ) : bgUrl ? (
                   <img src={bgUrl} alt="Избран фон" className="size-full object-cover" />
                 ) : null}
               </div>
               <div className="font-ui text-sm space-y-2">
                 <p className="text-xs uppercase tracking-wider text-muted-foreground">
-                  {renderedUrl ? "Финална композиция" : "Избран фон"}
+                  {renderedUrl ? "Финална композиция (1080p / 30 FPS)" : "Избрано стоково видео"}
                 </p>
                 {bgPrompt && <p className="text-muted-foreground">{bgPrompt}</p>}
                 <p className="text-xs text-muted-foreground">
-                  {renderedKind === "video"
-                    ? "Ако на iPhone не се сваля автоматично, натисни Share и избери Save to Files."
-                    : "Сваляй PNG и постни директно."}
+                  Ако на iPhone не се сваля автоматично, натисни Share и избери Save to Files.
                 </p>
               </div>
             </div>
           )}
-          {!bgUrl && !renderedUrl && (
-            <p className="font-ui text-sm text-muted-foreground flex items-center gap-2"><Upload className="size-4" /> Без избран фон ще се ползва изумруден градиент.</p>
+          {!bgVideoUrl && !bgUrl && !renderedUrl && (
+            <p className="font-ui text-sm text-muted-foreground flex items-center gap-2"><Upload className="size-4" /> Избери стоково видео от Pexels по-горе, преди да рендираш.</p>
           )}
         </Card>
       )}

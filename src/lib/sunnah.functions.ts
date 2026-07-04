@@ -61,29 +61,36 @@ function pickBlock(html: string, className: string): string | null {
 }
 
 async function scrape(collection: SunnahCollection, number: number): Promise<SunnahHadith> {
-  // Use reliable open-source JSON CDN instead of scraping sunnah.com to avoid Cloudflare 403 blocks
   const apiCollection = collection === "nawawi40" ? "nawawi" : collection;
   
+  // To perfectly match sunnah.com numbering (especially for Muslim which uses different indices),
+  // we fetch the full collection (which is cached heavily by Cloudflare CDN) and search by arabicnumber.
   const [araRes, engRes] = await Promise.all([
-    fetch(`https://cdn.jsdelivr.net/gh/fawazahmed0/hadith-api@1/editions/ara-${apiCollection}/${number}.json`),
-    fetch(`https://cdn.jsdelivr.net/gh/fawazahmed0/hadith-api@1/editions/eng-${apiCollection}/${number}.json`)
+    fetch(`https://cdn.jsdelivr.net/gh/fawazahmed0/hadith-api@1/editions/ara-${apiCollection}.min.json`),
+    fetch(`https://cdn.jsdelivr.net/gh/fawazahmed0/hadith-api@1/editions/eng-${apiCollection}.min.json`)
   ]);
 
   if (!araRes.ok || !engRes.ok) {
-    if (araRes.status === 404) throw new Error(`Хадис номер ${number} не съществува в тази колекция.`);
-    throw new Error(`Грешка при изтегляне на хадиса: ${araRes.status} / ${engRes.status}`);
+    throw new Error(`Грешка при изтегляне на колекцията: ${araRes.status} / ${engRes.status}`);
   }
 
   const araJson = await araRes.json();
   const engJson = await engRes.json();
 
-  if (!araJson.hadiths?.[0]?.text || !engJson.hadiths?.[0]?.text) {
-    throw new Error("Не успях да извлека текста (празен хадис).");
+  // Find the exact hadith. Sunnah.com's main number usually matches the `arabicnumber` (e.g. Sahih Muslim).
+  // If not found by arabicnumber, we fallback to the sequential `hadithnumber`.
+  const araMatch = araJson.hadiths.find((h: any) => parseInt(h.arabicnumber) === number) || 
+                   araJson.hadiths.find((h: any) => parseInt(h.hadithnumber) === number);
+                   
+  const engMatch = engJson.hadiths.find((h: any) => parseInt(h.arabicnumber) === number) || 
+                   engJson.hadiths.find((h: any) => parseInt(h.hadithnumber) === number);
+
+  if (!araMatch || !engMatch || !araMatch.text || !engMatch.text) {
+    throw new Error(`Хадис номер ${number} не съществува в тази колекция.`);
   }
 
-  // The API sometimes includes HTML tags, so we strip them just in case
-  const arabic = stripHtml(araJson.hadiths[0].text);
-  const english = stripHtml(engJson.hadiths[0].text);
+  const arabic = stripHtml(araMatch.text);
+  const english = stripHtml(engMatch.text);
 
   let reference = `${COLLECTIONS[collection].label} ${number}`;
 

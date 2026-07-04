@@ -23,9 +23,9 @@ async function analyzeVisualThemes(text: string, avoid: string[] = []): Promise<
   if (hit) return hit;
 
   const fallback: Analysis = {
-    theme: "природа",
+    theme: "природа и светлина",
     mood: "calm",
-    queries: ["calm nature landscape", "soft sunlight clouds", "misty mountains morning"],
+    queries: ["vibrant golden sunset nature", "colorful clouds sunlight blue sky", "emerald green valley morning sun"],
   };
 
   const avoidLine = avoid.length
@@ -41,8 +41,9 @@ async function analyzeVisualThemes(text: string, avoid: string[] = []): Promise<
           content:
             "Анализираш ислямски текст (аят или хадис) и връщаш JSON със стоково-видео подсказки за вертикален TikTok фон.\n" +
             "Изисквания: БЕЗ хора/лица, БЕЗ животни, БЕЗ религиозни символи (джамии, Корани, тасбих, флагове), БЕЗ текст в кадъра.\n" +
-            "Предпочитай природа (вода, дъжд, пустиня, планини, гори, небе, звезди, изгрев/залез, мъгла), архитектурни детайли (арки, геометрични шарки, мрамор, фенери), светлина, текстури, океан.\n" +
-            "Извличаш СМИСЪЛА — ако текстът говори за търпение → буря/тиха вода; за милост → дъжд над зелена долина; за светлина/напътствие → изгрев, фенер, звезди; за съдния ден → буреносни облаци, океан; за знание → отворена книга на маса, перо, мастило; за рай → водопад, цветя, градина; за смърт/отвъдното → залез, мъгла.\n" +
+            "ВАЖНО ЗА ЦВЕТОВЕТЕ: НИКОГА не предлагай черно-бели, тъмни или мрачни (black and white / monochrome / grayscale / dark / gloomy / shadow / silhouette / storm / fog) видеа! Всички заявки ТРЯБВА да търсят ВАЙБРАНТНИ, СВЕТЛИ и ЦВЕТНИ кадри (напр. \"vibrant sunset\", \"golden hour nature\", \"colorful sky\", \"emerald green valley\", \"turquoise water\", \"warm sunlight\").\n" +
+            "Предпочитай красива цветна природа (вода, слънчева светлина, планини, зелени гори, небе, изгрев/залез), архитектурни детайли, златен час, океан.\n" +
+            "Извличаш СМИСЪЛА — ако текстът говори за търпение → тиха вода на слънце; за милост → дъжд над зелена долина със слънчева светлина; за светлина/напътствие → топъл изгрев, фенер, звезди; за съдния ден → бурен океан със залез; за знание → отворена книга на топла светлина; за рай → водопад, цветя, слънчева градина; за смърт/отвъдното → спокоен златен залез.\n" +
             "Върни СТРИКТЕН JSON: {\"theme\": string (на български, 2-4 думи), \"mood\": \"calm\"|\"majestic\"|\"reflective\"|\"hopeful\"|\"solemn\", \"queries\": string[3..5] (английски Pexels заявки, най-конкретната първа, всяка 2-4 думи)}.\n" +
             (avoidLine ? avoidLine + "\n" : ""),
         },
@@ -79,7 +80,7 @@ type PexelsPhoto = {
   photographer?: string;
 };
 
-type PexelsVideoFile = { quality: string; width: number; height: number; link: string; file_type: string };
+type PexelsVideoFile = { quality: string; width: number; height: number; link: string; file_type: string; fps?: number; size?: number };
 type PexelsVideoPic = { picture: string };
 type PexelsVideo = {
   id: number;
@@ -98,7 +99,7 @@ async function pexelsPhotoQuery(key: string, query: string, perPage = 9) {
   return (j.photos ?? []) as PexelsPhoto[];
 }
 
-async function pexelsVideoQuery(key: string, query: string, perPage = 8) {
+async function pexelsVideoQuery(key: string, query: string, perPage = 40) {
   const url = `https://api.pexels.com/videos/search?query=${encodeURIComponent(query)}&orientation=portrait&size=medium&per_page=${perPage}`;
   const res = await fetch(url, { headers: { Authorization: key } });
   if (!res.ok) throw new Error(`Pexels грешка ${res.status}`);
@@ -106,29 +107,33 @@ async function pexelsVideoQuery(key: string, query: string, perPage = 8) {
   return (j.videos ?? []) as PexelsVideo[];
 }
 
-// Score: prefer ≥1280px tall, 6–20s, vertical aspect close to 9:16.
+// Score: prefer ≥1280px tall, 5–60s, vertical aspect close to 9:16. Avoid black and white/monochrome.
 function scoreVideo(v: PexelsVideo, file: PexelsVideoFile): number {
   let s = 0;
+  const meta = JSON.stringify(v).toLowerCase();
+  if (meta.includes("black and white") || meta.includes("monochrome") || meta.includes("grayscale") || meta.includes("greyscale") || meta.includes("silhouette") || meta.includes("dark sky")) {
+    s -= 25; // Heavily penalize black and white / monochrome stock videos
+  }
   const aspect = file.width > 0 ? file.height / file.width : 0;
   s += Math.max(0, 5 - Math.abs(aspect - 16 / 9) * 5); // up to +5
   if (file.height >= 1280) s += 3;
   if (file.height >= 1920) s += 2;
   const d = v.duration ?? 10;
-  if (d >= 6 && d <= 20) s += 3;
-  else if (d > 20 && d <= 35) s += 1;
-  else if (d < 4) s -= 2;
+  // User requested videos between 5-60 seconds.
+  if (d >= 5 && d <= 60) s += 4;
+  else if (d < 5 || d > 60) s -= 10; // Penalize outside this range heavily
   return s;
 }
 
 function pickBestFile(v: PexelsVideo): PexelsVideoFile | undefined {
   const verticals = (v.video_files || []).filter(
-    (f) => f.file_type === "video/mp4" && f.height >= f.width,
+    (f) => f.file_type === "video/mp4" && f.height >= f.width && (f.fps === undefined || f.fps >= 25) && f.height <= 1920,
   );
-  // Strongly prefer ≥1280 tall files; only fall back to <1280 if nothing else.
-  const hq = verticals.filter((f) => f.height >= 1280);
-  const pool = hq.length ? hq : verticals;
+  // Prefer files smaller than 35 MB so server downloads in <3 seconds
+  const normalSize = verticals.filter((f) => !f.size || f.size <= 35 * 1024 * 1024);
+  const pool = normalSize.length ? normalSize : verticals;
   pool.sort((a, b) => Math.abs(a.height - 1920) - Math.abs(b.height - 1920));
-  return pool[0] || v.video_files?.[0];
+  return pool[0] || (v.video_files || [])[0];
 }
 
 // ------------ Public server functions ------------
@@ -182,17 +187,19 @@ export const searchPexelsPhotos = createServerFn({ method: "POST" })
   });
 
 export const searchPexelsVideos = createServerFn({ method: "POST" })
-  .inputValidator((input: { text: string; query?: string; avoid?: string[] }) => input)
+  .inputValidator((input: { text: string; query?: string; avoid?: string[]; minDuration?: number }) => input)
   .handler(async ({ data }) => {
     const key = process.env.PEXELS_API_KEY;
     if (!key) throw new Error("Pexels не е конфигуриран");
 
     type Out = { id: number; link: string; poster: string; photographer: string; score: number; duration: number };
-    const buildOut = (vs: PexelsVideo[]): Out[] =>
-      vs
+    const buildOut = (vs: PexelsVideo[]): Out[] => {
+      const minD = data.minDuration ?? 30; // default 30
+      const all = vs
         .map((v) => {
+          if (v.duration && v.duration < minD) return null;
           const file = pickBestFile(v);
-          if (!file?.link) return null;
+          if (!file?.link || (file.fps !== undefined && file.fps < 25)) return null;
           return {
             id: v.id,
             link: file.link,
@@ -202,8 +209,17 @@ export const searchPexelsVideos = createServerFn({ method: "POST" })
             score: scoreVideo(v, file),
           };
         })
-        .filter((x): x is Out => !!x)
-        .sort((a, b) => b.score - a.score);
+        .filter((x): x is Out => !!x);
+        
+      let pool = all.filter(x => x.score >= 5);
+      if (pool.length < 6) pool = all;
+      
+      for (let i = pool.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [pool[i], pool[j]] = [pool[j], pool[i]];
+      }
+      return pool.slice(0, 12);
+    };
 
     if (data.query?.trim()) {
       const vs = await pexelsVideoQuery(key, data.query.trim());

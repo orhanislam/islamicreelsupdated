@@ -1,0 +1,247 @@
+import { createServerFn } from "@tanstack/react-start";
+import type { Buffer } from "node:buffer";
+
+export const runServerRender = createServerFn({ method: "POST" })
+  .validator((opts: any) => opts)
+  .handler(async ({ data }) => {
+    const ffmpeg = (await import("fluent-ffmpeg")).default;
+    const ffmpegInstaller = (await import("@ffmpeg-installer/ffmpeg")).default;
+    const fs = (await import("fs")).promises;
+    const os = await import("os");
+    const path = await import("path");
+    
+    ffmpeg.setFfmpegPath(ffmpegInstaller.path);
+
+    const sessionId = Date.now().toString() + Math.floor(Math.random() * 10000);
+    const tempDir = os.tmpdir();
+    const bgPath = path.join(tempDir, `bg_${sessionId}`); // extension added later
+    const audioPath = path.join(tempDir, `audio_${sessionId}.mp3`);
+    const assPath = path.join(tempDir, `subs_${sessionId}.ass`);
+    const outPath = path.join(tempDir, `out_${sessionId}.mp4`);
+
+    try {
+      console.log("[server-render] Starting pure FFmpeg render...");
+
+      // 1. Download/Save Audio
+      if (data.audioUrl) {
+        if (data.audioUrl.startsWith("data:")) {
+          const b64 = data.audioUrl.split(",")[1];
+          await fs.writeFile(audioPath, Buffer.from(b64, "base64"));
+        } else {
+          const res = await fetch(data.audioUrl, {
+            headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" }
+          });
+          if (!res.ok) throw new Error(`Failed to fetch audio: ${res.status} ${res.statusText}`);
+          const arrayBuf = await res.arrayBuffer();
+          await fs.writeFile(audioPath, Buffer.from(arrayBuf));
+        }
+      } else {
+        throw new Error("No audioUrl provided");
+      }
+
+      let audioDur = 15;
+      try {
+        const mp3Duration = (await import("mp3-duration")).default;
+        const audioBuf = await fs.readFile(audioPath);
+        audioDur = await mp3Duration(audioBuf);
+        console.log(`[server-render] Exact audio duration: ${audioDur} seconds`);
+      } catch (err) {
+        console.warn("[server-render] Could not get exact MP3 duration, falling back to 20s", err);
+        audioDur = 20;
+      }
+
+      // 2. Download/Save Background
+      let isVideoBg = false;
+      let finalBgPath = bgPath;
+      const bgUrl = data.backgroundVideoUrl || data.backgroundUrl;
+      if (!bgUrl) throw new Error("No background provided");
+
+      if (bgUrl.startsWith("data:")) {
+        const b64 = bgUrl.split(",")[1];
+        const mime = bgUrl.split(";")[0].split(":")[1];
+        if (mime.includes("video")) {
+          isVideoBg = true;
+          finalBgPath += ".mp4";
+        } else {
+          finalBgPath += ".jpg";
+        }
+        await fs.writeFile(finalBgPath, Buffer.from(b64, "base64"));
+      } else {
+        const res = await fetch(bgUrl, {
+          headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" }
+        });
+        if (!res.ok) throw new Error(`Failed to fetch background video: ${res.status} ${res.statusText}`);
+        const contentType = res.headers.get("content-type") || "";
+        if (contentType.includes("video") || bgUrl.includes(".mp4")) {
+          isVideoBg = true;
+          finalBgPath += ".mp4";
+        } else {
+          finalBgPath += ".jpg";
+        }
+        const arrayBuf = await res.arrayBuffer();
+        await fs.writeFile(finalBgPath, Buffer.from(arrayBuf));
+      }
+
+      // 3. Generate ASS Subtitles
+      const formatTime = (secs: number) => {
+        const h = Math.floor(secs / 3600);
+        const m = Math.floor((secs % 3600) / 60);
+        const s = Math.floor(secs % 60);
+        const cs = Math.floor((secs % 1) * 100);
+        return `${h}:${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}.${cs.toString().padStart(2, "0")}`;
+      };
+
+      const isLowerThird = data.style === "lower-third";
+      const bulgarianAlign = isLowerThird ? 2 : 5;
+      const bulgarianMarginV = isLowerThird ? 300 : 0;
+
+      let ass = `[Script Info]
+ScriptType: v4.00+
+PlayResX: 1080
+PlayResY: 1920
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Arabic,Scheherazade New,100,&H00FFFFFF,&H000000FF,&H00000000,&H80000000,-1,0,0,0,100,100,0,0,1,3,0,8,50,50,300,1
+Style: Bulgarian,Inter,80,&H00FFFFFF,&H000000FF,&H00000000,&H80000000,-1,0,0,0,100,100,0,0,1,5,2,${bulgarianAlign},60,60,${bulgarianMarginV},1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+`;
+
+      // Arabic is intentionally omitted from video output so the Bulgarian text fits nicely without clutter.
+
+      if (data.bulgarian) {
+        const words = data.bulgarian.trim().split(/\s+/).filter(Boolean);
+        let timings = data.bulgarianWordTimings;
+        if (!timings || !timings.length) {
+          timings = [];
+          const step = audioDur / Math.max(1, words.length);
+          for (let i = 0; i < words.length; i++) {
+            timings.push({ start: i * step, end: (i + 1) * step });
+          }
+        }
+
+        // Group words into short TikTok-style phrases (2 to 6 words per phrase, breaking on punctuation)
+        const MAX_WORDS = 6;
+        const MIN_WORDS = 2;
+        type Phrase = { words: string[]; startIdx: number; endIdx: number };
+        const phrases: Phrase[] = [];
+        let cur: string[] = [];
+        let curStart = 0;
+        const flush = () => {
+          if (!cur.length) return;
+          phrases.push({ words: cur, startIdx: curStart, endIdx: curStart + cur.length });
+          curStart += cur.length;
+          cur = [];
+        };
+        for (let i = 0; i < words.length; i++) {
+          const w = words[i];
+          cur.push(w);
+          const endsPunct = /[.!?…]$/.test(w) || (/[,;:—]$/.test(w) && cur.length >= MIN_WORDS);
+          if ((endsPunct && cur.length >= MIN_WORDS) || cur.length >= MAX_WORDS) {
+            flush();
+          }
+        }
+        flush();
+
+        const posTag = isLowerThird ? "{\\an2\\pos(540,1600)}" : "{\\an5\\pos(540,960)}";
+
+        let prevEnd = 0;
+        for (let i = 0; i < timings.length && i < words.length; i++) {
+          const start = timings[i].start;
+          const end = timings[i].end;
+          const p = phrases.find(ph => i >= ph.startIdx && i < ph.endIdx) || phrases[phrases.length - 1];
+          
+          if (start > prevEnd && p) {
+             ass += `Dialogue: 0,${formatTime(prevEnd)},${formatTime(start)},Bulgarian,,0,0,0,,${posTag}${p.words.join(" ")}\n`;
+          }
+          
+          if (p) {
+            let textLine = "";
+            for (let j = p.startIdx; j < p.endIdx && j < words.length; j++) {
+              // Highlight current active word in bright yellow (\c&H00FFFF&)
+              if (j === i) textLine += `{\\c&H00FFFF&}${words[j]}{\\c&H00FFFFFF&} `;
+              else textLine += `${words[j]} `;
+            }
+            ass += `Dialogue: 0,${formatTime(start)},${formatTime(end)},Bulgarian,,0,0,0,,${posTag}${textLine.trim()}\n`;
+          }
+          
+          prevEnd = end;
+        }
+        const lastPhrase = phrases[phrases.length - 1];
+        if (lastPhrase) {
+          ass += `Dialogue: 0,${formatTime(prevEnd)},0:10:00.00,Bulgarian,,0,0,0,,${posTag}${lastPhrase.words.join(" ")}\n`;
+        }
+      }
+
+      await fs.writeFile(assPath, "\uFEFF" + ass); // UTF-8 BOM helps some parsers
+
+      // Escape ASS path for FFmpeg filter on Windows
+      const escapedAssPath = assPath.replace(/\\/g, '/').replace(/:/g, '\\:');
+
+      // 4. Run FFmpeg
+      console.log(`[server-render] Generating MP4 with FFmpeg...`);
+      return new Promise<string>((resolve, reject) => {
+        let cmd = ffmpeg();
+        
+        if (isVideoBg) {
+          cmd = cmd.input(finalBgPath).inputOptions(["-stream_loop -1"]);
+        } else {
+          cmd = cmd.input(finalBgPath).inputOptions(["-loop 1"]);
+        }
+        
+        cmd = cmd.input(audioPath);
+
+        cmd.complexFilter([
+          `[0:v]crop='min(iw,ih*9/16)':'min(iw*16/9,ih)',scale=1080:1920,drawbox=x=0:y=0:w=1080:h=1920:color=black@0.15:t=fill,subtitles='${escapedAssPath}'[v]`
+        ])
+        .outputOptions([
+          "-map [v]",
+          "-map 1:a",
+          "-c:v libx264",
+          "-pix_fmt yuv420p",
+          "-movflags +faststart",
+          "-preset ultrafast",
+          "-crf 28",
+          "-r 30",
+          "-vsync 1",
+          "-g 60",
+          "-c:a aac",
+          `-t ${audioDur}`,
+          "-threads 4"
+        ])
+        .outputFormat("mp4")
+        .save(outPath)
+        .on("end", async () => {
+          try {
+            const stat = await fs.stat(outPath);
+            console.log(`[server-render] FFmpeg finished successfully. MP4 size: ${stat.size} bytes`);
+            const buf = await fs.readFile(outPath);
+            resolve(buf.toString("base64"));
+          } catch (e) {
+            reject(e);
+          } finally {
+            // Cleanup
+            await fs.unlink(finalBgPath).catch(() => {});
+            await fs.unlink(audioPath).catch(() => {});
+            await fs.unlink(assPath).catch(() => {});
+            await fs.unlink(outPath).catch(() => {});
+          }
+        })
+        .on("error", async (err) => {
+          console.error("[server-render] FFmpeg Error:", err);
+          // Cleanup
+          await fs.unlink(finalBgPath).catch(() => {});
+          await fs.unlink(audioPath).catch(() => {});
+          await fs.unlink(assPath).catch(() => {});
+          await fs.unlink(outPath).catch(() => {});
+          reject(err);
+        });
+      });
+
+    } catch (err: unknown) {
+      console.error("[server-render] Critical failure:", err);
+      throw new Error(String(err));
+    }
+  });
