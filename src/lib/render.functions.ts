@@ -4,13 +4,21 @@ import type { Buffer } from "node:buffer";
 export const runServerRender = createServerFn({ method: "POST" })
   .validator((opts: any) => opts)
   .handler(async ({ data }) => {
-    const ffmpeg = (await import("fluent-ffmpeg")).default;
-    const ffmpegInstaller = (await import("@ffmpeg-installer/ffmpeg")).default;
+    const ffmpegMod = await import("fluent-ffmpeg");
+    const ffmpeg = ffmpegMod.default || ffmpegMod;
+    let ffmpegPath = "ffmpeg";
+    try {
+      const installerMod = await import("@ffmpeg-installer/ffmpeg");
+      const installer = installerMod.default || installerMod;
+      if (installer?.path) ffmpegPath = installer.path;
+    } catch (e) {
+      console.warn("[server-render] @ffmpeg-installer failed, using system ffmpeg binary:", e);
+    }
     const fs = (await import("fs")).promises;
     const os = await import("os");
     const path = await import("path");
     
-    ffmpeg.setFfmpegPath(ffmpegInstaller.path);
+    ffmpeg.setFfmpegPath(ffmpegPath);
 
     const sessionId = Date.now().toString() + Math.floor(Math.random() * 10000);
     const tempDir = os.tmpdir();

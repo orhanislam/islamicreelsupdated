@@ -10,6 +10,11 @@ export default defineConfig({
   tanstackStart: {
     server: { entry: "server" },
     // Override lovable's cloudflare preset for server-side video rendering
-    nitro: { preset: "node-server" }
+    nitro: {
+      preset: "node-server",
+      externals: {
+        external: ["fluent-ffmpeg", "@ffmpeg-installer/ffmpeg"]
+      }
+    }
   },
 });
