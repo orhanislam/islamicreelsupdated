@@ -12,6 +12,11 @@ try {
 export const runServerRender = createServerFn({ method: "POST" })
   .validator((opts: any) => opts)
   .handler(async ({ data }) => {
+    const fs = (await import("fs")).promises;
+    const fsSync = await import("fs");
+    const os = await import("os");
+    const path = await import("path");
+    
     const ffmpegMod = await import("fluent-ffmpeg");
     const ffmpeg = ffmpegMod.default || ffmpegMod;
     let ffmpegPath = "ffmpeg";
@@ -21,13 +26,23 @@ export const runServerRender = createServerFn({ method: "POST" })
         const installer = installerMod.default || installerMod;
         if (installer?.path) ffmpegPath = installer.path;
       } catch (e) {
-        console.warn("[server-render] @ffmpeg-installer failed, using system ffmpeg binary:", e);
+        console.warn("[server-render] @ffmpeg-installer failed on win32:", e);
+      }
+    } else {
+      const candidates = [
+        "/usr/bin/ffmpeg",
+        "/usr/local/bin/ffmpeg",
+        path.resolve(process.cwd(), "node_modules/@ffmpeg-installer/linux-x64/ffmpeg"),
+        path.resolve(process.cwd(), "../node_modules/@ffmpeg-installer/linux-x64/ffmpeg"),
+        "ffmpeg"
+      ];
+      for (const c of candidates) {
+        if (c === "ffmpeg" || fsSync.existsSync(c)) {
+          ffmpegPath = c;
+          break;
+        }
       }
     }
-    const fs = (await import("fs")).promises;
-    const os = await import("os");
-    const path = await import("path");
-    
     ffmpeg.setFfmpegPath(ffmpegPath);
 
     const sessionId = Date.now().toString() + Math.floor(Math.random() * 10000);
@@ -218,6 +233,8 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
           "-map [v]",
           "-map 1:a",
           "-c:v libx264",
+          "-profile:v main",
+          "-level 4.0",
           "-pix_fmt yuv420p",
           "-movflags +faststart",
           "-preset ultrafast",
@@ -226,6 +243,8 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
           "-vsync 1",
           "-g 60",
           "-c:a aac",
+          "-b:a 128k",
+          "-ar 44100",
           `-t ${audioDur}`,
           "-threads 4"
         ])
