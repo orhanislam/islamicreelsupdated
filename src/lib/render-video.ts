@@ -585,15 +585,17 @@ export async function renderVideo(opts: VideoOptions): Promise<{ blob: Blob; mim
     }
   } else if (hasArSegments) {
     const M = segs.length;
+    const lastSegEnd = segs[M - 1]?.end || duration;
+    const scale = duration > 0 && lastSegEnd > 0 ? (duration / lastSegEnd) : 1;
     for (let i = 0; i < allWords.length; i++) {
       const fracS = (cumCost[i] / totalCost) * M;
       const fracE = (cumCost[i + 1] / totalCost) * M;
       const idxS = Math.min(M - 1, Math.floor(fracS));
       const remS = fracS - idxS;
-      const start = segs[idxS].start + remS * (segs[idxS].end - segs[idxS].start);
+      const start = (segs[idxS].start + remS * (segs[idxS].end - segs[idxS].start)) * scale;
       const idxE = Math.min(M - 1, Math.floor(fracE));
       const remE = fracE - idxE;
-      const end = segs[idxE].start + remE * (segs[idxE].end - segs[idxE].start);
+      const end = (segs[idxE].start + remE * (segs[idxE].end - segs[idxE].start)) * scale;
       wordTimes[i] = { start, end };
     }
   } else {

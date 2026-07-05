@@ -138,6 +138,8 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
           const segs = data.wordSegments;
           if (Array.isArray(segs) && segs.length > 0) {
             const M = segs.length;
+            const lastSegEnd = segs[M - 1]?.end || audioDur;
+            const scale = audioDur > 0 && lastSegEnd > 0 ? (audioDur / lastSegEnd) : 1;
             const costs = words.map(w => 1 + w.replace(/[^\p{L}\p{N}]/gu, "").length * 0.55);
             const cumCost = [0];
             for (let i = 0; i < costs.length; i++) cumCost.push(cumCost[i] + costs[i]);
@@ -147,10 +149,10 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
               const fracE = (cumCost[i + 1] / totalCost) * M;
               const idxS = Math.min(M - 1, Math.floor(fracS));
               const remS = fracS - idxS;
-              const start = segs[idxS].start + remS * (segs[idxS].end - segs[idxS].start);
+              const start = (segs[idxS].start + remS * (segs[idxS].end - segs[idxS].start)) * scale;
               const idxE = Math.min(M - 1, Math.floor(fracE));
               const remE = fracE - idxE;
-              const end = segs[idxE].start + remE * (segs[idxE].end - segs[idxE].start);
+              const end = (segs[idxE].start + remE * (segs[idxE].end - segs[idxE].start)) * scale;
               timings.push({ start, end });
             }
           } else {

@@ -45,20 +45,17 @@ export const fetchAyah = createServerFn({ method: "POST" })
       recData = await recRes.json().catch(() => null);
     }
 
-    // Mishari Rashid Alafasy recitation from Quran.com API v4 (ID 7) — includes exact
-    // millisecond word timestamps (segments) for perfect subtitle synchronization.
-    let audioUrl = `https://everyayah.com/data/Yasser_Ad-Dussary_128kbps/${pad(surah, 3)}${pad(ayah, 3)}.mp3`;
+    // Yasser Al-Dossari recitation from everyayah.com with exact word synchronization
+    // derived from Quran.com API v4 (ID 7) Tajweed timing segments.
+    const audioUrl = `https://everyayah.com/data/Yasser_Ad-Dussary_128kbps/${pad(surah, 3)}${pad(ayah, 3)}.mp3`;
     let wordSegments: WordSegment[] = [];
 
     const audioFile = recData?.audio_files?.[0];
-    if (audioFile?.url) {
-      audioUrl = audioFile.url.startsWith("http") ? audioFile.url : `https://verses.quran.com/${audioFile.url}`;
-      if (Array.isArray(audioFile.segments) && audioFile.segments.length > 0) {
-        wordSegments = audioFile.segments.map((s: number[]) => ({
-          start: (Number(s[2]) || 0) / 1000,
-          end: (Number(s[3]) || 0) / 1000,
-        }));
-      }
+    if (audioFile && Array.isArray(audioFile.segments) && audioFile.segments.length > 0) {
+      wordSegments = audioFile.segments.map((s: number[]) => ({
+        start: (Number(s[2]) || 0) / 1000,
+        end: (Number(s[3]) || 0) / 1000,
+      }));
     }
 
     const arabicText: string = ar.data.text;
