@@ -584,11 +584,17 @@ export async function renderVideo(opts: VideoOptions): Promise<{ blob: Blob; mim
       }
     }
   } else if (hasArSegments) {
-    const lastArEnd = segs[segs.length - 1].end || duration;
+    const M = segs.length;
     for (let i = 0; i < allWords.length; i++) {
-      const fracS = cumCost[i] / totalCost;
-      const fracE = cumCost[i + 1] / totalCost;
-      wordTimes[i] = { start: fracS * lastArEnd, end: fracE * lastArEnd };
+      const fracS = (cumCost[i] / totalCost) * M;
+      const fracE = (cumCost[i + 1] / totalCost) * M;
+      const idxS = Math.min(M - 1, Math.floor(fracS));
+      const remS = fracS - idxS;
+      const start = segs[idxS].start + remS * (segs[idxS].end - segs[idxS].start);
+      const idxE = Math.min(M - 1, Math.floor(fracE));
+      const remE = fracE - idxE;
+      const end = segs[idxE].start + remE * (segs[idxE].end - segs[idxE].start);
+      wordTimes[i] = { start, end };
     }
   } else {
     for (let i = 0; i < allWords.length; i++) {

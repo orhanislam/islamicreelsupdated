@@ -32,18 +32,34 @@ export const fetchAyah = createServerFn({ method: "POST" })
     const { surah, ayah } = data;
     const key = `${surah}:${ayah}`;
 
-    const [arRes, enRes] = await Promise.all([
+    const [arRes, enRes, recRes] = await Promise.all([
       fetch(`https://api.alquran.cloud/v1/ayah/${key}/quran-uthmani`),
       fetch(`https://api.alquran.cloud/v1/ayah/${key}/en.muhsinkhan`),
+      fetch(`https://api.quran.com/api/v4/quran/recitations/7?verse_key=${key}&fields=segments`).catch(() => null),
     ]);
     if (!arRes.ok || !enRes.ok) throw new Error("Аятът не е намерен");
     const ar = await arRes.json();
     const en = await enRes.json();
+    let recData: any = null;
+    if (recRes && recRes.ok) {
+      recData = await recRes.json().catch(() => null);
+    }
 
-    // Yasser Al-Dossari (Ad-Dussary) recitation from everyayah.com — reliable
-    // CDN with one MP3 per ayah. Quran.com's recitations API does NOT include
-    // Al-Dossari, so we use everyayah and fall back to linear word reveal.
-    const audioUrl = `https://everyayah.com/data/Yasser_Ad-Dussary_128kbps/${pad(surah, 3)}${pad(ayah, 3)}.mp3`;
+    // Mishari Rashid Alafasy recitation from Quran.com API v4 (ID 7) — includes exact
+    // millisecond word timestamps (segments) for perfect subtitle synchronization.
+    let audioUrl = `https://everyayah.com/data/Yasser_Ad-Dussary_128kbps/${pad(surah, 3)}${pad(ayah, 3)}.mp3`;
+    let wordSegments: WordSegment[] = [];
+
+    const audioFile = recData?.audio_files?.[0];
+    if (audioFile?.url) {
+      audioUrl = audioFile.url.startsWith("http") ? audioFile.url : `https://verses.quran.com/${audioFile.url}`;
+      if (Array.isArray(audioFile.segments) && audioFile.segments.length > 0) {
+        wordSegments = audioFile.segments.map((s: number[]) => ({
+          start: (Number(s[2]) || 0) / 1000,
+          end: (Number(s[3]) || 0) / 1000,
+        }));
+      }
+    }
 
     const arabicText: string = ar.data.text;
     const arabicWordCount = arabicText.split(/\s+/).filter(Boolean).length;
@@ -55,7 +71,7 @@ export const fetchAyah = createServerFn({ method: "POST" })
       english: en.data.text,
       surahName: ar.data.surah.englishName,
       audioUrl,
-      wordSegments: [],
+      wordSegments,
       arabicWordCount,
     };
   });

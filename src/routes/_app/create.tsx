@@ -639,7 +639,7 @@ function CreatePage() {
             </div>
             {content.source_type === "ayah" && content.audioUrl && (
               <div>
-                <p className="font-ui text-xs uppercase tracking-wider text-muted-foreground">Рецитация — Ясер ал-Досари</p>
+                <p className="font-ui text-xs uppercase tracking-wider text-muted-foreground">Рецитация — Мишари ал-Афаси (синхронизирани думи)</p>
                 <audio controls src={customAudioUrl ?? content.audioUrl} className="mt-2 w-full" />
               </div>
             )}

@@ -135,9 +135,29 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         let timings = data.bulgarianWordTimings;
         if (!timings || !timings.length) {
           timings = [];
-          const step = audioDur / Math.max(1, words.length);
-          for (let i = 0; i < words.length; i++) {
-            timings.push({ start: i * step, end: (i + 1) * step });
+          const segs = data.wordSegments;
+          if (Array.isArray(segs) && segs.length > 0) {
+            const M = segs.length;
+            const costs = words.map(w => 1 + w.replace(/[^\p{L}\p{N}]/gu, "").length * 0.55);
+            const cumCost = [0];
+            for (let i = 0; i < costs.length; i++) cumCost.push(cumCost[i] + costs[i]);
+            const totalCost = cumCost[cumCost.length - 1] || 1;
+            for (let i = 0; i < words.length; i++) {
+              const fracS = (cumCost[i] / totalCost) * M;
+              const fracE = (cumCost[i + 1] / totalCost) * M;
+              const idxS = Math.min(M - 1, Math.floor(fracS));
+              const remS = fracS - idxS;
+              const start = segs[idxS].start + remS * (segs[idxS].end - segs[idxS].start);
+              const idxE = Math.min(M - 1, Math.floor(fracE));
+              const remE = fracE - idxE;
+              const end = segs[idxE].start + remE * (segs[idxE].end - segs[idxE].start);
+              timings.push({ start, end });
+            }
+          } else {
+            const step = audioDur / Math.max(1, words.length);
+            for (let i = 0; i < words.length; i++) {
+              timings.push({ start: i * step, end: (i + 1) * step });
+            }
           }
         }
 
