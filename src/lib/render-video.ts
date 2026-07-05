@@ -28,7 +28,7 @@ export type VideoOptions = RenderOptions & {
 
 let W = 1080;
 let H = 1920;
-let SAFE = { top: 320, bottom: 280, side: 130 };
+let SAFE = { top: 320, bottom: 280, side: 180 };
 
 function configureCanvasSize(ios: boolean, quality?: "1080p" | "720p") {
   const scale = 1; // Strictly 1080p (1080x1920) as requested
@@ -37,7 +37,7 @@ function configureCanvasSize(ios: boolean, quality?: "1080p" | "720p") {
   SAFE = {
     top: 320,
     bottom: 280,
-    side: 130,
+    side: 180,
   };
   return scale;
 }

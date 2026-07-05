@@ -67,31 +67,62 @@ export const synthesizeHadithNarration = createServerFn({ method: "POST" })
       .replace(/\s+/g, " ")
       .trim();
 
-    const { EdgeTTS } = await import("node-edge-tts");
-    const tts = new EdgeTTS({
-      voice: "bg-BG-BorislavNeural", // Premium natural male voice for Bulgarian
-      lang: "bg-BG",
-      outputFormat: "audio-24khz-48kbitrate-mono-mp3",
-    });
+    let audioBuffer: any = null;
+    const BufferMod = (await import("node:buffer")).Buffer;
 
-    // We can't directly get a Buffer from node-edge-tts without saving or streaming,
-    // wait, node-edge-tts might have a way to stream or just save to tmp file.
-    // Let's check if it has a way to get buffer. 
-    // Actually, reading the source of node-edge-tts, we can use a temp file.
-    const tmpFile = `/tmp/tts-${Date.now()}.mp3`;
-    let audioBuffer: Buffer;
-    
-    try {
-      const os = await import("os");
-      const path = await import("path");
-      const fs = await import("fs/promises");
-      
-      const tmpPath = path.join(os.tmpdir(), `tts-${Date.now()}-${Math.random().toString(36).slice(2)}.mp3`);
-      await tts.ttsPromise(cleaned, tmpPath);
-      audioBuffer = await fs.readFile(tmpPath);
-      await fs.unlink(tmpPath).catch(() => {});
-    } catch (e: any) {
-      throw new Error("Грешка при генериране на Edge TTS: " + e.message);
+    const elevenKey = process.env.ELEVENLABS_API_KEY || process.env.VITE_ELEVENLABS_API_KEY;
+    const elevenVoice = process.env.ELEVENLABS_VOICE_ID || process.env.VITE_ELEVENLABS_VOICE_ID || "JBFqnCBsd6RMkjVDRZzb"; // Default: George / Multilingual v2
+
+    if (elevenKey) {
+      try {
+        console.log("[tts] Synthesizing with ElevenLabs API...");
+        const res = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${elevenVoice}`, {
+          method: "POST",
+          headers: {
+            "xi-api-key": elevenKey,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            text: cleaned,
+            model_id: "eleven_multilingual_v2",
+            voice_settings: {
+              stability: 0.5,
+              similarity_boost: 0.8,
+            },
+          }),
+        });
+        if (res.ok) {
+          const arrayBuf = await res.arrayBuffer();
+          audioBuffer = BufferMod.from(arrayBuf);
+          console.log("[tts] Successfully generated audio via ElevenLabs");
+        } else {
+          console.warn(`[tts] ElevenLabs API error ${res.status}: ${await res.text()}, falling back to EdgeTTS`);
+        }
+      } catch (err) {
+        console.warn("[tts] ElevenLabs request failed, falling back to EdgeTTS:", err);
+      }
+    }
+
+    if (!audioBuffer) {
+      const { EdgeTTS } = await import("node-edge-tts");
+      const tts = new EdgeTTS({
+        voice: "bg-BG-BorislavNeural", // Premium natural male voice for Bulgarian
+        lang: "bg-BG",
+        outputFormat: "audio-24khz-48kbitrate-mono-mp3",
+      });
+
+      try {
+        const os = await import("os");
+        const path = await import("path");
+        const fs = await import("fs/promises");
+
+        const tmpPath = path.join(os.tmpdir(), `tts-${Date.now()}-${Math.random().toString(36).slice(2)}.mp3`);
+        await tts.ttsPromise(cleaned, tmpPath);
+        audioBuffer = await fs.readFile(tmpPath);
+        await fs.unlink(tmpPath).catch(() => {});
+      } catch (e: any) {
+        throw new Error("Грешка при генериране на Edge TTS: " + e.message);
+      }
     }
 
     // Get exact audio duration

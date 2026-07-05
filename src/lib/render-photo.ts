@@ -16,7 +16,7 @@ const H = 1920;
 
 // TikTok-safe layout. UI overlays sit in the top ~280 and bottom ~360px,
 // so we keep all critical text comfortably within these margins.
-const SAFE = { top: 320, bottom: 280, side: 130 };
+const SAFE = { top: 320, bottom: 280, side: 180 };
 
 async function loadImage(src: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
