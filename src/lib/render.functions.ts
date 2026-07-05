@@ -144,7 +144,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
           if (Array.isArray(segs) && segs.length > 0) {
             const M = segs.length;
             const lastSegEnd = segs[M - 1]?.end || audioDur;
-            const scale = audioDur > 0 && lastSegEnd > 0 ? (audioDur / lastSegEnd) : 1;
+            const scale = 1; // DO NOT scale exact reciter segment timestamps
             const costs = words.map(w => 1 + w.replace(/[^\p{L}\p{N}]/gu, "").length * 0.55);
             const cumCost = [0];
             for (let i = 0; i < costs.length; i++) cumCost.push(cumCost[i] + costs[i]);

@@ -586,7 +586,7 @@ export async function renderVideo(opts: VideoOptions): Promise<{ blob: Blob; mim
   } else if (hasArSegments) {
     const M = segs.length;
     const lastSegEnd = segs[M - 1]?.end || duration;
-    const scale = duration > 0 && lastSegEnd > 0 ? (duration / lastSegEnd) : 1;
+    const scale = 1; // DO NOT scale exact reciter segment timestamps
     for (let i = 0; i < allWords.length; i++) {
       const fracS = (cumCost[i] / totalCost) * M;
       const fracE = (cumCost[i + 1] / totalCost) * M;

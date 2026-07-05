@@ -82,7 +82,7 @@ export const fetchAyah = createServerFn({ method: "POST" })
     for (let idx = 0; idx < count; idx++) {
       const i = ayah + idx;
       const key = `${surah}:${i}`;
-      const dossariUrl = `https://everyayah.com/data/Yasser_Ad-Dussary_128kbps/${pad(surah, 3)}${pad(i, 3)}.mp3`;
+      const defaultAlafasyUrl = `https://everyayah.com/data/Alafasy_128kbps/${pad(surah, 3)}${pad(i, 3)}.mp3`;
 
       const ar = await fetchJsonWithRetry(`https://api.alquran.cloud/v1/ayah/${key}/quran-uthmani`);
       if (!ar || !ar.data || !ar.data.text) {
@@ -92,8 +92,10 @@ export const fetchAyah = createServerFn({ method: "POST" })
       if (!en || !en.data || !en.data.text) {
         throw new Error(`Преводът за Аят ${i} не е намерен.`);
       }
-      const recData = await fetchJsonWithRetry(`https://api.quran.com/api/v4/quran/recitations/7?verse_key=${key}&fields=segments`);
-      const audioArrayBuf = await fetchBufferWithRetry(dossariUrl);
+      const recData = await fetchJsonWithRetry(`https://api.quran.com/api/v4/quran/recitations/7?verse_key=${key}&fields=segments,url`);
+      const audioFile = recData?.audio_files?.[0];
+      const audioUrlToFetch = audioFile?.url ? `https://verses.quran.com/${audioFile.url}` : defaultAlafasyUrl;
+      const audioArrayBuf = await fetchBufferWithRetry(audioUrlToFetch) || await fetchBufferWithRetry(defaultAlafasyUrl);
 
       if (!surahName) surahName = ar.data.surah.englishName;
       arabicList.push(ar.data.text);
@@ -108,7 +110,6 @@ export const fetchAyah = createServerFn({ method: "POST" })
         } catch { /* ignore */ }
       }
 
-      const audioFile = recData?.audio_files?.[0];
       let segs: WordSegment[] = [];
       if (audioFile && Array.isArray(audioFile.segments) && audioFile.segments.length > 0) {
         segs = audioFile.segments.map((s: number[]) => ({
@@ -131,8 +132,8 @@ export const fetchAyah = createServerFn({ method: "POST" })
     const englishText = englishList.join(" ");
     const arabicWordCount = arabicText.split(/\s+/).filter(Boolean).length;
 
-    let audioUrl = `https://everyayah.com/data/Yasser_Ad-Dussary_128kbps/${pad(surah, 3)}${pad(ayah, 3)}.mp3`;
-    if (count > 1 && audioBufs.length > 0) {
+    let audioUrl = `https://everyayah.com/data/Alafasy_128kbps/${pad(surah, 3)}${pad(ayah, 3)}.mp3`;
+    if (audioBufs.length > 0) {
       const combined = BufferMod.concat(audioBufs);
       audioUrl = `data:audio/mp3;base64,${combined.toString("base64")}`;
     }
