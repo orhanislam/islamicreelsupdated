@@ -253,7 +253,7 @@ function drawReferencePill(ctx: CanvasRenderingContext2D, text: string) {
   const pillW = tw + padX * 2;
   const pillH = fontPx + padY * 2;
   const x = (W - pillW) / 2;
-  const y = H - 160 * scale - pillH / 2;
+  const y = 280 * scale;
   ctx.shadowBlur = 15;
   ctx.shadowColor = "rgba(0, 0, 0, 0.6)";
   ctx.fillStyle = "rgba(0, 0, 0, 0.65)";

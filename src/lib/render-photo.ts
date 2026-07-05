@@ -100,7 +100,7 @@ function drawReferencePill(ctx: CanvasRenderingContext2D, text: string) {
   const pillW = tw + padX * 2;
   const pillH = 28 + padY * 2;
   const x = (W - pillW) / 2;
-  const y = H - 160 - pillH / 2;
+  const y = 280;
   // Glass-gold capsule
   ctx.save();
   ctx.shadowBlur = 0;
