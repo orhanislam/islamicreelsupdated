@@ -133,7 +133,7 @@ export const fetchAyah = createServerFn({ method: "POST" })
     const arabicWordCount = arabicText.split(/\s+/).filter(Boolean).length;
 
     let audioUrl = `https://everyayah.com/data/Alafasy_128kbps/${pad(surah, 3)}${pad(ayah, 3)}.mp3`;
-    if (audioBufs.length > 0) {
+    if (count > 1 && audioBufs.length > 0) {
       const combined = BufferMod.concat(audioBufs);
       audioUrl = `data:audio/mp3;base64,${combined.toString("base64")}`;
     }

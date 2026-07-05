@@ -15,6 +15,7 @@ export const runServerRender = createServerFn({ method: "POST" })
     const fs = (await import("fs")).promises;
     const os = await import("os");
     const path = await import("path");
+    const BufferMod = (await import("node:buffer")).Buffer;
     
     const ffmpegMod = await import("fluent-ffmpeg");
     const ffmpeg = ffmpegMod.default || ffmpegMod;
@@ -45,14 +46,14 @@ export const runServerRender = createServerFn({ method: "POST" })
       if (data.audioUrl) {
         if (data.audioUrl.startsWith("data:")) {
           const b64 = data.audioUrl.split(",")[1];
-          await fs.writeFile(audioPath, Buffer.from(b64, "base64"));
+          await fs.writeFile(audioPath, BufferMod.from(b64, "base64"));
         } else {
           const res = await fetch(data.audioUrl, {
             headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" }
           });
           if (!res.ok) throw new Error(`Failed to fetch audio: ${res.status} ${res.statusText}`);
           const arrayBuf = await res.arrayBuffer();
-          await fs.writeFile(audioPath, Buffer.from(arrayBuf));
+          await fs.writeFile(audioPath, BufferMod.from(arrayBuf));
         }
       } else {
         throw new Error("No audioUrl provided");
@@ -84,7 +85,7 @@ export const runServerRender = createServerFn({ method: "POST" })
         } else {
           finalBgPath += ".jpg";
         }
-        await fs.writeFile(finalBgPath, Buffer.from(b64, "base64"));
+        await fs.writeFile(finalBgPath, BufferMod.from(b64, "base64"));
       } else {
         const res = await fetch(bgUrl, {
           headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" }
@@ -98,7 +99,7 @@ export const runServerRender = createServerFn({ method: "POST" })
           finalBgPath += ".jpg";
         }
         const arrayBuf = await res.arrayBuffer();
-        await fs.writeFile(finalBgPath, Buffer.from(arrayBuf));
+        await fs.writeFile(finalBgPath, BufferMod.from(arrayBuf));
       }
 
       // 3. Generate ASS Subtitles
