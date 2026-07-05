@@ -61,6 +61,7 @@ function CreatePage() {
   const [tab, setTab] = useState<"ayah" | "hadith" | "viral">("ayah");
   const [surah, setSurah] = useState<number | "">("");
   const [ayah, setAyah] = useState<number | "">("");
+  const [ayahEnd, setAyahEnd] = useState<number | "">("");
   const [hadithNum, setHadithNum] = useState<number | "">("");
   const [hadithList, setHadithList] = useState<HadithData[]>([]);
   const [hadithSource, setHadithSource] = useState<"nawawi40" | SunnahCollection>("bukhari");
@@ -132,13 +133,16 @@ function CreatePage() {
     setPexelsPhotos([]); setPexelsVideos([]); setPexelsTheme(""); setPexelsTried([]); setPexelsAvoid([]);
   };
 
-  const loadAyah = async (s: number, a: number) => {
+  const loadAyah = async (s: number, a: number, aEnd?: number) => {
     setLoading(true); reset();
     try {
-      const d: AyahData = await runFetchAyah({ data: { surah: s, ayah: a } });
+      const d: AyahData = await runFetchAyah({ data: { surah: s, ayah: a, ayahEnd: aEnd } });
+      const refStr = d.ayahEnd && d.ayahEnd > d.ayah
+        ? `Сура ${d.surah} (${d.surahName}) • Аяти ${d.ayah}–${d.ayahEnd}`
+        : `Сура ${d.surah} (${d.surahName}) • Аят ${d.ayah}`;
       const c: Content = {
         source_type: "ayah",
-        source_ref: `Quran ${d.surah}:${d.ayah} (${d.surahName})`,
+        source_ref: refStr,
         arabic: d.arabic, english: d.english, audioUrl: d.audioUrl,
         wordSegments: d.wordSegments, arabicWordCount: d.arabicWordCount,
       };
@@ -525,10 +529,14 @@ function CreatePage() {
                 <Input id="surah" type="number" min={1} max={114} placeholder="Напр. 2" value={surah} onChange={(e) => setSurah(e.target.value ? +e.target.value : "")} className="w-24" />
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="ayah">Аят</Label>
+                <Label htmlFor="ayah">От Аят</Label>
                 <Input id="ayah" type="number" min={1} placeholder="Напр. 255" value={ayah} onChange={(e) => setAyah(e.target.value ? +e.target.value : "")} className="w-24" />
               </div>
-              <Button onClick={() => loadAyah(surah as number, ayah as number)} disabled={loading || !surah || !ayah}>
+              <div className="space-y-1.5">
+                <Label htmlFor="ayahEnd">До Аят (по избор)</Label>
+                <Input id="ayahEnd" type="number" min={1} placeholder="Напр. 257" value={ayahEnd} onChange={(e) => setAyahEnd(e.target.value ? +e.target.value : "")} className="w-28" />
+              </div>
+              <Button onClick={() => loadAyah(surah as number, ayah as number, ayahEnd ? ayahEnd as number : undefined)} disabled={loading || !surah || !ayah}>
                 {loading ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4 mr-1" />}
                 Извлечи и преведи
               </Button>

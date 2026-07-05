@@ -92,7 +92,7 @@ async function scrape(collection: SunnahCollection, number: number): Promise<Sun
   const arabic = stripHtml(araMatch.text);
   const english = stripHtml(engMatch.text);
 
-  let reference = `${COLLECTIONS[collection].label} ${number}`;
+  let reference = `${COLLECTIONS[collection].label} • Hadith #${number}`;
 
   return {
     collection,

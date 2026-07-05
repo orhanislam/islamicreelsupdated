@@ -5,6 +5,7 @@ export type WordSegment = { start: number; end: number };
 export type AyahData = {
   surah: number;
   ayah: number;
+  ayahEnd?: number;
   arabic: string;
   english: string;
   surahName: string;
@@ -17,56 +18,106 @@ export type AyahData = {
 const pad = (n: number, l: number) => String(n).padStart(l, "0");
 
 export const fetchAyah = createServerFn({ method: "POST" })
-  .inputValidator((input: { surah: number; ayah: number }) => {
+  .inputValidator((input: { surah: number; ayah: number; ayahEnd?: number }) => {
     const surah = Math.floor(Number(input.surah));
     const ayah = Math.floor(Number(input.ayah));
+    let ayahEnd = input.ayahEnd !== undefined && input.ayahEnd !== null && String(input.ayahEnd) !== ""
+      ? Math.floor(Number(input.ayahEnd))
+      : ayah;
     if (!Number.isFinite(surah) || surah < 1 || surah > 114) {
       throw new Error(`Невалидна сура: ${input.surah} (трябва 1–114)`);
     }
     if (!Number.isFinite(ayah) || ayah < 1) {
       throw new Error(`Невалиден аят: ${input.ayah}`);
     }
-    return { surah, ayah };
+    if (!Number.isFinite(ayahEnd) || ayahEnd < ayah) {
+      ayahEnd = ayah;
+    }
+    if (ayahEnd - ayah > 10) {
+      throw new Error("Моля, избери интервал от най-много 10 аята за едно видео.");
+    }
+    return { surah, ayah, ayahEnd };
   })
   .handler(async ({ data }): Promise<AyahData> => {
-    const { surah, ayah } = data;
-    const key = `${surah}:${ayah}`;
+    const { surah, ayah, ayahEnd } = data;
+    const count = (ayahEnd && ayahEnd > ayah) ? (ayahEnd - ayah + 1) : 1;
 
-    const [arRes, enRes, recRes] = await Promise.all([
-      fetch(`https://api.alquran.cloud/v1/ayah/${key}/quran-uthmani`),
-      fetch(`https://api.alquran.cloud/v1/ayah/${key}/en.muhsinkhan`),
-      fetch(`https://api.quran.com/api/v4/quran/recitations/7?verse_key=${key}&fields=segments`).catch(() => null),
-    ]);
-    if (!arRes.ok || !enRes.ok) throw new Error("Аятът не е намерен");
-    const ar = await arRes.json();
-    const en = await enRes.json();
-    let recData: any = null;
-    if (recRes && recRes.ok) {
-      recData = await recRes.json().catch(() => null);
-    }
+    const mp3Duration = (await import("mp3-duration")).default;
+    const BufferMod = (await import("node:buffer")).Buffer;
 
-    // Yasser Al-Dossari recitation from everyayah.com with exact word synchronization
-    // derived from Quran.com API v4 (ID 7) Tajweed timing segments.
-    const audioUrl = `https://everyayah.com/data/Yasser_Ad-Dussary_128kbps/${pad(surah, 3)}${pad(ayah, 3)}.mp3`;
+    const results = await Promise.all(
+      Array.from({ length: count }, (_, idx) => {
+        const i = ayah + idx;
+        const key = `${surah}:${i}`;
+        const dossariUrl = `https://everyayah.com/data/Yasser_Ad-Dussary_128kbps/${pad(surah, 3)}${pad(i, 3)}.mp3`;
+        return Promise.all([
+          fetch(`https://api.alquran.cloud/v1/ayah/${key}/quran-uthmani`).then(r => r.ok ? r.json() : Promise.reject(new Error(`Аят ${i} не е намерен`))),
+          fetch(`https://api.alquran.cloud/v1/ayah/${key}/en.muhsinkhan`).then(r => r.ok ? r.json() : Promise.reject(new Error(`Аят ${i} не е намерен`))),
+          fetch(`https://api.quran.com/api/v4/quran/recitations/7?verse_key=${key}&fields=segments`).then(r => r.ok ? r.json() : null).catch(() => null),
+          fetch(dossariUrl).then(r => r.ok ? r.arrayBuffer() : null).catch(() => null),
+        ]);
+      })
+    );
+
+    const arabicList: string[] = [];
+    const englishList: string[] = [];
+    let surahName = "";
     let wordSegments: WordSegment[] = [];
+    const audioBufs: any[] = [];
+    let timeOffset = 0;
 
-    const audioFile = recData?.audio_files?.[0];
-    if (audioFile && Array.isArray(audioFile.segments) && audioFile.segments.length > 0) {
-      wordSegments = audioFile.segments.map((s: number[]) => ({
-        start: (Number(s[2]) || 0) / 1000,
-        end: (Number(s[3]) || 0) / 1000,
-      }));
+    for (let idx = 0; idx < results.length; idx++) {
+      const [ar, en, recData, audioArrayBuf] = results[idx];
+      if (!surahName) surahName = ar.data.surah.englishName;
+      arabicList.push(ar.data.text);
+      englishList.push(en.data.text);
+
+      let buf: any = null;
+      let dur = 0;
+      if (audioArrayBuf) {
+        buf = BufferMod.from(audioArrayBuf);
+        audioBufs.push(buf);
+        try {
+          dur = await mp3Duration(buf);
+        } catch { /* ignore */ }
+      }
+
+      const audioFile = recData?.audio_files?.[0];
+      let segs: WordSegment[] = [];
+      if (audioFile && Array.isArray(audioFile.segments) && audioFile.segments.length > 0) {
+        segs = audioFile.segments.map((s: number[]) => ({
+          start: (Number(s[2]) || 0) / 1000 + timeOffset,
+          end: (Number(s[3]) || 0) / 1000 + timeOffset,
+        }));
+      }
+      wordSegments.push(...segs);
+
+      if (dur > 0) {
+        timeOffset += dur;
+      } else if (segs.length > 0) {
+        timeOffset = segs[segs.length - 1].end;
+      } else {
+        timeOffset += 10;
+      }
     }
 
-    const arabicText: string = ar.data.text;
+    const arabicText = arabicList.join(" ۝ ");
+    const englishText = englishList.join(" ");
     const arabicWordCount = arabicText.split(/\s+/).filter(Boolean).length;
+
+    let audioUrl = `https://everyayah.com/data/Yasser_Ad-Dussary_128kbps/${pad(surah, 3)}${pad(ayah, 3)}.mp3`;
+    if (count > 1 && audioBufs.length === count) {
+      const combined = BufferMod.concat(audioBufs);
+      audioUrl = `data:audio/mp3;base64,${combined.toString("base64")}`;
+    }
 
     return {
       surah,
       ayah,
+      ayahEnd: count > 1 ? ayahEnd : undefined,
       arabic: arabicText,
-      english: en.data.text,
-      surahName: ar.data.surah.englishName,
+      english: englishText,
+      surahName,
       audioUrl,
       wordSegments,
       arabicWordCount,
