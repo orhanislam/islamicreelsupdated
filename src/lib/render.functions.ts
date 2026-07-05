@@ -13,47 +13,19 @@ export const runServerRender = createServerFn({ method: "POST" })
   .validator((opts: any) => opts)
   .handler(async ({ data }) => {
     const fs = (await import("fs")).promises;
-    const fsSync = await import("fs");
     const os = await import("os");
     const path = await import("path");
-    const { execSync } = await import("child_process");
     
     const ffmpegMod = await import("fluent-ffmpeg");
     const ffmpeg = ffmpegMod.default || ffmpegMod;
-    let ffmpegPath = "ffmpeg";
+    let ffmpegPath = "/usr/bin/ffmpeg";
     if (process.platform === "win32") {
       try {
         const installerMod = await import("@ffmpeg-installer/ffmpeg");
         const installer = installerMod.default || installerMod;
         if (installer?.path) ffmpegPath = installer.path;
       } catch (e) {
-        console.warn("[server-render] @ffmpeg-installer failed on win32:", e);
-      }
-    } else {
-      // Try to locate ffmpeg using 'which' command first
-      try {
-        const which = execSync("which ffmpeg", { encoding: "utf8" }).trim();
-        if (which) ffmpegPath = which;
-      } catch {
-        // 'which' failed, check common paths manually
-        const candidates = [
-          "/usr/bin/ffmpeg",
-          "/usr/local/bin/ffmpeg",
-          "/snap/bin/ffmpeg",
-        ];
-        let found = false;
-        for (const c of candidates) {
-          if (fsSync.existsSync(c)) {
-            ffmpegPath = c;
-            found = true;
-            break;
-          }
-        }
-        if (!found) {
-          throw new Error(
-            "FFmpeg не е инсталиран на сървъра! Изпълнете: sudo apt-get install -y ffmpeg"
-          );
-        }
+        ffmpegPath = "ffmpeg";
       }
     }
     console.log(`[server-render] Using ffmpeg at: ${ffmpegPath}`);
