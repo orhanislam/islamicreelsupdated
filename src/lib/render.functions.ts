@@ -253,8 +253,11 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         
         cmd = cmd.input(audioPath);
 
+        const width = data.quality === "1080p" ? 1080 : 720;
+        const height = data.quality === "1080p" ? 1920 : 1280;
+
         cmd.complexFilter([
-          `[0:v]crop='min(iw,ih*9/16)':'min(iw*16/9,ih)',scale=1080:1920,drawbox=x=0:y=0:w=1080:h=1920:color=black@0.15:t=fill,subtitles='${escapedAssPath}'[v]`
+          `[0:v]crop='min(iw,ih*9/16)':'min(iw*16/9,ih)',scale=${width}:${height},drawbox=x=0:y=0:w=${width}:h=${height}:color=black@0.15:t=fill,subtitles='${escapedAssPath}'[v]`
         ])
         .outputOptions([
           "-map [v]",
@@ -273,7 +276,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
           "-b:a 128k",
           "-ar 44100",
           `-t ${audioDur}`,
-          "-threads 4"
+          "-threads 0"
         ])
         .outputFormat("mp4")
         .save(outPath)
