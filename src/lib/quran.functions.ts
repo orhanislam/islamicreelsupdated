@@ -78,13 +78,16 @@ export const fetchAyah = createServerFn({ method: "POST" })
     const audioBufs: any[] = [];
     let timeOffset = 0;
 
-    let firstAudioUrl = `https://everyayah.com/data/Alafasy_128kbps/${pad(surah, 3)}${pad(ayah, 3)}.mp3`;
+    let firstAudioUrl = `https://everyayah.com/data/Yasser_Ad-Dussary_128kbps/${pad(surah, 3)}${pad(ayah, 3)}.mp3`;
+
+    // Fetch exact word-level timing segments for Yasser Ad-Dossary (reciter ID 97 on QuranCDN API)
+    const quranCdnData = await fetchJsonWithRetry(`https://api.qurancdn.com/api/qdc/audio/reciters/97/audio_files?chapter=${surah}&segments=true`);
 
     // Sequential fetching with retries to prevent connection limits and 'fetch failed' errors
     for (let idx = 0; idx < count; idx++) {
       const i = ayah + idx;
       const key = `${surah}:${i}`;
-      const defaultAlafasyUrl = `https://everyayah.com/data/Alafasy_128kbps/${pad(surah, 3)}${pad(i, 3)}.mp3`;
+      const defaultDossaryUrl = `https://everyayah.com/data/Yasser_Ad-Dussary_128kbps/${pad(surah, 3)}${pad(i, 3)}.mp3`;
 
       const ar = await fetchJsonWithRetry(`https://api.alquran.cloud/v1/ayah/${key}/quran-uthmani`);
       if (!ar || !ar.data || !ar.data.text) {
@@ -94,11 +97,10 @@ export const fetchAyah = createServerFn({ method: "POST" })
       if (!en || !en.data || !en.data.text) {
         throw new Error(`Преводът за Аят ${i} не е намерен.`);
       }
-      const recData = await fetchJsonWithRetry(`https://api.quran.com/api/v4/quran/recitations/7?verse_key=${key}&fields=segments,url`);
-      const audioFile = recData?.audio_files?.[0];
-      const audioUrlToFetch = audioFile?.url ? `https://verses.quran.com/${audioFile.url}` : defaultAlafasyUrl;
+
+      const audioUrlToFetch = defaultDossaryUrl;
       if (idx === 0) firstAudioUrl = audioUrlToFetch;
-      const audioArrayBuf = await fetchBufferWithRetry(audioUrlToFetch) || await fetchBufferWithRetry(defaultAlafasyUrl);
+      const audioArrayBuf = await fetchBufferWithRetry(audioUrlToFetch);
 
       if (!surahName) surahName = ar.data.surah.englishName;
       arabicList.push(ar.data.text);
@@ -114,10 +116,12 @@ export const fetchAyah = createServerFn({ method: "POST" })
       }
 
       let segs: WordSegment[] = [];
-      if (audioFile && Array.isArray(audioFile.segments) && audioFile.segments.length > 0) {
-        segs = audioFile.segments.map((s: number[]) => ({
-          start: (Number(s[2]) || 0) / 1000 + timeOffset,
-          end: (Number(s[3]) || 0) / 1000 + timeOffset,
+      const vt = quranCdnData?.audio_files?.[0]?.verse_timings?.find((v: any) => v.verse_key === key);
+      if (vt && vt.duration > 0 && Array.isArray(vt.segments) && vt.segments.length > 0) {
+        const scale = dur > 0 ? (dur / (vt.duration / 1000)) : 1;
+        segs = vt.segments.map((s: number[]) => ({
+          start: ((Number(s[1]) - vt.timestamp_from) / 1000) * scale + timeOffset,
+          end: ((Number(s[2]) - vt.timestamp_from) / 1000) * scale + timeOffset,
         }));
       }
       wordSegments.push(...segs);
