@@ -1,6 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 
-export type WordSegment = { start: number; end: number };
+export type WordSegment = { start: number; end: number; word?: string };
 
 export type AyahData = {
   surah: number;
@@ -105,6 +105,7 @@ export const fetchAyah = createServerFn({ method: "POST" })
       if (!surahName) surahName = ar.data.surah.englishName;
       arabicList.push(ar.data.text);
       englishList.push(en.data.text);
+      const arWords = ar.data.text.split(/\s+/).filter(Boolean);
 
       let dur = 0;
       if (audioArrayBuf) {
@@ -119,9 +120,10 @@ export const fetchAyah = createServerFn({ method: "POST" })
       const vt = quranCdnData?.audio_files?.[0]?.verse_timings?.find((v: any) => v.verse_key === key);
       if (vt && vt.duration > 0 && Array.isArray(vt.segments) && vt.segments.length > 0) {
         const scale = dur > 0 ? (dur / (vt.duration / 1000)) : 1;
-        segs = vt.segments.map((s: number[]) => ({
+        segs = vt.segments.map((s: number[], sIdx: number) => ({
           start: ((Number(s[1]) - vt.timestamp_from) / 1000) * scale + timeOffset,
           end: ((Number(s[2]) - vt.timestamp_from) / 1000) * scale + timeOffset,
+          word: arWords[sIdx] || `ar_${sIdx + 1}`,
         }));
       }
       wordSegments.push(...segs);

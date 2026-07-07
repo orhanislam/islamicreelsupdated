@@ -143,22 +143,35 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
           timings = [];
           const segs = data.wordSegments;
           if (Array.isArray(segs) && segs.length > 0) {
-            const M = segs.length;
-            const lastSegEnd = segs[M - 1]?.end || audioDur;
             const scale = 1; // DO NOT scale exact reciter segment timestamps
             const costs = words.map(w => 1 + w.replace(/[^\p{L}\p{N}]/gu, "").length * 0.55);
             const cumCost = [0];
             for (let i = 0; i < costs.length; i++) cumCost.push(cumCost[i] + costs[i]);
             const totalCost = cumCost[cumCost.length - 1] || 1;
+
+            // Build cumulative acoustic timeline of the reciter's voice
+            // Instead of counting indices (1, 2, 3...), we sum the actual acoustic duration of each segment!
+            const segDurs = segs.map(s => Math.max(0.1, (s.end - s.start) * scale));
+            const cumAudio = [0];
+            for (let i = 0; i < segDurs.length; i++) cumAudio.push(cumAudio[i] + segDurs[i]);
+            const totalAudio = cumAudio[cumAudio.length - 1] || audioDur;
+
             for (let i = 0; i < words.length; i++) {
-              const fracS = (cumCost[i] / totalCost) * M;
-              const fracE = (cumCost[i + 1] / totalCost) * M;
-              const idxS = Math.min(M - 1, Math.floor(fracS));
-              const remS = fracS - idxS;
-              const start = (segs[idxS].start + remS * (segs[idxS].end - segs[idxS].start)) * scale;
-              const idxE = Math.min(M - 1, Math.floor(fracE));
-              const remE = fracE - idxE;
-              const end = (segs[idxE].start + remE * (segs[idxE].end - segs[idxE].start)) * scale;
+              const fracS = cumCost[i] / totalCost;
+              const fracE = cumCost[i + 1] / totalCost;
+              const targetAudioS = fracS * totalAudio;
+              const targetAudioE = fracE * totalAudio;
+
+              let sIdx = 0;
+              while (sIdx < segs.length - 1 && cumAudio[sIdx + 1] < targetAudioS) sIdx++;
+              const remAudioS = (targetAudioS - cumAudio[sIdx]) / segDurs[sIdx];
+              const start = (segs[sIdx].start + remAudioS * (segs[sIdx].end - segs[sIdx].start)) * scale;
+
+              let eIdx = 0;
+              while (eIdx < segs.length - 1 && cumAudio[eIdx + 1] < targetAudioE) eIdx++;
+              const remAudioE = (targetAudioE - cumAudio[eIdx]) / segDurs[eIdx];
+              const end = (segs[eIdx].start + remAudioE * (segs[eIdx].end - segs[eIdx].start)) * scale;
+
               timings.push({ start, end });
             }
           } else {
