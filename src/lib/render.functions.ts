@@ -205,33 +205,25 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         }
         flush();
 
-        const posTag = isLowerThird ? "{\\an2\\pos(540,1600)}" : "{\\an5\\pos(540,960)}";
+        // CapCut pro subtitle style: Smooth zoom pop-in from 85% to 100% scale over 180ms + fade-in
+        const animTag = "\\fscx85\\fscy85\\t(0,180,\\fscx100\\fscy100)\\fad(150,120)";
+        const styleTag = isLowerThird
+          ? `{\\an2\\pos(540,1600)${animTag}}`
+          : `{\\an5\\pos(540,960)${animTag}}`;
 
         let prevEnd = 0;
-        for (let i = 0; i < timings.length && i < words.length; i++) {
-          const start = timings[i].start;
-          const end = timings[i].end;
-          const p = phrases.find(ph => i >= ph.startIdx && i < ph.endIdx) || phrases[phrases.length - 1];
-          
-          if (start > prevEnd && p) {
-             ass += `Dialogue: 0,${formatTime(prevEnd)},${formatTime(start)},Bulgarian,,0,0,0,,${posTag}${p.words.join(" ")}\n`;
-          }
-          
-          if (p) {
-            let textLine = "";
-            for (let j = p.startIdx; j < p.endIdx && j < words.length; j++) {
-              // Highlight current active word in bright yellow (\c&H00FFFF&)
-              if (j === i) textLine += `{\\c&H00FFFF&}${words[j]}{\\c&H00FFFFFF&} `;
-              else textLine += `${words[j]} `;
-            }
-            ass += `Dialogue: 0,${formatTime(start)},${formatTime(end)},Bulgarian,,0,0,0,,${posTag}${textLine.trim()}\n`;
-          }
-          
+        for (let idx = 0; idx < phrases.length; idx++) {
+          const p = phrases[idx];
+          const start = timings[p.startIdx]?.start ?? prevEnd;
+          const end = timings[p.endIdx - 1]?.end ?? (start + 2);
+
+          const textLine = p.words.join(" ");
+          ass += `Dialogue: 0,${formatTime(start)},${formatTime(end)},Bulgarian,,0,0,0,,${styleTag}${textLine}\n`;
           prevEnd = end;
         }
         const lastPhrase = phrases[phrases.length - 1];
         if (lastPhrase) {
-          ass += `Dialogue: 0,${formatTime(prevEnd)},0:10:00.00,Bulgarian,,0,0,0,,${posTag}${lastPhrase.words.join(" ")}\n`;
+          ass += `Dialogue: 0,${formatTime(prevEnd)},0:10:00.00,Bulgarian,,0,0,0,,${styleTag}${lastPhrase.words.join(" ")}\n`;
         }
       }
 

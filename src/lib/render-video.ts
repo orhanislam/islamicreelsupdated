@@ -761,7 +761,9 @@ export async function renderVideo(opts: VideoOptions): Promise<{ blob: Blob; mim
       const alphaIn = Math.max(0, Math.min(1, sinceStart / FADE_IN));
       // Allow the last subtitle to fade out normally when its end time is reached
       const alphaOut = Math.max(0, Math.min(1, tillEnd / 0.18));
-      const alpha = Math.min(alphaIn, alphaOut);
+      // CapCut pop-in scale zoom animation (starts at 85% and zooms up to 100% over first 180ms)
+      const popProgress = Math.max(0, Math.min(1, sinceStart / 0.18));
+      const popScale = 0.85 + 0.15 * (1 - Math.pow(1 - popProgress, 3)); // cubic-out ease
 
       // Premium modern TikTok font (bold, sans-serif)
       ctx.font = `800 ${activePhrase.fontSize}px 'Outfit', 'Inter', sans-serif`;
@@ -778,6 +780,12 @@ export async function renderVideo(opts: VideoOptions): Promise<{ blob: Blob; mim
           ? H - SAFE.bottom - blockH + activePhrase.lineHeight * 0.75
           : (H - blockH) / 2 + activePhrase.lineHeight * 0.75;
 
+      ctx.save();
+      const centerY = baseY + blockH / 2 - activePhrase.lineHeight * 0.75;
+      ctx.translate(W / 2, centerY);
+      ctx.scale(popScale, popScale);
+      ctx.translate(-W / 2, -centerY);
+
       ctx.globalAlpha = alpha;
       ctx.textAlign = "center";
       ctx.strokeStyle = "rgba(0,0,0,0.45)";
@@ -789,6 +797,7 @@ export async function renderVideo(opts: VideoOptions): Promise<{ blob: Blob; mim
         ctx.fillStyle = "#ffffff";
         ctx.fillText(text, W / 2, y);
       }
+      ctx.restore();
       ctx.globalAlpha = 1;
       ctx.shadowBlur = 0;
       ctx.shadowOffsetY = 0;
