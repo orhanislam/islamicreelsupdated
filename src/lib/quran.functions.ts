@@ -78,6 +78,8 @@ export const fetchAyah = createServerFn({ method: "POST" })
     const audioBufs: any[] = [];
     let timeOffset = 0;
 
+    let firstAudioUrl = `https://everyayah.com/data/Alafasy_128kbps/${pad(surah, 3)}${pad(ayah, 3)}.mp3`;
+
     // Sequential fetching with retries to prevent connection limits and 'fetch failed' errors
     for (let idx = 0; idx < count; idx++) {
       const i = ayah + idx;
@@ -95,6 +97,7 @@ export const fetchAyah = createServerFn({ method: "POST" })
       const recData = await fetchJsonWithRetry(`https://api.quran.com/api/v4/quran/recitations/7?verse_key=${key}&fields=segments,url`);
       const audioFile = recData?.audio_files?.[0];
       const audioUrlToFetch = audioFile?.url ? `https://verses.quran.com/${audioFile.url}` : defaultAlafasyUrl;
+      if (idx === 0) firstAudioUrl = audioUrlToFetch;
       const audioArrayBuf = await fetchBufferWithRetry(audioUrlToFetch) || await fetchBufferWithRetry(defaultAlafasyUrl);
 
       if (!surahName) surahName = ar.data.surah.englishName;
@@ -132,7 +135,7 @@ export const fetchAyah = createServerFn({ method: "POST" })
     const englishText = englishList.join(" ");
     const arabicWordCount = arabicText.split(/\s+/).filter(Boolean).length;
 
-    let audioUrl = `https://everyayah.com/data/Alafasy_128kbps/${pad(surah, 3)}${pad(ayah, 3)}.mp3`;
+    let audioUrl = firstAudioUrl;
     if (count > 1 && audioBufs.length > 0) {
       const combined = BufferMod.concat(audioBufs);
       audioUrl = `data:audio/mp3;base64,${combined.toString("base64")}`;
