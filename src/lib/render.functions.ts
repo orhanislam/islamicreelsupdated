@@ -260,7 +260,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
           "-pix_fmt yuv420p",
           "-movflags +faststart",
           "-preset ultrafast",
-          "-crf 28",
+          "-crf 22",
           "-r 30",
           "-vsync 1",
           "-g 60",

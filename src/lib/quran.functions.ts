@@ -43,6 +43,47 @@ async function fetchBufferWithRetry(url: string, retries = 2): Promise<ArrayBuff
   return null;
 }
 
+async function sliceQuranCdnAudio(audioUrl: string, startSec: number, endSec: number): Promise<string | null> {
+  try {
+    const fs = (await import("node:fs")).promises;
+    const os = await import("node:os");
+    const path = await import("node:path");
+    const { execFile } = await import("node:child_process");
+    const { promisify } = await import("node:util");
+    const execFileAsync = promisify(execFile);
+
+    let ffmpegPath = "/usr/bin/ffmpeg";
+    if (process.platform === "win32") {
+      try {
+        const installerMod = await import("@ffmpeg-installer/ffmpeg");
+        const installer = installerMod.default || installerMod;
+        if (installer?.path) ffmpegPath = installer.path;
+      } catch {
+        ffmpegPath = "ffmpeg";
+      }
+    }
+
+    const tmpSlice = path.join(os.tmpdir(), `quran_slice_${Date.now()}_${Math.random().toString(36).substring(2)}.mp3`);
+    await execFileAsync(ffmpegPath, [
+      "-y",
+      "-ss", startSec.toFixed(3),
+      "-to", endSec.toFixed(3),
+      "-i", audioUrl,
+      "-c", "copy",
+      "-loglevel", "error",
+      "-nostdin",
+      tmpSlice
+    ]);
+
+    const buf = await fs.readFile(tmpSlice);
+    await fs.unlink(tmpSlice).catch(() => {});
+    return `data:audio/mp3;base64,${buf.toString("base64")}`;
+  } catch (e) {
+    console.error("[quran-slice] FFmpeg slice failed:", e);
+    return null;
+  }
+}
+
 export const fetchAyah = createServerFn({ method: "POST" })
   .inputValidator((input: { surah: number; ayah: number; ayahEnd?: number }) => {
     const surah = Math.floor(Number(input.surah));
@@ -66,7 +107,7 @@ export const fetchAyah = createServerFn({ method: "POST" })
   })
   .handler(async ({ data }): Promise<AyahData> => {
     const { surah, ayah, ayahEnd } = data;
-    const count = (ayahEnd && ayahEnd > ayah) ? (ayahEnd - ayah + 1) : 1;
+    const count = ayahEnd - ayah + 1;
 
     const mp3Duration = (await import("mp3-duration")).default;
     const BufferMod = (await import("node:buffer")).Buffer;
@@ -82,6 +123,22 @@ export const fetchAyah = createServerFn({ method: "POST" })
 
     // Fetch exact word-level timing segments for Yasser Ad-Dossary (reciter ID 97 on QuranCDN API)
     const quranCdnData = await fetchJsonWithRetry(`https://api.qurancdn.com/api/qdc/audio/reciters/97/audio_files?chapter=${surah}&segments=true`);
+    const cdnAudioUrl = quranCdnData?.audio_files?.[0]?.audio_url;
+    const cdnTimings = quranCdnData?.audio_files?.[0]?.verse_timings;
+    const vtStart = cdnTimings?.find((v: any) => v.verse_key === `${surah}:${ayah}`);
+    const vtEnd = cdnTimings?.find((v: any) => v.verse_key === `${surah}:${ayah + count - 1}`);
+
+    let useCdnSlice = false;
+    let cdnBase64Url = "";
+    if (cdnAudioUrl && vtStart && vtEnd && vtStart.timestamp_from !== undefined && vtEnd.timestamp_to !== undefined) {
+      const startSec = vtStart.timestamp_from / 1000;
+      const endSec = vtEnd.timestamp_to / 1000;
+      const sliced = await sliceQuranCdnAudio(cdnAudioUrl, startSec, endSec);
+      if (sliced) {
+        useCdnSlice = true;
+        cdnBase64Url = sliced;
+      }
+    }
 
     // Sequential fetching with retries to prevent connection limits and 'fetch failed' errors
     for (let idx = 0; idx < count; idx++) {
@@ -98,42 +155,55 @@ export const fetchAyah = createServerFn({ method: "POST" })
         throw new Error(`Преводът за Аят ${i} не е намерен.`);
       }
 
-      const audioUrlToFetch = defaultDossaryUrl;
-      if (idx === 0) firstAudioUrl = audioUrlToFetch;
-      const audioArrayBuf = await fetchBufferWithRetry(audioUrlToFetch);
-
       if (!surahName) surahName = ar.data.surah.englishName;
       arabicList.push(ar.data.text);
       englishList.push(en.data.text);
       const arWords = ar.data.text.split(/\s+/).filter(Boolean);
 
-      let dur = 0;
-      if (audioArrayBuf) {
-        const buf = BufferMod.from(audioArrayBuf);
-        audioBufs.push(buf);
-        try {
-          dur = await mp3Duration(buf);
-        } catch { /* ignore */ }
-      }
-
-      let segs: WordSegment[] = [];
-      const vt = quranCdnData?.audio_files?.[0]?.verse_timings?.find((v: any) => v.verse_key === key);
-      if (vt && vt.duration > 0 && Array.isArray(vt.segments) && vt.segments.length > 0) {
-        const scale = dur > 0 ? (dur / (vt.duration / 1000)) : 1;
-        segs = vt.segments.map((s: number[], sIdx: number) => ({
-          start: ((Number(s[1]) - vt.timestamp_from) / 1000) * scale + timeOffset,
-          end: ((Number(s[2]) - vt.timestamp_from) / 1000) * scale + timeOffset,
-          word: arWords[sIdx] || `ar_${sIdx + 1}`,
-        }));
-      }
-      wordSegments.push(...segs);
-
-      if (dur > 0) {
-        timeOffset += dur;
-      } else if (segs.length > 0) {
-        timeOffset = segs[segs.length - 1].end;
+      if (useCdnSlice) {
+        const vt = cdnTimings?.find((v: any) => v.verse_key === key);
+        if (vt && Array.isArray(vt.segments) && vt.segments.length > 0) {
+          const offsetSec = vtStart.timestamp_from / 1000;
+          const segs = vt.segments.map((s: number[], sIdx: number) => ({
+            start: Math.round(((Number(s[1]) / 1000) - offsetSec) * 1000) / 1000,
+            end: Math.round(((Number(s[2]) / 1000) - offsetSec) * 1000) / 1000,
+            word: arWords[sIdx] || `ar_${sIdx + 1}`,
+          }));
+          wordSegments.push(...segs);
+        }
       } else {
-        timeOffset += 10;
+        const audioUrlToFetch = defaultDossaryUrl;
+        if (idx === 0) firstAudioUrl = audioUrlToFetch;
+        const audioArrayBuf = await fetchBufferWithRetry(audioUrlToFetch);
+
+        let dur = 0;
+        if (audioArrayBuf) {
+          const buf = BufferMod.from(audioArrayBuf);
+          audioBufs.push(buf);
+          try {
+            dur = await mp3Duration(buf);
+          } catch { /* ignore */ }
+        }
+
+        let segs: WordSegment[] = [];
+        const vt = cdnTimings?.find((v: any) => v.verse_key === key);
+        if (vt && vt.duration > 0 && Array.isArray(vt.segments) && vt.segments.length > 0) {
+          const scale = dur > 0 ? (dur / (vt.duration / 1000)) : 1;
+          segs = vt.segments.map((s: number[], sIdx: number) => ({
+            start: ((Number(s[1]) - vt.timestamp_from) / 1000) * scale + timeOffset,
+            end: ((Number(s[2]) - vt.timestamp_from) / 1000) * scale + timeOffset,
+            word: arWords[sIdx] || `ar_${sIdx + 1}`,
+          }));
+        }
+        wordSegments.push(...segs);
+
+        if (dur > 0) {
+          timeOffset += dur;
+        } else if (segs.length > 0) {
+          timeOffset = segs[segs.length - 1].end;
+        } else {
+          timeOffset += 10;
+        }
       }
     }
 
@@ -141,8 +211,8 @@ export const fetchAyah = createServerFn({ method: "POST" })
     const englishText = englishList.join(" ");
     const arabicWordCount = arabicText.split(/\s+/).filter(Boolean).length;
 
-    let audioUrl = firstAudioUrl;
-    if (count > 1 && audioBufs.length > 0) {
+    let audioUrl = useCdnSlice ? cdnBase64Url : firstAudioUrl;
+    if (!useCdnSlice && count > 1 && audioBufs.length > 0) {
       const combined = BufferMod.concat(audioBufs);
       audioUrl = `data:audio/mp3;base64,${combined.toString("base64")}`;
     }

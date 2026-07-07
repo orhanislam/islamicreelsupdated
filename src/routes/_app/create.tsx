@@ -99,7 +99,7 @@ function CreatePage() {
   // caption style + output format
   const [captionStyle, setCaptionStyle] = useState<RenderOptions["style"]>("centered");
   const [format, setFormat] = useState<"photo" | "video">("video");
-  const [videoQuality, setVideoQuality] = useState<"1080p" | "720p">("720p");
+  const [videoQuality, setVideoQuality] = useState<"1080p" | "720p">("1080p");
   const [renderMode, setRenderMode] = useState<"client" | "server">("server");
   // Bulgarian male narration (hadiths)
   const [useBgNarration, setUseBgNarration] = useState(true);

@@ -764,6 +764,7 @@ export async function renderVideo(opts: VideoOptions): Promise<{ blob: Blob; mim
       // CapCut pop-in scale zoom animation (starts at 85% and zooms up to 100% over first 180ms)
       const popProgress = Math.max(0, Math.min(1, sinceStart / 0.18));
       const popScale = 0.85 + 0.15 * (1 - Math.pow(1 - popProgress, 3)); // cubic-out ease
+      const alpha = Math.min(alphaIn, alphaOut);
 
       // Premium modern TikTok font (bold, sans-serif)
       ctx.font = `800 ${activePhrase.fontSize}px 'Outfit', 'Inter', sans-serif`;
