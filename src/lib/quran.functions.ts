@@ -52,15 +52,13 @@ async function sliceQuranCdnAudio(audioUrl: string, startSec: number, endSec: nu
     const { promisify } = await import("node:util");
     const execFileAsync = promisify(execFile);
 
-    let ffmpegPath = "/usr/bin/ffmpeg";
-    if (process.platform === "win32") {
-      try {
-        const installerMod = await import("@ffmpeg-installer/ffmpeg");
-        const installer = installerMod.default || installerMod;
-        if (installer?.path) ffmpegPath = installer.path;
-      } catch {
-        ffmpegPath = "ffmpeg";
-      }
+    let ffmpegPath = "ffmpeg";
+    try {
+      const installerMod = await import("@ffmpeg-installer/ffmpeg");
+      const installer = installerMod.default || installerMod;
+      if (installer?.path) ffmpegPath = installer.path;
+    } catch {
+      ffmpegPath = process.platform === "win32" ? "ffmpeg" : "/usr/bin/ffmpeg";
     }
 
     const tmpSlice = path.join(os.tmpdir(), `quran_slice_${Date.now()}_${Math.random().toString(36).substring(2)}.mp3`);
