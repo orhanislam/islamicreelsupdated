@@ -29,43 +29,35 @@ export const translateToBulgarian = createServerFn({ method: "POST" })
 
       if (uncached.length > 0) {
         try {
-          const prompt = `Източник: ${data.sourceRef}\n\nМоля, преведи следните аяти на български език (точен, литературен превод, без съкращения, ясен български текст).\nВърни САМО JSON обект, където ключовете са номерата на аятите, а стойностите са преводите им на български език:\n{\n  "105": "превод на аят 105...",\n  "106": "превод на аят 106..."\n}\n\nАяти:\n${uncached.map((b) => `Аят ${b.ayah}: ${b.english}`).join("\n\n")}`;
-          const rawJson = await geminiChat(
+          const prompt = `Източник: ${data.sourceRef}\n\nМоля, преведи следните аяти на български език (точен, литературен превод от оригиналния арабски текст, на ясен и правилен български език).\nЗа всеки аят върни превода във формат:\n===AYAH номер===\nтекст на превода\n\nАяти за превод:\n${uncached.map((b) => `Аят ${b.ayah}:\nАрабски: ${b.arabic || ""}\nАнглийски: ${b.english || ""}`).join("\n\n")}`;
+
+          const rawResp = await geminiChat(
             "gemini-2.5-flash",
             [
               { role: "system", content: SYSTEM },
               { role: "user", content: prompt },
             ],
-            true
+            false
           );
-          const cleanJson = rawJson
-            .replace(/^```json\s*/i, "")
-            .replace(/^```\s*/i, "")
-            .replace(/\s*```$/i, "")
-            .trim();
-          const parsed = JSON.parse(cleanJson);
 
-          if (Array.isArray(parsed)) {
-            uncached.forEach((b, idx) => {
-              const val = parsed[idx];
-              if (val && typeof val === "string" && val.trim().length > 0) {
-                globalCache.set(`ayah_${b.ayah}_${(b.english || "").trim()}`, sanitize(val).trim());
-              }
-            });
-          } else if (parsed && typeof parsed === "object") {
-            for (const b of uncached) {
-              let val = parsed[String(b.ayah)] || parsed[b.ayah];
-              if (!val) {
-                const matchingKey = Object.keys(parsed).find((k) => k.endsWith(String(b.ayah)));
-                if (matchingKey) val = parsed[matchingKey];
-              }
-              if (val && typeof val === "string" && val.trim().length > 0) {
-                globalCache.set(`ayah_${b.ayah}_${(b.english || "").trim()}`, sanitize(val).trim());
+          const parts = rawResp.split(/===AYAH\s*(\d+)===/i);
+          for (let i = 1; i < parts.length; i += 2) {
+            const ayahNum = Number(parts[i]);
+            let text = (parts[i + 1] || "").trim();
+            text = text.replace(/===AYAH.*$/s, "").trim();
+            if (ayahNum && text) {
+              const targetB = uncached.find((b) => Number(b.ayah) === ayahNum);
+              if (targetB) {
+                const cleanText = sanitize(text);
+                const formattedText = cleanText.startsWith(`(${targetB.ayah})`)
+                  ? cleanText
+                  : `(${targetB.ayah}) ${cleanText}`;
+                globalCache.set(`ayah_${targetB.ayah}_${(targetB.english || "").trim()}`, formattedText);
               }
             }
           }
         } catch (e) {
-          console.warn("[translate] Batch JSON translate failed, falling back to sequential:", e);
+          console.warn("[translate] Batch translate failed, falling back to sequential:", e);
         }
 
         for (const b of data.ayahBounds) {
@@ -74,11 +66,17 @@ export const translateToBulgarian = createServerFn({ method: "POST" })
             try {
               const raw = await geminiChat("gemini-2.5-flash", [
                 { role: "system", content: SYSTEM },
-                { role: "user", content: `Източник: ${data.sourceRef} (Аят ${b.ayah})\n\nАнглийски:\n${b.english}` },
+                {
+                  role: "user",
+                  content: `Източник: ${data.sourceRef} (Аят ${b.ayah})\n\nАрабски:\n${b.arabic || ""}\n\nАнглийски:\n${b.english || ""}`,
+                },
               ]);
               const bgText = sanitize(raw).trim();
               if (bgText && bgText.length > 0) {
-                globalCache.set(cacheKey, bgText);
+                const formattedText = bgText.startsWith(`(${b.ayah})`)
+                  ? bgText
+                  : `(${b.ayah}) ${bgText}`;
+                globalCache.set(cacheKey, formattedText);
               }
             } catch (err) {
               console.error(`Error translating ayah ${b.ayah}:`, err);
@@ -91,7 +89,10 @@ export const translateToBulgarian = createServerFn({ method: "POST" })
         const cacheKey = `ayah_${b.ayah}_${(b.english || "").trim()}`;
         return { ...b, bulgarian: globalCache.get(cacheKey) || "" };
       });
-      const bulgarian = updatedBounds.map((b) => b.bulgarian).filter(Boolean).join(" ");
+      const bulgarian = updatedBounds
+        .map((b) => b.bulgarian)
+        .filter(Boolean)
+        .join("\n\n");
       return { bulgarian, ayahBounds: updatedBounds, cached: false };
     }
 
