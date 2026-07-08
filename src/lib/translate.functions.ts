@@ -38,12 +38,30 @@ export const translateToBulgarian = createServerFn({ method: "POST" })
             ],
             true
           );
-          const parsed = JSON.parse(rawJson);
-          for (const b of uncached) {
-            const val = parsed[String(b.ayah)] || parsed[b.ayah];
-            if (val && typeof val === "string" && val.trim().length > 0) {
-              const bgText = sanitize(val).trim();
-              globalCache.set(`ayah_${b.ayah}_${(b.english || "").trim()}`, bgText);
+          const cleanJson = rawJson
+            .replace(/^```json\s*/i, "")
+            .replace(/^```\s*/i, "")
+            .replace(/\s*```$/i, "")
+            .trim();
+          const parsed = JSON.parse(cleanJson);
+
+          if (Array.isArray(parsed)) {
+            uncached.forEach((b, idx) => {
+              const val = parsed[idx];
+              if (val && typeof val === "string" && val.trim().length > 0) {
+                globalCache.set(`ayah_${b.ayah}_${(b.english || "").trim()}`, sanitize(val).trim());
+              }
+            });
+          } else if (parsed && typeof parsed === "object") {
+            for (const b of uncached) {
+              let val = parsed[String(b.ayah)] || parsed[b.ayah];
+              if (!val) {
+                const matchingKey = Object.keys(parsed).find((k) => k.endsWith(String(b.ayah)));
+                if (matchingKey) val = parsed[matchingKey];
+              }
+              if (val && typeof val === "string" && val.trim().length > 0) {
+                globalCache.set(`ayah_${b.ayah}_${(b.english || "").trim()}`, sanitize(val).trim());
+              }
             }
           }
         } catch (e) {
@@ -58,10 +76,12 @@ export const translateToBulgarian = createServerFn({ method: "POST" })
                 { role: "system", content: SYSTEM },
                 { role: "user", content: `Източник: ${data.sourceRef} (Аят ${b.ayah})\n\nАнглийски:\n${b.english}` },
               ]);
-              globalCache.set(cacheKey, sanitize(raw).trim());
+              const bgText = sanitize(raw).trim();
+              if (bgText && bgText.length > 0) {
+                globalCache.set(cacheKey, bgText);
+              }
             } catch (err) {
               console.error(`Error translating ayah ${b.ayah}:`, err);
-              globalCache.set(cacheKey, b.english || "");
             }
           }
         }
@@ -69,9 +89,9 @@ export const translateToBulgarian = createServerFn({ method: "POST" })
 
       const updatedBounds = data.ayahBounds.map((b) => {
         const cacheKey = `ayah_${b.ayah}_${(b.english || "").trim()}`;
-        return { ...b, bulgarian: globalCache.get(cacheKey) || b.english || "" };
+        return { ...b, bulgarian: globalCache.get(cacheKey) || "" };
       });
-      const bulgarian = updatedBounds.map((b) => b.bulgarian).join(" ");
+      const bulgarian = updatedBounds.map((b) => b.bulgarian).filter(Boolean).join(" ");
       return { bulgarian, ayahBounds: updatedBounds, cached: false };
     }
 

@@ -712,7 +712,35 @@ function CreatePage() {
           </Card>
 
           <Card className="glass-card p-6 space-y-4 animate-fade-up">
-            <Label className="font-ui" htmlFor="bg">Български превод (можеш да редактираш)</Label>
+            <div className="flex items-center justify-between">
+              <Label className="font-ui" htmlFor="bg">Български превод (можеш да редактираш)</Label>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={translating || !content}
+                onClick={async () => {
+                  if (!content) return;
+                  setTranslating(true);
+                  try {
+                    const t = await runTranslate({
+                      data: { english: content.english, sourceRef: content.source_ref, ayahBounds: content.ayahBounds },
+                    });
+                    setBulgarian(t.bulgarian);
+                    if (t.ayahBounds) {
+                      content.ayahBounds = t.ayahBounds;
+                      setContent({ ...content, ayahBounds: t.ayahBounds });
+                    }
+                    toast.success("Преведено на български");
+                  } catch (err: unknown) {
+                    toast.error(err instanceof Error ? err.message : "Грешка при превод");
+                  } finally {
+                    setTranslating(false);
+                  }
+                }}
+              >
+                Преведи отново
+              </Button>
+            </div>
             {translating ? (
               <div className="flex items-center gap-2 text-muted-foreground"><Loader2 className="size-4 animate-spin" /> Превеждам…</div>
             ) : (
