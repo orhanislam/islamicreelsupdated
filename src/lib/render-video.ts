@@ -507,9 +507,30 @@ export async function renderVideo(opts: VideoOptions): Promise<{ blob: Blob; mim
 
   const MAX_WORDS_PER_PHRASE = 7;
   const MIN_WORDS_PER_PHRASE = 3;
-  type Phrase = { words: string[]; startWord: number; endWord: number };
+  type Phrase = { words: string[]; startWord: number; endWord: number; exactStart?: number; exactEnd?: number };
   const phrases: Phrase[] = [];
-  {
+  if (opts.ayahBounds && Array.isArray(opts.ayahBounds) && opts.ayahBounds.length > 0) {
+    const bounds = opts.ayahBounds;
+    const totalEngLen = bounds.reduce((acc: number, b: any) => acc + (b.english ? b.english.length : 10), 0) || 1;
+    let wordIdx = 0;
+    for (let bIdx = 0; bIdx < bounds.length; bIdx++) {
+      const b = bounds[bIdx];
+      const isLast = bIdx === bounds.length - 1;
+      const ratio = (b.english ? b.english.length : 10) / totalEngLen;
+      const count = isLast ? (allWords.length - wordIdx) : Math.max(1, Math.round(allWords.length * ratio));
+      const ayahWords = allWords.slice(wordIdx, Math.min(allWords.length, wordIdx + count));
+      if (ayahWords.length > 0) {
+        phrases.push({
+          words: ayahWords,
+          startWord: wordIdx,
+          endWord: wordIdx + ayahWords.length,
+          exactStart: Number(b.start) || 0,
+          exactEnd: Number(b.end) || (Number(b.start) + 5)
+        });
+      }
+      wordIdx += ayahWords.length;
+    }
+  } else {
     let cur: string[] = [];
     let curStart = 0;
     const flush = () => {
@@ -648,15 +669,15 @@ export async function renderVideo(opts: VideoOptions): Promise<{ blob: Blob; mim
   // Compute each phrase's [start,end] from word timings, plus pre-wrapped lines.
   type RenderPhrase = Phrase & { start: number; end: number; fontSize: number; lineHeight: number; lines: string[][] };
   const phraseRender: RenderPhrase[] = phrases.map((p) => {
-    const start = wordTimes[p.startWord]?.start ?? 0;
-    const end = wordTimes[p.endWord - 1]?.end ?? revealDuration;
+    const start = p.exactStart ?? (wordTimes[p.startWord]?.start ?? 0);
+    const end = p.exactEnd ?? (wordTimes[p.endWord - 1]?.end ?? revealDuration);
     const text = p.words.join(" ");
     const { fontSize: fs, lineHeight: lh } = chooseFontSize(ctx, text, maxW, verticalForText);
     ctx.font = `700 ${fs}px 'Cormorant Garamond', Georgia, serif`;
     const lines = wrapWords(ctx, p.words, maxW);
     return { ...p, start, end, fontSize: fs, lineHeight: lh, lines };
   });
-  if (phraseRender.length) {
+  if (phraseRender.length && !opts.ayahBounds) {
     phraseRender[0].start = 0;
     phraseRender[phraseRender.length - 1].end = revealDuration;
   }

@@ -209,48 +209,74 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
           }
         }
 
-        // Group words into short TikTok-style phrases (2 to 6 words per phrase, breaking on punctuation)
-        const MAX_WORDS = 6;
-        const MIN_WORDS = 2;
-        type Phrase = { words: string[]; startIdx: number; endIdx: number };
-        const phrases: Phrase[] = [];
-        let cur: string[] = [];
-        let curStart = 0;
-        const flush = () => {
-          if (!cur.length) return;
-          phrases.push({ words: cur, startIdx: curStart, endIdx: curStart + cur.length });
-          curStart += cur.length;
-          cur = [];
-        };
-        for (let i = 0; i < words.length; i++) {
-          const w = words[i];
-          cur.push(w);
-          const endsPunct = /[.!?…]$/.test(w) || (/[,;:—]$/.test(w) && cur.length >= MIN_WORDS);
-          if ((endsPunct && cur.length >= MIN_WORDS) || cur.length >= MAX_WORDS) {
-            flush();
-          }
-        }
-        flush();
-
         // CapCut pro subtitle style: Smooth zoom pop-in from 85% to 100% scale over 180ms + fade-in
         const animTag = "\\fscx85\\fscy85\\t(0,180,\\fscx100\\fscy100)\\fad(150,120)";
         const styleTag = isLowerThird
           ? `{\\an2\\pos(540,1600)${animTag}}`
           : `{\\an5\\pos(540,960)${animTag}}`;
 
-        let prevEnd = 0;
-        for (let idx = 0; idx < phrases.length; idx++) {
-          const p = phrases[idx];
-          const start = timings[p.startIdx]?.start ?? prevEnd;
-          const end = timings[p.endIdx - 1]?.end ?? (start + 2);
+        const bounds = data.ayahBounds;
+        if (Array.isArray(bounds) && bounds.length > 0) {
+          // FULL-AYAH BLOCK SYNCHRONIZER: One complete Ayah per subtitle block from ayah.start to ayah.end
+          const totalEngLen = bounds.reduce((acc: number, b: any) => acc + (b.english ? b.english.length : 10), 0) || 1;
+          let wordIdx = 0;
+          for (let bIdx = 0; bIdx < bounds.length; bIdx++) {
+            const b = bounds[bIdx];
+            const isLast = bIdx === bounds.length - 1;
+            const ratio = (b.english ? b.english.length : 10) / totalEngLen;
+            const count = isLast ? (words.length - wordIdx) : Math.max(1, Math.round(words.length * ratio));
+            const ayahWords = words.slice(wordIdx, Math.min(words.length, wordIdx + count));
+            wordIdx += ayahWords.length;
 
-          const textLine = p.words.join(" ");
-          ass += `Dialogue: 0,${formatTime(start)},${formatTime(end)},Bulgarian,,0,0,0,,${styleTag}${textLine}\n`;
-          prevEnd = end;
-        }
-        const lastPhrase = phrases[phrases.length - 1];
-        if (lastPhrase) {
-          ass += `Dialogue: 0,${formatTime(prevEnd)},0:10:00.00,Bulgarian,,0,0,0,,${styleTag}${lastPhrase.words.join(" ")}\n`;
+            if (ayahWords.length > 0) {
+              const start = Number(b.start) || 0;
+              const end = Number(b.end) || (start + 5);
+              // Wrap lines nicely for full Ayah block (~6 words per line using \N)
+              let formattedText = "";
+              for (let w = 0; w < ayahWords.length; w++) {
+                formattedText += ayahWords[w] + " ";
+                if ((w + 1) % 6 === 0 && w < ayahWords.length - 1) {
+                  formattedText = formattedText.trimEnd() + "\\N";
+                }
+              }
+              formattedText = formattedText.trim();
+              ass += `Dialogue: 0,${formatTime(start)},${formatTime(end)},Bulgarian,,0,0,0,,${styleTag}${formattedText}\n`;
+            }
+          }
+        } else {
+          // Group words into short TikTok-style phrases for non-Ayah narrations
+          const MAX_WORDS = 6;
+          const MIN_WORDS = 2;
+          type Phrase = { words: string[]; startIdx: number; endIdx: number };
+          const phrases: Phrase[] = [];
+          let cur: string[] = [];
+          let curStart = 0;
+          const flush = () => {
+            if (!cur.length) return;
+            phrases.push({ words: cur, startIdx: curStart, endIdx: curStart + cur.length });
+            curStart += cur.length;
+            cur = [];
+          };
+          for (let i = 0; i < words.length; i++) {
+            const w = words[i];
+            cur.push(w);
+            const endsPunct = /[.!?…]$/.test(w) || (/[,;:—]$/.test(w) && cur.length >= MIN_WORDS);
+            if ((endsPunct && cur.length >= MIN_WORDS) || cur.length >= MAX_WORDS) {
+              flush();
+            }
+          }
+          flush();
+
+          let prevEnd = 0;
+          for (let idx = 0; idx < phrases.length; idx++) {
+            const p = phrases[idx];
+            const start = timings[p.startIdx]?.start ?? prevEnd;
+            const end = timings[p.endIdx - 1]?.end ?? (start + 2);
+
+            const textLine = p.words.join(" ");
+            ass += `Dialogue: 0,${formatTime(start)},${formatTime(end)},Bulgarian,,0,0,0,,${styleTag}${textLine}\n`;
+            prevEnd = end;
+          }
         }
       }
 
