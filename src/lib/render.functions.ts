@@ -236,15 +236,21 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             if (ayahWords.length > 0) {
               const start = Number(b.start) || 0;
               const end = Number(b.end) || (start + 5);
+              const wordCount = ayahWords.length;
+              const fs = wordCount > 40 ? 38 : wordCount > 28 ? 44 : wordCount > 18 ? 50 : wordCount > 10 ? 56 : 64;
+              const wpl = wordCount > 40 ? 9 : wordCount > 28 ? 8 : wordCount > 18 ? 7 : wordCount > 10 ? 6 : 5;
               let formattedText = "";
               for (let w = 0; w < ayahWords.length; w++) {
                 formattedText += ayahWords[w] + " ";
-                if ((w + 1) % 6 === 0 && w < ayahWords.length - 1) {
+                if ((w + 1) % wpl === 0 && w < ayahWords.length - 1) {
                   formattedText = formattedText.trimEnd() + "\\N";
                 }
               }
               formattedText = formattedText.trim();
-              ass += `Dialogue: 0,${formatTime(start)},${formatTime(end)},Bulgarian,,0,0,0,,${styleTag}${formattedText}\n`;
+              const ayahStyleTag = data.style === "bottom"
+                ? `{\\an2\\pos(540,1600)\\fs${fs}${animTag}}`
+                : `{\\an5\\pos(540,960)\\fs${fs}${animTag}}`;
+              ass += `Dialogue: 0,${formatTime(start)},${formatTime(end)},Bulgarian,,0,0,0,,${ayahStyleTag}${formattedText}\n`;
             }
           }
         } else {
