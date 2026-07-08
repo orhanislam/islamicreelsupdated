@@ -25,7 +25,13 @@ export const translateToBulgarian = createServerFn({ method: "POST" })
         .replace(/\(\s*(saw|pbuh|ﷺ|саллялляху алейхи (?:ва|уе) селлем)\s*\)/gi, "(мир да бъде със него)");
 
     if (data.ayahBounds && Array.isArray(data.ayahBounds) && data.ayahBounds.length > 0) {
-      const uncached = data.ayahBounds.filter((b) => !globalCache.has(`ayah_${b.ayah}_${(b.english || "").trim()}`));
+      const getCached = (b: any) => {
+        const key = `ayah_${b.ayah}_${(b.english || "").trim()}`;
+        const val = globalCache.get(key);
+        return val && val.trim().length > 0 ? val.trim() : null;
+      };
+
+      const uncached = data.ayahBounds.filter((b) => !getCached(b));
 
       if (uncached.length > 0) {
         try {
@@ -62,7 +68,7 @@ export const translateToBulgarian = createServerFn({ method: "POST" })
 
           for (const targetB of uncached) {
             const cacheKey = `ayah_${targetB.ayah}_${(targetB.english || "").trim()}`;
-            if (!globalCache.has(cacheKey)) {
+            if (!globalCache.get(cacheKey) || !globalCache.get(cacheKey)!.trim()) {
               const lineRegex = new RegExp(`(?:^|\\n)\\s*(?:\\(${targetB.ayah}\\)|\\[${targetB.ayah}\\]|${targetB.ayah}\\.)\\s*([^\\n]+(?:\\n(?!\\s*(?:\\(|\\[|\\d+\\.))[^\n]+)*)`, "i");
               const match = rawResp.match(lineRegex);
               if (match && match[1]) {
@@ -74,13 +80,26 @@ export const translateToBulgarian = createServerFn({ method: "POST" })
               }
             }
           }
+
+          if (uncached.length === 1 && rawResp.trim()) {
+            const singleB = uncached[0];
+            const cacheKey = `ayah_${singleB.ayah}_${(singleB.english || "").trim()}`;
+            if (!globalCache.get(cacheKey) || !globalCache.get(cacheKey)!.trim()) {
+              const cleanText = sanitize(rawResp).trim();
+              const formattedText = cleanText.startsWith(`(${singleB.ayah})`)
+                ? cleanText
+                : `(${singleB.ayah}) ${cleanText}`;
+              globalCache.set(cacheKey, formattedText);
+            }
+          }
         } catch (e) {
           console.warn("[translate] Batch translate failed, falling back to sequential:", e);
         }
 
         for (const b of data.ayahBounds) {
           const cacheKey = `ayah_${b.ayah}_${(b.english || "").trim()}`;
-          if (!globalCache.has(cacheKey)) {
+          const val = globalCache.get(cacheKey);
+          if (!val || val.trim().length === 0) {
             try {
               await new Promise((r) => setTimeout(r, 1200));
               const raw = await geminiChat("gemini-2.5-flash", [
@@ -108,10 +127,24 @@ export const translateToBulgarian = createServerFn({ method: "POST" })
         const cacheKey = `ayah_${b.ayah}_${(b.english || "").trim()}`;
         return { ...b, bulgarian: globalCache.get(cacheKey) || "" };
       });
-      const bulgarian = updatedBounds
+      let bulgarian = updatedBounds
         .map((b) => b.bulgarian)
         .filter(Boolean)
         .join("\n\n");
+
+      if (!bulgarian || bulgarian.trim().length === 0) {
+        try {
+          const fullPrompt = `Източник: ${data.sourceRef}\n\nМоля, преведи следните аяти на български език, като всеки аят започва с номера му в скоби (напр. (1) ...):\n\n${data.ayahBounds.map((b) => `(${b.ayah}) ${b.english || b.arabic || ""}`).join("\n\n")}`;
+          const rawFull = await geminiChat("gemini-2.5-flash", [
+            { role: "system", content: SYSTEM },
+            { role: "user", content: fullPrompt },
+          ]);
+          bulgarian = sanitize(rawFull).trim();
+        } catch (e) {
+          console.error("[translate] Fallback full translation failed:", e);
+        }
+      }
+
       return { bulgarian, ayahBounds: updatedBounds, cached: false };
     }
 
