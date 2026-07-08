@@ -172,7 +172,7 @@ function CreatePage() {
       };
       setContent(c);
       setTranslating(true);
-      const t = await runTranslate({ data: { english: h.english, sourceRef: h.reference } });
+      const t = await runTranslate({ data: { arabic: h.arabic, english: h.english, sourceRef: h.reference } });
       setBulgarian(t.bulgarian);
       toast.success(t.cached ? "От кеша" : "Преведено");
     } catch (e: unknown) {
@@ -196,7 +196,7 @@ function CreatePage() {
       };
       setContent(c);
       setTranslating(true);
-      const t = await runTranslate({ data: { english: h.english, sourceRef: h.reference } });
+      const t = await runTranslate({ data: { arabic: h.arabic, english: h.english, sourceRef: h.reference } });
       setBulgarian(t.bulgarian);
       toast.success(`${h.reference} · ${h.grade ?? "Sahih"}`);
     } catch (e: unknown) {
@@ -216,7 +216,7 @@ function CreatePage() {
       };
       setContent(c);
       setTranslating(true);
-      const t = await runTranslate({ data: { english: h.english, sourceRef: h.reference } });
+      const t = await runTranslate({ data: { arabic: h.arabic, english: h.english, sourceRef: h.reference } });
       setBulgarian(t.bulgarian);
       toast.success(`${h.reference} · ${h.grade ?? "Sahih"}`);
     } catch (e: unknown) {
@@ -733,7 +733,7 @@ function CreatePage() {
                   setTranslating(true);
                   try {
                     const t = await runTranslate({
-                      data: { english: content.english, sourceRef: content.source_ref, ayahBounds: content.ayahBounds },
+                      data: { arabic: content.arabic, english: content.english, sourceRef: content.source_ref, ayahBounds: content.ayahBounds },
                     });
                     setBulgarian(t.bulgarian);
                     if (t.ayahBounds) {

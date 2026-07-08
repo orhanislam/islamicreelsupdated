@@ -16,7 +16,7 @@ if (!(globalThis as any).__translationCache) {
 }
 
 export const translateToBulgarian = createServerFn({ method: "POST" })
-  .inputValidator((input: { english: string; sourceRef: string; ayahBounds?: any[] }) => input)
+  .inputValidator((input: { english: string; sourceRef: string; arabic?: string; ayahBounds?: any[] }) => input)
   .handler(async ({ data }) => {
     const sanitize = (t: string) =>
       t
@@ -115,19 +115,22 @@ export const translateToBulgarian = createServerFn({ method: "POST" })
       return { bulgarian, ayahBounds: updatedBounds, cached: false };
     }
 
-    const cacheKey = data.english.trim();
-    if (globalCache.has(cacheKey)) {
-      return { bulgarian: globalCache.get(cacheKey)!, cached: true };
+    const cacheKey = `${data.sourceRef}_${data.english.trim()}`;
+    const cachedVal = globalCache.get(cacheKey);
+    if (cachedVal && cachedVal.trim().length > 0) {
+      return { bulgarian: cachedVal.trim(), cached: true };
     }
+
+    const prompt = `Източник: ${data.sourceRef}\n\nМоля, преведи следния хадис/текст на ясен, литературен и точен български език (от оригиналния арабски текст и английския превод).\nВърни САМО българския превод на текста (без въведения, без кавички и без коментари):\n\n${data.arabic ? `Арабски:\n${data.arabic}\n\n` : ""}Английски:\n${data.english}`;
 
     const raw = await geminiChat(
       "gemini-2.5-flash",
       [
         { role: "system", content: SYSTEM },
-        { role: "user", content: `Източник: ${data.sourceRef}\n\nАнглийски:\n${data.english}` },
+        { role: "user", content: prompt },
       ],
     );
-    const bulgarian = sanitize(raw);
+    const bulgarian = sanitize(raw).trim();
     if (!bulgarian) throw new Error("Празен превод");
 
     globalCache.set(cacheKey, bulgarian);
