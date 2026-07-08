@@ -41,27 +41,19 @@ export async function geminiChat(
     });
   };
 
-  const modelsToTry = Array.from(
-    new Set([
-      model,
-      "gemini-2.5-flash",
-      "gemini-2.0-flash",
-      "gemini-1.5-flash",
-      "gemini-1.5-pro",
-    ])
-  );
-
+  const targetModel = "gemini-2.5-flash";
   let res: Response | null = null;
-  for (const m of modelsToTry) {
-    res = await fetchWithModel(m);
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    res = await fetchWithModel(targetModel);
     if (res.ok) break;
-    if (res.status === 429) {
-      console.warn(`[gemini] 429 Too Many Requests on ${m}, waiting 3.5s before retry...`);
-      await new Promise((r) => setTimeout(r, 3500));
-      res = await fetchWithModel(m);
-      if (res.ok) break;
+    if (res.status === 429 && attempt < 3) {
+      console.warn(`[gemini] 429 Too Many Requests on ${targetModel} (attempt ${attempt}/3), waiting ${attempt * 3000}ms...`);
+      await new Promise((r) => setTimeout(r, attempt * 3000));
+      continue;
     }
-    console.warn(`[gemini] Failed on ${m} with status ${res.status}, trying next model...`);
+    if (attempt < 3) {
+      await new Promise((r) => setTimeout(r, 1500));
+    }
   }
 
   if (!res?.ok) {

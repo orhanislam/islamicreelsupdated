@@ -147,7 +147,7 @@ export const translateToBulgarian = createServerFn({ method: "POST" })
         try {
           await new Promise((r) => setTimeout(r, 2000));
           const fullPrompt = `Източник: ${data.sourceRef}\n\nМоля, преведи следните аяти на български език, като всеки аят започва с номера му в скоби (напр. (1) ...):\n\n${data.ayahBounds.map((b) => `(${b.ayah}) ${b.english || b.arabic || ""}`).join("\n\n")}`;
-          const rawFull = await geminiChat("gemini-1.5-flash", [
+          const rawFull = await geminiChat("gemini-2.5-flash", [
             { role: "system", content: SYSTEM },
             { role: "user", content: fullPrompt },
           ]);
