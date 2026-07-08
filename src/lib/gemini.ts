@@ -52,6 +52,12 @@ export async function geminiChat(
   for (const m of modelsToTry) {
     res = await fetchWithModel(m);
     if (res.ok) break;
+    if (res.status === 429) {
+      console.warn(`[gemini] 429 Too Many Requests on ${m}, waiting 1.5s before retry...`);
+      await new Promise((r) => setTimeout(r, 1500));
+      res = await fetchWithModel(m);
+      if (res.ok) break;
+    }
     console.warn(`[gemini] Failed on ${m} with status ${res.status}, trying next model...`);
   }
 

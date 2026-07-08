@@ -25,23 +25,52 @@ export const translateToBulgarian = createServerFn({ method: "POST" })
         .replace(/\(\s*(saw|pbuh|ﷺ|саллялляху алейхи (?:ва|уе) селлем)\s*\)/gi, "(мир да бъде със него)");
 
     if (data.ayahBounds && Array.isArray(data.ayahBounds) && data.ayahBounds.length > 0) {
-      const updatedBounds = await Promise.all(
-        data.ayahBounds.map(async (b) => {
-          const cacheKey = `ayah_${b.ayah}_${(b.english || "").trim()}`;
-          let bgText = "";
-          if (globalCache.has(cacheKey)) {
-            bgText = globalCache.get(cacheKey)!;
-          } else {
-            const raw = await geminiChat("gemini-2.5-flash", [
+      const uncached = data.ayahBounds.filter((b) => !globalCache.has(`ayah_${b.ayah}_${(b.english || "").trim()}`));
+
+      if (uncached.length > 0) {
+        try {
+          const prompt = `Източник: ${data.sourceRef}\n\nМоля, преведи следните аяти на български език (точен, литературен превод, без съкращения, ясен български текст).\nВърни САМО JSON обект, където ключовете са номерата на аятите, а стойностите са преводите им на български език:\n{\n  "105": "превод на аят 105...",\n  "106": "превод на аят 106..."\n}\n\nАяти:\n${uncached.map((b) => `Аят ${b.ayah}: ${b.english}`).join("\n\n")}`;
+          const rawJson = await geminiChat(
+            "gemini-2.5-flash",
+            [
               { role: "system", content: SYSTEM },
-              { role: "user", content: `Източник: ${data.sourceRef} (Аят ${b.ayah})\n\nАнглийски:\n${b.english}` },
-            ]);
-            bgText = sanitize(raw).trim();
-            globalCache.set(cacheKey, bgText);
+              { role: "user", content: prompt },
+            ],
+            true
+          );
+          const parsed = JSON.parse(rawJson);
+          for (const b of uncached) {
+            const val = parsed[String(b.ayah)] || parsed[b.ayah];
+            if (val && typeof val === "string" && val.trim().length > 0) {
+              const bgText = sanitize(val).trim();
+              globalCache.set(`ayah_${b.ayah}_${(b.english || "").trim()}`, bgText);
+            }
           }
-          return { ...b, bulgarian: bgText };
-        })
-      );
+        } catch (e) {
+          console.warn("[translate] Batch JSON translate failed, falling back to sequential:", e);
+        }
+
+        for (const b of data.ayahBounds) {
+          const cacheKey = `ayah_${b.ayah}_${(b.english || "").trim()}`;
+          if (!globalCache.has(cacheKey)) {
+            try {
+              const raw = await geminiChat("gemini-2.5-flash", [
+                { role: "system", content: SYSTEM },
+                { role: "user", content: `Източник: ${data.sourceRef} (Аят ${b.ayah})\n\nАнглийски:\n${b.english}` },
+              ]);
+              globalCache.set(cacheKey, sanitize(raw).trim());
+            } catch (err) {
+              console.error(`Error translating ayah ${b.ayah}:`, err);
+              globalCache.set(cacheKey, b.english || "");
+            }
+          }
+        }
+      }
+
+      const updatedBounds = data.ayahBounds.map((b) => {
+        const cacheKey = `ayah_${b.ayah}_${(b.english || "").trim()}`;
+        return { ...b, bulgarian: globalCache.get(cacheKey) || b.english || "" };
+      });
       const bulgarian = updatedBounds.map((b) => b.bulgarian).join(" ");
       return { bulgarian, ayahBounds: updatedBounds, cached: false };
     }
