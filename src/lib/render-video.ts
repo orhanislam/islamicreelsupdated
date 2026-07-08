@@ -516,9 +516,14 @@ export async function renderVideo(opts: VideoOptions): Promise<{ blob: Blob; mim
     for (let bIdx = 0; bIdx < bounds.length; bIdx++) {
       const b = bounds[bIdx];
       const isLast = bIdx === bounds.length - 1;
-      const ratio = (b.english ? b.english.length : 10) / totalEngLen;
-      const count = isLast ? (allWords.length - wordIdx) : Math.max(1, Math.round(allWords.length * ratio));
-      const ayahWords = allWords.slice(wordIdx, Math.min(allWords.length, wordIdx + count));
+      let ayahWords: string[];
+      if (b.bulgarian && typeof b.bulgarian === "string" && b.bulgarian.trim().length > 0) {
+        ayahWords = b.bulgarian.split(/\s+/).filter(Boolean);
+      } else {
+        const ratio = (b.english ? b.english.length : 10) / totalEngLen;
+        const count = isLast ? (allWords.length - wordIdx) : Math.max(1, Math.round(allWords.length * ratio));
+        ayahWords = allWords.slice(wordIdx, Math.min(allWords.length, wordIdx + count));
+      }
       if (ayahWords.length > 0) {
         phrases.push({
           words: ayahWords,

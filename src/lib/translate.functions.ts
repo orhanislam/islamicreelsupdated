@@ -16,13 +16,35 @@ if (!(globalThis as any).__translationCache) {
 }
 
 export const translateToBulgarian = createServerFn({ method: "POST" })
-  .inputValidator((input: { english: string; sourceRef: string }) => input)
+  .inputValidator((input: { english: string; sourceRef: string; ayahBounds?: any[] }) => input)
   .handler(async ({ data }) => {
     const sanitize = (t: string) =>
       t
         .replace(/\(\s*с\s*\/\s*у\s*\)/gi, "(мир да бъде със него)")
         .replace(/\bс\s*\/\s*у\b/gi, "мир да бъде със него")
         .replace(/\(\s*(saw|pbuh|ﷺ|саллялляху алейхи (?:ва|уе) селлем)\s*\)/gi, "(мир да бъде със него)");
+
+    if (data.ayahBounds && Array.isArray(data.ayahBounds) && data.ayahBounds.length > 0) {
+      const updatedBounds = await Promise.all(
+        data.ayahBounds.map(async (b) => {
+          const cacheKey = `ayah_${b.ayah}_${(b.english || "").trim()}`;
+          let bgText = "";
+          if (globalCache.has(cacheKey)) {
+            bgText = globalCache.get(cacheKey)!;
+          } else {
+            const raw = await geminiChat("gemini-2.5-flash", [
+              { role: "system", content: SYSTEM },
+              { role: "user", content: `Източник: ${data.sourceRef} (Аят ${b.ayah})\n\nАнглийски:\n${b.english}` },
+            ]);
+            bgText = sanitize(raw).trim();
+            globalCache.set(cacheKey, bgText);
+          }
+          return { ...b, bulgarian: bgText };
+        })
+      );
+      const bulgarian = updatedBounds.map((b) => b.bulgarian).join(" ");
+      return { bulgarian, ayahBounds: updatedBounds, cached: false };
+    }
 
     const cacheKey = data.english.trim();
     if (globalCache.has(cacheKey)) {

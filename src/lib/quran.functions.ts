@@ -63,12 +63,14 @@ async function sliceQuranCdnAudio(audioUrl: string, startSec: number, endSec: nu
     }
 
     const tmpSlice = path.join(os.tmpdir(), `quran_slice_${Date.now()}_${Math.random().toString(36).substring(2)}.mp3`);
+    const durationSec = Math.max(0.1, endSec - startSec);
     await execFileAsync(ffmpegPath, [
       "-y",
       "-ss", startSec.toFixed(3),
-      "-to", endSec.toFixed(3),
       "-i", audioUrl,
-      "-c", "copy",
+      "-t", durationSec.toFixed(3),
+      "-c:a", "libmp3lame",
+      "-q:a", "2",
       "-loglevel", "error",
       "-nostdin",
       tmpSlice
@@ -162,14 +164,16 @@ export const fetchAyah = createServerFn({ method: "POST" })
 
       if (useCdnSlice) {
         const vt = cdnTimings?.find((v: any) => v.verse_key === key);
-        if (vt && Array.isArray(vt.segments) && vt.segments.length > 0) {
+        if (vt) {
           const offsetSec = vtStart.timestamp_from / 1000;
-          const segs = vt.segments.map((s: number[], sIdx: number) => ({
-            start: Math.round(((Number(s[1]) / 1000) - offsetSec) * 1000) / 1000,
-            end: Math.round(((Number(s[2]) / 1000) - offsetSec) * 1000) / 1000,
-            word: arWords[sIdx] || `ar_${sIdx + 1}`,
-          }));
-          wordSegments.push(...segs);
+          if (Array.isArray(vt.segments) && vt.segments.length > 0) {
+            const segs = vt.segments.map((s: number[], sIdx: number) => ({
+              start: Math.round(((Number(s[1]) / 1000) - offsetSec) * 1000) / 1000,
+              end: Math.round(((Number(s[2]) / 1000) - offsetSec) * 1000) / 1000,
+              word: arWords[sIdx] || `ar_${sIdx + 1}`,
+            }));
+            wordSegments.push(...segs);
+          }
           const aStart = Math.round(((vt.timestamp_from / 1000) - offsetSec) * 1000) / 1000;
           const aEnd = Math.round(((vt.timestamp_to / 1000) - offsetSec) * 1000) / 1000;
           ayahBounds.push({ ayah: i, start: aStart, end: aEnd, arabic: ar.data.text, english: en.data.text });

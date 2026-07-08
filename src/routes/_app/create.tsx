@@ -149,8 +149,12 @@ function CreatePage() {
       };
       setContent(c);
       setTranslating(true);
-      const t = await runTranslate({ data: { english: d.english, sourceRef: c.source_ref } });
+      const t = await runTranslate({ data: { english: d.english, sourceRef: c.source_ref, ayahBounds: d.ayahBounds } });
       setBulgarian(t.bulgarian);
+      if (t.ayahBounds) {
+        c.ayahBounds = t.ayahBounds;
+        setContent({ ...c, ayahBounds: t.ayahBounds });
+      }
       toast.success(t.cached ? "От кеша" : "Преведено");
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : "Грешка");

@@ -223,15 +223,19 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
           for (let bIdx = 0; bIdx < bounds.length; bIdx++) {
             const b = bounds[bIdx];
             const isLast = bIdx === bounds.length - 1;
-            const ratio = (b.english ? b.english.length : 10) / totalEngLen;
-            const count = isLast ? (words.length - wordIdx) : Math.max(1, Math.round(words.length * ratio));
-            const ayahWords = words.slice(wordIdx, Math.min(words.length, wordIdx + count));
-            wordIdx += ayahWords.length;
+            let ayahWords: string[];
+            if (b.bulgarian && typeof b.bulgarian === "string" && b.bulgarian.trim().length > 0) {
+              ayahWords = b.bulgarian.split(/\s+/).filter(Boolean);
+            } else {
+              const ratio = (b.english ? b.english.length : 10) / totalEngLen;
+              const count = isLast ? (words.length - wordIdx) : Math.max(1, Math.round(words.length * ratio));
+              ayahWords = words.slice(wordIdx, Math.min(words.length, wordIdx + count));
+              wordIdx += ayahWords.length;
+            }
 
             if (ayahWords.length > 0) {
               const start = Number(b.start) || 0;
               const end = Number(b.end) || (start + 5);
-              // Wrap lines nicely for full Ayah block (~6 words per line using \N)
               let formattedText = "";
               for (let w = 0; w < ayahWords.length; w++) {
                 formattedText += ayahWords[w] + " ";
