@@ -29,7 +29,7 @@ export const translateToBulgarian = createServerFn({ method: "POST" })
 
       if (uncached.length > 0) {
         try {
-          const prompt = `Източник: ${data.sourceRef}\n\nМоля, преведи следните аяти на български език (точен, литературен превод от оригиналния арабски текст, на ясен и правилен български език).\nЗа всеки аят върни превода във формат:\n===AYAH номер===\nтекст на превода\n\nАяти за превод:\n${uncached.map((b) => `Аят ${b.ayah}:\nАрабски: ${b.arabic || ""}\nАнглийски: ${b.english || ""}`).join("\n\n")}`;
+          const prompt = `Източник: ${data.sourceRef}\n\nМоля, преведи следните аяти на български език (точен, литературен превод от оригиналния арабски текст, на ясен и правилен български език).\nЗа всеки аят върни превода във формат:\n=== AYAH номер ===\nтекст на превода\n\nАяти за превод:\n${uncached.map((b) => `Аят ${b.ayah}:\nАрабски: ${b.arabic || ""}\nАнглийски: ${b.english || ""}`).join("\n\n")}`;
 
           const rawResp = await geminiChat(
             "gemini-2.5-flash",
@@ -40,19 +40,37 @@ export const translateToBulgarian = createServerFn({ method: "POST" })
             false
           );
 
-          const parts = rawResp.split(/===AYAH\s*(\d+)===/i);
-          for (let i = 1; i < parts.length; i += 2) {
-            const ayahNum = Number(parts[i]);
-            let text = (parts[i + 1] || "").trim();
-            text = text.replace(/===AYAH.*$/s, "").trim();
-            if (ayahNum && text) {
-              const targetB = uncached.find((b) => Number(b.ayah) === ayahNum);
-              if (targetB) {
-                const cleanText = sanitize(text);
+          const delimiterRegex = /===\s*(?:AYAH|АЯТ)\s*(\d+)\s*===/i;
+          if (delimiterRegex.test(rawResp)) {
+            const parts = rawResp.split(delimiterRegex);
+            for (let i = 1; i < parts.length; i += 2) {
+              const ayahNum = Number(parts[i]);
+              let text = (parts[i + 1] || "").trim();
+              text = text.replace(/===\s*(?:AYAH|АЯТ).*$/is, "").trim();
+              if (ayahNum && text) {
+                const targetB = uncached.find((b) => Number(b.ayah) === ayahNum);
+                if (targetB) {
+                  const cleanText = sanitize(text);
+                  const formattedText = cleanText.startsWith(`(${targetB.ayah})`)
+                    ? cleanText
+                    : `(${targetB.ayah}) ${cleanText}`;
+                  globalCache.set(`ayah_${targetB.ayah}_${(targetB.english || "").trim()}`, formattedText);
+                }
+              }
+            }
+          }
+
+          for (const targetB of uncached) {
+            const cacheKey = `ayah_${targetB.ayah}_${(targetB.english || "").trim()}`;
+            if (!globalCache.has(cacheKey)) {
+              const lineRegex = new RegExp(`(?:^|\\n)\\s*(?:\\(${targetB.ayah}\\)|\\[${targetB.ayah}\\]|${targetB.ayah}\\.)\\s*([^\\n]+(?:\\n(?!\\s*(?:\\(|\\[|\\d+\\.))[^\n]+)*)`, "i");
+              const match = rawResp.match(lineRegex);
+              if (match && match[1]) {
+                const cleanText = sanitize(match[1]).trim();
                 const formattedText = cleanText.startsWith(`(${targetB.ayah})`)
                   ? cleanText
                   : `(${targetB.ayah}) ${cleanText}`;
-                globalCache.set(`ayah_${targetB.ayah}_${(targetB.english || "").trim()}`, formattedText);
+                globalCache.set(cacheKey, formattedText);
               }
             }
           }
@@ -64,6 +82,7 @@ export const translateToBulgarian = createServerFn({ method: "POST" })
           const cacheKey = `ayah_${b.ayah}_${(b.english || "").trim()}`;
           if (!globalCache.has(cacheKey)) {
             try {
+              await new Promise((r) => setTimeout(r, 1200));
               const raw = await geminiChat("gemini-2.5-flash", [
                 { role: "system", content: SYSTEM },
                 {
