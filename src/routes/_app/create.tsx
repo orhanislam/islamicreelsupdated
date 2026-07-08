@@ -34,6 +34,7 @@ type Content = {
   english: string;
   audioUrl?: string;
   wordSegments?: { start: number; end: number }[];
+  ayahBounds?: { ayah: number; start: number; end: number; arabic: string; english: string }[];
   arabicWordCount?: number;
 };
 
@@ -144,7 +145,7 @@ function CreatePage() {
         source_type: "ayah",
         source_ref: refStr,
         arabic: d.arabic, english: d.english, audioUrl: d.audioUrl,
-        wordSegments: d.wordSegments, arabicWordCount: d.arabicWordCount,
+        wordSegments: d.wordSegments, ayahBounds: d.ayahBounds, arabicWordCount: d.arabicWordCount,
       };
       setContent(c);
       setTranslating(true);
@@ -437,6 +438,7 @@ function CreatePage() {
           requireAudio: Boolean(audio),
           fallbackDuration: 8,
           wordSegments: customAudioUrl || narration ? undefined : content.wordSegments,
+          ayahBounds: customAudioUrl || narration ? undefined : content.ayahBounds,
           arabicWordCount: customAudioUrl || narration ? undefined : content.arabicWordCount,
           bulgarianWordTimings: narration && timings && timings.length ? timings : undefined,
           quality: videoQuality,

@@ -141,43 +141,70 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         let timings = data.bulgarianWordTimings;
         if (!timings || !timings.length) {
           timings = [];
-          const segs = data.wordSegments;
-          if (Array.isArray(segs) && segs.length > 0) {
-            const scale = 1; // DO NOT scale exact reciter segment timestamps
-            const costs = words.map(w => 1 + w.replace(/[^\p{L}\p{N}]/gu, "").length * 0.55);
-            const cumCost = [0];
-            for (let i = 0; i < costs.length; i++) cumCost.push(cumCost[i] + costs[i]);
-            const totalCost = cumCost[cumCost.length - 1] || 1;
+          const bounds = data.ayahBounds;
+          if (Array.isArray(bounds) && bounds.length > 0) {
+            // AYAH-BOUNDED ACOUSTIC ANCHORING
+            // Distribute Bulgarian words across the Ayahs and strictly bound each word inside its Ayah's exact start and end time.
+            const totalEngLen = bounds.reduce((acc: number, b: any) => acc + (b.english ? b.english.length : 10), 0) || 1;
+            let wordIdx = 0;
+            for (let bIdx = 0; bIdx < bounds.length; bIdx++) {
+              const b = bounds[bIdx];
+              const isLast = bIdx === bounds.length - 1;
+              const ratio = (b.english ? b.english.length : 10) / totalEngLen;
+              const count = isLast ? (words.length - wordIdx) : Math.max(1, Math.round(words.length * ratio));
+              const ayahWords = words.slice(wordIdx, Math.min(words.length, wordIdx + count));
+              wordIdx += ayahWords.length;
 
-            // Build cumulative acoustic timeline of the reciter's voice
-            // Instead of counting indices (1, 2, 3...), we sum the actual acoustic duration of each segment!
-            const segDurs = segs.map(s => Math.max(0.1, (s.end - s.start) * scale));
-            const cumAudio = [0];
-            for (let i = 0; i < segDurs.length; i++) cumAudio.push(cumAudio[i] + segDurs[i]);
-            const totalAudio = cumAudio[cumAudio.length - 1] || audioDur;
+              const bStart = Number(b.start) || 0;
+              const bEnd = Number(b.end) || (bStart + 5);
+              const bDur = Math.max(0.5, bEnd - bStart);
 
-            for (let i = 0; i < words.length; i++) {
-              const fracS = cumCost[i] / totalCost;
-              const fracE = cumCost[i + 1] / totalCost;
-              const targetAudioS = fracS * totalAudio;
-              const targetAudioE = fracE * totalAudio;
-
-              let sIdx = 0;
-              while (sIdx < segs.length - 1 && cumAudio[sIdx + 1] < targetAudioS) sIdx++;
-              const remAudioS = (targetAudioS - cumAudio[sIdx]) / segDurs[sIdx];
-              const start = (segs[sIdx].start + remAudioS * (segs[sIdx].end - segs[sIdx].start)) * scale;
-
-              let eIdx = 0;
-              while (eIdx < segs.length - 1 && cumAudio[eIdx + 1] < targetAudioE) eIdx++;
-              const remAudioE = (targetAudioE - cumAudio[eIdx]) / segDurs[eIdx];
-              const end = (segs[eIdx].start + remAudioE * (segs[eIdx].end - segs[eIdx].start)) * scale;
-
-              timings.push({ start, end });
+              for (let w = 0; w < ayahWords.length; w++) {
+                const fracS = w / ayahWords.length;
+                const fracE = (w + 1) / ayahWords.length;
+                timings.push({
+                  start: bStart + fracS * bDur,
+                  end: bStart + fracE * bDur
+                });
+              }
             }
           } else {
-            const step = audioDur / Math.max(1, words.length);
-            for (let i = 0; i < words.length; i++) {
-              timings.push({ start: i * step, end: (i + 1) * step });
+            const segs = data.wordSegments;
+            if (Array.isArray(segs) && segs.length > 0) {
+              const scale = 1;
+              const costs = words.map(w => 1 + w.replace(/[^\p{L}\p{N}]/gu, "").length * 0.55);
+              const cumCost = [0];
+              for (let i = 0; i < costs.length; i++) cumCost.push(cumCost[i] + costs[i]);
+              const totalCost = cumCost[cumCost.length - 1] || 1;
+
+              const segDurs = segs.map(s => Math.max(0.1, (s.end - s.start) * scale));
+              const cumAudio = [0];
+              for (let i = 0; i < segDurs.length; i++) cumAudio.push(cumAudio[i] + segDurs[i]);
+              const totalAudio = cumAudio[cumAudio.length - 1] || audioDur;
+
+              for (let i = 0; i < words.length; i++) {
+                const fracS = cumCost[i] / totalCost;
+                const fracE = cumCost[i + 1] / totalCost;
+                const targetAudioS = fracS * totalAudio;
+                const targetAudioE = fracE * totalAudio;
+
+                let sIdx = 0;
+                while (sIdx < segs.length - 1 && cumAudio[sIdx + 1] < targetAudioS) sIdx++;
+                const remAudioS = (targetAudioS - cumAudio[sIdx]) / segDurs[sIdx];
+                const start = (segs[sIdx].start + remAudioS * (segs[sIdx].end - segs[sIdx].start)) * scale;
+
+                let eIdx = 0;
+                while (eIdx < segs.length - 1 && cumAudio[eIdx + 1] < targetAudioE) eIdx++;
+                const remAudioE = (targetAudioE - cumAudio[eIdx]) / segDurs[eIdx];
+                const end = (segs[eIdx].start + remAudioE * (segs[eIdx].end - segs[eIdx].start)) * scale;
+
+                timings.push({ start, end });
+              }
+            } else {
+              const step = audioDur / Math.max(1, words.length);
+              for (let i = 0; i < words.length; i++) {
+                timings.push({ start: i * step, end: (i + 1) * step });
+              }
             }
           }
         }

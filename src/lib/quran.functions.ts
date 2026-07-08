@@ -12,6 +12,7 @@ export type AyahData = {
   audioUrl: string;
   /** Per-Arabic-word timing in seconds, aligned to audioUrl. Empty if unavailable. */
   wordSegments: WordSegment[];
+  ayahBounds?: { ayah: number; start: number; end: number; arabic: string; english: string }[];
   arabicWordCount: number;
 };
 
@@ -114,6 +115,7 @@ export const fetchAyah = createServerFn({ method: "POST" })
     const englishList: string[] = [];
     let surahName = "";
     let wordSegments: WordSegment[] = [];
+    const ayahBounds: { ayah: number; start: number; end: number; arabic: string; english: string }[] = [];
     const audioBufs: any[] = [];
     let timeOffset = 0;
 
@@ -168,6 +170,9 @@ export const fetchAyah = createServerFn({ method: "POST" })
             word: arWords[sIdx] || `ar_${sIdx + 1}`,
           }));
           wordSegments.push(...segs);
+          const aStart = Math.round(((vt.timestamp_from / 1000) - offsetSec) * 1000) / 1000;
+          const aEnd = Math.round(((vt.timestamp_to / 1000) - offsetSec) * 1000) / 1000;
+          ayahBounds.push({ ayah: i, start: aStart, end: aEnd, arabic: ar.data.text, english: en.data.text });
         }
       } else {
         const audioUrlToFetch = defaultDossaryUrl;
@@ -183,6 +188,7 @@ export const fetchAyah = createServerFn({ method: "POST" })
           } catch { /* ignore */ }
         }
 
+        const aStart = timeOffset;
         let segs: WordSegment[] = [];
         const vt = cdnTimings?.find((v: any) => v.verse_key === key);
         if (vt && vt.duration > 0 && Array.isArray(vt.segments) && vt.segments.length > 0) {
@@ -202,6 +208,8 @@ export const fetchAyah = createServerFn({ method: "POST" })
         } else {
           timeOffset += 10;
         }
+        const aEnd = timeOffset;
+        ayahBounds.push({ ayah: i, start: aStart, end: aEnd, arabic: ar.data.text, english: en.data.text });
       }
     }
 
@@ -224,6 +232,7 @@ export const fetchAyah = createServerFn({ method: "POST" })
       surahName,
       audioUrl,
       wordSegments,
+      ayahBounds,
       arabicWordCount,
     };
   });

@@ -18,6 +18,7 @@ export type VideoOptions = RenderOptions & {
   fallbackDuration?: number;
   /** Per-Arabic-word timing in seconds, aligned to audioUrl. */
   wordSegments?: WordSegment[];
+  ayahBounds?: { ayah: number; start: number; end: number; arabic: string; english: string }[];
   /** Total Arabic words — used with wordSegments to derive reveal progress. */
   arabicWordCount?: number;
   /** Per-Bulgarian-word timings (from ElevenLabs with-timestamps), aligned to audioUrl. */
@@ -581,6 +582,34 @@ export async function renderVideo(opts: VideoOptions): Promise<{ blob: Blob; mim
         const s = fromTime + ((cumCost[i] - fromCost) / remainingCost) * span;
         const e = fromTime + ((cumCost[i + 1] - fromCost) / remainingCost) * span;
         wordTimes[i] = { start: s, end: e };
+      }
+    }
+  } else if (opts.ayahBounds && Array.isArray(opts.ayahBounds) && opts.ayahBounds.length > 0) {
+    const bounds = opts.ayahBounds;
+    const totalEngLen = bounds.reduce((acc: number, b: any) => acc + (b.english ? b.english.length : 10), 0) || 1;
+    let wordIdx = 0;
+    for (let bIdx = 0; bIdx < bounds.length; bIdx++) {
+      const b = bounds[bIdx];
+      const isLast = bIdx === bounds.length - 1;
+      const ratio = (b.english ? b.english.length : 10) / totalEngLen;
+      const count = isLast ? (allWords.length - wordIdx) : Math.max(1, Math.round(allWords.length * ratio));
+      const ayahWords = allWords.slice(wordIdx, Math.min(allWords.length, wordIdx + count));
+      wordIdx += ayahWords.length;
+
+      const bStart = Number(b.start) || 0;
+      const bEnd = Number(b.end) || (bStart + 5);
+      const bDur = Math.max(0.5, bEnd - bStart);
+
+      for (let w = 0; w < ayahWords.length; w++) {
+        const fracS = w / ayahWords.length;
+        const fracE = (w + 1) / ayahWords.length;
+        const idx = wordIdx - ayahWords.length + w;
+        if (idx < wordTimes.length) {
+          wordTimes[idx] = {
+            start: bStart + fracS * bDur,
+            end: bStart + fracE * bDur
+          };
+        }
       }
     }
   } else if (hasArSegments) {
