@@ -452,11 +452,21 @@ function CreatePage() {
         let mimeType: string;
 
         if (renderMode === "server") {
-          toast.message("Изпращане към сървъра за рендиране... Моля, изчакайте (до 60 секунди).");
+          toast.message("Сървърно рендиране... Моля, изчакайте.");
           try {
             const base64Data = await runServerRender({ data: opts });
-            const res = await fetch(`data:video/mp4;base64,${base64Data}`);
-            blob = await res.blob();
+            const byteCharacters = atob(base64Data);
+            const sliceSize = 1024;
+            const byteArrays: Uint8Array[] = [];
+            for (let offset = 0; offset < byteCharacters.length; offset += sliceSize) {
+              const slice = byteCharacters.slice(offset, offset + sliceSize);
+              const byteNumbers = new Array(slice.length);
+              for (let i = 0; i < slice.length; i++) {
+                byteNumbers[i] = slice.charCodeAt(i);
+              }
+              byteArrays.push(new Uint8Array(byteNumbers));
+            }
+            blob = new Blob(byteArrays, { type: "video/mp4" });
             mimeType = "video/mp4";
           } catch (e: any) {
             throw new Error(`Сървърна грешка: ${e.message || e}`);
