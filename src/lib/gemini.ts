@@ -41,20 +41,23 @@ export async function geminiChat(
     });
   };
 
-  const modelsToTry = [
-    model, // Primary (usually gemini-2.5-flash)
-    "gemini-2.5-flash",
-    "gemini-2.0-flash",
-    "gemini-2.0-flash-lite",
-  ];
+  const modelsToTry = Array.from(
+    new Set([
+      model,
+      "gemini-2.5-flash",
+      "gemini-2.0-flash",
+      "gemini-1.5-flash",
+      "gemini-1.5-pro",
+    ])
+  );
 
   let res: Response | null = null;
   for (const m of modelsToTry) {
     res = await fetchWithModel(m);
     if (res.ok) break;
     if (res.status === 429) {
-      console.warn(`[gemini] 429 Too Many Requests on ${m}, waiting 1.5s before retry...`);
-      await new Promise((r) => setTimeout(r, 1500));
+      console.warn(`[gemini] 429 Too Many Requests on ${m}, waiting 3.5s before retry...`);
+      await new Promise((r) => setTimeout(r, 3500));
       res = await fetchWithModel(m);
       if (res.ok) break;
     }

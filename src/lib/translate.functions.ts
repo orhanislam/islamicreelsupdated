@@ -96,29 +96,40 @@ export const translateToBulgarian = createServerFn({ method: "POST" })
           console.warn("[translate] Batch translate failed, falling back to sequential:", e);
         }
 
-        for (const b of data.ayahBounds) {
-          const cacheKey = `ayah_${b.ayah}_${(b.english || "").trim()}`;
-          const val = globalCache.get(cacheKey);
-          if (!val || val.trim().length === 0) {
-            try {
-              await new Promise((r) => setTimeout(r, 1200));
-              const raw = await geminiChat("gemini-2.5-flash", [
-                { role: "system", content: SYSTEM },
-                {
-                  role: "user",
-                  content: `Източник: ${data.sourceRef} (Аят ${b.ayah})\n\nАрабски:\n${b.arabic || ""}\n\nАнглийски:\n${b.english || ""}`,
-                },
-              ]);
-              const bgText = sanitize(raw).trim();
-              if (bgText && bgText.length > 0) {
-                const formattedText = bgText.startsWith(`(${b.ayah})`)
-                  ? bgText
-                  : `(${b.ayah}) ${bgText}`;
+        const stillMissing = data.ayahBounds.filter((b) => !getCached(b));
+        if (stillMissing.length > 0) {
+          try {
+            await new Promise((r) => setTimeout(r, 1000));
+            const prompt2 = `Източник: ${data.sourceRef}\n\nМоля, преведи следните аяти на български език, като всеки аят започва с номера му в скоби (напр. (1) ...):\n\n${stillMissing.map((b) => `(${b.ayah}) ${b.english || b.arabic || ""}`).join("\n\n")}`;
+            const raw2 = await geminiChat("gemini-2.5-flash", [
+              { role: "system", content: SYSTEM },
+              { role: "user", content: prompt2 },
+            ]);
+            for (const b of stillMissing) {
+              const cacheKey = `ayah_${b.ayah}_${(b.english || "").trim()}`;
+              const lineRegex = new RegExp(`(?:^|\\n)\\s*(?:\\(${b.ayah}\\)|\\[${b.ayah}\\]|${b.ayah}\\.)\\s*([^\\n]+(?:\\n(?!\\s*(?:\\(|\\[|\\d+\\.))[^\n]+)*)`, "i");
+              const match = raw2.match(lineRegex);
+              if (match && match[1]) {
+                const cleanText = sanitize(match[1]).trim();
+                const formattedText = cleanText.startsWith(`(${b.ayah})`)
+                  ? cleanText
+                  : `(${b.ayah}) ${cleanText}`;
                 globalCache.set(cacheKey, formattedText);
               }
-            } catch (err) {
-              console.error(`Error translating ayah ${b.ayah}:`, err);
             }
+            if (stillMissing.length === 1 && raw2.trim()) {
+              const singleB = stillMissing[0];
+              const cacheKey = `ayah_${singleB.ayah}_${(singleB.english || "").trim()}`;
+              if (!getCached(singleB)) {
+                const cleanText = sanitize(raw2).trim();
+                const formattedText = cleanText.startsWith(`(${singleB.ayah})`)
+                  ? cleanText
+                  : `(${singleB.ayah}) ${cleanText}`;
+                globalCache.set(cacheKey, formattedText);
+              }
+            }
+          } catch (err) {
+            console.error("[translate] Single batch retry failed:", err);
           }
         }
       }
@@ -134,8 +145,9 @@ export const translateToBulgarian = createServerFn({ method: "POST" })
 
       if (!bulgarian || bulgarian.trim().length === 0) {
         try {
+          await new Promise((r) => setTimeout(r, 2000));
           const fullPrompt = `Източник: ${data.sourceRef}\n\nМоля, преведи следните аяти на български език, като всеки аят започва с номера му в скоби (напр. (1) ...):\n\n${data.ayahBounds.map((b) => `(${b.ayah}) ${b.english || b.arabic || ""}`).join("\n\n")}`;
-          const rawFull = await geminiChat("gemini-2.5-flash", [
+          const rawFull = await geminiChat("gemini-1.5-flash", [
             { role: "system", content: SYSTEM },
             { role: "user", content: fullPrompt },
           ]);
@@ -143,6 +155,12 @@ export const translateToBulgarian = createServerFn({ method: "POST" })
         } catch (e) {
           console.error("[translate] Fallback full translation failed:", e);
         }
+      }
+
+      if (!bulgarian || bulgarian.trim().length === 0) {
+        bulgarian = data.ayahBounds
+          .map((b) => `(${b.ayah}) ${b.english || ""}`)
+          .join("\n\n");
       }
 
       return { bulgarian, ayahBounds: updatedBounds, cached: false };
@@ -163,7 +181,7 @@ export const translateToBulgarian = createServerFn({ method: "POST" })
         { role: "user", content: prompt },
       ],
     );
-    const bulgarian = sanitize(raw).trim();
+    const bulgarian = sanitize(raw).trim() || data.english.trim();
     if (!bulgarian) throw new Error("Празен превод");
 
     globalCache.set(cacheKey, bulgarian);
