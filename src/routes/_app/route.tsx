@@ -15,9 +15,12 @@ function AppShell() {
             <div className="size-8 rounded-full bg-primary text-primary-foreground grid place-items-center font-arabic">ن</div>
             <span className="text-lg font-semibold">Nur Studio</span>
           </Link>
-          <nav className="font-ui flex items-center gap-1 text-sm">
+          <nav className="font-ui flex items-center gap-1.5 text-sm">
             <Link to="/create" className="rounded-md px-3 py-2 hover:bg-secondary [&.active]:bg-secondary [&.active]:text-primary" activeProps={{ className: "active" }}>
               <PlusCircle className="inline size-4 mr-1" /> Създай
+            </Link>
+            <Link to="/downloads" className="rounded-md px-3 py-2 hover:bg-secondary [&.active]:bg-secondary [&.active]:text-primary" activeProps={{ className: "active" }}>
+              Изтегляния
             </Link>
           </nav>
         </div>

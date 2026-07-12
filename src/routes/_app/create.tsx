@@ -11,6 +11,7 @@ import { suggestViral } from "@/lib/suggestions.functions";
 import { createSameOriginDownloadUrl, createSameOriginMediaUrl, cleanMediaMimeType, isIOSMediaDevice, sanitizeFilename, saveMediaBlob, saveMediaFromUrl } from "@/lib/download-media";
 import { renderPhoto, blobToBase64, type RenderOptions } from "@/lib/render-photo";
 import { renderVideo } from "@/lib/render-video";
+import { enqueueDownload } from "@/lib/downloads-queue";
 import { synthesizeHadithNarration } from "@/lib/tts.functions";
 import { runServerRender } from "@/lib/render.functions";
 import { Button } from "@/components/ui/button";
@@ -477,29 +478,20 @@ function CreatePage() {
           mimeType = result.mimeType;
         }
 
-        if (renderedUrl) URL.revokeObjectURL(renderedUrl);
-        const blobUrl = URL.createObjectURL(blob);
-        setRenderedUrl(blobUrl);
-        setRenderedBlob(blob);
-        setRenderedKind("video");
         const ext = mimeType.includes("mp4") ? "mp4" : "webm";
-        setRenderedExt(ext);
-        setRenderedMime(cleanMediaMimeType(mimeType));
-        console.info("[create] video render finished", { size: blob.size, mimeType, ext });
-        
-        // On iOS, auto-download immediately — skip preview to avoid Safari
-        // re-encoding or playback issues that can truncate audio.
-        if (isIOSMediaDevice()) {
-          const filename = sanitizeFilename(`${content?.source_ref ?? "post"}.${ext}`);
-          try {
-            await saveMediaBlob(blob, filename, cleanMediaMimeType(mimeType));
-            toast.success("Видеото е свалено!");
-          } catch {
-            toast.success("Видеото е готово — натисни Свали");
-          }
-        } else {
-          toast.success("Видеото е готово");
-        }
+        const title = sanitizeFilename(`${content?.source_ref ?? "nur-studio-video"}`);
+        const id = `${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
+        await enqueueDownload({
+          id,
+          title,
+          blob,
+          ext,
+          mimeType: cleanMediaMimeType(mimeType),
+          createdAt: Date.now(),
+        });
+        toast.success("Видеото е готово! Прехвърляне към изтегляния...");
+        navigate({ to: "/downloads" });
+        return;
       }
       window.setTimeout(() => {
         previewRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });

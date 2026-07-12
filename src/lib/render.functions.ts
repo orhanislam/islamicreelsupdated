@@ -114,9 +114,10 @@ export const runServerRender = createServerFn({ method: "POST" })
         return `${h}:${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}.${cs.toString().padStart(2, "0")}`;
       };
 
-      const isLowerThird = data.style === "lower-third";
-      const bulgarianAlign = isLowerThird ? 2 : 5;
-      const bulgarianMarginV = isLowerThird ? 300 : 0;
+      // Always anchor subtitles lower vertically (Alignment 2 = bottom-center)
+      // so when text is bigger or multi-line it stays cleanly in the lower half.
+      const bulgarianAlign = 2;
+      const bulgarianMarginV = 380;
 
       let ass = `[Script Info]
 ScriptType: v4.00+
@@ -126,8 +127,8 @@ PlayResY: 1920
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
 Style: Arabic,Scheherazade New,100,&H00FFFFFF,&H000000FF,&H00000000,&H80000000,-1,0,0,0,100,100,0,0,1,3,0,8,50,50,300,1
-Style: Bulgarian,Inter,80,&H00FFFFFF,&H000000FF,&H00000000,&H80000000,-1,0,0,0,100,100,0,0,1,5,2,${bulgarianAlign},180,180,${bulgarianMarginV},1
-Style: Reference,Inter,46,&H005DC9F4,&H000000FF,&H00000000,&H80000000,-1,0,0,0,100,100,0,0,1,3,1,8,50,50,280,1
+Style: Bulgarian,Outfit,88,&H00FFFFFF,&H000000FF,&H4C000000,&H66000000,-1,0,0,0,100,100,0,0,1,3.2,1,${bulgarianAlign},140,140,${bulgarianMarginV},1
+Style: Reference,Outfit,46,&H005DC9F4,&H000000FF,&H00000000,&H80000000,-1,0,0,0,100,100,0,0,1,3,1,8,50,50,280,1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
@@ -343,11 +344,12 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         
         cmd = cmd.input(audioPath);
 
-        const width = data.quality === "1080p" ? 1080 : 720;
-        const height = data.quality === "1080p" ? 1920 : 1280;
+        const is1080p = data.quality !== "720p";
+        const width = is1080p ? 1080 : 720;
+        const height = is1080p ? 1920 : 1280;
 
         cmd.complexFilter([
-          `[0:v]crop='min(iw,ih*9/16)':'min(iw*16/9,ih)',scale=${width}:${height},drawbox=x=0:y=0:w=${width}:h=${height}:color=black@0.15:t=fill,subtitles='${escapedAssPath}'[v]`
+          `[0:v]crop='min(iw,ih*9/16)':'min(iw*16/9,ih)',scale=${width}:${height}:flags=lanczos,drawbox=x=0:y=0:w=${width}:h=${height}:color=black@0.15:t=fill,subtitles='${escapedAssPath}'[v]`
         ])
         .outputOptions([
           "-map [v]",
@@ -357,10 +359,10 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
           "-level 4.2",
           "-pix_fmt yuv420p",
           "-movflags +faststart",
-          "-preset fast",
+          "-preset veryfast",
           "-crf 18",
-          "-maxrate 15M",
-          "-bufsize 30M",
+          "-maxrate 28M",
+          "-bufsize 56M",
           "-r 30",
           "-vsync 1",
           "-g 60",

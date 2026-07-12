@@ -32,13 +32,14 @@ let H = 1920;
 let SAFE = { top: 320, bottom: 280, side: 180 };
 
 function configureCanvasSize(ios: boolean, quality?: "1080p" | "720p") {
-  const scale = 1; // Strictly 1080p (1080x1920) as requested
-  W = 1080;
-  H = 1920;
+  const is1080p = quality !== "720p"; // Strictly 1080p (1080x1920) by default
+  const scale = is1080p ? 1 : 720 / 1080;
+  W = is1080p ? 1080 : 720;
+  H = is1080p ? 1920 : 1280;
   SAFE = {
-    top: 320,
-    bottom: 280,
-    side: 180,
+    top: Math.round(320 * scale),
+    bottom: Math.round(280 * scale),
+    side: Math.round(180 * scale),
   };
   return scale;
 }
@@ -153,9 +154,9 @@ function chooseFontSize(
   // Long hadiths cannot fit professionally as one giant block. Pick a readable
   // size, then paginate the wrapped lines so every part of the text appears.
   const wordCount = words.length;
-  const readableMax = wordCount > 40 ? 38 : wordCount > 28 ? 44 : wordCount > 18 ? 50 : wordCount > 10 ? 56 : 64;
+  const readableMax = wordCount > 40 ? 46 : wordCount > 28 ? 54 : wordCount > 18 ? 64 : wordCount > 10 ? 72 : 82;
   const maxSize = Math.round(readableMax * (W / 1080));
-  const minSize = Math.round(32 * (W / 1080));
+  const minSize = Math.round(36 * (W / 1080));
   for (let size = maxSize; size >= minSize; size -= 2) {
     ctx.font = `800 ${size}px 'Inter', 'Roboto', 'Montserrat', sans-serif`;
     const lines = wrapWords(ctx, words, maxWidth);
@@ -189,9 +190,8 @@ function buildCaptionPages(
     const pageLines = lines.slice(lineIndex, lineIndex + maxLinesPerPage);
     const count = pageLines.reduce((sum, line) => sum + line.length, 0);
     const blockH = pageLines.length * lineHeight;
-    const baseYStart =
-      style === "lower-third" ? H - SAFE.bottom - blockH + lineHeight * 0.75 :
-      /* centered/minimal */      (H - blockH) / 2 + lineHeight * 0.75;
+    const targetBottomY = H * 0.74;
+    const baseYStart = targetBottomY - (pageLines.length - 1) * lineHeight;
     pages.push({ lines: pageLines, startWord: wordIndex, endWord: wordIndex + count, baseYStart });
     lineIndex += pageLines.length;
     wordIndex += count;
@@ -205,19 +205,19 @@ function pickMimeType(ios: boolean): string {
   // asking Safari for an exact codec string often reports support but creates
   // files that the native player refuses to open. Prefer the plain container.
   const candidates = ios ? [
+    "video/mp4;codecs=avc1.64002A", // High Profile Level 4.2 for pristine 1080p
+    "video/mp4;codecs=avc1.4D402A", // Main Profile Level 4.2
+    "video/mp4;codecs=avc1.42E02A", // Baseline Profile Level 4.2
     "video/mp4",
     "video/mp4;codecs=avc1.42E01F",
-    "video/mp4;codecs=avc1.42E01F,mp4a.40.2",
   ] : [
-    "video/webm;codecs=vp9,opus",
+    "video/webm;codecs=vp9,opus", // VP9 High Quality 1080p
+    "video/mp4;codecs=avc1.64002A",
+    "video/mp4;codecs=avc1.4D402A",
+    "video/mp4;codecs=avc1.42E02A",
     "video/webm;codecs=vp8,opus",
     "video/webm",
-    "video/mp4;codecs=avc1.42E01F,mp4a.40.2",
-    "video/mp4;codecs=avc1.42E01F",
     "video/mp4",
-    "video/webm;codecs=vp9,opus",
-    "video/webm;codecs=vp8,opus",
-    "video/webm",
   ];
   for (const c of candidates) {
     if (typeof MediaRecorder !== "undefined" && MediaRecorder.isTypeSupported(c)) return c;
@@ -286,12 +286,14 @@ export async function renderVideo(opts: VideoOptions): Promise<{ blob: Blob; mim
 
   const ios = isIOSDevice();
   const scale = configureCanvasSize(ios, opts.quality);
-  const videoBitsPerSecond = opts.quality === "1080p" ? 4_500_000 : 2_500_000;
+  const videoBitsPerSecond = opts.quality === "720p" ? 14_000_000 : 28_000_000;
 
   const canvas = document.createElement("canvas");
   canvas.width = W;
   canvas.height = H;
   const ctx = canvas.getContext("2d")!;
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = "high";
   let attachedCanvas: HTMLCanvasElement | null = null;
   const detachCanvas = () => {
     if (attachedCanvas?.isConnected) attachedCanvas.remove();
@@ -470,8 +472,13 @@ export async function renderVideo(opts: VideoOptions): Promise<{ blob: Blob; mim
     canvasVideoTrack = videoStream.getVideoTracks()[0] as (MediaStreamTrack & { requestFrame?: () => void }) | undefined;
   }
   canvasVideoTrack?.addEventListener?.("ended", () => console.warn("[render-video] canvas video track ended before recorder stopped"));
+  let lastCanvasRequestTime = 0;
   const requestCanvasFrame = () => {
-    try { canvasVideoTrack?.requestFrame?.(); } catch { /* ignore */ }
+    const nowMs = performance.now();
+    if (nowMs - lastCanvasRequestTime >= 33) {
+      lastCanvasRequestTime = nowMs;
+      try { canvasVideoTrack?.requestFrame?.(); } catch { /* ignore */ }
+    }
   };
   const forceCanvasCommit = () => {
     // iOS Safari can delay committing 2D canvas updates into the captured
@@ -732,6 +739,8 @@ export async function renderVideo(opts: VideoOptions): Promise<{ blob: Blob; mim
   let lastPhraseIdx = -1;
 
   const drawFrame = (elapsed: number) => {
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = "high";
     const t = Math.min(1, elapsed / duration);
 
     // Pick the active phrase, enforcing exact start/end window for Ayah bounds.
@@ -877,20 +886,16 @@ export async function renderVideo(opts: VideoOptions): Promise<{ blob: Blob; mim
         popScale = 0.88 + 0.12 * (1 - Math.pow(1 - popProgress, 3));
       }
 
-      // Premium modern TikTok font (bold, sans-serif)
-      ctx.font = `800 ${activePhrase.fontSize}px 'Outfit', 'Inter', sans-serif`;
+      // Modern minimalistic clean white font
+      ctx.font = `700 ${activePhrase.fontSize}px 'Outfit', 'Inter', sans-serif`;
       ctx.textBaseline = "alphabetic";
       ctx.lineJoin = "round";
-      // Premium TikTok text glow & shadow
-      ctx.shadowColor = "rgba(0, 0, 0, 0.9)";
-      ctx.shadowBlur = 18;
-      ctx.shadowOffsetY = 6;
 
       const blockH = activePhrase.lines.length * activePhrase.lineHeight;
-      const baseY =
-        opts.style === "lower-third"
-          ? H - SAFE.bottom - blockH + activePhrase.lineHeight * 0.75
-          : (H - blockH) / 2 + activePhrase.lineHeight * 0.75;
+      // Position vertically lower down the screen (~74% down).
+      // As text gets bigger or has multiple lines, anchor downward vertically.
+      const targetBottomY = H * 0.74;
+      const baseY = targetBottomY - (activePhrase.lines.length - 1) * activePhrase.lineHeight;
 
       ctx.save();
       const centerY = baseY + blockH / 2 - activePhrase.lineHeight * 0.75;
@@ -900,13 +905,27 @@ export async function renderVideo(opts: VideoOptions): Promise<{ blob: Blob; mim
 
       ctx.globalAlpha = alpha;
       ctx.textAlign = "center";
-      ctx.strokeStyle = "rgba(0,0,0,0.45)";
-      ctx.lineWidth = 2;
+      ctx.lineJoin = "round";
+
+      // Subtle minimalistic dark border & soft shadow for readability without muddying
+      ctx.strokeStyle = "rgba(0, 0, 0, 0.65)";
+      ctx.lineWidth = Math.max(3, activePhrase.fontSize * 0.04);
+      ctx.shadowColor = "rgba(0, 0, 0, 0.45)";
+      ctx.shadowBlur = 6;
+      ctx.shadowOffsetY = 2;
       for (let i = 0; i < activePhrase.lines.length; i++) {
         const text = activePhrase.lines[i].join(" ");
         const y = baseY + i * activePhrase.lineHeight;
         ctx.strokeText(text, W / 2, y);
-        ctx.fillStyle = "#ffffff";
+      }
+
+      // Pure crisp white fill
+      ctx.shadowBlur = 0;
+      ctx.shadowOffsetY = 0;
+      ctx.fillStyle = "#ffffff";
+      for (let i = 0; i < activePhrase.lines.length; i++) {
+        const text = activePhrase.lines[i].join(" ");
+        const y = baseY + i * activePhrase.lineHeight;
         ctx.fillText(text, W / 2, y);
       }
       ctx.restore();
@@ -1038,22 +1057,16 @@ export async function renderVideo(opts: VideoOptions): Promise<{ blob: Blob; mim
         }
       }
 
-      const iosTail = 0.0; // User requested exact ending, no tail pause
-      const audioTailDone = hasAudio && audioEndedAtWall !== null && wall >= audioEndedAtWall + (ios ? iosTail : 0);
-      const isStuck = audioClockStale && wall >= lastAudioProgressWall + 5;
-      // Fallback: if even manual detection fails, use wall time with generous padding
-      const audioFallbackDone = hasAudio && audioEndedAtWall === null && (
-        ios ? (wall >= duration + iosTail + 1.0)
-            : (audioElapsed >= duration)
-        || isStuck
-      );
-      const silentVideoDone = !hasAudio && wall >= duration + 0.5;
-      const playbackDone = Boolean(audioTailDone || audioFallbackDone || silentVideoDone);
-      if (!captionDone || !playbackDone) {
+      const wallDone = wall >= duration + 0.4;
+      const audioTailDone = hasAudio && audioEndedAtWall !== null && wall >= audioEndedAtWall;
+      const audioFallbackDone = hasAudio && audioElapsed >= duration - 0.05;
+      const silentVideoDone = !hasAudio && wall >= duration;
+      const playbackDone = Boolean(wallDone || audioTailDone || audioFallbackDone || silentVideoDone);
+
+      if (!playbackDone) {
         scheduleDraw();
       } else {
-        // Diagnostic: log which path triggered the finish
-        console.log(`[render-video] FINISH: wall=${wall.toFixed(2)}s duration=${duration.toFixed(2)}s audioEndedAtWall=${audioEndedAtWall?.toFixed(2) ?? 'null'} audioTail=${String(audioTailDone)} fallback=${String(audioFallbackDone)} silent=${String(silentVideoDone)} caption=${String(captionDone)}`);
+        console.log(`[render-video] FINISH: wall=${wall.toFixed(2)}s duration=${duration.toFixed(2)}s`);
         finish();
       }
     };
