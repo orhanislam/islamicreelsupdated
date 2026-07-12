@@ -144,32 +144,14 @@ export const translateToBulgarian = createServerFn({ method: "POST" })
 
       const updatedBounds = data.ayahBounds.map((b) => {
         const cacheKey = `ayah_${b.ayah}_${(b.english || "").trim()}`;
-        return { ...b, bulgarian: globalCache.get(cacheKey) || "" };
+        const cached = globalCache.get(cacheKey);
+        const existingBg = b.bulgarian ? (b.bulgarian.startsWith(`(${b.ayah})`) ? b.bulgarian : `(${b.ayah}) ${b.bulgarian}`) : "";
+        return { ...b, bulgarian: cached || existingBg || `(${b.ayah}) ${b.english || ""}` };
       });
       let bulgarian = updatedBounds
         .map((b) => b.bulgarian)
         .filter(Boolean)
         .join("\n\n");
-
-      if (!bulgarian || bulgarian.trim().length === 0 || /[\u0600-\u06FF]/.test(bulgarian)) {
-        try {
-          await new Promise((r) => setTimeout(r, 2000));
-          const fullPrompt = `Източник: ${data.sourceRef}\n\nМоля, преведи следните аяти на БЪЛГАРСКИ ЕЗИК (на кирилица!), като всеки аят започва с номера му в скоби (напр. (1) ...):\nНЕ връщай арабски текст!\n\n${data.ayahBounds.map((b) => `(${b.ayah}) ${b.english || b.arabic || ""}`).join("\n\n")}`;
-          const rawFull = await geminiChat("gemini-2.5-flash", [
-            { role: "system", content: SYSTEM },
-            { role: "user", content: fullPrompt },
-          ]);
-          bulgarian = sanitize(rawFull).trim();
-        } catch (e) {
-          console.error("[translate] Fallback full translation failed:", e);
-        }
-      }
-
-      if (!bulgarian || bulgarian.trim().length === 0 || /[\u0600-\u06FF]/.test(bulgarian)) {
-        bulgarian = data.ayahBounds
-          .map((b) => `(${b.ayah}) ${b.english || ""}`)
-          .join("\n\n");
-      }
 
       return { bulgarian, ayahBounds: updatedBounds, cached: false };
     }

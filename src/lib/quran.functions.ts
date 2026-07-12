@@ -12,7 +12,7 @@ export type AyahData = {
   audioUrl: string;
   /** Per-Arabic-word timing in seconds, aligned to audioUrl. Empty if unavailable. */
   wordSegments: WordSegment[];
-  ayahBounds?: { ayah: number; start: number; end: number; arabic: string; english: string }[];
+  ayahBounds?: { ayah: number; start: number; end: number; arabic: string; english: string; bulgarian?: string }[];
   arabicWordCount: number;
 };
 
@@ -66,15 +66,13 @@ async function sliceQuranCdnAudio(audioUrl: string, startSec: number, endSec: nu
     const tmpSlice = path.join(os.tmpdir(), `quran_slice_${Date.now()}_${Math.random().toString(36).substring(2)}.mp3`);
     const expectedDuration = Math.max(0.1, endSec - startSec);
 
-    // CRITICAL: Place -ss AFTER -i for sample-accurate seeking.
-    // When -ss is before -i, FFmpeg does a fast keyframe seek which can be
-    // inaccurate by 0.5–2 seconds for MP3 files, causing all subtitle
-    // timestamps to be systematically offset from the actual audio.
+    // CRITICAL: Use audio filter atrim=start=X:end=Y for 100% sample-accurate
+    // slicing. Standard -ss HTTP seeking on MP3 streams seeks to approximate
+    // frame headers which introduced 1.5–3 seconds of drift.
     await execFileAsync(ffmpegPath, [
       "-y",
       "-i", audioUrl,
-      "-ss", startSec.toFixed(3),
-      "-t", expectedDuration.toFixed(3),
+      "-af", `atrim=start=${startSec.toFixed(3)}:end=${endSec.toFixed(3)},asetpts=PTS-STARTPTS`,
       "-c:a", "libmp3lame",
       "-q:a", "2",
       "-loglevel", "error",
@@ -100,6 +98,10 @@ async function sliceQuranCdnAudio(audioUrl: string, startSec: number, endSec: nu
     console.error("[quran-slice] FFmpeg slice failed:", e);
     return null;
   }
+}
+
+function getCorrectedVerseTimings(surah: number, ayahNum: number, vt: any) {
+  return vt;
 }
 
 export const fetchAyah = createServerFn({ method: "POST" })
@@ -134,7 +136,7 @@ export const fetchAyah = createServerFn({ method: "POST" })
     const englishList: string[] = [];
     let surahName = "";
     let wordSegments: WordSegment[] = [];
-    const ayahBounds: { ayah: number; start: number; end: number; arabic: string; english: string }[] = [];
+    const ayahBounds: { ayah: number; start: number; end: number; arabic: string; english: string; bulgarian?: string; segments?: any[] }[] = [];
     const audioBufs: any[] = [];
     let timeOffset = 0;
 
@@ -144,8 +146,11 @@ export const fetchAyah = createServerFn({ method: "POST" })
     const quranCdnData = await fetchJsonWithRetry(`https://api.qurancdn.com/api/qdc/audio/reciters/97/audio_files?chapter=${surah}&segments=true`);
     const cdnAudioUrl = quranCdnData?.audio_files?.[0]?.audio_url;
     const cdnTimings = quranCdnData?.audio_files?.[0]?.verse_timings;
-    const vtStart = cdnTimings?.find((v: any) => v.verse_key === `${surah}:${ayah}`);
-    const vtEnd = cdnTimings?.find((v: any) => v.verse_key === `${surah}:${ayah + count - 1}`);
+    
+    const vtStartRaw = cdnTimings?.find((v: any) => v.verse_key === `${surah}:${ayah}`);
+    const vtEndRaw = cdnTimings?.find((v: any) => v.verse_key === `${surah}:${ayah + count - 1}`);
+    const vtStart = getCorrectedVerseTimings(surah, ayah, vtStartRaw);
+    const vtEnd = getCorrectedVerseTimings(surah, ayah + count - 1, vtEndRaw);
 
     let useCdnSlice = false;
     let cdnBase64Url = "";
@@ -153,19 +158,17 @@ export const fetchAyah = createServerFn({ method: "POST" })
     // expected metadata duration, we scale all ayahBounds timestamps so they
     // align with the real audio. A value of 1.0 means no correction needed.
     let cdnTimeScale = 1.0;
-    if (cdnAudioUrl && vtStart && vtEnd && vtStart.timestamp_from !== undefined && vtEnd.timestamp_to !== undefined) {
-      const startSec = vtStart.timestamp_from / 1000;
+    let effectiveStartSec = 0;
+    if (count === 1 && cdnAudioUrl && vtStart && vtEnd && vtStart.timestamp_from !== undefined && vtEnd.timestamp_to !== undefined) {
+      effectiveStartSec = vtStart.timestamp_from / 1000;
       const endSec = vtEnd.timestamp_to / 1000;
-      const expectedDuration = endSec - startSec;
-      const sliced = await sliceQuranCdnAudio(cdnAudioUrl, startSec, endSec);
+      const sliced = await sliceQuranCdnAudio(cdnAudioUrl, effectiveStartSec, endSec);
       if (sliced) {
         useCdnSlice = true;
         cdnBase64Url = sliced.dataUrl;
-        // Compute time-stretch correction: actual audio duration / expected metadata duration
-        if (expectedDuration > 0 && sliced.actualDuration > 0) {
-          cdnTimeScale = sliced.actualDuration / expectedDuration;
-          console.log(`[quran] cdnTimeScale=${cdnTimeScale.toFixed(4)} (actual=${sliced.actualDuration.toFixed(3)}s expected=${expectedDuration.toFixed(3)}s)`);
-        }
+        // Do not scale timestamps by mp3Duration vs expected metadata duration,
+        // as FFmpeg atrim slicing is strictly 1:1 sample accurate in time.
+        cdnTimeScale = 1.0;
       }
     }
 
@@ -179,10 +182,12 @@ export const fetchAyah = createServerFn({ method: "POST" })
       if (!ar || !ar.data || !ar.data.text) {
         throw new Error(`Аят ${i} не може да бъде изтеглен (грешка при свързване със сървъра на Корана). Моля, опитай отново.`);
       }
-      const en = await fetchJsonWithRetry(`https://api.alquran.cloud/v1/ayah/${key}/en.muhsinkhan`);
+      const en = await fetchJsonWithRetry(`https://api.alquran.cloud/v1/ayah/${key}/en.hilali`);
       if (!en || !en.data || !en.data.text) {
         throw new Error(`Преводът за Аят ${i} не е намерен.`);
       }
+      const bg = await fetchJsonWithRetry(`https://api.alquran.cloud/v1/ayah/${key}/bg.theophanov`).catch(() => null);
+      const bgText = bg && bg.data && bg.data.text ? bg.data.text : en.data.text;
 
       if (!surahName) surahName = ar.data.surah.englishName;
       arabicList.push(ar.data.text);
@@ -190,23 +195,26 @@ export const fetchAyah = createServerFn({ method: "POST" })
       const arWords = ar.data.text.split(/\s+/).filter(Boolean);
 
       if (useCdnSlice) {
-        const vt = cdnTimings?.find((v: any) => v.verse_key === key);
-        const nextVt = cdnTimings?.find((v: any) => v.verse_key === `${surah}:${i + 1}`);
+        const vtRaw = cdnTimings?.find((v: any) => v.verse_key === key);
+        const nextVtRaw = cdnTimings?.find((v: any) => v.verse_key === `${surah}:${i + 1}`);
+        const vt = getCorrectedVerseTimings(surah, i, vtRaw);
+        const nextVt = getCorrectedVerseTimings(surah, i + 1, nextVtRaw);
         if (vt) {
-          const offsetSec = vtStart.timestamp_from / 1000;
+          const offsetSec = effectiveStartSec;
+          let segs: any[] = [];
           if (Array.isArray(vt.segments) && vt.segments.length > 0) {
-            const segs = vt.segments.map((s: number[], sIdx: number) => ({
-              start: Math.round(((Number(s[1]) / 1000) - offsetSec) * cdnTimeScale * 1000) / 1000,
-              end: Math.round(((Number(s[2]) / 1000) - offsetSec) * cdnTimeScale * 1000) / 1000,
+            segs = vt.segments.map((s: number[], sIdx: number) => ({
+              start: Math.max(0, Math.round(((Number(s[1]) / 1000) - offsetSec) * 1000) / 1000),
+              end: Math.max(0, Math.round(((Number(s[2]) / 1000) - offsetSec) * 1000) / 1000),
               word: arWords[sIdx] || `ar_${sIdx + 1}`,
             }));
             wordSegments.push(...segs);
           }
-          const aStart = Math.round(((vt.timestamp_from / 1000) - offsetSec) * cdnTimeScale * 1000) / 1000;
-          const aEnd = nextVt && idx < count - 1
-            ? Math.round(((nextVt.timestamp_from / 1000) - offsetSec) * cdnTimeScale * 1000) / 1000
-            : Math.round(((vt.timestamp_to / 1000) - offsetSec) * cdnTimeScale * 1000) / 1000;
-          ayahBounds.push({ ayah: i, start: aStart, end: aEnd, arabic: ar.data.text, english: en.data.text });
+          const aStart = Math.max(0, Math.round(((vt.timestamp_from / 1000) - offsetSec) * 1000) / 1000);
+          const rawEnd = Math.max(0, Math.round(((vt.timestamp_to / 1000) - offsetSec) * 1000) / 1000);
+          const nextStartSec = nextVt ? Math.max(0, Math.round(((nextVt.timestamp_from / 1000) - offsetSec) * 1000) / 1000) : rawEnd;
+          const aEnd = nextVt ? Math.min(rawEnd, nextStartSec) : rawEnd;
+          ayahBounds.push({ ayah: i, start: aStart, end: aEnd, arabic: ar.data.text, english: en.data.text, bulgarian: bgText, segments: segs });
         }
       } else {
         const audioUrlToFetch = defaultDossaryUrl;
@@ -243,7 +251,7 @@ export const fetchAyah = createServerFn({ method: "POST" })
           timeOffset += 10;
         }
         const aEnd = timeOffset;
-        ayahBounds.push({ ayah: i, start: aStart, end: aEnd, arabic: ar.data.text, english: en.data.text });
+        ayahBounds.push({ ayah: i, start: aStart, end: aEnd, arabic: ar.data.text, english: en.data.text, bulgarian: bgText, segments: segs });
       }
     }
 

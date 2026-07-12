@@ -104,10 +104,13 @@ export const runServerRender = createServerFn({ method: "POST" })
 
       // 3. Generate ASS Subtitles
       const formatTime = (secs: number) => {
-        const h = Math.floor(secs / 3600);
-        const m = Math.floor((secs % 3600) / 60);
-        const s = Math.floor(secs % 60);
-        const cs = Math.floor((secs % 1) * 100);
+        const totalCs = Math.max(0, Math.round(secs * 100));
+        const cs = totalCs % 100;
+        const totalS = Math.floor(totalCs / 100);
+        const s = totalS % 60;
+        const totalM = Math.floor(totalS / 60);
+        const m = totalM % 60;
+        const h = Math.floor(totalM / 60);
         return `${h}:${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}.${cs.toString().padStart(2, "0")}`;
       };
 
@@ -150,21 +153,45 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             for (let bIdx = 0; bIdx < bounds.length; bIdx++) {
               const b = bounds[bIdx];
               const isLast = bIdx === bounds.length - 1;
-              const ratio = (b.english ? b.english.length : 10) / totalEngLen;
-              const count = isLast ? (words.length - wordIdx) : Math.max(1, Math.round(words.length * ratio));
-              const ayahWords = words.slice(wordIdx, Math.min(words.length, wordIdx + count));
+              let ayahWords: string[];
+              if (b.bulgarian && typeof b.bulgarian === "string" && b.bulgarian.trim().length > 0) {
+                ayahWords = b.bulgarian.split(/\s+/).filter(Boolean);
+              } else {
+                const ratio = (b.english ? b.english.length : 10) / totalEngLen;
+                const count = isLast ? (words.length - wordIdx) : Math.max(1, Math.round(words.length * ratio));
+                ayahWords = words.slice(wordIdx, Math.min(words.length, wordIdx + count));
+              }
               wordIdx += ayahWords.length;
 
               const bStart = Number(b.start) || 0;
               const bEnd = Number(b.end) || (bStart + 5);
               const bDur = Math.max(0.5, bEnd - bStart);
 
+              const ayahCosts = ayahWords.map((w: string) => 1 + w.replace(/[^\p{L}\p{N}]/gu, "").length * 0.55);
+              const ayahTotalCost = ayahCosts.reduce((sum: number, c: number) => sum + c, 0) || 1;
+              let ayahCumCost = 0;
+
+              const interpolateSegTime = (frac: number, segs?: any[]) => {
+                if (frac <= 0) return bStart;
+                if (frac >= 1) return bEnd;
+                if (!Array.isArray(segs) || segs.length === 0) {
+                  return bStart + frac * bDur;
+                }
+                const x = frac * segs.length;
+                const k = Math.min(segs.length - 1, Math.floor(x));
+                const r = x - k;
+                const sStart = Number(segs[k].start) || bStart;
+                const sEnd = Number(segs[k].end) || bEnd;
+                return sStart + r * (sEnd - sStart);
+              };
+
               for (let w = 0; w < ayahWords.length; w++) {
-                const fracS = w / ayahWords.length;
-                const fracE = (w + 1) / ayahWords.length;
+                const fracS = ayahCumCost / ayahTotalCost;
+                ayahCumCost += ayahCosts[w];
+                const fracE = ayahCumCost / ayahTotalCost;
                 timings.push({
-                  start: bStart + fracS * bDur,
-                  end: bStart + fracE * bDur
+                  start: Math.round(interpolateSegTime(fracS, b.segments) * 1000) / 1000,
+                  end: Math.round(interpolateSegTime(fracE, b.segments) * 1000) / 1000
                 });
               }
             }
@@ -172,12 +199,12 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             const segs = data.wordSegments;
             if (Array.isArray(segs) && segs.length > 0) {
               const scale = 1;
-              const costs = words.map(w => 1 + w.replace(/[^\p{L}\p{N}]/gu, "").length * 0.55);
+              const costs = words.map((w: string) => 1 + w.replace(/[^\p{L}\p{N}]/gu, "").length * 0.55);
               const cumCost = [0];
               for (let i = 0; i < costs.length; i++) cumCost.push(cumCost[i] + costs[i]);
               const totalCost = cumCost[cumCost.length - 1] || 1;
 
-              const segDurs = segs.map(s => Math.max(0.1, (s.end - s.start) * scale));
+              const segDurs = segs.map((s: any) => Math.max(0.1, (s.end - s.start) * scale));
               const cumAudio = [0];
               for (let i = 0; i < segDurs.length; i++) cumAudio.push(cumAudio[i] + segDurs[i]);
               const totalAudio = cumAudio[cumAudio.length - 1] || audioDur;
@@ -240,7 +267,8 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
               const start = Number(b.start) || 0;
               // Connect end to the next ayah's start for seamless coverage
               const nextStart = !isLast && bounds[bIdx + 1] ? Number(bounds[bIdx + 1].start) : null;
-              const end = nextStart !== null ? Math.max(nextStart, Number(b.end) || (start + 5)) : (Number(b.end) || (start + 5));
+              const rawEnd = Number(b.end) || (start + 5);
+              const end = nextStart !== null ? Math.min(rawEnd, nextStart) : rawEnd;
               const wordCount = ayahWords.length;
               const fs = wordCount > 40 ? 38 : wordCount > 28 ? 44 : wordCount > 18 ? 50 : wordCount > 10 ? 56 : 64;
               const wpl = wordCount > 40 ? 9 : wordCount > 28 ? 8 : wordCount > 18 ? 7 : wordCount > 10 ? 6 : 5;
@@ -340,9 +368,20 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
           "-b:a 128k",
           "-ar 44100",
           `-t ${audioDur}`,
+          "-shortest",
           "-threads 0"
         ])
         .outputFormat("mp4")
+        .on("start", (commandLine: string) => {
+          console.log(`[server-render] FFmpeg started with command: ${commandLine}`);
+        })
+        .on("progress", (progress: any) => {
+          if (progress.percent) {
+            console.log(`[server-render] Rendering progress: ${progress.percent.toFixed(1)}% (time: ${progress.timemark})`);
+          } else {
+            console.log(`[server-render] Rendering progress: ${progress.timemark}`);
+          }
+        })
         .save(outPath)
         .on("end", async () => {
           try {
@@ -360,7 +399,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             await fs.unlink(outPath).catch(() => {});
           }
         })
-        .on("error", async (err) => {
+        .on("error", async (err: any) => {
           console.error("[server-render] FFmpeg Error:", err);
           // Cleanup
           await fs.unlink(finalBgPath).catch(() => {});

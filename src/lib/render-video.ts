@@ -18,7 +18,7 @@ export type VideoOptions = RenderOptions & {
   fallbackDuration?: number;
   /** Per-Arabic-word timing in seconds, aligned to audioUrl. */
   wordSegments?: WordSegment[];
-  ayahBounds?: { ayah: number; start: number; end: number; arabic: string; english: string }[];
+  ayahBounds?: { ayah: number; start: number; end: number; arabic: string; english: string; bulgarian?: string; segments?: any[] }[];
   /** Total Arabic words — used with wordSegments to derive reveal progress. */
   arabicWordCount?: number;
   /** Per-Bulgarian-word timings (from ElevenLabs with-timestamps), aligned to audioUrl. */
@@ -630,14 +630,33 @@ export async function renderVideo(opts: VideoOptions): Promise<{ blob: Blob; mim
       const bEnd = Number(b.end) || (bStart + 5);
       const bDur = Math.max(0.2, bEnd - bStart);
 
+      const ayahCosts = ayahWords.map((w) => 1 + w.replace(/[^\p{L}\p{N}]/gu, "").length * 0.55);
+      const ayahTotalCost = ayahCosts.reduce((sum, c) => sum + c, 0) || 1;
+      let ayahCumCost = 0;
+
+      const interpolateSegTime = (frac: number, segs?: any[]) => {
+        if (frac <= 0) return bStart;
+        if (frac >= 1) return bEnd;
+        if (!Array.isArray(segs) || segs.length === 0) {
+          return bStart + frac * bDur;
+        }
+        const x = frac * segs.length;
+        const k = Math.min(segs.length - 1, Math.floor(x));
+        const r = x - k;
+        const sStart = Number(segs[k].start) || bStart;
+        const sEnd = Number(segs[k].end) || bEnd;
+        return sStart + r * (sEnd - sStart);
+      };
+
       for (let w = 0; w < ayahWords.length; w++) {
-        const fracS = w / ayahWords.length;
-        const fracE = (w + 1) / ayahWords.length;
+        const fracS = ayahCumCost / ayahTotalCost;
+        ayahCumCost += ayahCosts[w];
+        const fracE = ayahCumCost / ayahTotalCost;
         const idx = wordIdx + w;
         if (idx < wordTimes.length) {
           wordTimes[idx] = {
-            start: bStart + fracS * bDur,
-            end: bStart + fracE * bDur
+            start: Math.round(interpolateSegTime(fracS, b.segments) * 1000) / 1000,
+            end: Math.round(interpolateSegTime(fracE, b.segments) * 1000) / 1000,
           };
         }
       }
@@ -689,7 +708,7 @@ export async function renderVideo(opts: VideoOptions): Promise<{ blob: Blob; mim
   });
   if (phraseRender.length && opts.ayahBounds) {
     for (let i = 0; i < phraseRender.length - 1; i++) {
-      phraseRender[i].end = Math.max(phraseRender[i].end, phraseRender[i + 1].start);
+      phraseRender[i].end = Math.min(phraseRender[i].end, phraseRender[i + 1].start);
     }
   } else if (phraseRender.length && !opts.ayahBounds) {
     phraseRender[0].start = 0;
@@ -715,13 +734,20 @@ export async function renderVideo(opts: VideoOptions): Promise<{ blob: Blob; mim
   const drawFrame = (elapsed: number) => {
     const t = Math.min(1, elapsed / duration);
 
-    // Pick the active phrase, enforcing minimum display time.
+    // Pick the active phrase, enforcing exact start/end window for Ayah bounds.
     let activePhraseIdx = -1;
     for (let i = 0; i < phraseRender.length; i++) {
-      if (phraseRender[i].start <= elapsed + 0.02) activePhraseIdx = i; else break;
+      if (hasAyahBounds) {
+        if (elapsed >= phraseRender[i].start - 0.01 && elapsed < phraseRender[i].end) {
+          activePhraseIdx = i;
+          break;
+        }
+      } else {
+        if (phraseRender[i].start <= elapsed + 0.02) activePhraseIdx = i; else break;
+      }
     }
-    // If we'd jump past phrases that were never shown, force-show them first.
-    if (activePhraseIdx > lastPhraseIdx + 1) {
+    // If we'd jump past phrases that were never shown, force-show them first (only for non-Ayah bounds).
+    if (!hasAyahBounds && activePhraseIdx > lastPhraseIdx + 1) {
       for (let skip = lastPhraseIdx + 1; skip < activePhraseIdx; skip++) {
         if (!shownPhrases.has(skip)) {
           activePhraseIdx = skip;

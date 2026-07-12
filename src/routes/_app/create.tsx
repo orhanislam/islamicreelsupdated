@@ -466,7 +466,7 @@ function CreatePage() {
               }
               byteArrays.push(new Uint8Array(byteNumbers));
             }
-            blob = new Blob(byteArrays, { type: "video/mp4" });
+            blob = new Blob(byteArrays as BlobPart[], { type: "video/mp4" });
             mimeType = "video/mp4";
           } catch (e: any) {
             throw new Error(`Сървърна грешка: ${e.message || e}`);
