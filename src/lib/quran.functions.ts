@@ -164,6 +164,7 @@ export const fetchAyah = createServerFn({ method: "POST" })
 
       if (useCdnSlice) {
         const vt = cdnTimings?.find((v: any) => v.verse_key === key);
+        const nextVt = cdnTimings?.find((v: any) => v.verse_key === `${surah}:${i + 1}`);
         if (vt) {
           const offsetSec = vtStart.timestamp_from / 1000;
           if (Array.isArray(vt.segments) && vt.segments.length > 0) {
@@ -175,7 +176,9 @@ export const fetchAyah = createServerFn({ method: "POST" })
             wordSegments.push(...segs);
           }
           const aStart = Math.round(((vt.timestamp_from / 1000) - offsetSec) * 1000) / 1000;
-          const aEnd = Math.round(((vt.timestamp_to / 1000) - offsetSec) * 1000) / 1000;
+          const aEnd = nextVt && idx < count - 1
+            ? Math.round(((nextVt.timestamp_from / 1000) - offsetSec) * 1000) / 1000
+            : Math.round(((vt.timestamp_to / 1000) - offsetSec) * 1000) / 1000;
           ayahBounds.push({ ayah: i, start: aStart, end: aEnd, arabic: ar.data.text, english: en.data.text });
         }
       } else {

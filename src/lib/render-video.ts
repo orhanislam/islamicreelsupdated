@@ -617,19 +617,23 @@ export async function renderVideo(opts: VideoOptions): Promise<{ blob: Blob; mim
     for (let bIdx = 0; bIdx < bounds.length; bIdx++) {
       const b = bounds[bIdx];
       const isLast = bIdx === bounds.length - 1;
-      const ratio = (b.english ? b.english.length : 10) / totalEngLen;
-      const count = isLast ? (allWords.length - wordIdx) : Math.max(1, Math.round(allWords.length * ratio));
-      const ayahWords = allWords.slice(wordIdx, Math.min(allWords.length, wordIdx + count));
-      wordIdx += ayahWords.length;
+      let ayahWords: string[];
+      if (b.bulgarian && typeof b.bulgarian === "string" && b.bulgarian.trim().length > 0) {
+        ayahWords = b.bulgarian.split(/\s+/).filter(Boolean);
+      } else {
+        const ratio = (b.english ? b.english.length : 10) / totalEngLen;
+        const count = isLast ? (allWords.length - wordIdx) : Math.max(1, Math.round(allWords.length * ratio));
+        ayahWords = allWords.slice(wordIdx, Math.min(allWords.length, wordIdx + count));
+      }
 
       const bStart = Number(b.start) || 0;
       const bEnd = Number(b.end) || (bStart + 5);
-      const bDur = Math.max(0.5, bEnd - bStart);
+      const bDur = Math.max(0.2, bEnd - bStart);
 
       for (let w = 0; w < ayahWords.length; w++) {
         const fracS = w / ayahWords.length;
         const fracE = (w + 1) / ayahWords.length;
-        const idx = wordIdx - ayahWords.length + w;
+        const idx = wordIdx + w;
         if (idx < wordTimes.length) {
           wordTimes[idx] = {
             start: bStart + fracS * bDur,
@@ -637,6 +641,7 @@ export async function renderVideo(opts: VideoOptions): Promise<{ blob: Blob; mim
           };
         }
       }
+      wordIdx += ayahWords.length;
     }
   } else if (hasArSegments) {
     const scale = 1; // DO NOT scale exact reciter segment timestamps
@@ -682,7 +687,11 @@ export async function renderVideo(opts: VideoOptions): Promise<{ blob: Blob; mim
     const lines = wrapWords(ctx, p.words, maxW);
     return { ...p, start, end, fontSize: fs, lineHeight: lh, lines };
   });
-  if (phraseRender.length && !opts.ayahBounds) {
+  if (phraseRender.length && opts.ayahBounds) {
+    for (let i = 0; i < phraseRender.length - 1; i++) {
+      phraseRender[i].end = Math.max(phraseRender[i].end, phraseRender[i + 1].start);
+    }
+  } else if (phraseRender.length && !opts.ayahBounds) {
     phraseRender[0].start = 0;
     phraseRender[phraseRender.length - 1].end = revealDuration;
   }
@@ -810,15 +819,16 @@ export async function renderVideo(opts: VideoOptions): Promise<{ blob: Blob; mim
     }
 
     if (activePhrase) {
-      const FADE_IN = 0.22;
+      const isLastPhrase = activePhraseIdx === phraseRender.length - 1;
+      const FADE_IN = 0.18;
       const sinceStart = elapsed - activePhrase.start;
       const tillEnd = activePhrase.end - elapsed;
       const alphaIn = Math.max(0, Math.min(1, sinceStart / FADE_IN));
-      // Allow the last subtitle to fade out normally when its end time is reached
-      const alphaOut = Math.max(0, Math.min(1, tillEnd / 0.18));
-      // CapCut pop-in scale zoom animation (starts at 85% and zooms up to 100% over first 180ms)
-      const popProgress = Math.max(0, Math.min(1, sinceStart / 0.18));
-      const popScale = 0.85 + 0.15 * (1 - Math.pow(1 - popProgress, 3)); // cubic-out ease
+      // Only fade out at the very end of the last subtitle; keep intermediate transitions crisp
+      const alphaOut = isLastPhrase ? Math.max(0, Math.min(1, tillEnd / 0.18)) : 1.0;
+      // CapCut pop-in scale zoom animation (starts at 88% and zooms up to 100% over first 150ms)
+      const popProgress = Math.max(0, Math.min(1, sinceStart / 0.15));
+      const popScale = 0.88 + 0.12 * (1 - Math.pow(1 - popProgress, 3)); // cubic-out ease
       const alpha = Math.min(alphaIn, alphaOut);
 
       // Premium modern TikTok font (bold, sans-serif)
