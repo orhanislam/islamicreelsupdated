@@ -197,13 +197,13 @@ export const searchPexelsVideos = createServerFn({ method: "POST" })
     if (!key) throw new Error("Pexels не е конфигуриран");
 
     type Out = { id: number; link: string; poster: string; photographer: string; score: number; duration: number };
-    const buildOut = (vs: PexelsVideo[]): Out[] => {
-      const minD = data.minDuration ?? 30; // default 30
+    const buildOut = (vs: PexelsVideo[], minDurationOverride?: number): Out[] => {
+      const minD = minDurationOverride ?? Math.min(data.minDuration ?? 5, 8); // Accept videos >= 5 seconds (they loop seamlessly)
       const all = vs
         .map((v) => {
           if (v.duration && v.duration < minD) return null;
           const file = pickBestFile(v);
-          if (!file?.link || (file.fps !== undefined && file.fps < 25)) return null;
+          if (!file?.link) return null;
           return {
             id: v.id,
             link: file.link,
@@ -215,24 +215,25 @@ export const searchPexelsVideos = createServerFn({ method: "POST" })
         })
         .filter((x): x is Out => !!x);
         
-      let pool = all.filter(x => x.score >= 5);
-      if (pool.length < 6) pool = all;
+      let pool = all.filter(x => x.score >= 0);
+      if (pool.length < 4) pool = all;
       
       for (let i = pool.length - 1; i > 0; i--) {
         const j = Math.floor(Math.random() * (i + 1));
         [pool[i], pool[j]] = [pool[j], pool[i]];
       }
-      return pool.slice(0, 12);
+      return pool.slice(0, 16);
     };
 
     if (data.query?.trim()) {
       const vs = await pexelsVideoQuery(key, data.query.trim());
+      const built = buildOut(vs, 5);
       return {
         query: data.query.trim(),
         theme: "",
         mood: "calm" as Mood,
         queriesTried: [data.query.trim()],
-        videos: buildOut(vs),
+        videos: built,
       };
     }
 
