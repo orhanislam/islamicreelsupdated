@@ -1,6 +1,6 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { fetchAyah, type AyahData } from "@/lib/quran.functions";
 import { fetchHadith, listHadiths, type HadithData } from "@/lib/hadith.functions";
 import { fetchSunnahHadith, randomSahihHadith, type SunnahCollection } from "@/lib/sunnah.functions";
