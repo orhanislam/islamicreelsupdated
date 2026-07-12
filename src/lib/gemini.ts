@@ -1,3 +1,18 @@
+import fs from "node:fs";
+import path from "node:path";
+
+function getApiKey(): string {
+  try {
+    const envPath = path.resolve(process.cwd(), ".env");
+    if (fs.existsSync(envPath)) {
+      const content = fs.readFileSync(envPath, "utf-8");
+      const match = content.match(/GEMINI_API_KEY=["']?([^"'\r\n]+)["']?/);
+      if (match && match[1]) return match[1].trim();
+    }
+  } catch {}
+  return process.env.GEMINI_API_KEY || "";
+}
+
 // Shared helper for Google Gemini API calls.
 // Replaces all ai.gateway.lovable.dev calls with direct Google API access.
 
@@ -12,7 +27,7 @@ export async function geminiChat(
   messages: ChatMessage[],
   jsonMode = false,
 ): Promise<string> {
-  const apiKey = process.env.GEMINI_API_KEY;
+  const apiKey = getApiKey();
   if (!apiKey) throw new Error("GEMINI_API_KEY не е конфигуриран в .env");
 
   // Convert OpenAI messages to Gemini format
@@ -86,7 +101,7 @@ export async function geminiChat(
 export async function geminiGenerateImage(
   prompt: string,
 ): Promise<{ base64: string; mimeType: string }> {
-  const apiKey = process.env.GEMINI_API_KEY;
+  const apiKey = getApiKey();
   if (!apiKey) throw new Error("GEMINI_API_KEY не е конфигуриран в .env");
 
   // Use Gemini 2.0 Flash's native image generation via generateContent.
