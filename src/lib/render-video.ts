@@ -713,12 +713,12 @@ export async function renderVideo(opts: VideoOptions): Promise<{ blob: Blob; mim
     const lines = wrapWords(ctx, p.words, maxW);
     return { ...p, start, end, fontSize: fs, lineHeight: lh, lines };
   });
-  if (phraseRender.length && opts.ayahBounds) {
-    for (let i = 0; i < phraseRender.length - 1; i++) {
-      phraseRender[i].end = Math.min(phraseRender[i].end, phraseRender[i + 1].start);
-    }
-  } else if (phraseRender.length && !opts.ayahBounds) {
+  if (phraseRender.length) {
     phraseRender[0].start = 0;
+    for (let i = 0; i < phraseRender.length - 1; i++) {
+      // Make phrase boundaries contiguous: no overlapping timestamps or gaps
+      phraseRender[i].end = phraseRender[i + 1].start;
+    }
     phraseRender[phraseRender.length - 1].end = revealDuration;
   }
 
@@ -730,10 +730,8 @@ export async function renderVideo(opts: VideoOptions): Promise<{ blob: Blob; mim
 
   // Track which subtitle phrases have been drawn at least once.
   const shownPhrases = new Set<number>();
-  // Minimum display time per subtitle phrase (seconds).
-  // Disabled for ayahBounds — those are acoustically-anchored timestamps.
   const hasAyahBounds = opts.ayahBounds && Array.isArray(opts.ayahBounds) && opts.ayahBounds.length > 0;
-  const MIN_PHRASE_DISPLAY = hasAyahBounds ? 0 : 0.4;
+  const MIN_PHRASE_DISPLAY = 0; // Exactly 0 to eliminate any frame jumping/flickering between phrases
   // Track how long the current phrase has been on-screen.
   let currentPhraseShownSince = -1;
   let lastPhraseIdx = -1;
@@ -861,30 +859,12 @@ export async function renderVideo(opts: VideoOptions): Promise<{ blob: Blob; mim
       const sinceStart = elapsed - activePhrase.start;
       const tillEnd = activePhrase.end - elapsed;
 
-      // For ayah-bounded subtitles: instant swap between ayahs (no fade/pop)
-      // to eliminate flicker. Only the very first ayah gets a gentle fade-in,
-      // and only the very last ayah gets a fade-out.
-      let alpha: number;
-      let popScale: number;
-      if (hasAyahBounds) {
-        const alphaIn = isFirstPhrase ? Math.max(0, Math.min(1, sinceStart / 0.15)) : 1.0;
-        const alphaOut = isLastPhrase ? Math.max(0, Math.min(1, tillEnd / 0.15)) : 1.0;
-        alpha = Math.min(alphaIn, alphaOut);
-        // Only pop-scale on the very first ayah
-        if (isFirstPhrase) {
-          const popProgress = Math.max(0, Math.min(1, sinceStart / 0.15));
-          popScale = 0.90 + 0.10 * (1 - Math.pow(1 - popProgress, 3));
-        } else {
-          popScale = 1.0;
-        }
-      } else {
-        const FADE_IN = 0.18;
-        const alphaIn = Math.max(0, Math.min(1, sinceStart / FADE_IN));
-        const alphaOut = isLastPhrase ? Math.max(0, Math.min(1, tillEnd / 0.18)) : 1.0;
-        alpha = Math.min(alphaIn, alphaOut);
-        const popProgress = Math.max(0, Math.min(1, sinceStart / 0.15));
-        popScale = 0.88 + 0.12 * (1 - Math.pow(1 - popProgress, 3));
-      }
+      // Clean instant swap between phrases (no pop-scale or mid-fade flicker)
+      // Only the very first phrase gets a gentle start fade-in, and only the very last phrase gets an end fade-out.
+      const alphaIn = isFirstPhrase ? Math.max(0, Math.min(1, sinceStart / 0.15)) : 1.0;
+      const alphaOut = isLastPhrase ? Math.max(0, Math.min(1, tillEnd / 0.15)) : 1.0;
+      const alpha = Math.min(alphaIn, alphaOut);
+      const popScale = 1.0;
 
       // Modern minimalistic clean white font
       ctx.font = `700 ${activePhrase.fontSize}px 'Outfit', 'Inter', sans-serif`;
