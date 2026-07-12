@@ -61,15 +61,15 @@ export async function geminiChat(
     });
   };
 
-  // Use official working Google AI Studio endpoints that return 200 OK
+  // Prioritize gemini-2.5-flash (Paid/Professional tier) first as requested by user
   const validModels = [
-    "gemini-flash-latest",
-    "gemini-flash-lite-latest",
-    "gemma-4-31b-it",
     "gemini-2.5-flash",
-    "gemini-2.0-flash"
+    "gemini-2.5-pro",
+    "gemini-2.0-flash",
+    "gemini-flash-latest",
+    "gemini-flash-lite-latest"
   ];
-  const targetModel = validModels.includes(model) ? model : "gemini-flash-latest";
+  const targetModel = model || "gemini-2.5-flash";
   const uniqueModels = Array.from(new Set([targetModel, ...validModels]));
   let lastErrorMsg = "";
 
@@ -89,9 +89,9 @@ export async function geminiChat(
     }
   }
 
-  // Pass 2: Wait 2 seconds and retry the primary high-quota model with last key
+  // Pass 2: Wait 2 seconds and retry gemini-2.5-flash
   await new Promise((r) => setTimeout(r, 2000));
-  const retryRes = await fetchWithModel("gemini-flash-latest", apiKeys[apiKeys.length - 1]).catch(() => null);
+  const retryRes = await fetchWithModel("gemini-2.5-flash", apiKeys[apiKeys.length - 1]).catch(() => null);
   if (retryRes && retryRes.ok) {
     const json = await retryRes.json();
     const content = (json.candidates?.[0]?.content?.parts?.[0]?.text ?? "").trim();
