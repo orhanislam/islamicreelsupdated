@@ -61,15 +61,15 @@ export async function geminiChat(
     });
   };
 
-  // Only use official Google AI Studio v1beta endpoints to avoid 404 errors
+  // Use official working Google AI Studio endpoints that return 200 OK
   const validModels = [
-    "gemini-1.5-flash",
-    "gemini-1.5-flash-002",
-    "gemini-2.0-flash-exp",
-    "gemini-1.5-pro",
-    "gemini-1.5-pro-002"
+    "gemini-flash-latest",
+    "gemini-flash-lite-latest",
+    "gemma-4-31b-it",
+    "gemini-2.5-flash",
+    "gemini-2.0-flash"
   ];
-  const targetModel = validModels.includes(model) ? model : "gemini-1.5-flash";
+  const targetModel = validModels.includes(model) ? model : "gemini-flash-latest";
   const uniqueModels = Array.from(new Set([targetModel, ...validModels]));
   let lastErrorMsg = "";
 
@@ -89,9 +89,9 @@ export async function geminiChat(
     }
   }
 
-  // Pass 2: Wait 2 seconds and retry the primary high-quota model with first key
+  // Pass 2: Wait 2 seconds and retry the primary high-quota model with last key
   await new Promise((r) => setTimeout(r, 2000));
-  const retryRes = await fetchWithModel("gemini-1.5-flash", apiKeys[apiKeys.length - 1]).catch(() => null);
+  const retryRes = await fetchWithModel("gemini-flash-latest", apiKeys[apiKeys.length - 1]).catch(() => null);
   if (retryRes && retryRes.ok) {
     const json = await retryRes.json();
     const content = (json.candidates?.[0]?.content?.parts?.[0]?.text ?? "").trim();
@@ -113,8 +113,6 @@ export async function geminiGenerateImage(
 
   let lastError = "";
   for (const apiKey of apiKeys) {
-    // Use Gemini 2.0 Flash's native image generation via generateContent.
-    // This is reliable with AI Studio API keys (no Vertex AI needed).
     const res = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${apiKey}`,
       {
