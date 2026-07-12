@@ -19,15 +19,13 @@ export const runServerRender = createServerFn({ method: "POST" })
     
     const ffmpegMod = await import("fluent-ffmpeg");
     const ffmpeg = ffmpegMod.default || ffmpegMod;
-    let ffmpegPath = "/usr/bin/ffmpeg";
-    if (process.platform === "win32") {
-      try {
-        const installerMod = await import("@ffmpeg-installer/ffmpeg");
-        const installer = installerMod.default || installerMod;
-        if (installer?.path) ffmpegPath = installer.path;
-      } catch (e) {
-        ffmpegPath = "ffmpeg";
-      }
+    let ffmpegPath = "ffmpeg";
+    try {
+      const installerMod = await import("@ffmpeg-installer/ffmpeg");
+      const installer = installerMod.default || installerMod;
+      if (installer?.path) ffmpegPath = installer.path;
+    } catch (e) {
+      ffmpegPath = "ffmpeg";
     }
     console.log(`[server-render] Using ffmpeg at: ${ffmpegPath}`);
     ffmpeg.setFfmpegPath(ffmpegPath);
@@ -380,7 +378,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
           "-c:a aac",
           "-b:a 128k",
           "-ar 44100",
-          `-t ${audioDur}`,
+          `-t ${Number(audioDur).toFixed(2)}`,
           "-threads 0"
         ])
         .outputFormat("mp4")
@@ -424,8 +422,8 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
           await fs.unlink(outPath).catch(() => {});
           const errLines = ffmpegStderr
             .split("\n")
-            .filter(l => l.trim() && !l.includes("libx264 @") && !l.includes("aac @"))
-            .slice(-6)
+            .filter(l => l.trim() && !l.includes("libx264 @") && !l.includes("aac @") && !l.includes("frame=") && !l.includes("size="))
+            .slice(-10)
             .join(" | ");
           reject(new Error(err.message + (errLines ? ` [FFmpeg log: ${errLines}]` : "")));
         });
