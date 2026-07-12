@@ -362,7 +362,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         const height = is1080p ? 1920 : 1280;
 
         cmd.complexFilter([
-          `[0:v]fps=30,crop='min(iw,ih*9/16)':'min(iw*16/9,ih)',scale=${width}:${height}:flags=lanczos,drawbox=x=0:y=0:w=${width}:h=${height}:color=black@0.15:t=fill,subtitles='${escapedAssPath}'[v]`
+          `[0:v]crop='min(iw,ih*9/16)':'min(iw*16/9,ih)',scale=${width}:${height}:flags=lanczos,drawbox=x=0:y=0:w=${width}:h=${height}:color=black@0.15:t=fill,subtitles='${escapedAssPath}'[v]`
         ])
         .outputOptions([
           "-map [v]",
@@ -377,7 +377,6 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
           "-maxrate 28M",
           "-bufsize 56M",
           "-r 30",
-          "-vsync 1",
           "-g 60",
           "-c:a aac",
           "-b:a 128k",
@@ -414,14 +413,15 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             await fs.unlink(outPath).catch(() => {});
           }
         })
-        .on("error", async (err: any) => {
-          console.error("[server-render] FFmpeg Error:", err);
+        .on("error", async (err: any, stdout: string, stderr: string) => {
+          console.error("[server-render] FFmpeg Error:", err.message);
+          if (stderr) console.error("[server-render] FFmpeg stderr:", stderr);
           // Cleanup
           await fs.unlink(finalBgPath).catch(() => {});
           await fs.unlink(audioPath).catch(() => {});
           await fs.unlink(assPath).catch(() => {});
           await fs.unlink(outPath).catch(() => {});
-          reject(err);
+          reject(new Error(err.message + (stderr ? ` (${stderr.slice(-250)})` : "")));
         });
       });
 
