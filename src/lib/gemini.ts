@@ -41,34 +41,33 @@ export async function geminiChat(
     });
   };
 
-  const candidateModels = Array.from(new Set([
-    model || "gemini-2.5-flash",
-    "gemini-2.5-flash",
-    "gemini-2.0-flash",
-    "gemini-2.0-flash-lite",
-    "gemini-1.5-flash",
-  ]));
-
+  const targetModel = "gemini-2.5-flash";
   let lastErrorMsg = "";
-  for (const currentModel of candidateModels) {
-    for (let attempt = 1; attempt <= 2; attempt++) {
-      const res = await fetchWithModel(currentModel);
-      if (res.ok) {
-        const json = await res.json();
-        const content = (json.candidates?.[0]?.content?.parts?.[0]?.text ?? "").trim();
-        if (content) return content;
-      }
-      const txt = await res.text().catch(() => "");
-      lastErrorMsg = `[${currentModel} status ${res.status}] ${txt.slice(0, 150)}`;
-      if (res.status === 429) {
-        console.warn(`[gemini] Quota/429 on ${currentModel} (attempt ${attempt}/2), trying next fallback...`);
-        break; // break to try next candidate model immediately
-      }
-      await new Promise((r) => setTimeout(r, 1000));
+
+  for (let attempt = 1; attempt <= 4; attempt++) {
+    const res = await fetchWithModel(targetModel);
+    if (res.ok) {
+      const json = await res.json();
+      const content = (json.candidates?.[0]?.content?.parts?.[0]?.text ?? "").trim();
+      if (content) return content;
+    }
+
+    const txt = await res.text().catch(() => "");
+    lastErrorMsg = `[${targetModel} статус ${res.status}] ${txt.slice(0, 180)}`;
+
+    if (res.status === 429 && attempt < 4) {
+      const delay = attempt * 3500;
+      console.warn(`[gemini] 429 Лимит на заявки за ${targetModel} (опит ${attempt}/4), изчакване ${delay}ms...`);
+      await new Promise((r) => setTimeout(r, delay));
+      continue;
+    }
+
+    if (attempt < 4) {
+      await new Promise((r) => setTimeout(r, 1500));
     }
   }
 
-  throw new Error(`Лимитът за заявки е надвишен. Моля изчакайте малко или опитайте отново. (${lastErrorMsg})`);
+  throw new Error(`Лимитът за заявки е надвишен за gemini-2.5-flash. Моля изчакайте няколко секунди и опитайте отново. (${lastErrorMsg})`);
 }
 
 /**
