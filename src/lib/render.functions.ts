@@ -379,7 +379,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         let ffmpegStderr = "";
 
         cmd.complexFilter([
-          `[0:v]crop='min(iw,ih*9/16)':'min(iw*16/9,ih)',scale=${width}:${height}:flags=lanczos,eq=brightness=-0.08,subtitles='${escapedAssPath}'[v]`
+          `[0:v]crop='min(iw,ih*9/16)':'min(iw*16/9,ih)',scale=${width}:${height}:flags=bicubic,eq=brightness=-0.08,subtitles='${escapedAssPath}'[v]`
         ])
         .outputOptions([
           "-map [v]",
@@ -388,12 +388,12 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
           "-profile:v high",
           "-level 4.2",
           "-pix_fmt yuv420p",
-          "-preset fast",
-          "-crf 20",
+          "-preset veryfast",
+          "-crf 17",
           "-r 30",
           "-g 60",
           "-c:a aac",
-          "-b:a 128k",
+          "-b:a 192k",
           "-ar 44100",
           `-t ${Number(audioDur).toFixed(2)}`,
           "-threads 0"
