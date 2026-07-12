@@ -107,8 +107,7 @@ async function pexelsVideoQuery(key: string, query: string, perPage = 80) {
   return (j.videos ?? []) as PexelsVideo[];
 }
 
-// Score: prefer ≥1280px tall, 5–60s, vertical aspect close to 9:16. Avoid black and white/monochrome.
-function scoreVideo(v: PexelsVideo, file: PexelsVideoFile): number {
+function scoreVideo(v: PexelsVideo, file: PexelsVideoFile, targetMin = 30): number {
   let s = 0;
   const meta = JSON.stringify(v).toLowerCase();
   if (meta.includes("black and white") || meta.includes("monochrome") || meta.includes("grayscale") || meta.includes("greyscale") || meta.includes("silhouette") || meta.includes("dark sky")) {
@@ -119,9 +118,7 @@ function scoreVideo(v: PexelsVideo, file: PexelsVideoFile): number {
   if (file.height >= 1280) s += 3;
   if (file.height >= 1920) s += 2;
   const d = v.duration ?? 10;
-  // User requested videos between 5-60 seconds.
-  if (d >= 5 && d <= 60) s += 4;
-  else if (d < 5 || d > 60) s -= 10; // Penalize outside this range heavily
+  if (d >= targetMin) s += 15;
   return s;
 }
 
@@ -209,26 +206,24 @@ export const searchPexelsVideos = createServerFn({ method: "POST" })
             poster: v.video_pictures?.[0]?.picture ?? "",
             photographer: v.user?.name ?? "",
             duration: v.duration ?? 0,
-            score: scoreVideo(v, file),
+            score: scoreVideo(v, file, targetMin),
           };
         })
         .filter((x): x is Out => !!x);
 
-      // 1. First prioritize videos that strictly meet or exceed user's chosen minDuration (e.g. 60s)
+      // Strictly return videos that meet or exceed user's chosen minDuration (e.g. 60s)
       const matchingDuration = all.filter((x) => x.duration >= targetMin);
 
       let pool: Out[];
-      if (matchingDuration.length >= 3) {
+      if (matchingDuration.length > 0) {
         pool = matchingDuration;
       } else {
-        // 2. If Pexels doesn't have enough >= 60s videos for this query, sort by longest duration available
+        // Only if literally 0 videos meet targetMin, fallback to longest available
         pool = [...all].sort((a, b) => b.duration - a.duration);
       }
 
-      for (let i = pool.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [pool[i], pool[j]] = [pool[j], pool[i]];
-      }
+      // Sort matching videos by score (highest quality first)
+      pool.sort((a, b) => b.score - a.score);
       return pool.slice(0, 16);
     };
 
