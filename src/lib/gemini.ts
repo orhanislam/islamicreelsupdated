@@ -56,16 +56,16 @@ export async function geminiChat(
     });
   };
 
-  const models = [
-    model || "gemini-2.5-flash",
-    "gemini-2.5-flash",
-    "gemini-2.0-flash",
-    "gemini-2.0-flash-exp",
+  // Only use official Google AI Studio v1beta endpoints to avoid 404 errors
+  const validModels = [
     "gemini-1.5-flash",
-    "gemini-1.5-flash-latest"
-  ].filter(Boolean) as string[];
-
-  const uniqueModels = Array.from(new Set(models));
+    "gemini-1.5-flash-002",
+    "gemini-2.0-flash-exp",
+    "gemini-1.5-pro",
+    "gemini-1.5-pro-002"
+  ];
+  const targetModel = validModels.includes(model) ? model : "gemini-1.5-flash";
+  const uniqueModels = Array.from(new Set([targetModel, ...validModels]));
   let lastErrorMsg = "";
 
   // Pass 1: Try each model immediately
