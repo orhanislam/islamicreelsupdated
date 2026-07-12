@@ -373,7 +373,6 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
           "-profile:v high",
           "-level 4.2",
           "-pix_fmt yuv420p",
-          "-movflags +faststart",
           "-preset fast",
           "-crf 20",
           "-r 30",
@@ -382,7 +381,6 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
           "-b:a 128k",
           "-ar 44100",
           `-t ${audioDur}`,
-          "-shortest",
           "-threads 0"
         ])
         .outputFormat("mp4")
@@ -424,8 +422,12 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
           await fs.unlink(audioPath).catch(() => {});
           await fs.unlink(assPath).catch(() => {});
           await fs.unlink(outPath).catch(() => {});
-          const lastErrLines = ffmpegStderr.trim().split("\n").slice(-4).join(" | ");
-          reject(new Error(err.message + (lastErrLines ? ` [FFmpeg details: ${lastErrLines}]` : "")));
+          const errLines = ffmpegStderr
+            .split("\n")
+            .filter(l => l.trim() && !l.includes("libx264 @") && !l.includes("aac @"))
+            .slice(-6)
+            .join(" | ");
+          reject(new Error(err.message + (errLines ? ` [FFmpeg log: ${errLines}]` : "")));
         });
       });
 
