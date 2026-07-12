@@ -253,15 +253,13 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
           }
         }
 
-        // CapCut pro subtitle style: Smooth zoom pop-in from 85% to 100% scale over 180ms + fade-in
-        const animTag = "\\fscx85\\fscy85\\t(0,180,\\fscx100\\fscy100)\\fad(150,120)";
-        const styleTag = `{\\an2\\pos(540,1540)${animTag}}`;
+        // Crisp stable subtitle style: 100% scale at all times with no word-shifting zoom distortion
+        const instantAnimTag = "\\fscx100\\fscy100\\fad(0,0)";
 
         const bounds = data.ayahBounds;
         if (Array.isArray(bounds) && bounds.length > 0) {
           // FULL-AYAH BLOCK SYNCHRONIZER: One complete Ayah per subtitle block from ayah.start to ayah.end
           // No fade between consecutive ayahs — instant swap for crisp transitions
-          const instantAnimTag = "\\fscx100\\fscy100\\fad(0,0)";
           const totalEngLen = bounds.reduce((acc: number, b: any) => acc + (b.english ? b.english.length : 10), 0) || 1;
           let wordIdx = 0;
           for (let bIdx = 0; bIdx < bounds.length; bIdx++) {
@@ -295,7 +293,6 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                 }
               }
               formattedText = formattedText.trim();
-              // First ayah gets gentle fade-in; last gets fade-out; middle ayahs instant swap
               const useAnim = isFirst ? `\\fad(150,0)` : isLast ? `\\fad(0,120)` : instantAnimTag;
               const ayahStyleTag = data.style === "bottom"
                 ? `{\\an2\\pos(540,1600)\\fs${fs}${useAnim}}`
@@ -330,25 +327,26 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
           let prevEnd = 0;
           for (let idx = 0; idx < phrases.length; idx++) {
             const p = phrases[idx];
+            const isFirst = idx === 0;
+            const isLast = idx === phrases.length - 1;
             let start = timings[p.startIdx]?.start ?? prevEnd;
             let end = timings[p.endIdx - 1]?.end ?? (start + 2);
 
-            // Ensure no overlap with previous phrase
             if (start < prevEnd) {
               start = prevEnd;
             }
-            // Ensure next phrase start boundary doesn't overlap this end
+            // Make phrase boundaries contiguous with next phrase start
             const nextStart = idx + 1 < phrases.length ? (timings[phrases[idx + 1].startIdx]?.start ?? end) : audioDur;
-            if (end > nextStart) {
-              end = nextStart;
-            }
-            // Ensure minimum duration so no 1-frame flashes
-            if (end <= start + 0.08) {
-              end = start + 0.08;
+            end = nextStart;
+
+            if (end <= start + 0.05) {
+              end = start + 0.05;
             }
 
             const textLine = p.words.join(" ");
-            ass += `Dialogue: 0,${formatTime(start)},${formatTime(end)},Bulgarian,,0,0,0,,${styleTag}${textLine}\n`;
+            const useAnim = isFirst ? `\\fad(150,0)` : isLast ? `\\fad(0,120)` : instantAnimTag;
+            const phraseStyleTag = `{\\an2\\pos(540,1540)\\fscx100\\fscy100${useAnim}}`;
+            ass += `Dialogue: 0,${formatTime(start)},${formatTime(end)},Bulgarian,,0,0,0,,${phraseStyleTag}${textLine}\n`;
             prevEnd = end;
           }
         }

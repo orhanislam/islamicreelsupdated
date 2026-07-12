@@ -709,7 +709,7 @@ export async function renderVideo(opts: VideoOptions): Promise<{ blob: Blob; mim
     const end = p.exactEnd ?? (wordTimes[p.endWord - 1]?.end ?? revealDuration);
     const text = p.words.join(" ");
     const { fontSize: fs, lineHeight: lh } = chooseFontSize(ctx, text, maxW, verticalForText);
-    ctx.font = `700 ${fs}px 'Cormorant Garamond', Georgia, serif`;
+    ctx.font = `700 ${fs}px 'Outfit', 'Inter', sans-serif`;
     const lines = wrapWords(ctx, p.words, maxW);
     return { ...p, start, end, fontSize: fs, lineHeight: lh, lines };
   });
