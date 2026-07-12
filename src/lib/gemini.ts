@@ -42,12 +42,12 @@ export async function geminiChat(
   };
 
   const models = [
-    "gemini-1.5-flash",
-    "gemini-1.5-flash-latest",
-    "gemini-1.5-flash-8b",
+    model || "gemini-2.5-flash",
+    "gemini-2.5-flash",
+    "gemini-2.0-flash",
     "gemini-2.0-flash-exp",
-    "gemini-1.5-pro",
-    model
+    "gemini-1.5-flash",
+    "gemini-1.5-flash-latest"
   ].filter(Boolean) as string[];
 
   const uniqueModels = Array.from(new Set(models));
