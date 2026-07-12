@@ -42,37 +42,41 @@ export async function geminiChat(
   };
 
   const models = [
-    model || "gemini-2.5-flash",
-    "gemini-2.5-flash",
-    "gemini-2.0-flash",
-    "gemini-1.5-flash"
-  ];
-  const uniqueModels = Array.from(new Set(models));
+    "gemini-1.5-flash",
+    "gemini-1.5-flash-latest",
+    "gemini-1.5-flash-8b",
+    "gemini-2.0-flash-exp",
+    "gemini-1.5-pro",
+    model
+  ].filter(Boolean) as string[];
 
+  const uniqueModels = Array.from(new Set(models));
   let lastErrorMsg = "";
 
+  // Pass 1: Try each model immediately
   for (const currentModel of uniqueModels) {
-    for (let attempt = 1; attempt <= 2; attempt++) {
-      const res = await fetchWithModel(currentModel);
-      if (res.ok) {
-        const json = await res.json();
-        const content = (json.candidates?.[0]?.content?.parts?.[0]?.text ?? "").trim();
-        if (content) return content;
-      }
-
+    const res = await fetchWithModel(currentModel).catch(() => null);
+    if (res && res.ok) {
+      const json = await res.json();
+      const content = (json.candidates?.[0]?.content?.parts?.[0]?.text ?? "").trim();
+      if (content) return content;
+    }
+    if (res) {
       const txt = await res.text().catch(() => "");
       lastErrorMsg = `[${currentModel} статус ${res.status}] ${txt.slice(0, 150)}`;
-
-      if (res.status === 429) {
-        console.warn(`[gemini] 429 Лимит на заявки за ${currentModel}, превключване към следващ модел...`);
-        break; // break retry loop immediately to try the next model
-      }
-
-      await new Promise((r) => setTimeout(r, 1500));
     }
   }
 
-  throw new Error(`Лимитът за заявки е надвишен. Моля изчакайте малко или опитайте отново. (${lastErrorMsg})`);
+  // Pass 2: If all returned 429/busy, wait 2 seconds and retry the primary high-quota model
+  await new Promise((r) => setTimeout(r, 2000));
+  const retryRes = await fetchWithModel("gemini-1.5-flash").catch(() => null);
+  if (retryRes && retryRes.ok) {
+    const json = await retryRes.json();
+    const content = (json.candidates?.[0]?.content?.parts?.[0]?.text ?? "").trim();
+    if (content) return content;
+  }
+
+  throw new Error(`Лимитът за заявки е надвишен. Моля изчакайте 10 секунди и опитайте отново. (${lastErrorMsg})`);
 }
 
 /**
