@@ -311,9 +311,10 @@ function CreatePage() {
 
   const onPexelsVideoSearch = async (overrideQuery?: string) => {
     if (!content) return;
+    const textToSearch = `${content.english}${bulgarian ? `\n${bulgarian}` : ""}`;
     setPexelsVideosLoading(true);
     try {
-      const r = await runPexelsVideos({ data: { text: `${content.english}\n${bulgarian}`, query: overrideQuery ?? pexelsQuery, avoid: pexelsAvoid, minDuration: minPexelsDuration } });
+      const r = await runPexelsVideos({ data: { text: textToSearch, query: overrideQuery ?? pexelsQuery, avoid: pexelsAvoid, minDuration: minPexelsDuration } });
       setPexelsVideos(r.videos);
       setPexelsQuery(r.query);
       setPexelsTheme(r.theme ?? "");
@@ -326,9 +327,10 @@ function CreatePage() {
 
   const onAutoPickPexelsVideo = async () => {
     if (!content) return;
+    const textToSearch = `${content.english}${bulgarian ? `\n${bulgarian}` : ""}`;
     setPexelsVideosLoading(true);
     try {
-      const r = await runPexelsVideos({ data: { text: `${content.english}\n${bulgarian}`, avoid: pexelsAvoid, minDuration: minPexelsDuration } });
+      const r = await runPexelsVideos({ data: { text: textToSearch, avoid: pexelsAvoid, minDuration: minPexelsDuration } });
       setPexelsVideos(r.videos);
       setPexelsQuery(r.query);
       setPexelsTheme(r.theme ?? "");
@@ -354,6 +356,12 @@ function CreatePage() {
     setPexelsAvoid(next);
     setTimeout(() => { onPexelsVideoSearch(); }, 0);
   };
+
+  useEffect(() => {
+    if (content?.english) {
+      void onPexelsVideoSearch();
+    }
+  }, [content?.english]);
 
   const onPickPexels = (photo: { url: string; full: string; photographer: string }) => {
     setBgUrl(photo.full); setBgVideoUrl(null);
@@ -783,7 +791,7 @@ function CreatePage() {
         </div>
       )}
 
-      {content && bulgarian && !translating && (
+      {content && (
         <Card className="glass-card mt-6 p-6 space-y-4 animate-fade-up">
           <div className="flex items-center justify-between gap-3 flex-wrap">
             <div>

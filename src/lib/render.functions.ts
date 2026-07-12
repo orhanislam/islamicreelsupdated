@@ -315,8 +315,22 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
           let prevEnd = 0;
           for (let idx = 0; idx < phrases.length; idx++) {
             const p = phrases[idx];
-            const start = timings[p.startIdx]?.start ?? prevEnd;
-            const end = timings[p.endIdx - 1]?.end ?? (start + 2);
+            let start = timings[p.startIdx]?.start ?? prevEnd;
+            let end = timings[p.endIdx - 1]?.end ?? (start + 2);
+
+            // Ensure no overlap with previous phrase
+            if (start < prevEnd) {
+              start = prevEnd;
+            }
+            // Ensure next phrase start boundary doesn't overlap this end
+            const nextStart = idx + 1 < phrases.length ? (timings[phrases[idx + 1].startIdx]?.start ?? end) : audioDur;
+            if (end > nextStart) {
+              end = nextStart;
+            }
+            // Ensure minimum duration so no 1-frame flashes
+            if (end <= start + 0.08) {
+              end = start + 0.08;
+            }
 
             const textLine = p.words.join(" ");
             ass += `Dialogue: 0,${formatTime(start)},${formatTime(end)},Bulgarian,,0,0,0,,${styleTag}${textLine}\n`;
