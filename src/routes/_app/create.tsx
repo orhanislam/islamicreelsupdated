@@ -13,7 +13,7 @@ import { renderPhoto, blobToBase64, type RenderOptions } from "@/lib/render-phot
 import { renderVideo } from "@/lib/render-video";
 import { enqueueDownload } from "@/lib/downloads-queue";
 import { synthesizeHadithNarration } from "@/lib/tts.functions";
-import { runServerRender } from "@/lib/render.functions";
+import { runServerRender, startServerRenderJob } from "@/lib/render.functions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -453,25 +453,17 @@ function CreatePage() {
         let mimeType: string;
 
         if (renderMode === "server") {
-          toast.message("Сървърно рендиране... Моля, изчакайте.");
-          try {
-            const base64Data = await runServerRender({ data: opts });
-            const byteCharacters = atob(base64Data);
-            const sliceSize = 1024;
-            const byteArrays: Uint8Array[] = [];
-            for (let offset = 0; offset < byteCharacters.length; offset += sliceSize) {
-              const slice = byteCharacters.slice(offset, offset + sliceSize);
-              const byteNumbers = new Array(slice.length);
-              for (let i = 0; i < slice.length; i++) {
-                byteNumbers[i] = slice.charCodeAt(i);
-              }
-              byteArrays.push(new Uint8Array(byteNumbers));
-            }
-            blob = new Blob(byteArrays as BlobPart[], { type: "video/mp4" });
-            mimeType = "video/mp4";
-          } catch (e: any) {
-            throw new Error(`Сървърна грешка: ${e.message || e}`);
-          }
+          toast.message("Стартирам фоново рендиране на сървъра...");
+          await startServerRenderJob({
+            data: {
+              data: opts,
+              title: content.source_ref || "Ислямско видео",
+            },
+          });
+          toast.success("Видео се рендира във фонов режим на сървъра! Можеш да затвориш Safari и да го свалиш по-късно от Изтегляния.");
+          setRendering(false);
+          navigate({ to: "/downloads" });
+          return;
         } else {
           const result = await renderVideo(opts);
           blob = result.blob;

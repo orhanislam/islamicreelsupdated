@@ -416,3 +416,117 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
       throw new Error(String(err));
     }
   });
+
+// ==========================================
+// BACKGROUND SERVER JOBS (SURVIVE BROWSER CLOSE)
+// ==========================================
+
+const getJobsDir = async () => {
+  const os = await import("os");
+  const fs = (await import("fs")).promises;
+  const path = await import("path");
+  const dir = path.join(os.homedir(), ".islamicreels_jobs");
+  await fs.mkdir(dir, { recursive: true }).catch(() => {});
+  return dir;
+};
+
+async function loadJobs() {
+  const fs = (await import("fs")).promises;
+  const path = await import("path");
+  const dir = await getJobsDir();
+  const file = path.join(dir, "jobs.json");
+  try {
+    const txt = await fs.readFile(file, "utf-8");
+    return JSON.parse(txt);
+  } catch {
+    return [];
+  }
+}
+
+async function saveJobs(jobs: any[]) {
+  const fs = (await import("fs")).promises;
+  const path = await import("path");
+  const dir = await getJobsDir();
+  const file = path.join(dir, "jobs.json");
+  await fs.writeFile(file, JSON.stringify(jobs, null, 2), "utf-8");
+}
+
+export const startServerRenderJob = createServerFn({ method: "POST" })
+  .validator((input: { data: any; title: string }) => input)
+  .handler(async ({ data: { data, title } }) => {
+    const jobId = `job_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
+    const jobs = await loadJobs();
+    jobs.unshift({
+      id: jobId,
+      title: title || "Ислямско видео (Фонов рендер)",
+      status: "rendering",
+      createdAt: Date.now(),
+    });
+    await saveJobs(jobs);
+
+    // Start FFmpeg asynchronously in the background so closing Safari does not stop it
+    (async () => {
+      const fs = (await import("fs")).promises;
+      const path = await import("path");
+      const dir = await getJobsDir();
+      const targetMp4 = path.join(dir, `${jobId}.mp4`);
+      try {
+        console.log(`[server-job] Starting background render for ${jobId}...`);
+        const base64Data = await runServerRender({ data });
+        const BufferMod = (await import("node:buffer")).Buffer;
+        await fs.writeFile(targetMp4, BufferMod.from(base64Data, "base64"));
+
+        const curJobs = await loadJobs();
+        const idx = curJobs.findIndex((j: any) => j.id === jobId);
+        if (idx !== -1) {
+          curJobs[idx].status = "completed";
+          curJobs[idx].completedAt = Date.now();
+          await saveJobs(curJobs);
+        }
+        console.log(`[server-job] Background render ${jobId} COMPLETED!`);
+      } catch (err: any) {
+        console.error(`[server-job] Background render ${jobId} FAILED:`, err);
+        const curJobs = await loadJobs();
+        const idx = curJobs.findIndex((j: any) => j.id === jobId);
+        if (idx !== -1) {
+          curJobs[idx].status = "error";
+          curJobs[idx].error = String(err.message || err);
+          await saveJobs(curJobs);
+        }
+      }
+    })();
+
+    return { jobId, status: "rendering" };
+  });
+
+export const listServerRenderJobs = createServerFn({ method: "POST" })
+  .handler(async () => {
+    return await loadJobs();
+  });
+
+export const getServerRenderJobBase64 = createServerFn({ method: "POST" })
+  .validator((input: { id: string }) => input)
+  .handler(async ({ data: { id } }) => {
+    const fs = (await import("fs")).promises;
+    const path = await import("path");
+    const dir = await getJobsDir();
+    const targetMp4 = path.join(dir, `${id}.mp4`);
+    const BufferMod = (await import("node:buffer")).Buffer;
+    const buf = await fs.readFile(targetMp4);
+    return buf.toString("base64");
+  });
+
+export const deleteServerRenderJob = createServerFn({ method: "POST" })
+  .validator((input: { id: string }) => input)
+  .handler(async ({ data: { id } }) => {
+    const fs = (await import("fs")).promises;
+    const path = await import("path");
+    const dir = await getJobsDir();
+    const targetMp4 = path.join(dir, `${id}.mp4`);
+    await fs.unlink(targetMp4).catch(() => {});
+    const curJobs = await loadJobs();
+    const updated = curJobs.filter((j: any) => j.id !== id);
+    await saveJobs(updated);
+    return { success: true };
+  });
+
