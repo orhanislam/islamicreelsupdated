@@ -361,21 +361,21 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         const width = is1080p ? 1080 : 720;
         const height = is1080p ? 1920 : 1280;
 
+        let ffmpegStderr = "";
+
         cmd.complexFilter([
-          `[0:v]crop='min(iw,ih*9/16)':'min(iw*16/9,ih)',scale=${width}:${height}:flags=lanczos,drawbox=x=0:y=0:w=${width}:h=${height}:color=black@0.15:t=fill,subtitles='${escapedAssPath}'[v]`
+          `[0:v]crop='min(iw,ih*9/16)':'min(iw*16/9,ih)',scale=${width}:${height}:flags=lanczos,eq=brightness=-0.08,subtitles='${escapedAssPath}'[v]`
         ])
         .outputOptions([
           "-map [v]",
-          "-map 1:a",
+          "-map 1:a?",
           "-c:v libx264",
           "-profile:v high",
           "-level 4.2",
           "-pix_fmt yuv420p",
           "-movflags +faststart",
-          "-preset veryfast",
-          "-crf 18",
-          "-maxrate 28M",
-          "-bufsize 56M",
+          "-preset fast",
+          "-crf 20",
           "-r 30",
           "-g 60",
           "-c:a aac",
@@ -388,6 +388,9 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         .outputFormat("mp4")
         .on("start", (commandLine: string) => {
           console.log(`[server-render] FFmpeg started with command: ${commandLine}`);
+        })
+        .on("stderr", (line: string) => {
+          ffmpegStderr += line + "\n";
         })
         .on("progress", (progress: any) => {
           if (progress.percent) {
@@ -413,15 +416,16 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             await fs.unlink(outPath).catch(() => {});
           }
         })
-        .on("error", async (err: any, stdout: string, stderr: string) => {
+        .on("error", async (err: any) => {
           console.error("[server-render] FFmpeg Error:", err.message);
-          if (stderr) console.error("[server-render] FFmpeg stderr:", stderr);
+          if (ffmpegStderr) console.error("[server-render] FFmpeg stderr log:\n", ffmpegStderr);
           // Cleanup
           await fs.unlink(finalBgPath).catch(() => {});
           await fs.unlink(audioPath).catch(() => {});
           await fs.unlink(assPath).catch(() => {});
           await fs.unlink(outPath).catch(() => {});
-          reject(new Error(err.message + (stderr ? ` (${stderr.slice(-250)})` : "")));
+          const lastErrLines = ffmpegStderr.trim().split("\n").slice(-4).join(" | ");
+          reject(new Error(err.message + (lastErrLines ? ` [FFmpeg details: ${lastErrLines}]` : "")));
         });
       });
 
