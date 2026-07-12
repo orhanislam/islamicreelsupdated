@@ -30,8 +30,25 @@ export const runServerRender = createServerFn({ method: "POST" })
     console.log(`[server-render] Using ffmpeg at: ${ffmpegPath}`);
     ffmpeg.setFfmpegPath(ffmpegPath);
 
-    const sessionId = Date.now().toString() + Math.floor(Math.random() * 10000);
     const tempDir = os.tmpdir();
+    // Clean up stale temporary files older than 30 minutes to prevent "No space left on device" errors
+    try {
+      const now = Date.now();
+      const files = await fs.readdir(tempDir);
+      for (const f of files) {
+        if (/^(bg_|audio_|subs_|out_|quran_slice_)/.test(f)) {
+          const fp = path.join(tempDir, f);
+          const st = await fs.stat(fp).catch(() => null);
+          if (st && now - st.mtimeMs > 30 * 60 * 1000) {
+            await fs.unlink(fp).catch(() => {});
+          }
+        }
+      }
+    } catch {
+      // ignore non-critical cleanup errors
+    }
+
+    const sessionId = Date.now().toString() + Math.floor(Math.random() * 10000);
     const bgPath = path.join(tempDir, `bg_${sessionId}`); // extension added later
     const audioPath = path.join(tempDir, `audio_${sessionId}.mp3`);
     const assPath = path.join(tempDir, `subs_${sessionId}.ass`);
@@ -126,7 +143,7 @@ PlayResY: 1920
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
 Style: Arabic,Scheherazade New,100,&H00FFFFFF,&H000000FF,&H00000000,&H80000000,-1,0,0,0,100,100,0,0,1,3,0,8,50,50,300,1
-Style: Bulgarian,Outfit,106,&H00FFFFFF,&H000000FF,&H4C000000,&H66000000,-1,0,0,0,100,100,0,0,1,3.2,1,${bulgarianAlign},120,120,${bulgarianMarginV},1
+Style: Bulgarian,Outfit,120,&H00FFFFFF,&H000000FF,&H00000000,&H66000000,-1,0,0,0,100,100,0,0,1,4.5,0,${bulgarianAlign},100,100,1120,1
 Style: Reference,Outfit,46,&H005DC9F4,&H000000FF,&H00000000,&H80000000,-1,0,0,0,100,100,0,0,1,3,1,8,50,50,280,1
 
 [Events]

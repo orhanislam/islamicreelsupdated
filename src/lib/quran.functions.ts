@@ -100,6 +100,73 @@ async function sliceQuranCdnAudio(audioUrl: string, startSec: number, endSec: nu
   }
 }
 
+async function concatCleanMp3s(buffers: any[]): Promise<any> {
+  const BufferMod = (await import("node:buffer")).Buffer;
+  if (buffers.length === 0) return BufferMod.from([]);
+  if (buffers.length === 1) return buffers[0];
+
+  try {
+    const fs = (await import("node:fs")).promises;
+    const os = await import("node:os");
+    const path = await import("node:path");
+    const { execFile } = await import("node:child_process");
+    const { promisify } = await import("node:util");
+    const execFileAsync = promisify(execFile);
+
+    let ffmpegPath = "ffmpeg";
+    try {
+      const installerMod = await import("@ffmpeg-installer/ffmpeg");
+      const installer = installerMod.default || installerMod;
+      if (installer?.path) ffmpegPath = installer.path;
+    } catch {
+      ffmpegPath = "ffmpeg";
+    }
+
+    const id = `${Date.now()}_${Math.random().toString(36).substring(2)}`;
+    const inputPaths: string[] = [];
+    const ffmpegArgs: string[] = ["-y"];
+
+    for (let i = 0; i < buffers.length; i++) {
+      const p = path.join(os.tmpdir(), `quran_part_${id}_${i}.mp3`);
+      await fs.writeFile(p, buffers[i]);
+      inputPaths.push(p);
+      ffmpegArgs.push("-i", p);
+    }
+
+    const outPath = path.join(os.tmpdir(), `quran_concat_${id}.mp3`);
+    ffmpegArgs.push(
+      "-filter_complex",
+      `concat=n=${buffers.length}:v=0:a=1[out]`,
+      "-map", "[out]",
+      "-c:a", "libmp3lame",
+      "-q:a", "2",
+      "-loglevel", "error",
+      outPath
+    );
+
+    await execFileAsync(ffmpegPath, ffmpegArgs);
+    const resultBuf = await fs.readFile(outPath);
+
+    // Cleanup
+    for (const p of inputPaths) await fs.unlink(p).catch(() => {});
+    await fs.unlink(outPath).catch(() => {});
+
+    return resultBuf;
+  } catch (e) {
+    console.warn("[quran-concat] FFmpeg concat failed, falling back to clean header strip:", e);
+    const cleaned = buffers.map((buf, i) => {
+      if (i === 0) return buf;
+      if (buf.length > 10 && buf[0] === 0x49 && buf[1] === 0x44 && buf[2] === 0x33) {
+        const size = ((buf[6] & 0x7f) << 21) | ((buf[7] & 0x7f) << 14) | ((buf[8] & 0x7f) << 7) | (buf[9] & 0x7f);
+        const headerLen = 10 + size;
+        if (headerLen < buf.length) return buf.subarray(headerLen);
+      }
+      return buf;
+    });
+    return BufferMod.concat(cleaned);
+  }
+}
+
 function getCorrectedVerseTimings(surah: number, ayahNum: number, vt: any) {
   return vt;
 }
@@ -261,7 +328,7 @@ export const fetchAyah = createServerFn({ method: "POST" })
 
     let audioUrl = useCdnSlice ? cdnBase64Url : firstAudioUrl;
     if (!useCdnSlice && count > 1 && audioBufs.length > 0) {
-      const combined = BufferMod.concat(audioBufs);
+      const combined = await concatCleanMp3s(audioBufs);
       audioUrl = `data:audio/mp3;base64,${combined.toString("base64")}`;
     }
 

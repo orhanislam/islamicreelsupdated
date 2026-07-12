@@ -155,11 +155,11 @@ function chooseFontSize(
   // Long hadiths cannot fit professionally as one giant block. Pick a readable
   // size, then paginate the wrapped lines so every part of the text appears.
   const wordCount = words.length;
-  const readableMax = wordCount > 40 ? 56 : wordCount > 28 ? 65 : wordCount > 18 ? 77 : wordCount > 10 ? 86 : 98;
+  const readableMax = wordCount > 40 ? 64 : wordCount > 28 ? 75 : wordCount > 18 ? 88 : wordCount > 10 ? 98 : 112;
   const maxSize = Math.round(readableMax * (W / 1080));
   const minSize = Math.round(36 * (W / 1080));
   for (let size = maxSize; size >= minSize; size -= 2) {
-    ctx.font = `800 ${size}px 'Inter', 'Roboto', 'Montserrat', sans-serif`;
+    ctx.font = `900 ${size}px 'Inter', 'Outfit', 'Roboto', sans-serif`;
     const lines = wrapWords(ctx, words, maxWidth);
     const lh = Math.round(size * 1.34);
     const maxLinesPerPage = Math.max(1, Math.floor(maxHeight / lh));
@@ -907,12 +907,11 @@ export async function renderVideo(opts: VideoOptions): Promise<{ blob: Blob; mim
       ctx.textAlign = "center";
       ctx.lineJoin = "round";
 
-      // Subtle minimalistic dark border & soft shadow for readability without muddying
-      ctx.strokeStyle = "rgba(0, 0, 0, 0.65)";
-      ctx.lineWidth = Math.max(3, activePhrase.fontSize * 0.04);
-      ctx.shadowColor = "rgba(0, 0, 0, 0.45)";
-      ctx.shadowBlur = 6;
-      ctx.shadowOffsetY = 2;
+      // Pro TikTok caption styling: crisp opaque black outline without muddy shadow blur
+      ctx.strokeStyle = "#000000";
+      ctx.lineWidth = Math.max(5, activePhrase.fontSize * 0.075);
+      ctx.shadowBlur = 0;
+      ctx.shadowOffsetY = 0;
       for (let i = 0; i < activePhrase.lines.length; i++) {
         const text = activePhrase.lines[i].join(" ");
         const y = baseY + i * activePhrase.lineHeight;
