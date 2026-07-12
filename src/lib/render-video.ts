@@ -154,7 +154,7 @@ function chooseFontSize(
   // Long hadiths cannot fit professionally as one giant block. Pick a readable
   // size, then paginate the wrapped lines so every part of the text appears.
   const wordCount = words.length;
-  const readableMax = wordCount > 40 ? 46 : wordCount > 28 ? 54 : wordCount > 18 ? 64 : wordCount > 10 ? 72 : 82;
+  const readableMax = wordCount > 40 ? 56 : wordCount > 28 ? 65 : wordCount > 18 ? 77 : wordCount > 10 ? 86 : 98;
   const maxSize = Math.round(readableMax * (W / 1080));
   const minSize = Math.round(36 * (W / 1080));
   for (let size = maxSize; size >= minSize; size -= 2) {
@@ -190,8 +190,7 @@ function buildCaptionPages(
     const pageLines = lines.slice(lineIndex, lineIndex + maxLinesPerPage);
     const count = pageLines.reduce((sum, line) => sum + line.length, 0);
     const blockH = pageLines.length * lineHeight;
-    const targetBottomY = H * 0.74;
-    const baseYStart = targetBottomY - (pageLines.length - 1) * lineHeight;
+    const baseYStart = H * 0.60;
     pages.push({ lines: pageLines, startWord: wordIndex, endWord: wordIndex + count, baseYStart });
     lineIndex += pageLines.length;
     wordIndex += count;

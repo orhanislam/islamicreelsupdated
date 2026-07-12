@@ -115,10 +115,10 @@ export const runServerRender = createServerFn({ method: "POST" })
       };
 
       const isLowerThird = data.style === "lower-third";
-      // Always anchor subtitles lower vertically (Alignment 2 = bottom-center)
-      // so when text is bigger or multi-line it stays cleanly in the lower half.
-      const bulgarianAlign = 2;
-      const bulgarianMarginV = 380;
+      // Anchor top-down in the lower half (Alignment 8 = top-center at MarginV = 1150)
+      // so when text wraps or grows, lines continue vertically downwards.
+      const bulgarianAlign = 8;
+      const bulgarianMarginV = 1150;
 
       let ass = `[Script Info]
 ScriptType: v4.00+
@@ -128,7 +128,7 @@ PlayResY: 1920
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
 Style: Arabic,Scheherazade New,100,&H00FFFFFF,&H000000FF,&H00000000,&H80000000,-1,0,0,0,100,100,0,0,1,3,0,8,50,50,300,1
-Style: Bulgarian,Outfit,88,&H00FFFFFF,&H000000FF,&H4C000000,&H66000000,-1,0,0,0,100,100,0,0,1,3.2,1,${bulgarianAlign},140,140,${bulgarianMarginV},1
+Style: Bulgarian,Outfit,106,&H00FFFFFF,&H000000FF,&H4C000000,&H66000000,-1,0,0,0,100,100,0,0,1,3.2,1,${bulgarianAlign},120,120,${bulgarianMarginV},1
 Style: Reference,Outfit,46,&H005DC9F4,&H000000FF,&H00000000,&H80000000,-1,0,0,0,100,100,0,0,1,3,1,8,50,50,280,1
 
 [Events]
