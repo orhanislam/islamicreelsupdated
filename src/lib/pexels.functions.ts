@@ -99,7 +99,7 @@ async function pexelsPhotoQuery(key: string, query: string, perPage = 9) {
   return (j.photos ?? []) as PexelsPhoto[];
 }
 
-async function pexelsVideoQuery(key: string, query: string, perPage = 40) {
+async function pexelsVideoQuery(key: string, query: string, perPage = 80) {
   const url = `https://api.pexels.com/videos/search?query=${encodeURIComponent(query)}&orientation=portrait&size=medium&per_page=${perPage}`;
   const res = await fetch(url, { headers: { Authorization: key } });
   if (!res.ok) throw new Error(`Pexels грешка ${res.status}`);
@@ -197,11 +197,10 @@ export const searchPexelsVideos = createServerFn({ method: "POST" })
     if (!key) throw new Error("Pexels не е конфигуриран");
 
     type Out = { id: number; link: string; poster: string; photographer: string; score: number; duration: number };
-    const buildOut = (vs: PexelsVideo[], minDurationOverride?: number): Out[] => {
-      const minD = minDurationOverride ?? Math.min(data.minDuration ?? 5, 8); // Accept videos >= 5 seconds (they loop seamlessly)
+    const buildOut = (vs: PexelsVideo[]): Out[] => {
+      const targetMin = data.minDuration ?? 30;
       const all = vs
         .map((v) => {
-          if (v.duration && v.duration < minD) return null;
           const file = pickBestFile(v);
           if (!file?.link) return null;
           return {
@@ -214,10 +213,18 @@ export const searchPexelsVideos = createServerFn({ method: "POST" })
           };
         })
         .filter((x): x is Out => !!x);
-        
-      let pool = all.filter(x => x.score >= 0);
-      if (pool.length < 4) pool = all;
-      
+
+      // 1. First prioritize videos that strictly meet or exceed user's chosen minDuration (e.g. 60s)
+      const matchingDuration = all.filter((x) => x.duration >= targetMin);
+
+      let pool: Out[];
+      if (matchingDuration.length >= 3) {
+        pool = matchingDuration;
+      } else {
+        // 2. If Pexels doesn't have enough >= 60s videos for this query, sort by longest duration available
+        pool = [...all].sort((a, b) => b.duration - a.duration);
+      }
+
       for (let i = pool.length - 1; i > 0; i--) {
         const j = Math.floor(Math.random() * (i + 1));
         [pool[i], pool[j]] = [pool[j], pool[i]];
@@ -227,7 +234,7 @@ export const searchPexelsVideos = createServerFn({ method: "POST" })
 
     if (data.query?.trim()) {
       const vs = await pexelsVideoQuery(key, data.query.trim());
-      const built = buildOut(vs, 5);
+      const built = buildOut(vs);
       return {
         query: data.query.trim(),
         theme: "",
