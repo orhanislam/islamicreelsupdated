@@ -41,29 +41,34 @@ export async function geminiChat(
     });
   };
 
-  const targetModel = "gemini-2.5-flash";
-  let res: Response | null = null;
-  for (let attempt = 1; attempt <= 3; attempt++) {
-    res = await fetchWithModel(targetModel);
-    if (res.ok) break;
-    if (res.status === 429 && attempt < 3) {
-      console.warn(`[gemini] 429 Too Many Requests on ${targetModel} (attempt ${attempt}/3), waiting ${attempt * 3000}ms...`);
-      await new Promise((r) => setTimeout(r, attempt * 3000));
-      continue;
-    }
-    if (attempt < 3) {
-      await new Promise((r) => setTimeout(r, 1500));
+  const candidateModels = Array.from(new Set([
+    model || "gemini-2.5-flash",
+    "gemini-2.5-flash",
+    "gemini-2.0-flash",
+    "gemini-2.0-flash-lite",
+    "gemini-1.5-flash",
+  ]));
+
+  let lastErrorMsg = "";
+  for (const currentModel of candidateModels) {
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      const res = await fetchWithModel(currentModel);
+      if (res.ok) {
+        const json = await res.json();
+        const content = (json.candidates?.[0]?.content?.parts?.[0]?.text ?? "").trim();
+        if (content) return content;
+      }
+      const txt = await res.text().catch(() => "");
+      lastErrorMsg = `[${currentModel} status ${res.status}] ${txt.slice(0, 150)}`;
+      if (res.status === 429) {
+        console.warn(`[gemini] Quota/429 on ${currentModel} (attempt ${attempt}/2), trying next fallback...`);
+        break; // break to try next candidate model immediately
+      }
+      await new Promise((r) => setTimeout(r, 1000));
     }
   }
 
-  if (!res?.ok) {
-    const txt = await res?.text().catch(() => "");
-    throw new Error(`Gemini грешка ${res?.status}: ${txt?.slice(0, 200) || "Всички резервни модели са изчерпани или грешни"}`);
-  }
-
-  const json = await res.json();
-  const content = (json.candidates?.[0]?.content?.parts?.[0]?.text ?? "").trim();
-  return content;
+  throw new Error(`Лимитът за заявки е надвишен. Моля изчакайте малко или опитайте отново. (${lastErrorMsg})`);
 }
 
 /**
