@@ -126,14 +126,18 @@ function scoreVideo(v: PexelsVideo, file: PexelsVideoFile): number {
 }
 
 function pickBestFile(v: PexelsVideo): PexelsVideoFile | undefined {
-  const verticals = (v.video_files || []).filter(
-    (f) => f.file_type === "video/mp4" && f.height >= f.width && (f.fps === undefined || f.fps >= 25) && f.height <= 1920,
-  );
-  // Prefer files smaller than 35 MB so server downloads in <3 seconds
-  const normalSize = verticals.filter((f) => !f.size || f.size <= 35 * 1024 * 1024);
-  const pool = normalSize.length ? normalSize : verticals;
-  pool.sort((a, b) => Math.abs(a.height - 1920) - Math.abs(b.height - 1920));
-  return pool[0] || (v.video_files || [])[0];
+  const mp4s = (v.video_files || []).filter((f) => f.file_type === "video/mp4");
+  if (!mp4s.length) return (v.video_files || [])[0];
+  // Sort by resolution quality: vertical orientation first, then highest pixel count up to crisp HD/Full HD
+  mp4s.sort((a, b) => {
+    const aVert = a.height >= a.width ? 1 : 0;
+    const bVert = b.height >= b.width ? 1 : 0;
+    if (aVert !== bVert) return bVert - aVert;
+    const aTargetScore = Math.min(a.height, 1920);
+    const bTargetScore = Math.min(b.height, 1920);
+    return bTargetScore - aTargetScore || (b.width * b.height) - (a.width * a.height);
+  });
+  return mp4s[0];
 }
 
 // ------------ Public server functions ------------
