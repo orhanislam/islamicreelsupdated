@@ -705,7 +705,9 @@ export async function renderVideo(opts: VideoOptions): Promise<{ blob: Blob; mim
   // Track which subtitle phrases have been drawn at least once.
   const shownPhrases = new Set<number>();
   // Minimum display time per subtitle phrase (seconds).
-  const MIN_PHRASE_DISPLAY = 0.4;
+  // Disabled for ayahBounds — those are acoustically-anchored timestamps.
+  const hasAyahBounds = opts.ayahBounds && Array.isArray(opts.ayahBounds) && opts.ayahBounds.length > 0;
+  const MIN_PHRASE_DISPLAY = hasAyahBounds ? 0 : 0.4;
   // Track how long the current phrase has been on-screen.
   let currentPhraseShownSince = -1;
   let lastPhraseIdx = -1;
@@ -727,8 +729,8 @@ export async function renderVideo(opts: VideoOptions): Promise<{ blob: Blob; mim
         }
       }
     }
-    // Enforce minimum display time for current phrase.
-    if (lastPhraseIdx >= 0 && activePhraseIdx > lastPhraseIdx && currentPhraseShownSince >= 0) {
+    // Enforce minimum display time for current phrase (skipped for ayahBounds).
+    if (MIN_PHRASE_DISPLAY > 0 && lastPhraseIdx >= 0 && activePhraseIdx > lastPhraseIdx && currentPhraseShownSince >= 0) {
       const displayedFor = elapsed - currentPhraseShownSince;
       if (displayedFor < MIN_PHRASE_DISPLAY) {
         activePhraseIdx = lastPhraseIdx;
@@ -819,17 +821,35 @@ export async function renderVideo(opts: VideoOptions): Promise<{ blob: Blob; mim
     }
 
     if (activePhrase) {
+      const isFirstPhrase = activePhraseIdx === 0;
       const isLastPhrase = activePhraseIdx === phraseRender.length - 1;
-      const FADE_IN = 0.18;
       const sinceStart = elapsed - activePhrase.start;
       const tillEnd = activePhrase.end - elapsed;
-      const alphaIn = Math.max(0, Math.min(1, sinceStart / FADE_IN));
-      // Only fade out at the very end of the last subtitle; keep intermediate transitions crisp
-      const alphaOut = isLastPhrase ? Math.max(0, Math.min(1, tillEnd / 0.18)) : 1.0;
-      // CapCut pop-in scale zoom animation (starts at 88% and zooms up to 100% over first 150ms)
-      const popProgress = Math.max(0, Math.min(1, sinceStart / 0.15));
-      const popScale = 0.88 + 0.12 * (1 - Math.pow(1 - popProgress, 3)); // cubic-out ease
-      const alpha = Math.min(alphaIn, alphaOut);
+
+      // For ayah-bounded subtitles: instant swap between ayahs (no fade/pop)
+      // to eliminate flicker. Only the very first ayah gets a gentle fade-in,
+      // and only the very last ayah gets a fade-out.
+      let alpha: number;
+      let popScale: number;
+      if (hasAyahBounds) {
+        const alphaIn = isFirstPhrase ? Math.max(0, Math.min(1, sinceStart / 0.15)) : 1.0;
+        const alphaOut = isLastPhrase ? Math.max(0, Math.min(1, tillEnd / 0.15)) : 1.0;
+        alpha = Math.min(alphaIn, alphaOut);
+        // Only pop-scale on the very first ayah
+        if (isFirstPhrase) {
+          const popProgress = Math.max(0, Math.min(1, sinceStart / 0.15));
+          popScale = 0.90 + 0.10 * (1 - Math.pow(1 - popProgress, 3));
+        } else {
+          popScale = 1.0;
+        }
+      } else {
+        const FADE_IN = 0.18;
+        const alphaIn = Math.max(0, Math.min(1, sinceStart / FADE_IN));
+        const alphaOut = isLastPhrase ? Math.max(0, Math.min(1, tillEnd / 0.18)) : 1.0;
+        alpha = Math.min(alphaIn, alphaOut);
+        const popProgress = Math.max(0, Math.min(1, sinceStart / 0.15));
+        popScale = 0.88 + 0.12 * (1 - Math.pow(1 - popProgress, 3));
+      }
 
       // Premium modern TikTok font (bold, sans-serif)
       ctx.font = `800 ${activePhrase.fontSize}px 'Outfit', 'Inter', sans-serif`;
@@ -967,9 +987,19 @@ export async function renderVideo(opts: VideoOptions): Promise<{ blob: Blob; mim
         lastAudioProgressWall = wall;
       }
       const audioClockStale = hasAudio && wall > 1.25 && wall - lastAudioProgressWall > 1.25;
-      const clockElapsed = hasAudio && audioElapsed > 0.05 && !audioClockStale ? audioElapsed : wall;
-      
-      const elapsed = Math.min(duration, Math.max(clockElapsed, Math.min(wall, revealDuration)));
+
+      // When ayahBounds are present, subtitles must be precisely locked to the
+      // actual audio playback position — never race ahead via wall clock.
+      // The wall clock can run faster than audio decode on some devices, causing
+      // subtitles to jump to the next ayah while the reciter is still on the previous one.
+      let elapsed: number;
+      if (opts.ayahBounds && opts.ayahBounds.length > 0 && hasAudio && audioElapsed > 0.05 && !audioClockStale) {
+        // Use audio clock exclusively — it's locked to real playback
+        elapsed = Math.min(duration, audioElapsed);
+      } else {
+        const clockElapsed = hasAudio && audioElapsed > 0.05 && !audioClockStale ? audioElapsed : wall;
+        elapsed = Math.min(duration, Math.max(clockElapsed, Math.min(wall, revealDuration)));
+      }
       const { captionDone } = drawFrame(elapsed);
 
       // --- Audio completion detection ---

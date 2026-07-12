@@ -44,7 +44,7 @@ async function fetchBufferWithRetry(url: string, retries = 2): Promise<ArrayBuff
   return null;
 }
 
-async function sliceQuranCdnAudio(audioUrl: string, startSec: number, endSec: number): Promise<string | null> {
+async function sliceQuranCdnAudio(audioUrl: string, startSec: number, endSec: number): Promise<{ dataUrl: string; actualDuration: number } | null> {
   try {
     const fs = (await import("node:fs")).promises;
     const os = await import("node:os");
@@ -52,6 +52,7 @@ async function sliceQuranCdnAudio(audioUrl: string, startSec: number, endSec: nu
     const { execFile } = await import("node:child_process");
     const { promisify } = await import("node:util");
     const execFileAsync = promisify(execFile);
+    const mp3Duration = (await import("mp3-duration")).default;
 
     let ffmpegPath = "ffmpeg";
     try {
@@ -63,12 +64,17 @@ async function sliceQuranCdnAudio(audioUrl: string, startSec: number, endSec: nu
     }
 
     const tmpSlice = path.join(os.tmpdir(), `quran_slice_${Date.now()}_${Math.random().toString(36).substring(2)}.mp3`);
-    const durationSec = Math.max(0.1, endSec - startSec);
+    const expectedDuration = Math.max(0.1, endSec - startSec);
+
+    // CRITICAL: Place -ss AFTER -i for sample-accurate seeking.
+    // When -ss is before -i, FFmpeg does a fast keyframe seek which can be
+    // inaccurate by 0.5–2 seconds for MP3 files, causing all subtitle
+    // timestamps to be systematically offset from the actual audio.
     await execFileAsync(ffmpegPath, [
       "-y",
-      "-ss", startSec.toFixed(3),
       "-i", audioUrl,
-      "-t", durationSec.toFixed(3),
+      "-ss", startSec.toFixed(3),
+      "-t", expectedDuration.toFixed(3),
       "-c:a", "libmp3lame",
       "-q:a", "2",
       "-loglevel", "error",
@@ -77,8 +83,19 @@ async function sliceQuranCdnAudio(audioUrl: string, startSec: number, endSec: nu
     ]);
 
     const buf = await fs.readFile(tmpSlice);
+    let actualDuration = expectedDuration;
+    try {
+      const BufferMod = (await import("node:buffer")).Buffer;
+      actualDuration = await mp3Duration(BufferMod.from(buf));
+    } catch { /* use expected */ }
     await fs.unlink(tmpSlice).catch(() => {});
-    return `data:audio/mp3;base64,${buf.toString("base64")}`;
+
+    console.log(`[quran-slice] expected=${expectedDuration.toFixed(3)}s actual=${actualDuration.toFixed(3)}s drift=${(actualDuration - expectedDuration).toFixed(3)}s`);
+
+    return {
+      dataUrl: `data:audio/mp3;base64,${buf.toString("base64")}`,
+      actualDuration,
+    };
   } catch (e) {
     console.error("[quran-slice] FFmpeg slice failed:", e);
     return null;
@@ -132,13 +149,23 @@ export const fetchAyah = createServerFn({ method: "POST" })
 
     let useCdnSlice = false;
     let cdnBase64Url = "";
+    // Correction factor: if the actual sliced audio duration differs from the
+    // expected metadata duration, we scale all ayahBounds timestamps so they
+    // align with the real audio. A value of 1.0 means no correction needed.
+    let cdnTimeScale = 1.0;
     if (cdnAudioUrl && vtStart && vtEnd && vtStart.timestamp_from !== undefined && vtEnd.timestamp_to !== undefined) {
       const startSec = vtStart.timestamp_from / 1000;
       const endSec = vtEnd.timestamp_to / 1000;
+      const expectedDuration = endSec - startSec;
       const sliced = await sliceQuranCdnAudio(cdnAudioUrl, startSec, endSec);
       if (sliced) {
         useCdnSlice = true;
-        cdnBase64Url = sliced;
+        cdnBase64Url = sliced.dataUrl;
+        // Compute time-stretch correction: actual audio duration / expected metadata duration
+        if (expectedDuration > 0 && sliced.actualDuration > 0) {
+          cdnTimeScale = sliced.actualDuration / expectedDuration;
+          console.log(`[quran] cdnTimeScale=${cdnTimeScale.toFixed(4)} (actual=${sliced.actualDuration.toFixed(3)}s expected=${expectedDuration.toFixed(3)}s)`);
+        }
       }
     }
 
@@ -169,16 +196,16 @@ export const fetchAyah = createServerFn({ method: "POST" })
           const offsetSec = vtStart.timestamp_from / 1000;
           if (Array.isArray(vt.segments) && vt.segments.length > 0) {
             const segs = vt.segments.map((s: number[], sIdx: number) => ({
-              start: Math.round(((Number(s[1]) / 1000) - offsetSec) * 1000) / 1000,
-              end: Math.round(((Number(s[2]) / 1000) - offsetSec) * 1000) / 1000,
+              start: Math.round(((Number(s[1]) / 1000) - offsetSec) * cdnTimeScale * 1000) / 1000,
+              end: Math.round(((Number(s[2]) / 1000) - offsetSec) * cdnTimeScale * 1000) / 1000,
               word: arWords[sIdx] || `ar_${sIdx + 1}`,
             }));
             wordSegments.push(...segs);
           }
-          const aStart = Math.round(((vt.timestamp_from / 1000) - offsetSec) * 1000) / 1000;
+          const aStart = Math.round(((vt.timestamp_from / 1000) - offsetSec) * cdnTimeScale * 1000) / 1000;
           const aEnd = nextVt && idx < count - 1
-            ? Math.round(((nextVt.timestamp_from / 1000) - offsetSec) * 1000) / 1000
-            : Math.round(((vt.timestamp_to / 1000) - offsetSec) * 1000) / 1000;
+            ? Math.round(((nextVt.timestamp_from / 1000) - offsetSec) * cdnTimeScale * 1000) / 1000
+            : Math.round(((vt.timestamp_to / 1000) - offsetSec) * cdnTimeScale * 1000) / 1000;
           ayahBounds.push({ ayah: i, start: aStart, end: aEnd, arabic: ar.data.text, english: en.data.text });
         }
       } else {

@@ -218,11 +218,14 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         const bounds = data.ayahBounds;
         if (Array.isArray(bounds) && bounds.length > 0) {
           // FULL-AYAH BLOCK SYNCHRONIZER: One complete Ayah per subtitle block from ayah.start to ayah.end
+          // No fade between consecutive ayahs — instant swap for crisp transitions
+          const instantAnimTag = "\\fscx100\\fscy100\\fad(0,0)";
           const totalEngLen = bounds.reduce((acc: number, b: any) => acc + (b.english ? b.english.length : 10), 0) || 1;
           let wordIdx = 0;
           for (let bIdx = 0; bIdx < bounds.length; bIdx++) {
             const b = bounds[bIdx];
             const isLast = bIdx === bounds.length - 1;
+            const isFirst = bIdx === 0;
             let ayahWords: string[];
             if (b.bulgarian && typeof b.bulgarian === "string" && b.bulgarian.trim().length > 0) {
               ayahWords = b.bulgarian.split(/\s+/).filter(Boolean);
@@ -235,7 +238,9 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 
             if (ayahWords.length > 0) {
               const start = Number(b.start) || 0;
-              const end = Number(b.end) || (start + 5);
+              // Connect end to the next ayah's start for seamless coverage
+              const nextStart = !isLast && bounds[bIdx + 1] ? Number(bounds[bIdx + 1].start) : null;
+              const end = nextStart !== null ? Math.max(nextStart, Number(b.end) || (start + 5)) : (Number(b.end) || (start + 5));
               const wordCount = ayahWords.length;
               const fs = wordCount > 40 ? 38 : wordCount > 28 ? 44 : wordCount > 18 ? 50 : wordCount > 10 ? 56 : 64;
               const wpl = wordCount > 40 ? 9 : wordCount > 28 ? 8 : wordCount > 18 ? 7 : wordCount > 10 ? 6 : 5;
@@ -247,9 +252,11 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                 }
               }
               formattedText = formattedText.trim();
+              // First ayah gets gentle fade-in; last gets fade-out; middle ayahs instant swap
+              const useAnim = isFirst ? `\\fad(150,0)` : isLast ? `\\fad(0,120)` : instantAnimTag;
               const ayahStyleTag = data.style === "bottom"
-                ? `{\\an2\\pos(540,1600)\\fs${fs}${animTag}}`
-                : `{\\an5\\pos(540,960)\\fs${fs}${animTag}}`;
+                ? `{\\an2\\pos(540,1600)\\fs${fs}${useAnim}}`
+                : `{\\an5\\pos(540,960)\\fs${fs}${useAnim}}`;
               ass += `Dialogue: 0,${formatTime(start)},${formatTime(end)},Bulgarian,,0,0,0,,${ayahStyleTag}${formattedText}\n`;
             }
           }
