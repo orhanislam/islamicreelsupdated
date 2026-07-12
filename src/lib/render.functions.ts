@@ -114,6 +114,7 @@ export const runServerRender = createServerFn({ method: "POST" })
         return `${h}:${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}.${cs.toString().padStart(2, "0")}`;
       };
 
+      const isLowerThird = data.style === "lower-third";
       // Always anchor subtitles lower vertically (Alignment 2 = bottom-center)
       // so when text is bigger or multi-line it stays cleanly in the lower half.
       const bulgarianAlign = 2;
@@ -239,9 +240,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 
         // CapCut pro subtitle style: Smooth zoom pop-in from 85% to 100% scale over 180ms + fade-in
         const animTag = "\\fscx85\\fscy85\\t(0,180,\\fscx100\\fscy100)\\fad(150,120)";
-        const styleTag = isLowerThird
-          ? `{\\an2\\pos(540,1600)${animTag}}`
-          : `{\\an5\\pos(540,960)${animTag}}`;
+        const styleTag = `{\\an2\\pos(540,1540)${animTag}}`;
 
         const bounds = data.ayahBounds;
         if (Array.isArray(bounds) && bounds.length > 0) {
