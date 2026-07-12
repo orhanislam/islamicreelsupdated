@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import {
   getDownloadsQueue,
   deleteDownloadItem,
@@ -32,6 +32,8 @@ function DownloadsPage() {
   const [loading, setLoading] = useState(true);
   const [downloadedIds, setDownloadedIds] = useState<Set<string>>(new Set());
   const [downloadingServerId, setDownloadingServerId] = useState<string | null>(null);
+  const [preloadedUrls, setPreloadedUrls] = useState<Record<string, string>>({});
+  const preloadingRef = useRef<Set<string>>(new Set());
 
   const loadAll = async () => {
     try {
@@ -62,6 +64,35 @@ function DownloadsPage() {
         .catch(() => {});
     }, 3000);
     return () => clearInterval(t);
+  }, [serverJobs]);
+
+  // Automatically preload server MP4 files in the background so clicking download is instant!
+  useEffect(() => {
+    serverJobs.forEach(async (job) => {
+      if (job.status === "completed" && !preloadedUrls[job.id] && !preloadingRef.current.has(job.id)) {
+        preloadingRef.current.add(job.id);
+        try {
+          const base64 = await getServerRenderJobBase64({ data: { id: job.id } });
+          const byteCharacters = atob(base64);
+          const sliceSize = 1024;
+          const byteArrays: Uint8Array[] = [];
+          for (let offset = 0; offset < byteCharacters.length; offset += sliceSize) {
+            const slice = byteCharacters.slice(offset, offset + sliceSize);
+            const byteNumbers = new Array(slice.length);
+            for (let i = 0; i < slice.length; i++) {
+              byteNumbers[i] = slice.charCodeAt(i);
+            }
+            byteArrays.push(new Uint8Array(byteNumbers));
+          }
+          const blob = new Blob(byteArrays as BlobPart[], { type: "video/mp4" });
+          const url = URL.createObjectURL(blob);
+          setPreloadedUrls((prev) => ({ ...prev, [job.id]: url }));
+        } catch (err) {
+          console.error("Failed to preload server video:", err);
+          preloadingRef.current.delete(job.id);
+        }
+      }
+    });
   }, [serverJobs]);
 
   // Auto-trigger download for local items when opened
@@ -101,36 +132,42 @@ function DownloadsPage() {
   };
 
   const handleDownloadServerJob = async (job: ServerJob) => {
-    setDownloadingServerId(job.id);
-    try {
-      toast.message("Подготвям видеото за изтегляне от сървъра...");
-      const base64 = await getServerRenderJobBase64({ data: { id: job.id } });
-      const byteCharacters = atob(base64);
-      const sliceSize = 1024;
-      const byteArrays: Uint8Array[] = [];
-      for (let offset = 0; offset < byteCharacters.length; offset += sliceSize) {
-        const slice = byteCharacters.slice(offset, offset + sliceSize);
-        const byteNumbers = new Array(slice.length);
-        for (let i = 0; i < slice.length; i++) {
-          byteNumbers[i] = slice.charCodeAt(i);
+    let url = preloadedUrls[job.id];
+    if (!url) {
+      setDownloadingServerId(job.id);
+      try {
+        toast.message("Подготвям видеото за изтегляне от сървъра...");
+        const base64 = await getServerRenderJobBase64({ data: { id: job.id } });
+        const byteCharacters = atob(base64);
+        const sliceSize = 1024;
+        const byteArrays: Uint8Array[] = [];
+        for (let offset = 0; offset < byteCharacters.length; offset += sliceSize) {
+          const slice = byteCharacters.slice(offset, offset + sliceSize);
+          const byteNumbers = new Array(slice.length);
+          for (let i = 0; i < slice.length; i++) {
+            byteNumbers[i] = slice.charCodeAt(i);
+          }
+          byteArrays.push(new Uint8Array(byteNumbers));
         }
-        byteArrays.push(new Uint8Array(byteNumbers));
+        const blob = new Blob(byteArrays as BlobPart[], { type: "video/mp4" });
+        url = URL.createObjectURL(blob);
+        setPreloadedUrls((prev) => ({ ...prev, [job.id]: url }));
+      } catch (e) {
+        toast.error("Не успях да сваля видеото от сървъра");
+        setDownloadingServerId(null);
+        return;
+      } finally {
+        setDownloadingServerId(null);
       }
-      const blob = new Blob(byteArrays as BlobPart[], { type: "video/mp4" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `${job.title || "islamic-reel"}.mp4`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      setTimeout(() => URL.revokeObjectURL(url), 10000);
-      toast.success("Видеото е свалено успешно!");
-    } catch (e) {
-      toast.error("Не успях да сваля видеото от сървъра");
-    } finally {
-      setDownloadingServerId(null);
     }
+
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${job.title || "islamic-reel"}.mp4`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    toast.success("Видеото е свалено веднага!");
   };
 
   const handleRemoveLocal = async (id: string) => {
@@ -255,7 +292,7 @@ function DownloadsPage() {
                       ) : (
                         <Download className="size-4" />
                       )}
-                      Свали MP4 от сървъра
+                      {preloadedUrls[job.id] ? "Изтегли веднага (Готово)" : "Свали MP4 от сървъра"}
                     </button>
                   ) : job.status === "rendering" ? (
                     <div className="flex-1 text-xs text-muted-foreground text-center py-2 bg-muted/40 rounded-xl">
