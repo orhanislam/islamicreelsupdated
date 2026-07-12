@@ -116,9 +116,10 @@ function drawCover(
   iw: number,
   ih: number,
   t: number,
+  applyZoom = true,
 ) {
-  // gentle Ken Burns zoom 1.0 -> 1.06
-  const zoom = 1 + 0.06 * t;
+  // Only apply Ken Burns zoom to still photos; keep video frames 1:1 crisp without subpixel jitter
+  const zoom = applyZoom ? 1 + 0.06 * t : 1;
   const r = Math.max(W / iw, H / ih) * zoom;
   const w = iw * r;
   const h = ih * r;
@@ -803,7 +804,7 @@ export async function renderVideo(opts: VideoOptions): Promise<{ blob: Blob; mim
           if ((bgVideo.paused || bgVideo.ended) && !bgVideo.seeking) {
             void bgVideo.play().catch(() => undefined);
           }
-          drawCover(ctx, bgVideo, bgVideo.videoWidth || 1080, bgVideo.videoHeight || 1920, t);
+          drawCover(ctx, bgVideo, bgVideo.videoWidth || 1080, bgVideo.videoHeight || 1920, t, false);
           backgroundDrawn = true;
           // Save a snapshot for fallback during future seeks.
           saveBgSnapshot();
@@ -820,7 +821,7 @@ export async function renderVideo(opts: VideoOptions): Promise<{ blob: Blob; mim
       }
     }
     if (!backgroundDrawn && bg) {
-      drawCover(ctx, bg, bg.width, bg.height, t);
+      drawCover(ctx, bg, bg.width, bg.height, t, true);
       backgroundDrawn = true;
     }
     if (!backgroundDrawn) {

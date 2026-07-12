@@ -348,7 +348,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         const height = is1080p ? 1920 : 1280;
 
         cmd.complexFilter([
-          `[0:v]crop='min(iw,ih*9/16)':'min(iw*16/9,ih)',scale=${width}:${height}:flags=lanczos,drawbox=x=0:y=0:w=${width}:h=${height}:color=black@0.15:t=fill,subtitles='${escapedAssPath}'[v]`
+          `[0:v]fps=30,crop='min(iw,ih*9/16)':'min(iw*16/9,ih)',scale=${width}:${height}:flags=lanczos,drawbox=x=0:y=0:w=${width}:h=${height}:color=black@0.15:t=fill,subtitles='${escapedAssPath}'[v]`
         ])
         .outputOptions([
           "-map [v]",
