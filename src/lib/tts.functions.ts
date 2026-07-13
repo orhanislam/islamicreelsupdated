@@ -160,17 +160,36 @@ export const synthesizeHadithNarration = createServerFn({ method: "POST" })
         audioBuffer = await fs.readFile(tmpPath);
         await fs.unlink(tmpPath).catch(() => {});
       } catch (e: any) {
-        console.warn("[tts] EdgeTTS failed, falling back to Google TTS:", e);
+        console.warn("[tts] Node EdgeTTS failed, trying Python edge-tts realistic male voice:", e);
         try {
-          const base64Audio = await googleTTS.getAudioBase64(cleaned.slice(0, 200), {
-            lang: "bg",
-            slow: false,
-            host: "https://translate.google.com",
-            timeout: 10000,
-          });
-          audioBuffer = BufferMod.from(base64Audio, "base64");
-        } catch (gErr: any) {
-          throw new Error("Грешка при генериране на аудио озвучаване: " + (e?.message || gErr?.message || "Неуспешен запис"));
+          const os = await import("os");
+          const path = await import("path");
+          const fs = await import("fs/promises");
+          const { execFile } = await import("child_process");
+          const util = await import("util");
+          const execFileAsync = util.promisify(execFile);
+
+          const tmpPyPath = path.join(os.tmpdir(), `py-tts-${Date.now()}.mp3`);
+          await execFileAsync("edge-tts", [
+            "--voice", "bg-BG-BorislavNeural",
+            "--text", cleaned,
+            "--write-media", tmpPyPath
+          ]);
+          audioBuffer = await fs.readFile(tmpPyPath);
+          await fs.unlink(tmpPyPath).catch(() => {});
+        } catch (pyErr) {
+          console.warn("[tts] Python edge-tts failed, falling back to Google TTS:", pyErr);
+          try {
+            const base64Audio = await googleTTS.getAudioBase64(cleaned.slice(0, 200), {
+              lang: "bg",
+              slow: false,
+              host: "https://translate.google.com",
+              timeout: 10000,
+            });
+            audioBuffer = BufferMod.from(base64Audio, "base64");
+          } catch (gErr: any) {
+            throw new Error("Грешка при генериране на аудио озвучаване: " + (e?.message || gErr?.message || "Неуспешен запис"));
+          }
         }
       }
     }
