@@ -214,14 +214,12 @@ export const searchPexelsVideos = createServerFn({ method: "POST" })
       // Strictly return videos that meet or exceed user's chosen minDuration (e.g. 60s)
       const matchingDuration = all.filter((x) => x.duration >= targetMin);
 
-      let pool: Out[];
-      if (matchingDuration.length > 0) {
-        pool = matchingDuration;
-      } else {
-        // Only if literally 0 videos meet targetMin, fallback to longest available
-        pool = [...all].sort((a, b) => b.duration - a.duration);
+      // If user requested videos >= 60s and none exist, return empty array (do NOT show shorter videos)
+      if (targetMin >= 60 && matchingDuration.length === 0) {
+        return [];
       }
 
+      const pool = matchingDuration.length > 0 ? matchingDuration : [];
       // Sort matching videos by score (highest quality first)
       pool.sort((a, b) => b.score - a.score);
       return pool.slice(0, 16);
