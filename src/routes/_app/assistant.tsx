@@ -1,11 +1,11 @@
 import React, { useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { Bot, Send, Loader2, Sparkles, Film, Download } from "lucide-react";
+import { Bot, Send, Loader2, Sparkles, Download, CheckCircle2, Video, Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { toast } from "sonner";
-import { chatAndGenerateVideo } from "@/lib/assistant.functions";
+import { chatWithAssistant, confirmAndGenerateVideo, type VideoProposal } from "@/lib/assistant.functions";
 
 export const Route = createFileRoute("/_app/assistant")({
   component: AssistantPage,
@@ -14,6 +14,7 @@ export const Route = createFileRoute("/_app/assistant")({
 type ChatMsg = {
   role: "user" | "assistant";
   text: string;
+  proposal?: VideoProposal | null;
   jobId?: string;
   reference?: string;
 };
@@ -21,10 +22,11 @@ type ChatMsg = {
 function AssistantPage() {
   const [prompt, setPrompt] = useState("");
   const [loading, setLoading] = useState(false);
+  const [confirmingIdx, setConfirmingIdx] = useState<number | null>(null);
   const [messages, setMessages] = useState<ChatMsg[]>([
     {
       role: "assistant",
-      text: "Здравей! Аз съм твоят Ислямски AI Видео Асистент. Напиши ми какво видео искаш да създадем (например: *„Направи видео за Хадис 1 на Навауи“* или *„Направи видео за Сура Ал-Фятиха аят 1 до 4“*) и ще го генерирам автоматично и оставя в Изтегляния!",
+      text: "Здравей! Аз съм твоят интелигентен Ислямски AI Видео Асистент.\n\nКажи ми какво видео искаш да създадем (напр. *„Направи видео за търпението“* или *„Видео за Хадис № 5 на Навауи“*). Първо ще ти изготвя красиво предложение за одобрение, и едва когато кажеш „да“, ще го генерирам!",
     },
   ]);
 
@@ -44,7 +46,7 @@ function AssistantPage() {
         content: m.text,
       }));
 
-      const res = await chatAndGenerateVideo({
+      const res = await chatWithAssistant({
         data: {
           prompt: userText,
           history,
@@ -56,14 +58,9 @@ function AssistantPage() {
         {
           role: "assistant",
           text: res.reply,
-          jobId: res.jobId,
-          reference: res.reference,
+          proposal: res.proposal,
         },
       ]);
-
-      if (res.jobStarted) {
-        toast.success("Видеото се генерира във фонов режим на сървъра!");
-      }
     } catch (err: any) {
       toast.error(err?.message || "Грешка при комуникацията с асистента");
       setMessages((prev) => [
@@ -78,6 +75,33 @@ function AssistantPage() {
     }
   };
 
+  const handleConfirmProposal = async (proposal: VideoProposal, msgIdx: number) => {
+    if (confirmingIdx !== null) return;
+    setConfirmingIdx(msgIdx);
+    toast.message("Генерирам видеото по твоето одобрено предложение...");
+
+    try {
+      const res = await confirmAndGenerateVideo({
+        data: { proposal },
+      });
+
+      setMessages((prev) => [
+        ...prev,
+        {
+          role: "assistant",
+          text: res.reply,
+          jobId: res.jobId,
+          reference: res.reference,
+        },
+      ]);
+      toast.success("Видеото е стартирано успешно!");
+    } catch (err: any) {
+      toast.error(err?.message || "Грешка при стартиране на видеото");
+    } finally {
+      setConfirmingIdx(null);
+    }
+  };
+
   return (
     <div className="mx-auto max-w-4xl px-4 py-8 font-ui">
       <div className="mb-6 flex items-center gap-3">
@@ -85,14 +109,14 @@ function AssistantPage() {
           <Bot className="size-6" />
         </div>
         <div>
-          <h1 className="text-2xl font-bold">AI Видео Асистент (Чат генератор)</h1>
+          <h1 className="text-2xl font-bold">AI Видео Асистент (С одобрение)</h1>
           <p className="text-sm text-muted-foreground">
-            Разговаряй с асистента и той автоматично ще създаде цялото видео и ще го остави в Изтегляния.
+            Асистентът първо ти предлага детайлен план за видеото и пита за одобрение, преди да започне рендирането.
           </p>
         </div>
       </div>
 
-      <Card className="glass-card flex h-[620px] flex-col overflow-hidden border border-border/80 shadow-lg">
+      <Card className="glass-card flex h-[640px] flex-col overflow-hidden border border-border/80 shadow-lg">
         <div className="flex-1 space-y-4 overflow-y-auto p-6">
           {messages.map((m, idx) => (
             <div
@@ -107,13 +131,78 @@ function AssistantPage() {
                 </div>
               )}
               <div
-                className={`max-w-[80%] rounded-2xl px-4 py-3 text-sm leading-relaxed ${
+                className={`max-w-[85%] rounded-2xl px-4 py-3 text-sm leading-relaxed ${
                   m.role === "user"
                     ? "bg-primary text-primary-foreground"
                     : "bg-muted/80 text-foreground"
                 }`}
               >
                 <div className="whitespace-pre-line">{m.text}</div>
+
+                {m.proposal && (
+                  <div className="mt-4 rounded-xl border border-primary/30 bg-card/90 p-4 shadow-sm space-y-3">
+                    <div className="flex items-center justify-between border-b border-border/50 pb-2">
+                      <div className="flex items-center gap-2 font-semibold text-primary">
+                        <Video className="size-4" />
+                        <span>Предложение за видео</span>
+                      </div>
+                      <span className="rounded-full bg-primary/15 px-2.5 py-0.5 text-xs font-medium text-primary">
+                        Очаква одобрение
+                      </span>
+                    </div>
+
+                    <div className="space-y-1.5 text-xs">
+                      <div>
+                        <span className="font-semibold text-muted-foreground">Заглавие: </span>
+                        <span className="font-medium text-foreground">{m.proposal.title}</span>
+                      </div>
+                      {m.proposal.summaryBg && (
+                        <div>
+                          <span className="font-semibold text-muted-foreground">Съдържание: </span>
+                          <span className="text-foreground">{m.proposal.summaryBg}</span>
+                        </div>
+                      )}
+                      {m.proposal.themeBg && (
+                        <div>
+                          <span className="font-semibold text-muted-foreground">Визуална атмосфера: </span>
+                          <span className="text-foreground">{m.proposal.themeBg}</span>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-2 pt-2">
+                      <Button
+                        size="sm"
+                        onClick={() => handleConfirmProposal(m.proposal!, idx)}
+                        disabled={confirmingIdx !== null}
+                        className="rounded-lg bg-primary text-primary-foreground font-semibold hover:bg-primary/90"
+                      >
+                        {confirmingIdx === idx ? (
+                          <>
+                            <Loader2 className="size-3.5 mr-1.5 animate-spin" />
+                            Генерира се...
+                          </>
+                        ) : (
+                          <>
+                            <CheckCircle2 className="size-3.5 mr-1.5" />
+                            ✨ Одобри и генерирай видеото
+                          </>
+                        )}
+                      </Button>
+
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setPrompt("Искам да променим следното в предложението: ")}
+                        className="rounded-lg text-xs"
+                      >
+                        <Pencil className="size-3.5 mr-1" />
+                        Промени нещо
+                      </Button>
+                    </div>
+                  </div>
+                )}
+
                 {m.jobId && (
                   <div className="mt-3 flex items-center gap-2 border-t border-border/40 pt-3">
                     <Link
@@ -139,7 +228,7 @@ function AssistantPage() {
               </div>
               <div className="rounded-2xl bg-muted/80 px-4 py-3 text-sm text-muted-foreground flex items-center gap-2">
                 <Loader2 className="size-4 animate-spin" />
-                Асистентът мисли и създава видеото...
+                Асистентът мисли и подготвя предложение...
               </div>
             </div>
           )}
@@ -152,7 +241,7 @@ function AssistantPage() {
           <Input
             value={prompt}
             onChange={(e) => setPrompt(e.target.value)}
-            placeholder="Напр.: Направи видео за Хадис № 5 на Навауи или Сура Ал-Ихляс..."
+            placeholder="Напр.: Направи видео за търпението или Хадис № 5 на Навауи..."
             className="flex-1 rounded-xl"
             disabled={loading}
           />
