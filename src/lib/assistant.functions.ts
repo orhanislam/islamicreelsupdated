@@ -134,7 +134,7 @@ export const confirmAndGenerateVideo = createServerFn({ method: "POST" })
 
       try {
         const narr = await synthesizeHadithNarration({ data: { text: bulgarian } });
-        audioUrl = narr.audioUrl;
+        audioUrl = `data:${narr.mimeType || "audio/mp3"};base64,${narr.base64}`;
         bulgarianWordTimings = narr.wordTimings;
       } catch (e) {
         console.warn("Could not narrate hadith:", e);

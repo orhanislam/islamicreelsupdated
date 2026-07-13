@@ -55,17 +55,13 @@ function DownloadsPage() {
     loadAll();
   }, []);
 
-  // Poll server jobs every 3 seconds if any job is still rendering
+  // Poll every 3 seconds while page is open so newly started background jobs appear immediately
   useEffect(() => {
-    const hasRendering = serverJobs.some((j) => j.status === "rendering");
-    if (!hasRendering) return;
-    const t = setInterval(() => {
-      listServerRenderJobs()
-        .then((data) => setServerJobs(data))
-        .catch(() => {});
+    const timer = setInterval(() => {
+      loadAll();
     }, 3000);
-    return () => clearInterval(t);
-  }, [serverJobs]);
+    return () => clearInterval(timer);
+  }, []);
 
   // Automatically preload server MP4 files in the background so clicking download is instant!
   useEffect(() => {
