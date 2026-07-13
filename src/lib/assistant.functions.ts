@@ -44,6 +44,10 @@ ${memoryContext}
 Когато потребителят поиска видео, ти НЕ генерираш видеото веднага, а му предлагаш детайлен план (proposal), за да го одобри.
 Ако потребителят ти каже да промениш стила на текста (напр. "златно караоке", "зелен изумруд", "неонови субтитри", "класически бял") или го има в паметта му, задължително избери съответния "tiktokTheme" ("hormozi", "emerald", "neon" или "classic").
 
+КРИТИЧНО ПРАВИЛО ЗА ВАЙРЪЛ ТЕМИ (DO NOT RECOMMEND COMMON TEXTS):
+НИКОГА не препоръчвай банални, често срещани или общоизвестни клиширани текстове (като най-стандартните напомняния или най-често повтаряните кратки цитати).
+ВИНАГИ избирай ДЪЛБОКИ, ВЪЗДЕЙСТВАЩИ, ПО-РЯДКО ЦИТИРАНИ, но психологически поразителни уроци от Корана или Сахих Хадиси, които ще накарат зрителя да натръпне, да се замисли и да сподели видеото веднага (Viral Hook & High Retention)!
+
 Трябва да върнеш JSON обект със следната структура:
 1. Ако потребителят иска видео или тема за видео:
 {
@@ -106,6 +110,61 @@ ${memoryContext}
       reply: parsed.reply || "С какво мога да ти помогна днес?",
       proposal: (parsed.proposal as VideoProposal) || null,
       memory,
+    };
+  });
+
+export const suggestViralProposal = createServerFn({ method: "POST" })
+  .handler(async () => {
+    const prompt = `Ти си топ продуцент на вирусни Ислямски видеа (Reels & TikTok) на български език.
+Измисли и предложи ЕДНА изключително силна, НЕБАНАЛНА и психологически поразяваща тема/урок от Корана или Сахих Хадис за видео.
+
+СТРИКТНО ПРАВИЛО: DO NOT RECOMMEND COMMON TEXTS. Не предлагай общи, банални или често срещани текстове. Избери текст с дълбоко житейско послание за изпитанията, душата, надеждата, мълчанието или скритата мъдрост.
+
+Върни JSON със следната структура:
+{
+  "reply": "Вълнуващо представяне на български защо тази тема ще стане вайръл и каква е мъдростта ѝ.",
+  "proposal": {
+    "title": "Краткия заглавен рефрен на български",
+    "type": "hadith",
+    "collection": "bukhari",
+    "number": 6424,
+    "summaryBg": "Българско обяснение на урока",
+    "themeBg": "Кинематографична атмосфера",
+    "searchQuery": "islamic nature cinematic",
+    "tiktokTheme": "hormozi"
+  }
+}
+Върни САМО валиден JSON.`;
+
+    const msgs = [{ role: "system", content: prompt }];
+    const raw = await geminiChat("gemini-2.5-flash", msgs, true);
+    let parsed: any;
+    try {
+      let clean = raw.replace(/```json\s*|\s*```/g, "").trim();
+      const firstBrace = clean.indexOf("{");
+      const lastBrace = clean.lastIndexOf("}");
+      if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+        clean = clean.substring(firstBrace, lastBrace + 1);
+      }
+      parsed = JSON.parse(clean);
+    } catch {
+      parsed = {
+        reply: "Предлагам ти дълбок, рядко цитиран урок от Сахих ал-Бухари за вътрешната сила при изпитания.",
+        proposal: {
+          title: "Сахих ал-Бухари #6424 — Скритата милост в изпитанията",
+          type: "hadith",
+          collection: "bukhari",
+          number: 6424,
+          summaryBg: "Когото Аллах желае да дари с добро, Той го подлага на изпитания за пречистване.",
+          themeBg: "Буря, която утихва в златна светлина",
+          searchQuery: "storm sunlight dramatic sky nature cinematic",
+          tiktokTheme: "hormozi"
+        }
+      };
+    }
+    return {
+      reply: parsed.reply,
+      proposal: parsed.proposal as VideoProposal,
     };
   });
 

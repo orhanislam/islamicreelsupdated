@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { toast } from "sonner";
-import { chatWithAssistant, confirmAndGenerateVideo, startBatchViralSeries, type VideoProposal } from "@/lib/assistant.functions";
+import { chatWithAssistant, suggestViralProposal, confirmAndGenerateVideo, startBatchViralSeries, type VideoProposal } from "@/lib/assistant.functions";
 import { getAiMemory, updateAiMemory, type AiMemory } from "@/lib/memory.functions";
 import { playStudioClick } from "@/lib/sfx";
 
@@ -25,6 +25,7 @@ function AssistantPage() {
   const [prompt, setPrompt] = useState("");
   const [loading, setLoading] = useState(false);
   const [batchLoading, setBatchLoading] = useState(false);
+  const [viralLoading, setViralLoading] = useState(false);
   const [confirmingIdx, setConfirmingIdx] = useState<number | null>(null);
   const [showMemory, setShowMemory] = useState(false);
   const [memory, setMemory] = useState<AiMemory | null>(null);
@@ -170,6 +171,30 @@ function AssistantPage() {
     }
   };
 
+  const handleViralSuggest = async () => {
+    try {
+      playStudioClick("start");
+      setViralLoading(true);
+      toast.message("🔥 AI търси уникална вайръл тема (без банални текстове)...");
+
+      const res = await suggestViralProposal();
+
+      setMessages((prev) => [
+        ...prev,
+        {
+          role: "assistant",
+          text: `🔥 **Вайръл Предложение:**\n\n${res.reply}\n\n📋 **Тема:** ${res.proposal?.title}\n🎨 **Атмосфера:** ${res.proposal?.themeBg}\n\n👆 Натисни **\"✅ Одобрявам\"** за да генерирам видеото автоматично!`,
+          proposal: res.proposal,
+        },
+      ]);
+      playStudioClick("success");
+    } catch (e: any) {
+      toast.error(e?.message || "Грешка при генериране на вайръл предложение");
+    } finally {
+      setViralLoading(false);
+    }
+  };
+
   return (
     <div className="mx-auto max-w-4xl px-4 py-8 font-ui">
       <div className="mb-6 flex items-center justify-between gap-3">
@@ -260,6 +285,33 @@ function AssistantPage() {
           )}
         </Card>
       )}
+
+      {/* Viral AI Suggestion Card */}
+      <div className="mb-4 rounded-2xl border border-red-500/30 bg-gradient-to-r from-red-500/10 via-orange-500/5 to-transparent p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <div>
+          <div className="flex items-center gap-2 text-red-400 font-bold text-sm">
+            <Sparkles className="size-4" /> ВАЙРЪЛ AI ГЕНЕРАТОР
+          </div>
+          <p className="text-xs text-muted-foreground mt-1">
+            AI избира уникална, дълбока и рядко цитирана тема от Корана или Хадисите. Без банални текстове — само вирусни!
+          </p>
+        </div>
+        <button
+          onClick={handleViralSuggest}
+          disabled={viralLoading || loading}
+          className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-red-500 to-orange-500 px-5 py-2.5 text-xs font-bold text-white shadow-lg hover:from-red-400 hover:to-orange-400 transition shrink-0 cursor-pointer"
+        >
+          {viralLoading ? (
+            <>
+              <Loader2 className="size-4 animate-spin" /> Търсене...
+            </>
+          ) : (
+            <>
+              🔥 Вайръл Тема
+            </>
+          )}
+        </button>
+      </div>
 
       {/* Batch Series Luxury Card */}
       <div className="mb-6 rounded-2xl border border-amber-500/30 bg-gradient-to-r from-amber-500/10 via-amber-500/5 to-transparent p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
