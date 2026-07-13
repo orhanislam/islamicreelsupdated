@@ -321,6 +321,18 @@ function AssistantPage() {
                           <span className="text-foreground">{m.proposal.themeBg}</span>
                         </div>
                       )}
+                      <div>
+                        <span className="font-semibold text-muted-foreground">Стил на текста: </span>
+                        <span className="font-medium text-primary">
+                          {m.proposal.tiktokTheme === "emerald"
+                            ? "🕋 Ислямски Изумруд (Emerald Glow)"
+                            : m.proposal.tiktokTheme === "neon"
+                            ? "🔥 Динамичен Неон (Neon Cyan)"
+                            : m.proposal.tiktokTheme === "classic"
+                            ? "⚪ Класически Бял (Classic Crisp)"
+                            : "🌟 Златно Караоке (Hormozi Gold)"}
+                        </span>
+                      </div>
                     </div>
 
                     <div className="flex flex-wrap items-center gap-2 pt-2">

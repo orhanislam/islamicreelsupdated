@@ -19,6 +19,7 @@ export type VideoProposal = {
   summaryBg: string;
   themeBg: string;
   searchQuery: string;
+  tiktokTheme?: "hormozi" | "emerald" | "neon" | "classic";
 };
 
 export const chatWithAssistant = createServerFn({ method: "POST" })
@@ -41,12 +42,13 @@ ${memoryContext}
 
 ВАЖНО ПРАВИЛО: Ти ВИНАГИ ПИТАШ потребителя за одобрение преди да се генерира видеото!
 Когато потребителят поиска видео, ти НЕ генерираш видеото веднага, а му предлагаш детайлен план (proposal), за да го одобри.
+Ако потребителят ти каже да промениш стила на текста (напр. "златно караоке", "зелен изумруд", "неонови субтитри", "класически бял") или го има в паметта му, задължително избери съответния "tiktokTheme" ("hormozi", "emerald", "neon" или "classic").
 
 Трябва да върнеш JSON обект със следната структура:
 1. Ако потребителят иска видео или тема за видео:
 {
   "reply": "Твоят учтив отговор на български език, в който представяш предложението и питаш дали му харесва.",
-  "newLearnedFact": "Ако в това съобщение потребителят ти е казал нещо важно за себе си или ново предпочитание, запиши го тук (иначе остави null)",
+  "newLearnedFact": "Ако в това съобщение потребителят ти е казал нещо важно за себе си или ново предпочитание за стил/фон, запиши го тук (иначе остави null)",
   "proposal": {
     "title": "Точно заглавие на български",
     "type": "hadith" или "quran",
@@ -57,7 +59,8 @@ ${memoryContext}
     "count": брой аяти (1-7),
     "summaryBg": "Кратко описание или български превод на избрания текст",
     "themeBg": "Визуална атмосфера на български",
-    "searchQuery": "ключови думи за фон на английски"
+    "searchQuery": "ключови думи за фон на английски",
+    "tiktokTheme": "hormozi" | "emerald" | "neon" | "classic" (по подразбиране "hormozi")
   }
 }
 
@@ -173,6 +176,7 @@ export const confirmAndGenerateVideo = createServerFn({ method: "POST" })
           bulgarian,
           reference,
           style: "middle",
+          tiktokTheme: proposal.tiktokTheme || "hormozi",
           audioUrl: audioUrl || undefined,
           requireAudio: Boolean(audioUrl),
           fallbackDuration: 10,
