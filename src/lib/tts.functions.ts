@@ -137,8 +137,16 @@ export const synthesizeHadithNarration = createServerFn({ method: "POST" })
     mimeType: string;
     wordTimings: WordTiming[];
   }> => {
-    // Clean text for optimal TTS
+    // Clean and normalize Islamic terminology & abbreviations for accurate Bulgarian TTS diction
     const cleaned = data.text
+      .replace(/\(\s*с\s*\/\s*у\s*\)/gi, " мир да бъде с него ")
+      .replace(/\bс\s*\/\s*у\b/gi, " мир да бъде с него ")
+      .replace(/\b(?:с\.а\.с\.|с\.а\.в\.|saw|pbuh|ﷺ)\b/gi, " мир да бъде с него ")
+      .replace(/\b(?:с\.в\.т\.|swt)\b/gi, " Субханаху ва Тааля ")
+      .replace(/\b(?:р\.а\.|ra)\b/gi, " Аллах да е доволен от него ")
+      .replace(/\bal-djadjali\b/gi, "Ал-Даджжал")
+      .replace(/\bал-джаджали\b/gi, "Ал-Даджжал")
+      .replace(/\bал-даджал\b/gi, "Ал-Даджжал")
       .replace(/[\-—_…]+/g, " ")
       .replace(/\s+/g, " ")
       .trim();

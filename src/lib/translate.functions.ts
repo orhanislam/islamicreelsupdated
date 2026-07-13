@@ -16,16 +16,31 @@ if (!(globalThis as any).__translationCache) {
   (globalThis as any).__translationCache = globalCache;
 }
 
+export function normalizeIslamicTermsBulgarian(t: string): string {
+  return t
+    .replace(/[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF]+/g, "")
+    // Abbreviations
+    .replace(/\(\s*с\s*\/\s*у\s*\)/gi, "(мир да бъде с него)")
+    .replace(/\bс\s*\/\s*у\b/gi, "мир да бъде с него")
+    .replace(/\b(?:с\.а\.с\.|с\.а\.в\.|с\.а\.в|saw|pbuh|ﷺ)\b/gi, "мир да бъде с него")
+    .replace(/\(\s*(?:saw|pbuh|ﷺ|саллялляху алейхи (?:ва|уе) селлем)\s*\)/gi, "(мир да бъде с него)")
+    .replace(/\b(?:с\.в\.т\.|swt)\b/gi, "Субханаху ва Тааля")
+    .replace(/\b(?:р\.а\.|ra)\b/gi, "Аллах да е доволен от него")
+    // Contextual fixes for proper Islamic terminology & preventing AI transliteration mistakes
+    .replace(/\bal-djadjali\b/gi, "Ал-Даджжал")
+    .replace(/\bал-джаджали\b/gi, "Ал-Даджжал")
+    .replace(/\bал-даджал\b/gi, "Ал-Даджжал")
+    .replace(/\bДаджал\b/g, "Даджжал")
+    .replace(/\bал-Бухари\b/gi, "Ал-Бухари")
+    .replace(/\bАбу Давуд\b/gi, "Абу Дауд")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 export const translateToBulgarian = createServerFn({ method: "POST" })
   .inputValidator((input: { english: string; sourceRef: string; arabic?: string; ayahBounds?: any[] }) => input)
   .handler(async ({ data }) => {
-    const sanitize = (t: string) =>
-      t
-        .replace(/[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF]+/g, "")
-        .replace(/\(\s*с\s*\/\s*у\s*\)/gi, "(мир да бъде със него)")
-        .replace(/\bс\s*\/\s*у\b/gi, "мир да бъде със него")
-        .replace(/\(\s*(saw|pbuh|ﷺ|саллялляху алейхи (?:ва|уе) селлем)\s*\)/gi, "(мир да бъде със него)")
-        .trim();
+    const sanitize = (t: string) => normalizeIslamicTermsBulgarian(t);
 
     if (data.ayahBounds && Array.isArray(data.ayahBounds) && data.ayahBounds.length > 0) {
       const getCached = (b: any) => {
