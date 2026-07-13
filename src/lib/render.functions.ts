@@ -76,12 +76,42 @@ export const runServerRender = createServerFn({ method: "POST" })
 
       let audioDur = 15;
       try {
-        const mp3Duration = (await import("mp3-duration")).default;
-        const audioBuf = await fs.readFile(audioPath);
-        audioDur = await mp3Duration(audioBuf);
-        console.log(`[server-render] Exact audio duration: ${audioDur} seconds`);
+        audioDur = await new Promise<number>((resolve) => {
+          let output = "";
+          ffmpeg()
+            .input(audioPath)
+            .outputOptions(["-f null"])
+            .output("-")
+            .on("error", () => {
+              const match = output.match(/Duration:\s*(\d+):(\d+):(\d+\.\d+)/);
+              if (match) {
+                resolve(Number(match[1]) * 3600 + Number(match[2]) * 60 + Number(match[3]));
+              } else {
+                resolve(0);
+              }
+            })
+            .on("end", () => {
+              const match = output.match(/Duration:\s*(\d+):(\d+):(\d+\.\d+)/);
+              if (match) {
+                resolve(Number(match[1]) * 3600 + Number(match[2]) * 60 + Number(match[3]));
+              } else {
+                resolve(0);
+              }
+            })
+            .on("stderr", (line: string) => {
+              output += line + "\n";
+            })
+            .run();
+        });
+
+        if (!audioDur || audioDur <= 0) {
+          const mp3Duration = (await import("mp3-duration")).default;
+          const audioBuf = await fs.readFile(audioPath);
+          audioDur = await mp3Duration(audioBuf);
+        }
+        console.log(`[server-render] Exact audio duration probed: ${audioDur} seconds`);
       } catch (err) {
-        console.warn("[server-render] Could not get exact MP3 duration, falling back to 20s", err);
+        console.warn("[server-render] Could not probe exact audio duration, falling back to 20s", err);
         audioDur = 20;
       }
 

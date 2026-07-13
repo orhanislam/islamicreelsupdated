@@ -139,7 +139,7 @@ async function concatCleanMp3s(buffers: any[]): Promise<any> {
       `concat=n=${buffers.length}:v=0:a=1[out]`,
       "-map", "[out]",
       "-c:a", "libmp3lame",
-      "-q:a", "2",
+      "-b:a", "192k",
       "-loglevel", "error",
       outPath
     );
