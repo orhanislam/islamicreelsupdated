@@ -1,11 +1,12 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { Bot, Send, Loader2, Sparkles, Download, CheckCircle2, Video, Pencil } from "lucide-react";
+import { Bot, Send, Loader2, Sparkles, Download, CheckCircle2, Video, Pencil, Brain, Trash2, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { toast } from "sonner";
 import { chatWithAssistant, confirmAndGenerateVideo, type VideoProposal } from "@/lib/assistant.functions";
+import { getAiMemory, updateAiMemory, type AiMemory } from "@/lib/memory.functions";
 
 export const Route = createFileRoute("/_app/assistant")({
   component: AssistantPage,
@@ -23,12 +24,53 @@ function AssistantPage() {
   const [prompt, setPrompt] = useState("");
   const [loading, setLoading] = useState(false);
   const [confirmingIdx, setConfirmingIdx] = useState<number | null>(null);
+  const [showMemory, setShowMemory] = useState(false);
+  const [memory, setMemory] = useState<AiMemory | null>(null);
+  const [newInstruction, setNewInstruction] = useState("");
   const [messages, setMessages] = useState<ChatMsg[]>([
     {
       role: "assistant",
-      text: "Здравей! Аз съм твоят интелигентен Ислямски AI Видео Асистент.\n\nКажи ми какво видео искаш да създадем (напр. *„Направи видео за търпението“* или *„Видео за Хадис № 5 на Навауи“*). Първо ще ти изготвя красиво предложение за одобрение, и едва когато кажеш „да“, ще го генерирам!",
+      text: "Здравей! Аз съм твоят интелигентен Ислямски AI Видео Асистент с дълготрайна памет 🧠.\n\nКажи ми какво видео искаш да създадем. Аз помня всички твои предпочитания и правила и първо ти изготвям предложение за одобрение!",
     },
   ]);
+
+  useEffect(() => {
+    getAiMemory().then((m) => setMemory(m)).catch(() => {});
+  }, []);
+
+  const handleAddInstruction = async () => {
+    if (!newInstruction.trim() || !memory) return;
+    const updated: AiMemory = {
+      ...memory,
+      customInstructions: [...memory.customInstructions, newInstruction.trim()],
+    };
+    setMemory(updated);
+    setNewInstruction("");
+    await updateAiMemory({ data: { memory: updated } });
+    toast.success("Инструкцията е запазена в паметта на асистента!");
+  };
+
+  const handleRemoveInstruction = async (idx: number) => {
+    if (!memory) return;
+    const updated: AiMemory = {
+      ...memory,
+      customInstructions: memory.customInstructions.filter((_, i) => i !== idx),
+    };
+    setMemory(updated);
+    await updateAiMemory({ data: { memory: updated } });
+    toast.success("Инструкцията е премахната.");
+  };
+
+  const handleRemoveFact = async (idx: number) => {
+    if (!memory) return;
+    const updated: AiMemory = {
+      ...memory,
+      learnedFacts: memory.learnedFacts.filter((_, i) => i !== idx),
+    };
+    setMemory(updated);
+    await updateAiMemory({ data: { memory: updated } });
+    toast.success("Фактът е изтрит от паметта.");
+  };
 
   const handleSend = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
@@ -104,17 +146,94 @@ function AssistantPage() {
 
   return (
     <div className="mx-auto max-w-4xl px-4 py-8 font-ui">
-      <div className="mb-6 flex items-center gap-3">
-        <div className="flex size-12 items-center justify-center rounded-2xl bg-primary/15 text-primary shadow-sm">
-          <Bot className="size-6" />
+      <div className="mb-6 flex items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <div className="flex size-12 items-center justify-center rounded-2xl bg-primary/15 text-primary shadow-sm">
+            <Bot className="size-6" />
+          </div>
+          <div>
+            <h1 className="text-2xl font-bold">AI Видео Асистент (С Дълготрайна Памет)</h1>
+            <p className="text-sm text-muted-foreground">
+              Асистентът помни твоите инструкции и винаги иска одобрение преди рендиране.
+            </p>
+          </div>
         </div>
-        <div>
-          <h1 className="text-2xl font-bold">AI Видео Асистент (С одобрение)</h1>
-          <p className="text-sm text-muted-foreground">
-            Асистентът първо ти предлага детайлен план за видеото и пита за одобрение, преди да започне рендирането.
-          </p>
-        </div>
+        <Button
+          variant={showMemory ? "default" : "outline"}
+          onClick={() => setShowMemory(!showMemory)}
+          className="flex items-center gap-2 rounded-xl text-xs"
+        >
+          <Brain className="size-4" />
+          <span>{showMemory ? "Скрий паметта" : "🧠 Моята AI Памет & Правила"}</span>
+        </Button>
       </div>
+
+      {showMemory && memory && (
+        <Card className="mb-6 border border-primary/30 bg-card/95 p-5 shadow-md space-y-4 rounded-2xl">
+          <div className="flex items-center justify-between border-b border-border/50 pb-2">
+            <div className="flex items-center gap-2 font-semibold text-primary">
+              <Brain className="size-5" />
+              <span>Управление на постоянната памет и инструкции</span>
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+              1. Твоите постоянни инструкции към асистента
+            </h3>
+            <div className="space-y-1.5">
+              {memory.customInstructions.map((inst, idx) => (
+                <div key={idx} className="flex items-center justify-between rounded-lg bg-muted/50 px-3 py-2 text-xs">
+                  <span>{inst}</span>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => handleRemoveInstruction(idx)}
+                    className="size-6 text-destructive hover:bg-destructive/10"
+                  >
+                    <Trash2 className="size-3.5" />
+                  </Button>
+                </div>
+              ))}
+            </div>
+            <div className="flex gap-2">
+              <Input
+                value={newInstruction}
+                onChange={(e) => setNewInstruction(e.target.value)}
+                placeholder="Добави ново правило (напр. „Винаги предпочитай залез за фон“)"
+                className="text-xs h-9"
+              />
+              <Button onClick={handleAddInstruction} size="sm" className="h-9 shrink-0 text-xs gap-1">
+                <Plus className="size-3.5" />
+                <span>Добави</span>
+              </Button>
+            </div>
+          </div>
+
+          {memory.learnedFacts.length > 0 && (
+            <div className="space-y-2 pt-2 border-t border-border/40">
+              <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                2. Какво е научил асистентът от разговорите с теб
+              </h3>
+              <div className="space-y-1">
+                {memory.learnedFacts.map((fact, idx) => (
+                  <div key={idx} className="flex items-center justify-between rounded-lg bg-primary/5 px-3 py-2 text-xs">
+                    <span>✨ {fact}</span>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => handleRemoveFact(idx)}
+                      className="size-6 text-destructive hover:bg-destructive/10"
+                    >
+                      <Trash2 className="size-3.5" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </Card>
+      )}
 
       <div className="mb-4 flex flex-wrap items-center gap-2">
         <span className="text-xs font-semibold text-muted-foreground mr-1">⚡ Бързи TikTok идеи:</span>

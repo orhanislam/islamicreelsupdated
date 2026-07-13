@@ -6,6 +6,7 @@ import { translateToBulgarian } from "@/lib/translate.functions";
 import { searchPexelsVideos } from "@/lib/pexels.functions";
 import { synthesizeHadithNarration } from "@/lib/tts.functions";
 import { startServerRenderJob } from "@/lib/render.functions";
+import { getAiMemory, updateAiMemory } from "@/lib/memory.functions";
 
 export type VideoProposal = {
   title: string;
@@ -23,31 +24,47 @@ export type VideoProposal = {
 export const chatWithAssistant = createServerFn({ method: "POST" })
   .validator((input: { prompt: string; history: { role: string; content: string }[] }) => input)
   .handler(async ({ data }) => {
-    const systemPrompt = `Ти си умен и учтив Ислямски AI Видео Асистент на Български език.
+    const memory = await getAiMemory();
+
+    const memoryContext = `
+=== ПАМЕТ НА АСИСТЕНТА ЗА ПОТРЕБИТЕЛЯ ===
+Инструкции от потребителя:
+${memory.customInstructions.map((i, idx) => `${idx + 1}. ${i}`).join("\n")}
+
+Запомнени факти за потребителя:
+${memory.learnedFacts.length ? memory.learnedFacts.join("\n") : "Няма записани факти още."}
+=======================================
+Трябва стриктно да спазваш горните инструкции при всяко предложение за видео и всеки отговор!`;
+
+    const systemPrompt = `Ти си умен и учтив Ислямски AI Видео Асистент на Български език с дълготрайна памет.
+${memoryContext}
+
 ВАЖНО ПРАВИЛО: Ти ВИНАГИ ПИТАШ потребителя за одобрение преди да се генерира видеото!
-Когато потребителят поиска видео (напр. "направи ми видео за хадис 5 от навауи", "видео за сура 112 аят 1 до 4", "видео за търпението"), ти НЕ генерираш видеото веднага, а му предлагаш детайлен план (proposal), за да го одобри.
+Когато потребителят поиска видео, ти НЕ генерираш видеото веднага, а му предлагаш детайлен план (proposal), за да го одобри.
 
 Трябва да върнеш JSON обект със следната структура:
 1. Ако потребителят иска видео или тема за видео:
 {
   "reply": "Твоят учтив отговор на български език, в който представяш предложението и питаш дали му харесва.",
+  "newLearnedFact": "Ако в това съобщение потребителят ти е казал нещо важно за себе си или ново предпочитание, запиши го тук (иначе остави null)",
   "proposal": {
-    "title": "Точно заглавие на български (напр. 40 Хадиса на ан-Навауи • Хадис № 5 или Сура Ал-Ихляс (112:1-4))",
+    "title": "Точно заглавие на български",
     "type": "hadith" или "quran",
-    "collection": "nawawi40" | "bukhari" | "muslim" | "tirmidhi" (само при hadith),
-    "number": номер на хадис (само при hadith),
-    "surah": номер на сура (1-114, само при quran),
-    "ayah": начален аят (само при quran),
-    "count": брой аяти (1-7, само при quran),
+    "collection": "nawawi40" | "bukhari" | "muslim" | "tirmidhi",
+    "number": номер на хадис,
+    "surah": номер на сура (1-114),
+    "ayah": начален аят,
+    "count": брой аяти (1-7),
     "summaryBg": "Кратко описание или български превод на избрания текст",
-    "themeBg": "Визуална атмосфера на български (напр. Спокоен залез над планини или Звездни небеса и пустиня)",
-    "searchQuery": "ключови думи за фон на английски (напр. calm sunset mountains nature)"
+    "themeBg": "Визуална атмосфера на български",
+    "searchQuery": "ключови думи за фон на английски"
   }
 }
 
 2. Ако потребителят задава въпрос, поздравява или обсъжда без конкретно искане за видео:
 {
   "reply": "Отговор на български език",
+  "newLearnedFact": "Ако има нов факт или предпочитание за запомняне",
   "proposal": null
 }
 
@@ -68,9 +85,17 @@ export const chatWithAssistant = createServerFn({ method: "POST" })
       parsed = { reply: raw, proposal: null };
     }
 
+    if (parsed.newLearnedFact && typeof parsed.newLearnedFact === "string" && parsed.newLearnedFact.trim().length > 2) {
+      if (!memory.learnedFacts.includes(parsed.newLearnedFact.trim())) {
+        memory.learnedFacts.push(parsed.newLearnedFact.trim());
+        await updateAiMemory({ data: { memory } }).catch(() => {});
+      }
+    }
+
     return {
       reply: parsed.reply || "С какво мога да ти помогна днес?",
       proposal: (parsed.proposal as VideoProposal) || null,
+      memory,
     };
   });
 
