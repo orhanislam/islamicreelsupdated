@@ -418,6 +418,18 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
           }
         }
 
+        if (timings && timings.length > 0) {
+          const syncRes = verifyAndCorrectSubtitleSync(
+            timings.map((t: any, idx: number) => ({
+              word: t.word || words[idx] || "...",
+              start: t.start,
+              end: t.end,
+            })),
+            audioDur
+          );
+          timings = syncRes.correctedTimings;
+        }
+
         // Crisp stable subtitle style: 100% scale at all times with no word-shifting zoom distortion
         const instantAnimTag = "\\fscx100\\fscy100\\fad(0,0)";
 

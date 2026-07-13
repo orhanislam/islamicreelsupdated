@@ -8,16 +8,21 @@ function estimateWordTimings(text: string, totalDuration: number): WordTiming[] 
   const words = text.split(/\s+/).filter(Boolean);
   if (!words.length) return [];
 
-  // Phonetic cost weighting: longer words and syllable complexity take proportionally more speech time
-  const speechCost = (w: string) => 1 + w.replace(/[^\p{L}\p{N}]/gu, "").length * 0.55;
+  // Phonetic cost weighting + punctuation pauses for rhythmic accuracy
+  const speechCost = (w: string) => {
+    let cost = 1 + w.replace(/[^\p{L}\p{N}]/gu, "").length * 0.55;
+    if (/[.!?…]$/.test(w)) cost += 3.5;
+    else if (/[,;:—]$/.test(w)) cost += 1.8;
+    return cost;
+  };
   const costs = words.map(speechCost);
   const totalCost = costs.reduce((sum, c) => sum + c, 0) || 1;
 
   const timings: WordTiming[] = [];
   let currentCost = 0;
 
-  const leadSilence = 0.15;
-  const tailSilence = 0.25;
+  const leadSilence = 0.05;
+  const tailSilence = 0.1;
   const speechDuration = Math.max(0.5, totalDuration - leadSilence - tailSilence);
 
   for (let i = 0; i < words.length; i++) {

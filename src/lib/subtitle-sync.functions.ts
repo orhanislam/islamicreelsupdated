@@ -38,6 +38,8 @@ export function verifyAndCorrectSubtitleSync(
 
   const safeMaxDur = Math.max(0.1, Number(totalAudioDurationSec) || 15);
 
+  // Step 1: Parse all valid raw timings
+  const parsed: { word: string; start: number; end: number }[] = [];
   for (let i = 0; i < rawTimings.length; i++) {
     const raw = rawTimings[i];
     const parseRes = WordTimingSchema.safeParse({
@@ -45,19 +47,33 @@ export function verifyAndCorrectSubtitleSync(
       start: Number(raw?.start ?? 0),
       end: Number(raw?.end ?? 0),
     });
-
-    if (!parseRes.success) {
-      warnings.push(`Дума #${i + 1} имаше невалиден таймстемп и бе коригирана.`);
-      continue;
+    if (parseRes.success) {
+      let { word, start, end } = parseRes.data;
+      if (end <= start) end = start + 0.3;
+      parsed.push({ word, start, end });
+    } else {
+      warnings.push(`Дума #${i + 1} имаше невалиден таймстемп.`);
     }
+  }
 
-    let { word, start, end } = parseRes.data;
+  if (parsed.length === 0) {
+    return { valid: false, correctedTimings: [], maxDriftMs: 0, warnings };
+  }
 
-    // Ensure start < end
-    if (end <= start) {
-      end = start + 0.35;
-      warnings.push(`Коригиран нулев интервал за дума „${word}“`);
-    }
+  // Step 2: Proportional Stretch & Anchor Align to match exact audio duration
+  const lastEnd = parsed[parsed.length - 1].end;
+  const stretchRatio = (lastEnd > 0 && Math.abs(lastEnd - safeMaxDur) > 0.15)
+    ? safeMaxDur / lastEnd
+    : 1;
+
+  if (stretchRatio !== 1) {
+    warnings.push(`Синхронизиране на темпото: коефициент ${stretchRatio.toFixed(3)} за точно съвпадение с аудиото (${safeMaxDur.toFixed(2)}s)`);
+  }
+
+  for (let i = 0; i < parsed.length; i++) {
+    let word = parsed[i].word;
+    let start = parsed[i].start * stretchRatio;
+    let end = parsed[i].end * stretchRatio;
 
     // Prevent overlap with previous word
     if (correctedTimings.length > 0) {
@@ -65,14 +81,14 @@ export function verifyAndCorrectSubtitleSync(
       if (start < prev.end) {
         const drift = Math.round((prev.end - start) * 1000);
         if (drift > maxDriftMs) maxDriftMs = drift;
-        start = prev.end + 0.01;
-        if (end <= start) end = start + 0.3;
+        start = prev.end;
+        if (end <= start) end = start + 0.15;
       }
     }
 
     // Strictly clamp within audio bounds
     if (start >= safeMaxDur) {
-      start = Math.max(0, safeMaxDur - 0.4);
+      start = Math.max(0, safeMaxDur - 0.2);
       end = safeMaxDur;
     }
     if (end > safeMaxDur) {

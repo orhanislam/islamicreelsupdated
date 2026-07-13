@@ -13,6 +13,7 @@ import {
   retryServerRenderJob,
 } from "@/lib/render.functions";
 import { generateViralThumbnail } from "@/lib/thumbnail.functions";
+import { saveMediaBlob, isIOSMediaDevice } from "@/lib/download-media";
 import { Download, Trash2, CheckCircle2, ArrowLeft, Video, Film, RefreshCw, Loader2, AlertCircle, CloudCheck, Image as ImageIcon } from "lucide-react";
 import { toast } from "sonner";
 import confetti from "canvas-confetti";
@@ -101,22 +102,14 @@ function DownloadsPage() {
     });
   }, [items]);
 
-  const triggerDownload = (item: DownloadItem, manual = false) => {
+  const triggerDownload = async (item: DownloadItem, manual = false) => {
     try {
-      const url = URL.createObjectURL(item.blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `${item.title || "nur-studio-video"}.${item.ext}`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      setTimeout(() => URL.revokeObjectURL(url), 10000);
-
+      await saveMediaBlob(item.blob, `${item.title || "nur-studio-video"}.${item.ext}`, item.mimeType);
       setDownloadedIds((prev) => new Set([...prev, item.id]));
       if (manual) {
-        toast.success("Изтеглянето стартира отново!");
+        toast.success("Изтеглянето е успешно!");
       } else {
-        toast.success(`Автоматично изтегляне: ${item.title}.${item.ext}`);
+        toast.success(`Изтегляне: ${item.title}.${item.ext}`);
         setTimeout(async () => {
           await deleteDownloadItem(item.id);
           setItems((prev) => prev.filter((x) => x.id !== item.id));
@@ -128,32 +121,19 @@ function DownloadsPage() {
   };
 
   const handleDownloadServerJob = async (job: ServerJob) => {
-    let url = preloadedUrls[job.id];
-    if (!url) {
-      setDownloadingServerId(job.id);
-      try {
-        toast.message("Подготвям видеото за изтегляне от сървъра...");
-        const base64 = await getServerRenderJobBase64({ data: { id: job.id } });
-        const res = await fetch("data:video/mp4;base64," + base64);
-        const blob = await res.blob();
-        url = URL.createObjectURL(blob);
-        setPreloadedUrls((prev) => ({ ...prev, [job.id]: url }));
-      } catch (e) {
-        toast.error("Не успях да сваля видеото от сървъра");
-        setDownloadingServerId(null);
-        return;
-      } finally {
-        setDownloadingServerId(null);
-      }
+    setDownloadingServerId(job.id);
+    try {
+      toast.message("Подготвям видеото за изтегляне от сървъра...");
+      const base64 = await getServerRenderJobBase64({ data: { id: job.id } });
+      const res = await fetch("data:video/mp4;base64," + base64);
+      const blob = await res.blob();
+      await saveMediaBlob(blob, `${job.title || "islamic-reel"}.mp4`, "video/mp4");
+      toast.success("Видеото е свалено успешно!");
+    } catch (e) {
+      toast.error("Не успях да сваля видеото от сървъра");
+    } finally {
+      setDownloadingServerId(null);
     }
-
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `${job.title || "islamic-reel"}.mp4`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    toast.success("Видеото е свалено веднага!");
   };
 
   const handleDownloadThumbnail = async (id: string, title: string) => {
