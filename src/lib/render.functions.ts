@@ -216,7 +216,13 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             const segs = data.wordSegments;
             if (Array.isArray(segs) && segs.length > 0) {
               const scale = 1;
-              const costs = words.map((w: string) => 1 + w.replace(/[^\p{L}\p{N}]/gu, "").length * 0.55);
+              const speechCost = (w: string) => {
+                let cost = 1 + w.replace(/[^\p{L}\p{N}]/gu, "").length * 0.55;
+                if (/[.!?…]$/.test(w)) cost += 3.5;
+                else if (/[,;:—]$/.test(w)) cost += 1.8;
+                return cost;
+              };
+              const costs = words.map(speechCost);
               const cumCost = [0];
               for (let i = 0; i < costs.length; i++) cumCost.push(cumCost[i] + costs[i]);
               const totalCost = cumCost[cumCost.length - 1] || 1;
@@ -245,9 +251,20 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                 timings.push({ start, end });
               }
             } else {
-              const step = audioDur / Math.max(1, words.length);
+              const speechCost = (w: string) => {
+                let cost = 1 + w.replace(/[^\p{L}\p{N}]/gu, "").length * 0.55;
+                if (/[.!?…]$/.test(w)) cost += 3.5;
+                else if (/[,;:—]$/.test(w)) cost += 1.8;
+                return cost;
+              };
+              const costs = words.map(speechCost);
+              const cumCost = [0];
+              for (let i = 0; i < costs.length; i++) cumCost.push(cumCost[i] + costs[i]);
+              const totalCost = cumCost[cumCost.length - 1] || 1;
               for (let i = 0; i < words.length; i++) {
-                timings.push({ start: i * step, end: (i + 1) * step });
+                const s = (cumCost[i] / totalCost) * audioDur;
+                const e = (cumCost[i + 1] / totalCost) * audioDur;
+                timings.push({ start: s, end: e });
               }
             }
           }

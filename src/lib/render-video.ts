@@ -580,11 +580,15 @@ export async function renderVideo(opts: VideoOptions): Promise<{ blob: Blob; mim
   const arCount = opts.arabicWordCount ?? segs.length;
   const hasArSegments = !hasBgSegments && segs.length > 0 && arCount > 0;
 
-  // Reserve a small tail so the last subtitle is fully on screen before audio ends.
-  const REVEAL_END_OFFSET = 0.4;
-  const revealDuration = Math.max(0.5, duration - REVEAL_END_OFFSET);
+  // Match subtitle reveal timeline to full audio duration
+  const revealDuration = Math.max(0.5, duration - 0.05);
 
-  const speechCost = (w: string) => 1 + w.replace(/[^\p{L}\p{N}]/gu, "").length * 0.55;
+  const speechCost = (w: string) => {
+    let cost = 1 + w.replace(/[^\p{L}\p{N}]/gu, "").length * 0.55;
+    if (/[.!?…]$/.test(w)) cost += 3.5;
+    else if (/[,;:—]$/.test(w)) cost += 1.8;
+    return cost;
+  };
   const costs = allWords.map(speechCost);
   const cumCost: number[] = [0];
   for (let i = 0; i < costs.length; i++) cumCost.push(cumCost[i] + costs[i]);
