@@ -160,7 +160,18 @@ export const synthesizeHadithNarration = createServerFn({ method: "POST" })
         audioBuffer = await fs.readFile(tmpPath);
         await fs.unlink(tmpPath).catch(() => {});
       } catch (e: any) {
-        throw new Error("Грешка при генериране на Edge TTS: " + e.message);
+        console.warn("[tts] EdgeTTS failed, falling back to Google TTS:", e);
+        try {
+          const base64Audio = await googleTTS.getAudioBase64(cleaned.slice(0, 200), {
+            lang: "bg",
+            slow: false,
+            host: "https://translate.google.com",
+            timeout: 10000,
+          });
+          audioBuffer = BufferMod.from(base64Audio, "base64");
+        } catch (gErr: any) {
+          throw new Error("Грешка при генериране на аудио озвучаване: " + (e?.message || gErr?.message || "Неуспешен запис"));
+        }
       }
     }
 
