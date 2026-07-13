@@ -479,7 +479,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 
         cmd.complexFilter([
           `[0:v]crop='min(iw,ih*9/16)':'min(iw*16/9,ih)',scale=${width}:${height}:flags=bicubic,eq=contrast=1.06:saturation=1.14:brightness=-0.06,subtitles='${escapedAssPath}'[v]`,
-          `[1:a]acompressor=threshold=-18dB:ratio=2.5:attack=5:release=50,bass=g=3:f=110:w=0.6[a]`
+          `[1:a]acompressor=threshold=-18dB:ratio=2.5:attack=5:release=50,bass=g=3:f=110:w=0.6,loudnorm=I=-14:LRA=11:TP=-1.5[a]`
         ])
         .outputOptions([
           "-map [v]",
@@ -495,7 +495,6 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
           "-c:a aac",
           "-b:a 192k",
           "-ar 44100",
-          "-af loudnorm=I=-14:LRA=11:TP=-1.5",
           `-t ${Number(audioDur).toFixed(2)}`,
           "-threads 0"
         ])
