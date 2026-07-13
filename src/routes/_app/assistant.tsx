@@ -116,6 +116,40 @@ function AssistantPage() {
         </div>
       </div>
 
+      <div className="mb-4 flex flex-wrap items-center gap-2">
+        <span className="text-xs font-semibold text-muted-foreground mr-1">⚡ Бързи TikTok идеи:</span>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => {
+            setPrompt("Направи кратко вирусна TikTok видео идея за Хадис № 1 на Навауи (намеренията)");
+          }}
+          className="rounded-full text-xs"
+        >
+          🌟 Хадис за намеренията (TikTok 9:16)
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => {
+            setPrompt("Направи TikTok видео за Сура Ал-Ихляс (112:1-4) със спокоен фон");
+          }}
+          className="rounded-full text-xs"
+        >
+          🕋 Сура Ал-Ихляс
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => {
+            setPrompt("Направи TikTok видео за Аят Алкарси (Сура 2 аят 255)");
+          }}
+          className="rounded-full text-xs"
+        >
+          📖 Аят ал-Курси
+        </Button>
+      </div>
+
       <Card className="glass-card flex h-[640px] flex-col overflow-hidden border border-border/80 shadow-lg">
         <div className="flex-1 space-y-4 overflow-y-auto p-6">
           {messages.map((m, idx) => (
