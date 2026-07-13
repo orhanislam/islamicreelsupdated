@@ -438,6 +438,28 @@ function AssistantPage() {
                             : "🌟 Златно Караоке (Hormozi Gold)"}
                         </span>
                       </div>
+                      {m.proposal.useBRoll && (
+                        <div>
+                          <span className="font-semibold text-muted-foreground">🎬 B-Roll: </span>
+                          <span className="text-foreground">
+                            Сменящи се кадри{m.proposal.bRollInterval ? ` на всеки ${m.proposal.bRollInterval}s` : ""}
+                          </span>
+                        </div>
+                      )}
+                      {m.proposal.subtitlePosition && m.proposal.subtitlePosition !== "middle" && (
+                        <div>
+                          <span className="font-semibold text-muted-foreground">📍 Субтитри: </span>
+                          <span className="text-foreground">
+                            {m.proposal.subtitlePosition === "bottom" ? "Отдолу" : "Долна третина"}
+                          </span>
+                        </div>
+                      )}
+                      {m.proposal.quality && m.proposal.quality !== "high" && (
+                        <div>
+                          <span className="font-semibold text-muted-foreground">📐 Качество: </span>
+                          <span className="text-foreground">{m.proposal.quality}</span>
+                        </div>
+                      )}
                     </div>
 
                     <div className="flex flex-wrap items-center gap-2 pt-2">

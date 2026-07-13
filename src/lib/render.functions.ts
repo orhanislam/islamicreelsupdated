@@ -302,11 +302,24 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
       // Arabic is intentionally omitted from video output so the Bulgarian text fits nicely without clutter.
 
       if (data.bulgarian) {
-        const words = data.bulgarian.trim().split(/\s+/).filter(Boolean);
+        let words = data.bulgarian.trim().split(/\s+/).filter(Boolean);
         let timings = data.bulgarianWordTimings;
         if (timings && timings.length > 0) {
           const syncRes = verifyAndCorrectSubtitleSync(timings, audioDur);
           timings = syncRes.correctedTimings;
+          // Use TTS words as truth when available, to guarantee 1:1 word-timing alignment
+          if (timings.length > 0 && timings[0].word && timings[0].word !== "...") {
+            words = timings.map((t: any) => t.word);
+          }
+          // If word counts still differ, re-distribute timings to match words
+          if (timings.length !== words.length) {
+            const ratio = audioDur / Math.max(1, words.length);
+            timings = words.map((_w: string, i: number) => ({
+              word: _w,
+              start: Number((i * ratio).toFixed(3)),
+              end: Number(((i + 1) * ratio).toFixed(3)),
+            }));
+          }
         } else {
           timings = [];
           const bounds = data.ayahBounds;

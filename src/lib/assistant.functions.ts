@@ -20,6 +20,11 @@ export type VideoProposal = {
   themeBg: string;
   searchQuery: string;
   tiktokTheme?: "hormozi" | "emerald" | "neon" | "classic";
+  // CapCut-like editing controls
+  bRollInterval?: number;        // seconds between B-Roll scene switches (e.g. 3)
+  useBRoll?: boolean;            // enable multi-scene B-Roll
+  subtitlePosition?: "bottom" | "middle" | "lower-third";
+  quality?: "high" | "720p";
 };
 
 export const chatWithAssistant = createServerFn({ method: "POST" })
@@ -48,6 +53,17 @@ ${memoryContext}
 НИКОГА не препоръчвай банални, често срещани или общоизвестни клиширани текстове (като най-стандартните напомняния или най-често повтаряните кратки цитати).
 ВИНАГИ избирай ДЪЛБОКИ, ВЪЗДЕЙСТВАЩИ, ПО-РЯДКО ЦИТИРАНИ, но психологически поразителни уроци от Корана или Сахих Хадиси, които ще накарат зрителя да натръпне, да се замисли и да сподели видеото веднага (Viral Hook & High Retention)!
 
+CAPCUT-ПОДОБНИ ИНСТРУКЦИИ ЗА РЕДАКТИРАНЕ:
+Ти разбираш и прилагаш всякакви инструкции за редактиране на видеото, подобно на CapCut/Premiere/DaVinci. Примери:
+- "добави B-Roll на всеки 3 секунди" → useBRoll: true, bRollInterval: 3
+- "сменящи се кадри" → useBRoll: true
+- "субтитрите отдолу" → subtitlePosition: "bottom"
+- "субтитрите в средата" → subtitlePosition: "middle"
+- "720p качество" → quality: "720p"
+- "зелен стил" → tiktokTheme: "emerald"
+- "класически бели букви" → tiktokTheme: "classic"
+Ако потребителят даде инструкции за редактиране, добави ги в proposal обекта.
+
 Трябва да върнеш JSON обект със следната структура:
 1. Ако потребителят иска видео или тема за видео:
 {
@@ -64,7 +80,11 @@ ${memoryContext}
     "summaryBg": "Кратко описание или български превод на избрания текст",
     "themeBg": "Визуална атмосфера на български",
     "searchQuery": "ключови думи за фон на английски",
-    "tiktokTheme": "hormozi" | "emerald" | "neon" | "classic" (по подразбиране "hormozi")
+    "tiktokTheme": "hormozi" | "emerald" | "neon" | "classic" (по подразбиране "hormozi"),
+    "useBRoll": true/false (ако потребителят иска сменящи се B-Roll кадри),
+    "bRollInterval": число в секунди (на колко секунди да се сменя B-Roll кадъра, напр. 3),
+    "subtitlePosition": "bottom" | "middle" | "lower-third" (позиция на субтитрите),
+    "quality": "high" | "720p" (качество на видеото)
   }
 }
 
@@ -232,6 +252,24 @@ export const confirmAndGenerateVideo = createServerFn({ method: "POST" })
 
     const bestVid = vidSearch.videos?.[0]?.link || "https://videos.pexels.com/video-files/855029/855029-hd_1080_1920_30fps.mp4";
 
+    // Fetch multi-scene B-Roll if requested
+    let bRollUrls: string[] | undefined;
+    if (proposal.useBRoll) {
+      try {
+        const { fetchMultiSceneBRoll } = await import("@/lib/pexels.functions");
+        const bRollResult = await fetchMultiSceneBRoll({
+          data: { query: proposal.searchQuery || "islamic nature cinematic" },
+        });
+        if (bRollResult.clips && bRollResult.clips.length > 1) {
+          bRollUrls = bRollResult.clips;
+        }
+      } catch (e) {
+        console.warn("[assistant] Could not fetch multi-scene B-Roll:", e);
+      }
+    }
+
+    const subtitleStyle = proposal.subtitlePosition || "middle";
+
     const { jobId } = await startServerRenderJob({
       data: {
         title: reference,
@@ -241,7 +279,7 @@ export const confirmAndGenerateVideo = createServerFn({ method: "POST" })
           arabic,
           bulgarian,
           reference,
-          style: "middle",
+          style: subtitleStyle,
           tiktokTheme: proposal.tiktokTheme || "hormozi",
           audioUrl: audioUrl || undefined,
           requireAudio: Boolean(audioUrl),
@@ -250,7 +288,8 @@ export const confirmAndGenerateVideo = createServerFn({ method: "POST" })
           ayahBounds,
           arabicWordCount,
           bulgarianWordTimings,
-          quality: "high",
+          quality: proposal.quality || "high",
+          bRollUrls,
         },
       },
     });
