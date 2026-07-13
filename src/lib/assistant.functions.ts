@@ -94,7 +94,8 @@ export const chatAndGenerateVideo = createServerFn({ method: "POST" })
         const surah = Number(act.surah) || 1;
         const ayah = Number(act.ayah) || 1;
         const count = Math.min(7, Math.max(1, Number(act.count) || 1));
-        const q = await fetchAyah({ data: { surah, ayah, count } });
+        const ayahEnd = ayah + count - 1;
+        const q = await fetchAyah({ data: { surah, ayah, ayahEnd } });
         arabic = q.arabic;
         english = q.english;
         reference = `Сура ${q.surahName} (${surah}:${ayah}${count > 1 ? `-${ayah + count - 1}` : ""})`;
@@ -139,6 +140,7 @@ export const chatAndGenerateVideo = createServerFn({ method: "POST" })
             fallbackDuration: 10,
             wordSegments,
             ayahBounds,
+            arabicWordCount: arabic.split(/\s+/).filter(Boolean).length,
             bulgarianWordTimings,
             quality: "high",
           },

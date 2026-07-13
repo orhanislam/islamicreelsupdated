@@ -226,9 +226,9 @@ export const fetchAyah = createServerFn({ method: "POST" })
     // align with the real audio. A value of 1.0 means no correction needed.
     let cdnTimeScale = 1.0;
     let effectiveStartSec = 0;
-    if (count === 1 && cdnAudioUrl && vtStart && vtEnd && vtStart.timestamp_from !== undefined && vtEnd.timestamp_to !== undefined) {
+    if (cdnAudioUrl && vtStart && vtEnd && vtStart.timestamp_from !== undefined && vtEnd.timestamp_to !== undefined) {
       effectiveStartSec = vtStart.timestamp_from / 1000;
-      const endSec = vtEnd.timestamp_to / 1000;
+      const endSec = (vtEnd.timestamp_to / 1000) + 0.55;
       const sliced = await sliceQuranCdnAudio(cdnAudioUrl, effectiveStartSec, endSec);
       if (sliced) {
         useCdnSlice = true;
