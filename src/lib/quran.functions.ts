@@ -216,6 +216,7 @@ export const fetchAyah = createServerFn({ method: "POST" })
     
     const vtStartRaw = cdnTimings?.find((v: any) => v.verse_key === `${surah}:${ayah}`);
     const vtEndRaw = cdnTimings?.find((v: any) => v.verse_key === `${surah}:${ayah + count - 1}`);
+    const vtNextRaw = cdnTimings?.find((v: any) => v.verse_key === `${surah}:${ayah + count}`);
     const vtStart = getCorrectedVerseTimings(surah, ayah, vtStartRaw);
     const vtEnd = getCorrectedVerseTimings(surah, ayah + count - 1, vtEndRaw);
 
@@ -228,7 +229,11 @@ export const fetchAyah = createServerFn({ method: "POST" })
     let effectiveStartSec = 0;
     if (cdnAudioUrl && vtStart && vtEnd && vtStart.timestamp_from !== undefined && vtEnd.timestamp_to !== undefined) {
       effectiveStartSec = vtStart.timestamp_from / 1000;
-      const endSec = (vtEnd.timestamp_to / 1000) + 0.55;
+      const rawEndSec = vtEnd.timestamp_to / 1000;
+      const nextStartSec = vtNextRaw && vtNextRaw.timestamp_from !== undefined
+        ? (vtNextRaw.timestamp_from / 1000) - 0.02
+        : rawEndSec + 0.12;
+      const endSec = Math.min(rawEndSec + 0.05, nextStartSec);
       const sliced = await sliceQuranCdnAudio(cdnAudioUrl, effectiveStartSec, endSec);
       if (sliced) {
         useCdnSlice = true;
