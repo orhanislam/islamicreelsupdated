@@ -1,5 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import type { Buffer } from "node:buffer";
+import { verifyAndCorrectSubtitleSync } from "./subtitle-sync.functions";
 
 // Polyfill __dirname and __filename for bundled CommonJS modules in ESM environments
 try {
@@ -179,6 +180,71 @@ export const runServerRender = createServerFn({ method: "POST" })
         }
       }
 
+      // 2.5 Multi-Scene B-Roll sequence (if multiple bRollUrls provided)
+      if (Array.isArray(data.bRollUrls) && data.bRollUrls.length > 1) {
+        try {
+          console.log(`[server-render] Creating multi-scene B-Roll sequence from ${data.bRollUrls.length} clips...`);
+          const bRollFiles: string[] = [];
+          for (let i = 0; i < data.bRollUrls.length; i++) {
+            const url = data.bRollUrls[i];
+            const p = path.join(tmpDir, `broll_${i}_${Date.now()}.mp4`);
+            const r = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0" } });
+            if (r.ok) {
+              const buf = await r.arrayBuffer();
+              await fs.writeFile(p, BufferMod.from(buf));
+              bRollFiles.push(p);
+            }
+          }
+          if (bRollFiles.length > 1) {
+            const clipDur = Math.max(3.5, audioDur / bRollFiles.length);
+            const concatListPath = path.join(tmpDir, `concat_${Date.now()}.txt`);
+            const normalizedPaths: string[] = [];
+
+            for (let i = 0; i < bRollFiles.length; i++) {
+              const normPath = path.join(tmpDir, `norm_${i}_${Date.now()}.mp4`);
+              await new Promise((resolve, reject) => {
+                ffmpeg(bRollFiles[i])
+                  .setFfmpegPath(ffmpegPath)
+                  .outputOptions([
+                    `-t ${clipDur}`,
+                    "-vf scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,fps=30",
+                    "-c:v libx264",
+                    "-preset ultrafast",
+                    "-an",
+                  ])
+                  .output(normPath)
+                  .on("end", resolve)
+                  .on("error", reject)
+                  .run();
+              });
+              normalizedPaths.push(normPath);
+            }
+
+            const concatContent = normalizedPaths.map((p) => `file '${p.replace(/\\/g, "/")}'`).join("\n");
+            await fs.writeFile(concatListPath, concatContent);
+
+            const multiSceneBg = path.join(tmpDir, `multiscene_${Date.now()}.mp4`);
+            await new Promise((resolve, reject) => {
+              ffmpeg()
+                .setFfmpegPath(ffmpegPath)
+                .input(concatListPath)
+                .inputOptions(["-f concat", "-safe 0"])
+                .outputOptions(["-c copy"])
+                .output(multiSceneBg)
+                .on("end", resolve)
+                .on("error", reject)
+                .run();
+            });
+
+            finalBgPath = multiSceneBg;
+            isVideoBg = true;
+            console.log("[server-render] Multi-scene B-Roll successfully built:", finalBgPath);
+          }
+        } catch (bRollErr) {
+          console.warn("[server-render] Multi-scene B-Roll failed, falling back to primary bg:", bRollErr);
+        }
+      }
+
       // 3. Generate ASS Subtitles
       const formatTime = (secs: number) => {
         const totalCs = Math.max(0, Math.round(secs * 100));
@@ -238,7 +304,10 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
       if (data.bulgarian) {
         const words = data.bulgarian.trim().split(/\s+/).filter(Boolean);
         let timings = data.bulgarianWordTimings;
-        if (!timings || !timings.length) {
+        if (timings && timings.length > 0) {
+          const syncRes = verifyAndCorrectSubtitleSync(timings, audioDur);
+          timings = syncRes.correctedTimings;
+        } else {
           timings = [];
           const bounds = data.ayahBounds;
           if (Array.isArray(bounds) && bounds.length > 0) {

@@ -6,7 +6,7 @@ import { fetchHadith, listHadiths, type HadithData } from "@/lib/hadith.function
 import { fetchSunnahHadith, randomSahihHadith, type SunnahCollection } from "@/lib/sunnah.functions";
 import { translateToBulgarian } from "@/lib/translate.functions";
 import { suggestBackgrounds, generateBackground } from "@/lib/backgrounds.functions";
-import { searchPexelsPhotos, searchPexelsVideos } from "@/lib/pexels.functions";
+import { searchPexelsPhotos, searchPexelsVideos, fetchMultiSceneBRoll } from "@/lib/pexels.functions";
 import { suggestViral } from "@/lib/suggestions.functions";
 import { createSameOriginDownloadUrl, createSameOriginMediaUrl, cleanMediaMimeType, isIOSMediaDevice, sanitizeFilename, saveMediaBlob, saveMediaFromUrl } from "@/lib/download-media";
 import { renderPhoto, blobToBase64, type RenderOptions } from "@/lib/render-photo";
@@ -58,6 +58,7 @@ function CreatePage() {
   const runPexelsVideos = useServerFn(searchPexelsVideos);
   const runSuggestViral = useServerFn(suggestViral);
   const runNarrate = useServerFn(synthesizeHadithNarration);
+  const runFetchMultiScene = useServerFn(fetchMultiSceneBRoll);
 
   // sources
   const [tab, setTab] = useState<"ayah" | "hadith" | "viral">("ayah");
@@ -108,6 +109,8 @@ function CreatePage() {
   const [narrationUrl, setNarrationUrl] = useState<string | null>(null);
   const [narrationTimings, setNarrationTimings] = useState<{ start: number; end: number; word?: string }[] | null>(null);
   const [narrating, setNarrating] = useState(false);
+  const [multiSceneUrls, setMultiSceneUrls] = useState<string[]>([]);
+  const [multiSceneLoading, setMultiSceneLoading] = useState(false);
 
   // render
   const [rendering, setRendering] = useState(false);
@@ -357,6 +360,27 @@ function CreatePage() {
     setTimeout(() => { onPexelsVideoSearch(); }, 0);
   };
 
+  const handleFetchMultiScene = async () => {
+    try {
+      setMultiSceneLoading(true);
+      toast.message("Избирам 3 кинематографични B-Roll сцени за динамичен монтаж...");
+      const r = await runFetchMultiScene({ data: { query: pexelsQuery || content?.source_ref || "islamic nature" } });
+      if (r.clips && r.clips.length > 1) {
+        setMultiSceneUrls(r.clips);
+        setBgVideoUrl(r.clips[0]);
+        clearRendered();
+        setFormat("video");
+        toast.success(`Избрани ${r.clips.length} сменящи се B-Roll кадра (${r.theme})!`);
+      } else {
+        toast.message("Не бяха намерени достатъчно клипове, използва се един фон");
+      }
+    } catch (e: any) {
+      toast.error(e?.message || "Грешка при избор на B-Roll");
+    } finally {
+      setMultiSceneLoading(false);
+    }
+  };
+
   useEffect(() => {
     if (content?.english) {
       void onPexelsVideoSearch();
@@ -455,6 +479,7 @@ function CreatePage() {
           arabicWordCount: customAudioUrl || narration ? undefined : content.arabicWordCount,
           bulgarianWordTimings: narration && timings && timings.length ? timings : undefined,
           quality: videoQuality,
+          bRollUrls: multiSceneUrls.length > 1 ? multiSceneUrls : undefined,
         };
 
         let blob: Blob;
@@ -821,6 +846,15 @@ function CreatePage() {
               <Button onClick={onAutoPickPexelsVideo} disabled={pexelsVideosLoading}>
                 {pexelsVideosLoading ? <Loader2 className="size-4 animate-spin mr-1" /> : <Sparkles className="size-4 mr-1" />}
                 Авто-избор
+              </Button>
+              <Button
+                variant="outline"
+                className="border-amber-500/50 text-amber-400 hover:bg-amber-500/10"
+                onClick={handleFetchMultiScene}
+                disabled={multiSceneLoading || pexelsVideosLoading}
+              >
+                {multiSceneLoading ? <Loader2 className="size-4 animate-spin mr-1" /> : <Film className="size-4 mr-1" />}
+                🎬 3 Сменящи се B-Roll сцени
               </Button>
             </div>
           </div>

@@ -261,7 +261,30 @@ export const searchPexelsVideos = createServerFn({ method: "POST" })
       query: chosenQuery,
       theme: analysis.theme,
       mood: analysis.mood,
-      queriesTried: tried,
       videos,
     };
   });
+
+export const fetchMultiSceneBRoll = createServerFn({ method: "POST" })
+  .validator((input: { query?: string }) => input)
+  .handler(async ({ data }): Promise<{ clips: string[]; theme: string }> => {
+    const key = process.env.PEXELS_API_KEY || "";
+    const queries = data?.query ? [data.query] : ["mountain sunset", "night sky stars", "nature river calm"];
+    const clips: string[] = [];
+
+    for (const q of queries) {
+      const vs = await pexelsVideoQuery(key, q);
+      const built = buildOut(vs);
+      for (const b of built) {
+        if (!clips.includes(b.link) && clips.length < 3) {
+          clips.push(b.link);
+        }
+      }
+    }
+
+    return {
+      clips: clips.slice(0, 3),
+      theme: data?.query || "Кинематографични B-Roll сцени",
+    };
+  });
+
