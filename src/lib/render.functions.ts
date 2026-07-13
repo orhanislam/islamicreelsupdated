@@ -440,6 +440,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
           "-c:a aac",
           "-b:a 192k",
           "-ar 44100",
+          "-af loudnorm=I=-14:LRA=11:TP=-1.5",
           `-t ${Number(audioDur).toFixed(2)}`,
           "-threads 0"
         ])
