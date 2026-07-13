@@ -73,18 +73,8 @@ function DownloadsPage() {
         preloadingRef.current.add(job.id);
         try {
           const base64 = await getServerRenderJobBase64({ data: { id: job.id } });
-          const byteCharacters = atob(base64);
-          const sliceSize = 1024;
-          const byteArrays: Uint8Array[] = [];
-          for (let offset = 0; offset < byteCharacters.length; offset += sliceSize) {
-            const slice = byteCharacters.slice(offset, offset + sliceSize);
-            const byteNumbers = new Array(slice.length);
-            for (let i = 0; i < slice.length; i++) {
-              byteNumbers[i] = slice.charCodeAt(i);
-            }
-            byteArrays.push(new Uint8Array(byteNumbers));
-          }
-          const blob = new Blob(byteArrays as BlobPart[], { type: "video/mp4" });
+          const res = await fetch("data:video/mp4;base64," + base64);
+          const blob = await res.blob();
           const url = URL.createObjectURL(blob);
           setPreloadedUrls((prev) => ({ ...prev, [job.id]: url }));
         } catch (err) {
@@ -138,18 +128,8 @@ function DownloadsPage() {
       try {
         toast.message("Подготвям видеото за изтегляне от сървъра...");
         const base64 = await getServerRenderJobBase64({ data: { id: job.id } });
-        const byteCharacters = atob(base64);
-        const sliceSize = 1024;
-        const byteArrays: Uint8Array[] = [];
-        for (let offset = 0; offset < byteCharacters.length; offset += sliceSize) {
-          const slice = byteCharacters.slice(offset, offset + sliceSize);
-          const byteNumbers = new Array(slice.length);
-          for (let i = 0; i < slice.length; i++) {
-            byteNumbers[i] = slice.charCodeAt(i);
-          }
-          byteArrays.push(new Uint8Array(byteNumbers));
-        }
-        const blob = new Blob(byteArrays as BlobPart[], { type: "video/mp4" });
+        const res = await fetch("data:video/mp4;base64," + base64);
+        const blob = await res.blob();
         url = URL.createObjectURL(blob);
         setPreloadedUrls((prev) => ({ ...prev, [job.id]: url }));
       } catch (e) {
@@ -282,24 +262,23 @@ function DownloadsPage() {
 
                 <div className="mt-auto flex items-center gap-2">
                   {job.status === "completed" ? (
-                    preloadedUrls[job.id] ? (
-                      <button
-                        onClick={() => handleDownloadServerJob(job)}
-                        disabled={downloadingServerId === job.id}
-                        className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground shadow hover:bg-primary/90 transition cursor-pointer"
-                      >
-                        <Download className="size-4" />
-                        Свали MP4 от сървъра
-                      </button>
-                    ) : (
-                      <button
-                        disabled
-                        className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-xl bg-primary/80 px-4 py-2.5 text-sm font-medium text-primary-foreground shadow transition opacity-80 cursor-wait"
-                      >
-                        <Loader2 className="size-4 animate-spin" />
-                        Подготовка на MP4 файла...
-                      </button>
-                    )
+                    <button
+                      onClick={() => handleDownloadServerJob(job)}
+                      disabled={downloadingServerId === job.id}
+                      className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground shadow hover:bg-primary/90 transition cursor-pointer"
+                    >
+                      {downloadingServerId === job.id ? (
+                        <>
+                          <Loader2 className="size-4 animate-spin" />
+                          Сваля се...
+                        </>
+                      ) : (
+                        <>
+                          <Download className="size-4" />
+                          Свали MP4 от сървъра
+                        </>
+                      )}
+                    </button>
                   ) : job.status === "rendering" ? (
                     <div className="flex-1 text-xs text-muted-foreground text-center py-2 bg-muted/40 rounded-xl">
                       Можеш да затвориш Safari — видеото ще е готово тук!

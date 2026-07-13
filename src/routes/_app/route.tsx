@@ -1,5 +1,5 @@
 import { createFileRoute, Outlet, Link } from "@tanstack/react-router";
-import { PlusCircle } from "lucide-react";
+import { PlusCircle, Bot } from "lucide-react";
 
 export const Route = createFileRoute("/_app")({
   ssr: false,
@@ -16,6 +16,9 @@ function AppShell() {
             <span className="text-lg font-semibold">Nur Studio</span>
           </Link>
           <nav className="font-ui flex items-center gap-1.5 text-sm">
+            <Link to="/assistant" className="rounded-md px-3 py-2 hover:bg-secondary [&.active]:bg-secondary [&.active]:text-primary" activeProps={{ className: "active" }}>
+              <Bot className="inline size-4 mr-1 text-primary" /> AI Асистент
+            </Link>
             <Link to="/create" className="rounded-md px-3 py-2 hover:bg-secondary [&.active]:bg-secondary [&.active]:text-primary" activeProps={{ className: "active" }}>
               <PlusCircle className="inline size-4 mr-1" /> Създай
             </Link>
