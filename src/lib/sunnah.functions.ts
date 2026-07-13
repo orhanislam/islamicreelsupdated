@@ -4,10 +4,10 @@ import { createServerFn } from "@tanstack/react-start";
 // Each collection page lives at https://sunnah.com/<collection>:<number>
 
 const COLLECTIONS = {
-  bukhari: { label: "Sahih al-Bukhari", max: 7563, allSahih: true },
-  muslim: { label: "Sahih Muslim", max: 3033, allSahih: true },
-  tirmidhi: { label: "Jami` at-Tirmidhi", max: 3956, allSahih: false },
-  nawawi40: { label: "40 Hadith Nawawi", max: 42, allSahih: true },
+  bukhari: { label: "Сахих ал-Бухари", max: 7563, allSahih: true },
+  muslim: { label: "Сахих Муслим", max: 3033, allSahih: true },
+  tirmidhi: { label: "Джами ат-Тирмизи", max: 3956, allSahih: false },
+  nawawi40: { label: "40 Хадиса на ан-Навауи", max: 42, allSahih: true },
 } as const;
 
 export type SunnahCollection = keyof typeof COLLECTIONS;
@@ -92,7 +92,7 @@ async function scrape(collection: SunnahCollection, number: number): Promise<Sun
   const arabic = stripHtml(araMatch.text);
   const english = stripHtml(engMatch.text);
 
-  let reference = `${COLLECTIONS[collection].label} • Hadith #${number}`;
+  let reference = `${COLLECTIONS[collection].label} • Хадис № ${number}`;
 
   return {
     collection,

@@ -561,10 +561,10 @@ function CreatePage() {
                 <Select value={hadithSource} onValueChange={(v) => setHadithSource(v as typeof hadithSource)}>
                   <SelectTrigger className="w-64"><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="bukhari">Sahih al-Bukhari (1–7563)</SelectItem>
-                    <SelectItem value="muslim">Sahih Muslim (1–7563)</SelectItem>
-                    <SelectItem value="tirmidhi">Jami` at-Tirmidhi — само сахих</SelectItem>
-                    <SelectItem value="nawawi40">40 Hadith Nawawi (куриран)</SelectItem>
+                    <SelectItem value="bukhari">Сахих ал-Бухари (1–7563)</SelectItem>
+                    <SelectItem value="muslim">Сахих Муслим (1–3033)</SelectItem>
+                    <SelectItem value="tirmidhi">Джами ат-Тирмизи — само сахих</SelectItem>
+                    <SelectItem value="nawawi40">40 Хадиса на ан-Навауи (куриран)</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -576,7 +576,7 @@ function CreatePage() {
                     <Select value={String(hadithNum || "")} onValueChange={(v) => setHadithNum(+v)}>
                       <SelectTrigger className="w-64"><SelectValue placeholder="Избери хадис" /></SelectTrigger>
                       <SelectContent className="max-h-72">
-                        {(hadithList.length ? hadithList : [{ number: 1, reference: "40 Hadith Nawawi 1" }]).map((h) => (
+                        {(hadithList.length ? hadithList : [{ number: 1, reference: "40 Хадиса на ан-Навауи • Хадис № 1" }]).map((h) => (
                           <SelectItem key={h.number} value={String(h.number)}>{h.reference}</SelectItem>
                         ))}
                       </SelectContent>

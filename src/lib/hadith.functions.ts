@@ -20,7 +20,7 @@ export const listHadiths = createServerFn({ method: "GET" }).handler(async () =>
     arabic: "",
     english: "",
     collection: "nawawi40",
-    reference: `40 Hadith Nawawi • Hadith #${i + 1}`,
+    reference: `40 Хадиса на ан-Навауи • Хадис № ${i + 1}`,
     sourceUrl: `https://sunnah.com/nawawi40:${i + 1}`,
   }));
 });
