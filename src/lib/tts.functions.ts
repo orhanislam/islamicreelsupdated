@@ -83,6 +83,48 @@ function parseElevenLabsTimings(
   return timings;
 }
 
+function parseVttTimings(vttText: string): WordTiming[] {
+  const timings: WordTiming[] = [];
+  const cues = vttText.split(/\r?\n\r?\n/);
+  const parseTime = (str: string) => {
+    const parts = str.trim().replace(",", ".").split(":");
+    if (parts.length === 3) {
+      return Number(parts[0]) * 3600 + Number(parts[1]) * 60 + Number(parts[2]);
+    }
+    if (parts.length === 2) {
+      return Number(parts[0]) * 60 + Number(parts[1]);
+    }
+    return 0;
+  };
+
+  for (const cue of cues) {
+    const lines = cue.trim().split(/\r?\n/);
+    for (let i = 0; i < lines.length; i++) {
+      if (lines[i].includes("-->")) {
+        const [startStr, endStr] = lines[i].split("-->");
+        const start = parseTime(startStr);
+        const end = parseTime(endStr);
+        const text = lines.slice(i + 1).join(" ").trim();
+        const words = text.split(/\s+/).filter(Boolean);
+        if (words.length > 0 && end > start) {
+          const dur = end - start;
+          for (let w = 0; w < words.length; w++) {
+            const wStart = start + (w / words.length) * dur;
+            const wEnd = start + ((w + 1) / words.length) * dur;
+            timings.push({
+              start: Math.round(wStart * 1000) / 1000,
+              end: Math.round(wEnd * 1000) / 1000,
+              word: words[w],
+            });
+          }
+        }
+        break;
+      }
+    }
+  }
+  return timings;
+}
+
 export const synthesizeHadithNarration = createServerFn({ method: "POST" })
   .validator((input: { text: string; reference?: string }) => {
     const text = String(input.text ?? "").trim();
@@ -174,13 +216,23 @@ export const synthesizeHadithNarration = createServerFn({ method: "POST" })
           const execFileAsync = util.promisify(execFile);
 
           const tmpPyPath = path.join(os.tmpdir(), `py-tts-${Date.now()}.mp3`);
+          const tmpVttPath = path.join(os.tmpdir(), `py-tts-${Date.now()}.vtt`);
           await execFileAsync("edge-tts", [
             "--voice", "bg-BG-BorislavNeural",
             "--text", cleaned,
-            "--write-media", tmpPyPath
+            "--write-media", tmpPyPath,
+            "--write-subtitles", tmpVttPath
           ]);
           audioBuffer = await fs.readFile(tmpPyPath);
+          try {
+            const vttContent = await fs.readFile(tmpVttPath, "utf-8");
+            const parsedVtt = parseVttTimings(vttContent);
+            if (parsedVtt.length > 0) {
+              exactWordTimings = parsedVtt;
+            }
+          } catch { /* ignore vtt parse errors */ }
           await fs.unlink(tmpPyPath).catch(() => {});
+          await fs.unlink(tmpVttPath).catch(() => {});
         } catch (pyErr) {
           console.warn("[tts] Python edge-tts failed, falling back to Google TTS:", pyErr);
           try {
