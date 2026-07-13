@@ -14,6 +14,7 @@ import {
 } from "@/lib/render.functions";
 import { Download, Trash2, CheckCircle2, ArrowLeft, Video, Film, RefreshCw, Loader2, AlertCircle, CloudCheck } from "lucide-react";
 import { toast } from "sonner";
+import confetti from "canvas-confetti";
 
 export const Route = createFileRoute("/_app/downloads")({
   component: DownloadsPage,
@@ -74,6 +75,12 @@ function DownloadsPage() {
           const blob = await res.blob();
           const url = URL.createObjectURL(blob);
           setPreloadedUrls((prev) => ({ ...prev, [job.id]: url }));
+          confetti({
+            particleCount: 65,
+            spread: 75,
+            origin: { y: 0.65 },
+            colors: ["#FFD700", "#10B981", "#3B82F6", "#F59E0B"],
+          });
         } catch (err) {
           console.error("Failed to preload server video:", err);
           preloadingRef.current.delete(job.id);

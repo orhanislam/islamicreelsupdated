@@ -440,7 +440,11 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             const lastWordEnd = timings[p.endIdx - 1]?.end ?? (start + 1.5);
             let end = Math.min(nextPhraseStart, Math.max(start + 0.3, lastWordEnd + 0.12));
 
-            const textLine = p.words.join(" ");
+            const highlightKeywords = /^(Аллах|Коран|Корана|Пророк|Пророкът|Хадис|Сура|Аят|Рай|Дженнет|Дуа|Иман|Благословение|Милост|Търпение|Надежда|Успех|Мухаммад|Господ|Господар)[.,!?]?$/i;
+            const textLine = p.words
+              .map((w) => (highlightKeywords.test(w) ? `{\\c&H0000D7FF&}${w}{\\r}` : w))
+              .join(" ");
+
             const useAnim = isFirst ? `\\fad(120,0)` : isLast ? `\\fad(0,100)` : instantAnimTag;
             const phraseStyleTag = `{\\an2\\pos(540,1540)\\fscx100\\fscy100${useAnim}}`;
             ass += `Dialogue: 0,${formatTime(start)},${formatTime(end)},Bulgarian,,0,0,0,,${phraseStyleTag}${textLine}\n`;
@@ -474,11 +478,12 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         let ffmpegStderr = "";
 
         cmd.complexFilter([
-          `[0:v]crop='min(iw,ih*9/16)':'min(iw*16/9,ih)',scale=${width}:${height}:flags=bicubic,eq=brightness=-0.08,subtitles='${escapedAssPath}'[v]`
+          `[0:v]crop='min(iw,ih*9/16)':'min(iw*16/9,ih)',scale=${width}:${height}:flags=bicubic,eq=contrast=1.06:saturation=1.14:brightness=-0.06,subtitles='${escapedAssPath}'[v]`,
+          `[1:a]acompressor=threshold=-18dB:ratio=2.5:attack=5:release=50,bass=g=3:f=110:w=0.6[a]`
         ])
         .outputOptions([
           "-map [v]",
-          "-map 1:a?",
+          "-map [a]",
           "-c:v libx264",
           "-profile:v high",
           "-level 4.2",
