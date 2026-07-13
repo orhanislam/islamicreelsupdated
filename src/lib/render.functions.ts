@@ -165,6 +165,23 @@ export const runServerRender = createServerFn({ method: "POST" })
       const bulgarianAlign = 8;
       const bulgarianMarginV = 1150;
 
+      const tiktokTheme = data.tiktokTheme || "hormozi";
+      let outlineColor = "&H00000000";
+      let outlineWidth = "5.5";
+      let shadowSize = "1.5";
+
+      if (tiktokTheme === "emerald") {
+        outlineColor = "&H00183010";
+        outlineWidth = "5.5";
+      } else if (tiktokTheme === "neon") {
+        outlineColor = "&H00201505";
+        outlineWidth = "5";
+      } else if (tiktokTheme === "classic") {
+        outlineColor = "&H00000000";
+        outlineWidth = "4";
+        shadowSize = "0";
+      }
+
       let ass = `[Script Info]
 ScriptType: v4.00+
 PlayResX: 1080
@@ -173,7 +190,7 @@ PlayResY: 1920
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
 Style: Arabic,Scheherazade New,100,&H00FFFFFF,&H000000FF,&H00000000,&H80000000,-1,0,0,0,100,100,0,0,1,3,0,8,50,50,300,1
-Style: Bulgarian,Outfit,120,&H00FFFFFF,&H000000FF,&H00000000,&H66000000,-1,0,0,0,100,100,0,0,1,4.5,0,${bulgarianAlign},100,100,1120,1
+Style: Bulgarian,Outfit,120,&H00FFFFFF,&H0000D7FF,${outlineColor},&H66000000,-1,0,0,0,100,100,0,0,1,${outlineWidth},${shadowSize},${bulgarianAlign},100,100,1120,1
 Style: Reference,Outfit,46,&H005DC9F4,&H000000FF,&H00000000,&H80000000,-1,0,0,0,100,100,0,0,1,3,1,8,50,50,280,1
 
 [Events]
