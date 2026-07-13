@@ -132,19 +132,29 @@ export const runServerRender = createServerFn({ method: "POST" })
         }
         await fs.writeFile(finalBgPath, BufferMod.from(b64, "base64"));
       } else {
-        const res = await fetch(bgUrl, {
-          headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" }
-        });
-        if (!res.ok) throw new Error(`Failed to fetch background video: ${res.status} ${res.statusText}`);
-        const contentType = res.headers.get("content-type") || "";
-        if (contentType.includes("video") || bgUrl.includes(".mp4")) {
+        try {
+          const res = await fetch(bgUrl, {
+            headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" }
+          });
+          if (!res.ok) throw new Error(`Status ${res.status}`);
+          const contentType = res.headers.get("content-type") || "";
+          if (contentType.includes("video") || bgUrl.includes(".mp4")) {
+            isVideoBg = true;
+            finalBgPath += ".mp4";
+          } else {
+            finalBgPath += ".jpg";
+          }
+          const arrayBuf = await res.arrayBuffer();
+          await fs.writeFile(finalBgPath, BufferMod.from(arrayBuf));
+        } catch (fetchErr) {
+          console.warn("[server-render] Primary background fetch failed, using reliable fallback video:", fetchErr);
+          const fallbackUrl = "https://videos.pexels.com/video-files/855029/855029-hd_1080_1920_30fps.mp4";
+          const fbRes = await fetch(fallbackUrl);
           isVideoBg = true;
           finalBgPath += ".mp4";
-        } else {
-          finalBgPath += ".jpg";
+          const arrayBuf = await fbRes.arrayBuffer();
+          await fs.writeFile(finalBgPath, BufferMod.from(arrayBuf));
         }
-        const arrayBuf = await res.arrayBuffer();
-        await fs.writeFile(finalBgPath, BufferMod.from(arrayBuf));
       }
 
       // 3. Generate ASS Subtitles
@@ -559,6 +569,7 @@ export const startServerRenderJob = createServerFn({ method: "POST" })
       title: title || "Ислямско видео (Фонов рендер)",
       status: "rendering",
       createdAt: Date.now(),
+      data,
     });
     await saveJobs(jobs);
 
@@ -595,6 +606,51 @@ export const startServerRenderJob = createServerFn({ method: "POST" })
     })();
 
     return { jobId, status: "rendering" };
+  });
+
+export const retryServerRenderJob = createServerFn({ method: "POST" })
+  .validator((input: { id: string }) => input)
+  .handler(async ({ data: { id } }) => {
+    const jobs = await loadJobs();
+    const idx = jobs.findIndex((j: any) => j.id === id);
+    if (idx === -1 || !jobs[idx].data) {
+      throw new Error("Job or render data not found");
+    }
+    const jobData = jobs[idx].data;
+    jobs[idx].status = "rendering";
+    jobs[idx].error = undefined;
+    await saveJobs(jobs);
+
+    (async () => {
+      const fs = (await import("fs")).promises;
+      const path = await import("path");
+      const dir = await getJobsDir();
+      const targetMp4 = path.join(dir, `${id}.mp4`);
+      try {
+        console.log(`[server-job] Retrying background render for ${id}...`);
+        const base64Data = await runServerRender({ data: jobData });
+        const BufferMod = (await import("node:buffer")).Buffer;
+        await fs.writeFile(targetMp4, BufferMod.from(base64Data, "base64"));
+
+        const curJobs = await loadJobs();
+        const curIdx = curJobs.findIndex((j: any) => j.id === id);
+        if (curIdx !== -1) {
+          curJobs[curIdx].status = "completed";
+          curJobs[curIdx].completedAt = Date.now();
+          await saveJobs(curJobs);
+        }
+      } catch (err: any) {
+        const curJobs = await loadJobs();
+        const curIdx = curJobs.findIndex((j: any) => j.id === id);
+        if (curIdx !== -1) {
+          curJobs[curIdx].status = "error";
+          curJobs[curIdx].error = String(err.message || err);
+          await saveJobs(curJobs);
+        }
+      }
+    })();
+
+    return { success: true };
   });
 
 export const listServerRenderJobs = createServerFn({ method: "POST" })

@@ -10,8 +10,9 @@ import {
   listServerRenderJobs,
   getServerRenderJobBase64,
   deleteServerRenderJob,
+  retryServerRenderJob,
 } from "@/lib/render.functions";
-import { Download, Trash2, CheckCircle2, ArrowLeft, Video, Film, RefreshCw, Loader2, AlertCircle } from "lucide-react";
+import { Download, Trash2, CheckCircle2, ArrowLeft, Video, Film, RefreshCw, Loader2, AlertCircle, CloudCheck } from "lucide-react";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_app/downloads")({
@@ -162,6 +163,17 @@ function DownloadsPage() {
     toast.success("Фоновият запис е изтрит от сървъра");
   };
 
+  const handleRetryServerJob = async (id: string) => {
+    try {
+      toast.message("Стартирам повторен опит за рендиране на сървъра...");
+      await retryServerRenderJob({ data: { id } });
+      toast.success("Рендирането започна отново на сървъра!");
+      loadAll();
+    } catch (e: any) {
+      toast.error(e?.message || "Не успях да стартирам повторно рендирането");
+    }
+  };
+
   const handleClearAll = async () => {
     await clearDownloadsQueue();
     for (const j of serverJobs) {
@@ -176,6 +188,18 @@ function DownloadsPage() {
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-8">
+      <div className="mb-6 rounded-2xl border border-primary/30 bg-primary/10 p-4 flex items-center gap-3 text-sm">
+        <CloudCheck className="size-6 text-primary shrink-0" />
+        <div>
+          <p className="font-semibold text-foreground">
+            ☁️ 100% Автономно рендиране — Можеш спокойно да затвориш сайта!
+          </p>
+          <p className="text-muted-foreground text-xs mt-0.5">
+            Когато одобриш видео от AI Асистента, то се рендира на сървъра. Можеш да затвориш браузъра веднага — когато се върнеш тук по-късно, видеото ще те чака готово за изтегляне!
+          </p>
+        </div>
+      </div>
+
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
         <div>
           <div className="flex items-center gap-2 text-primary font-medium text-sm mb-1">
@@ -284,8 +308,17 @@ function DownloadsPage() {
                       Можеш да затвориш Safari — видеото ще е готово тук!
                     </div>
                   ) : (
-                    <div className="flex-1 text-xs text-rose-500 text-center py-2">
-                      {job.error || "Грешка при рендиране"}
+                    <div className="flex-1 flex items-center justify-between gap-2 px-3 py-1.5 bg-rose-500/10 rounded-xl border border-rose-500/20">
+                      <span className="text-xs text-rose-500 line-clamp-1">
+                        {job.error || "Грешка при рендиране"}
+                      </span>
+                      <button
+                        onClick={() => handleRetryServerJob(job.id)}
+                        className="inline-flex items-center gap-1 rounded-lg bg-rose-500 px-2.5 py-1 text-xs font-semibold text-white hover:bg-rose-600 transition shrink-0"
+                      >
+                        <RefreshCw className="size-3" />
+                        Опитай пак
+                      </button>
                     </div>
                   )}
 
