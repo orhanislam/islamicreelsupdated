@@ -16,13 +16,17 @@ function estimateWordTimings(text: string, totalDuration: number): WordTiming[] 
   const timings: WordTiming[] = [];
   let currentCost = 0;
 
+  const leadSilence = 0.15;
+  const tailSilence = 0.25;
+  const speechDuration = Math.max(0.5, totalDuration - leadSilence - tailSilence);
+
   for (let i = 0; i < words.length; i++) {
     const startFrac = currentCost / totalCost;
     currentCost += costs[i];
     const endFrac = currentCost / totalCost;
 
-    const start = Math.round(startFrac * totalDuration * 1000) / 1000;
-    const end = Math.round(endFrac * totalDuration * 1000) / 1000;
+    const start = Math.round((leadSilence + startFrac * speechDuration) * 1000) / 1000;
+    const end = Math.round((leadSilence + endFrac * speechDuration) * 1000) / 1000;
 
     timings.push({
       start,

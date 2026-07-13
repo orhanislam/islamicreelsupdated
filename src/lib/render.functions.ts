@@ -397,8 +397,8 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             }
           }
         } else {
-          // Group words into short TikTok-style phrases for non-Ayah narrations
-          const MAX_WORDS = 6;
+          // Group words into short viral TikTok-style punchy phrases (2 to 4 words max)
+          const MAX_WORDS = 4;
           const MIN_WORDS = 2;
           type Phrase = { words: string[]; startIdx: number; endIdx: number };
           const phrases: Phrase[] = [];
@@ -425,22 +425,23 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             const p = phrases[idx];
             const isFirst = idx === 0;
             const isLast = idx === phrases.length - 1;
+            
+            // Ensure exact synchronization with the start of the first word in the phrase
             let start = timings[p.startIdx]?.start ?? prevEnd;
-            let end = timings[p.endIdx - 1]?.end ?? (start + 2);
-
             if (start < prevEnd) {
               start = prevEnd;
             }
-            // Make phrase boundaries contiguous with next phrase start
-            const nextStart = idx + 1 < phrases.length ? (timings[phrases[idx + 1].startIdx]?.start ?? end) : audioDur;
-            end = nextStart;
 
-            if (end <= start + 0.05) {
-              end = start + 0.05;
-            }
+            const nextPhraseStart = idx + 1 < phrases.length
+              ? (timings[phrases[idx + 1].startIdx]?.start ?? audioDur)
+              : audioDur;
+
+            // End when the last word in the phrase finishes, plus a slight tail (0.12s) for natural reading
+            const lastWordEnd = timings[p.endIdx - 1]?.end ?? (start + 1.5);
+            let end = Math.min(nextPhraseStart, Math.max(start + 0.3, lastWordEnd + 0.12));
 
             const textLine = p.words.join(" ");
-            const useAnim = isFirst ? `\\fad(150,0)` : isLast ? `\\fad(0,120)` : instantAnimTag;
+            const useAnim = isFirst ? `\\fad(120,0)` : isLast ? `\\fad(0,100)` : instantAnimTag;
             const phraseStyleTag = `{\\an2\\pos(540,1540)\\fscx100\\fscy100${useAnim}}`;
             ass += `Dialogue: 0,${formatTime(start)},${formatTime(end)},Bulgarian,,0,0,0,,${phraseStyleTag}${textLine}\n`;
             prevEnd = end;
