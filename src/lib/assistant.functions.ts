@@ -82,10 +82,17 @@ ${memoryContext}
     const raw = await geminiChat("gemini-2.5-flash", msgs, true);
     let parsed: any;
     try {
-      const clean = raw.replace(/```json\s*|\s*```/g, "").trim();
+      let clean = raw.replace(/```json\s*|\s*```/g, "").trim();
+      const firstBrace = clean.indexOf("{");
+      const lastBrace = clean.lastIndexOf("}");
+      if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+        clean = clean.substring(firstBrace, lastBrace + 1);
+      }
       parsed = JSON.parse(clean);
     } catch {
-      parsed = { reply: raw, proposal: null };
+      let cleanText = raw.replace(/```json[\s\S]*?```/g, "").replace(/[{}"_]/g, " ").trim();
+      if (!cleanText || cleanText.length < 5) cleanText = raw;
+      parsed = { reply: cleanText, proposal: null };
     }
 
     if (parsed.newLearnedFact && typeof parsed.newLearnedFact === "string" && parsed.newLearnedFact.trim().length > 2) {
@@ -166,7 +173,7 @@ export const confirmAndGenerateVideo = createServerFn({ method: "POST" })
 
     const bestVid = vidSearch.videos?.[0]?.link || "https://videos.pexels.com/video-files/855029/855029-hd_1080_1920_30fps.mp4";
 
-    const jobId = await startServerRenderJob({
+    const { jobId } = await startServerRenderJob({
       data: {
         title: reference,
         data: {

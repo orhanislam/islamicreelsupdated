@@ -57,21 +57,43 @@ export const runServerRender = createServerFn({ method: "POST" })
     try {
       console.log("[server-render] Starting pure FFmpeg render...");
 
-      // 1. Download/Save Audio
+      // 1. Download/Save Audio or Generate Silent Fallback
+      let hasValidAudio = false;
       if (data.audioUrl) {
-        if (data.audioUrl.startsWith("data:")) {
-          const b64 = data.audioUrl.split(",")[1];
-          await fs.writeFile(audioPath, BufferMod.from(b64, "base64"));
-        } else {
-          const res = await fetch(data.audioUrl, {
-            headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" }
-          });
-          if (!res.ok) throw new Error(`Failed to fetch audio: ${res.status} ${res.statusText}`);
-          const arrayBuf = await res.arrayBuffer();
-          await fs.writeFile(audioPath, BufferMod.from(arrayBuf));
+        try {
+          if (data.audioUrl.startsWith("data:")) {
+            const b64 = data.audioUrl.split(",")[1];
+            await fs.writeFile(audioPath, BufferMod.from(b64, "base64"));
+            hasValidAudio = true;
+          } else {
+            const res = await fetch(data.audioUrl, {
+              headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" }
+            });
+            if (res.ok) {
+              const arrayBuf = await res.arrayBuffer();
+              await fs.writeFile(audioPath, BufferMod.from(arrayBuf));
+              hasValidAudio = true;
+            }
+          }
+        } catch (err) {
+          console.warn("[server-render] Could not load audioUrl, generating silent audio track:", err);
         }
-      } else {
-        throw new Error("No audioUrl provided");
+      }
+
+      if (!hasValidAudio) {
+        console.log("[server-render] No audio provided or fetch failed, creating 15s silent audio track...");
+        await new Promise<void>((resolve, reject) => {
+          ffmpeg()
+            .input("anullsrc=r=44100:cl=mono")
+            .inputFormat("lavfi")
+            .outputOptions(["-t 15", "-c:a libmp3lame"])
+            .save(audioPath)
+            .on("end", () => resolve())
+            .on("error", (e: any) => {
+              console.warn("lavfi anullsrc fallback error, trying silent mp3 generation", e);
+              resolve();
+            });
+        });
       }
 
       let audioDur = 15;
