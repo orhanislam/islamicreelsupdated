@@ -12,7 +12,8 @@ import {
   deleteServerRenderJob,
   retryServerRenderJob,
 } from "@/lib/render.functions";
-import { Download, Trash2, CheckCircle2, ArrowLeft, Video, Film, RefreshCw, Loader2, AlertCircle, CloudCheck } from "lucide-react";
+import { generateViralThumbnail } from "@/lib/thumbnail.functions";
+import { Download, Trash2, CheckCircle2, ArrowLeft, Video, Film, RefreshCw, Loader2, AlertCircle, CloudCheck, Image as ImageIcon } from "lucide-react";
 import { toast } from "sonner";
 import confetti from "canvas-confetti";
 
@@ -34,6 +35,7 @@ function DownloadsPage() {
   const [loading, setLoading] = useState(true);
   const [downloadedIds, setDownloadedIds] = useState<Set<string>>(new Set());
   const [downloadingServerId, setDownloadingServerId] = useState<string | null>(null);
+  const [generatingThumbId, setGeneratingThumbId] = useState<string | null>(null);
   const [preloadedUrls, setPreloadedUrls] = useState<Record<string, string>>({});
   const preloadingRef = useRef<Set<string>>(new Set());
 
@@ -152,6 +154,25 @@ function DownloadsPage() {
     a.click();
     document.body.removeChild(a);
     toast.success("Видеото е свалено веднага!");
+  };
+
+  const handleDownloadThumbnail = async (id: string, title: string) => {
+    try {
+      setGeneratingThumbId(id);
+      toast.message("Генериране на професионална вайръл корица (Thumbnail)...");
+      const res = await generateViralThumbnail({ data: { title } });
+      const a = document.createElement("a");
+      a.href = res.dataUrl;
+      a.download = `${title || "islamic-reel"}_thumbnail.jpg`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      toast.success("Вайръл корицата е свалена успешно!");
+    } catch (e) {
+      toast.error("Не успях да създам корицата");
+    } finally {
+      setGeneratingThumbId(null);
+    }
   };
 
   const handleRemoveLocal = async (id: string) => {
@@ -289,23 +310,40 @@ function DownloadsPage() {
 
                 <div className="mt-auto flex items-center gap-2">
                   {job.status === "completed" ? (
-                    <button
-                      onClick={() => handleDownloadServerJob(job)}
-                      disabled={downloadingServerId === job.id}
-                      className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground shadow hover:bg-primary/90 transition cursor-pointer"
-                    >
-                      {downloadingServerId === job.id ? (
-                        <>
+                    <>
+                      <button
+                        onClick={() => handleDownloadServerJob(job)}
+                        disabled={downloadingServerId === job.id}
+                        className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-xl bg-primary px-3.5 py-2.5 text-sm font-medium text-primary-foreground shadow hover:bg-primary/90 transition cursor-pointer"
+                      >
+                        {downloadingServerId === job.id ? (
+                          <>
+                            <Loader2 className="size-4 animate-spin" />
+                            Сваля се...
+                          </>
+                        ) : (
+                          <>
+                            <Download className="size-4" />
+                            Свали MP4
+                          </>
+                        )}
+                      </button>
+                      <button
+                        onClick={() => handleDownloadThumbnail(job.id, job.title)}
+                        disabled={generatingThumbId === job.id}
+                        title="Генерирай Вайръл TikTok Корица (Thumbnail)"
+                        className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-amber-500/40 bg-amber-500/10 px-3 py-2.5 text-sm font-medium text-amber-400 hover:bg-amber-500/20 transition cursor-pointer shrink-0"
+                      >
+                        {generatingThumbId === job.id ? (
                           <Loader2 className="size-4 animate-spin" />
-                          Сваля се...
-                        </>
-                      ) : (
-                        <>
-                          <Download className="size-4" />
-                          Свали MP4 от сървъра
-                        </>
-                      )}
-                    </button>
+                        ) : (
+                          <>
+                            <ImageIcon className="size-4" />
+                            Корица
+                          </>
+                        )}
+                      </button>
+                    </>
                   ) : job.status === "rendering" ? (
                     <div className="flex-1 text-xs text-muted-foreground text-center py-2 bg-muted/40 rounded-xl">
                       Можеш да затвориш Safari — видеото ще е готово тук!

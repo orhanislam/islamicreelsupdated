@@ -5,8 +5,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { toast } from "sonner";
-import { chatWithAssistant, confirmAndGenerateVideo, type VideoProposal } from "@/lib/assistant.functions";
+import { chatWithAssistant, confirmAndGenerateVideo, startBatchViralSeries, type VideoProposal } from "@/lib/assistant.functions";
 import { getAiMemory, updateAiMemory, type AiMemory } from "@/lib/memory.functions";
+import { playStudioClick } from "@/lib/sfx";
 
 export const Route = createFileRoute("/_app/assistant")({
   component: AssistantPage,
@@ -23,6 +24,7 @@ type ChatMsg = {
 function AssistantPage() {
   const [prompt, setPrompt] = useState("");
   const [loading, setLoading] = useState(false);
+  const [batchLoading, setBatchLoading] = useState(false);
   const [confirmingIdx, setConfirmingIdx] = useState<number | null>(null);
   const [showMemory, setShowMemory] = useState(false);
   const [memory, setMemory] = useState<AiMemory | null>(null);
@@ -119,6 +121,7 @@ function AssistantPage() {
 
   const handleConfirmProposal = async (proposal: VideoProposal, msgIdx: number) => {
     if (confirmingIdx !== null) return;
+    playStudioClick("start");
     setConfirmingIdx(msgIdx);
     toast.message("Генерирам видеото по твоето одобрено предложение...");
 
@@ -136,11 +139,34 @@ function AssistantPage() {
           reference: res.reference,
         },
       ]);
+      playStudioClick("success");
       toast.success("Видеото е стартирано успешно!");
     } catch (err: any) {
       toast.error(err?.message || "Грешка при стартиране на видеото");
     } finally {
       setConfirmingIdx(null);
+    }
+  };
+
+  const handleStartBatchSeries = async () => {
+    try {
+      playStudioClick("start");
+      setBatchLoading(true);
+      toast.message("Стартиране на пакетно генериране на 3 вайръл видеа...");
+      const res = await startBatchViralSeries();
+      playStudioClick("success");
+      toast.success(res.message);
+      setMessages((prev) => [
+        ...prev,
+        {
+          role: "assistant",
+          text: `📦 **Пакетното генериране е стартирано!**\n\nСистемата генерира 3 вайръл видеа от Корана (Ал-Фатиха, Ал-Ихлас и Ал-Аср) с професионални субтитри. Можеш да ги следиш и свалиш в раздел **[Изтегляния](/downloads)**.`,
+        },
+      ]);
+    } catch (e: any) {
+      toast.error(e?.message || "Грешка при стартиране на пакетното генериране");
+    } finally {
+      setBatchLoading(false);
     }
   };
 
@@ -234,6 +260,33 @@ function AssistantPage() {
           )}
         </Card>
       )}
+
+      {/* Batch Series Luxury Card */}
+      <div className="mb-6 rounded-2xl border border-amber-500/30 bg-gradient-to-r from-amber-500/10 via-amber-500/5 to-transparent p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <div>
+          <div className="flex items-center gap-2 text-amber-400 font-bold text-sm">
+            <Sparkles className="size-4" /> ПАКЕТЕН РЕЖИМ • ВАЙРЪЛ СЕРИЯ ОТ КОРАНА
+          </div>
+          <p className="text-xs text-muted-foreground mt-1">
+            С 1 клик генерирай автоматично серия от 3 топ видеа (Ал-Фатиха, Ал-Ихлас, Ал-Аср) с професионални субтитри.
+          </p>
+        </div>
+        <button
+          onClick={handleStartBatchSeries}
+          disabled={batchLoading}
+          className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 px-4 py-2.5 text-xs font-bold text-black shadow-lg hover:from-amber-400 hover:to-amber-500 transition shrink-0 cursor-pointer"
+        >
+          {batchLoading ? (
+            <>
+              <Loader2 className="size-4 animate-spin" /> Генериране...
+            </>
+          ) : (
+            <>
+              <Video className="size-4" /> Генерирай Серия от 3 Видеа
+            </>
+          )}
+        </button>
+      </div>
 
       <div className="mb-4 flex flex-wrap items-center gap-2">
         <span className="text-xs font-semibold text-muted-foreground mr-1">⚡ Бързи TikTok идеи:</span>

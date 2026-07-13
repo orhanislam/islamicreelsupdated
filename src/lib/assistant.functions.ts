@@ -199,7 +199,34 @@ export const confirmAndGenerateVideo = createServerFn({ method: "POST" })
     return {
       reply: `🎬 **Одобрено! Стартирах генерирането на видеото за „${reference}“ на сървъра!**\n\nМожеш да го намериш и свалиш веднага след рендиране от раздел **[Изтегляния](/downloads)**.`,
       jobStarted: true,
-      jobId,
       reference,
     };
   });
+
+export const startBatchViralSeries = createServerFn({ method: "POST" })
+  .handler(async (): Promise<{ success: boolean; count: number; message: string }> => {
+    // Generate a curated 3-part viral series
+    const series = [
+      { surah: 1, ayah: 1, ayahEnd: 2, ref: "Сура Ал-Фатиха (1:1-2)" },
+      { surah: 112, ayah: 1, ayahEnd: 4, ref: "Сура Ал-Ихлас (112:1-4)" },
+      { surah: 103, ayah: 1, ayahEnd: 3, ref: "Сура Ал-Аср (103:1-3)" },
+    ];
+
+    for (const item of series) {
+      await approveAndRenderAssistantIdea({
+        data: {
+          surah: item.surah,
+          ayah: item.ayah,
+          ayahEnd: item.ayahEnd,
+          reference: `${item.ref} • Пакетно Вайръл Видео`,
+        },
+      });
+    }
+
+    return {
+      success: true,
+      count: series.length,
+      message: `📦 Успешно стартирано пакетно генериране на ${series.length} професионални вайръл видеа! Можеш да следиш напредъка им в раздел Изтегляния.`,
+    };
+  });
+
