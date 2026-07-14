@@ -12,10 +12,11 @@ import {
   getServerRenderJobDownloadUrl,
   deleteServerRenderJob,
   retryServerRenderJob,
+  cleanServerDiskSpace,
 } from "@/lib/render.functions";
 import { generateViralThumbnail } from "@/lib/thumbnail.functions";
 import { saveMediaBlob, isIOSMediaDevice } from "@/lib/download-media";
-import { Download, Trash2, CheckCircle2, ArrowLeft, Video, Film, RefreshCw, Loader2, AlertCircle, CloudCheck, Image as ImageIcon } from "lucide-react";
+import { Download, Trash2, CheckCircle2, ArrowLeft, Video, Film, RefreshCw, Loader2, AlertCircle, CloudCheck, Image as ImageIcon, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import confetti from "canvas-confetti";
 
@@ -38,8 +39,23 @@ function DownloadsPage() {
   const [downloadedIds, setDownloadedIds] = useState<Set<string>>(new Set());
   const [downloadingServerId, setDownloadingServerId] = useState<string | null>(null);
   const [generatingThumbId, setGeneratingThumbId] = useState<string | null>(null);
+  const [cleaningDisk, setCleaningDisk] = useState(false);
   const [preloadedUrls, setPreloadedUrls] = useState<Record<string, string>>({});
   const preloadingRef = useRef<Set<string>>(new Set());
+
+  const handleCleanServerDisk = async () => {
+    try {
+      setCleaningDisk(true);
+      toast.message("🧹 Изчиствам всички временни файлове, кеш и логове на сървъра...");
+      await cleanServerDiskSpace();
+      toast.success("✅ Дисковото пространство на сървъра е успешно освободено!");
+      loadAll();
+    } catch (e: any) {
+      toast.error(e?.message || "Грешка при почистване на диска");
+    } finally {
+      setCleaningDisk(false);
+    }
+  };
 
   const loadAll = async () => {
     try {
@@ -242,14 +258,24 @@ function DownloadsPage() {
           </p>
         </div>
 
-        {totalCount > 0 && (
+        <div className="flex items-center gap-2 flex-wrap">
           <button
-            onClick={handleClearAll}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3.5 py-2 text-sm font-medium hover:bg-destructive/10 hover:text-destructive hover:border-destructive/30 transition"
+            onClick={handleCleanServerDisk}
+            disabled={cleaningDisk}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-primary/40 bg-primary/10 px-3.5 py-2 text-sm font-medium text-primary hover:bg-primary/20 transition cursor-pointer"
           >
-            <Trash2 className="size-4" /> Изчисти всички
+            {cleaningDisk ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />}
+            🧹 Изчисти диска на сървъра
           </button>
-        )}
+          {totalCount > 0 && (
+            <button
+              onClick={handleClearAll}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3.5 py-2 text-sm font-medium hover:bg-destructive/10 hover:text-destructive hover:border-destructive/30 transition cursor-pointer"
+            >
+              <Trash2 className="size-4" /> Изчисти всички
+            </button>
+          )}
+        </div>
       </div>
 
       {loading ? (
@@ -351,17 +377,29 @@ function DownloadsPage() {
                       Можеш да затвориш Safari — видеото ще е готово тук!
                     </div>
                   ) : (
-                    <div className="flex-1 flex items-center justify-between gap-2 px-3 py-1.5 bg-rose-500/10 rounded-xl border border-rose-500/20">
-                      <span className="text-xs text-rose-500 line-clamp-1">
+                    <div className="flex-1 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 px-3 py-2 bg-rose-500/10 rounded-xl border border-rose-500/20">
+                      <span className="text-xs text-rose-500 line-clamp-2">
                         {job.error || "Грешка при рендиране"}
                       </span>
-                      <button
-                        onClick={() => handleRetryServerJob(job.id)}
-                        className="inline-flex items-center gap-1 rounded-lg bg-rose-500 px-2.5 py-1 text-xs font-semibold text-white hover:bg-rose-600 transition shrink-0"
-                      >
-                        <RefreshCw className="size-3" />
-                        Опитай пак
-                      </button>
+                      <div className="flex items-center gap-1.5 shrink-0 self-end sm:self-auto">
+                        <button
+                          onClick={async () => {
+                            await handleCleanServerDisk();
+                            await handleRetryServerJob(job.id);
+                          }}
+                          disabled={cleaningDisk}
+                          className="inline-flex items-center gap-1 rounded-lg bg-amber-500 px-2.5 py-1 text-xs font-bold text-black hover:bg-amber-400 transition cursor-pointer"
+                        >
+                          🧹 Изчисти диска и опитай
+                        </button>
+                        <button
+                          onClick={() => handleRetryServerJob(job.id)}
+                          className="inline-flex items-center gap-1 rounded-lg bg-rose-500 px-2.5 py-1 text-xs font-semibold text-white hover:bg-rose-600 transition shrink-0 cursor-pointer"
+                        >
+                          <RefreshCw className="size-3" />
+                          Опитай пак
+                        </button>
+                      </div>
                     </div>
                   )}
 

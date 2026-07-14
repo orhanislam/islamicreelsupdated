@@ -673,6 +673,67 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 // BACKGROUND SERVER JOBS (SURVIVE BROWSER CLOSE)
 // ==========================================
 
+async function aggressivelyCleanServerDisk(forceAll = false) {
+  try {
+    const os = await import("os");
+    const fs = (await import("fs")).promises;
+    const path = await import("path");
+    const now = Date.now();
+
+    // 1. Clean OS temp directory (/tmp)
+    try {
+      const tmpDir = os.tmpdir();
+      const tmpFiles = await fs.readdir(tmpDir);
+      const prefixes = ["broll_", "multiscene_", "norm_", "concat_", "sub_", "bg_", "py-tts-", "video_", "tmp-"];
+      for (const f of tmpFiles) {
+        const matchesPrefix = prefixes.some((p) => f.startsWith(p)) || f.endsWith(".mp4") || f.endsWith(".mp3") || f.endsWith(".vtt") || f.endsWith(".ass");
+        if (matchesPrefix) {
+          const fp = path.join(tmpDir, f);
+          const st = await fs.stat(fp).catch(() => null);
+          // If forceAll is true, or if file is older than 2 minutes, delete it
+          if (st && (forceAll || now - st.mtimeMs > 2 * 60 * 1000)) {
+            await fs.unlink(fp).catch(() => {});
+          }
+        }
+      }
+    } catch {}
+
+    // 2. Truncate PM2 log files (~/.pm2/logs and /root/.pm2/logs) to reclaim disk space immediately without closing open file descriptors
+    const logDirs = [path.join(os.homedir(), ".pm2", "logs"), "/root/.pm2/logs", "/home/admin/.pm2/logs"];
+    for (const lDir of logDirs) {
+      try {
+        const lFiles = await fs.readdir(lDir).catch(() => []);
+        for (const lf of lFiles) {
+          if (lf.endsWith(".log")) {
+            const lPath = path.join(lDir, lf);
+            const st = await fs.stat(lPath).catch(() => null);
+            // If log exceeds 10MB or if forceAll is true, truncate to 0 bytes
+            if (st && (forceAll || st.size > 10 * 1024 * 1024)) {
+              await fs.writeFile(lPath, "").catch(() => {});
+            }
+          }
+        }
+      } catch {}
+    }
+
+    // 3. Clean up old finished jobs in ~/.islamicreels_jobs (older than 6 hours normally, or all MP4s older than 1 hour if forceAll)
+    try {
+      const jobsDir = path.join(os.homedir(), ".islamicreels_jobs");
+      const jFiles = await fs.readdir(jobsDir).catch(() => []);
+      for (const jf of jFiles) {
+        if (jf.endsWith(".mp4")) {
+          const jp = path.join(jobsDir, jf);
+          const st = await fs.stat(jp).catch(() => null);
+          const threshold = forceAll ? 1 * 60 * 60 * 1000 : 6 * 60 * 60 * 1000;
+          if (st && now - st.mtimeMs > threshold) {
+            await fs.unlink(jp).catch(() => {});
+          }
+        }
+      }
+    } catch {}
+  } catch {}
+}
+
 const getJobsDir = async () => {
   const os = await import("os");
   const fs = (await import("fs")).promises;
@@ -680,20 +741,7 @@ const getJobsDir = async () => {
   const dir = path.join(os.homedir(), ".islamicreels_jobs");
   await fs.mkdir(dir, { recursive: true }).catch(() => {});
 
-  // Clean up finished jobs older than 48 hours to prevent ENOSPC disk full errors
-  try {
-    const now = Date.now();
-    const files = await fs.readdir(dir);
-    for (const f of files) {
-      if (f.endsWith(".mp4")) {
-        const fp = path.join(dir, f);
-        const st = await fs.stat(fp).catch(() => null);
-        if (st && now - st.mtimeMs > 48 * 60 * 60 * 1000) {
-          await fs.unlink(fp).catch(() => {});
-        }
-      }
-    }
-  } catch {}
+  await aggressivelyCleanServerDisk(false);
 
   return dir;
 };
@@ -741,6 +789,7 @@ export const startServerRenderJob = createServerFn({ method: "POST" })
       const targetMp4 = path.join(dir, `${jobId}.mp4`);
       try {
         console.log(`[server-job] Starting background render for ${jobId}...`);
+        await aggressivelyCleanServerDisk(true);
         const base64Data = await runServerRender({ data });
         const BufferMod = (await import("node:buffer")).Buffer;
         await fs.writeFile(targetMp4, BufferMod.from(base64Data, "base64"));
@@ -788,6 +837,7 @@ export const retryServerRenderJob = createServerFn({ method: "POST" })
       const targetMp4 = path.join(dir, `${id}.mp4`);
       try {
         console.log(`[server-job] Retrying background render for ${id}...`);
+        await aggressivelyCleanServerDisk(true);
         const base64Data = await runServerRender({ data: jobData });
         const BufferMod = (await import("node:buffer")).Buffer;
         await fs.writeFile(targetMp4, BufferMod.from(base64Data, "base64"));
@@ -859,4 +909,10 @@ export const getServerRenderJobDownloadUrl = createServerFn({ method: "POST" })
     return {
       downloadUrl: `/api/download/${id}?filename=${encodeURIComponent(filename)}`,
     };
+  });
+
+export const cleanServerDiskSpace = createServerFn({ method: "POST" })
+  .handler(async () => {
+    await aggressivelyCleanServerDisk(true);
+    return { success: true };
   });
