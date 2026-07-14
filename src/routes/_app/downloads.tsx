@@ -9,6 +9,7 @@ import {
 import {
   listServerRenderJobs,
   getServerRenderJobBase64,
+  getServerRenderJobDownloadUrl,
   deleteServerRenderJob,
   retryServerRenderJob,
 } from "@/lib/render.functions";
@@ -124,9 +125,30 @@ function DownloadsPage() {
     setDownloadingServerId(job.id);
     try {
       toast.message("Подготвям видеото за изтегляне от сървъра...");
+
+      // On iOS Safari, use a direct streaming URL — base64 data URLs crash Safari
+      if (isIOSMediaDevice()) {
+        try {
+          const { downloadUrl } = await getServerRenderJobDownloadUrl({
+            data: { id: job.id, title: job.title },
+          });
+          // Open the streaming URL — Safari will show its native download dialog
+          window.location.href = downloadUrl;
+          toast.success("Видеото се изтегля в Safari! Провери долу в лентата за изтегляния.");
+          return;
+        } catch (e) {
+          console.warn("[downloads] Streaming URL failed, trying base64 fallback:", e);
+        }
+      }
+
+      // Desktop browsers: use base64 blob (fast and reliable)
       const base64 = await getServerRenderJobBase64({ data: { id: job.id } });
-      const res = await fetch("data:video/mp4;base64," + base64);
-      const blob = await res.blob();
+      const byteChars = atob(base64);
+      const byteArray = new Uint8Array(byteChars.length);
+      for (let i = 0; i < byteChars.length; i++) {
+        byteArray[i] = byteChars.charCodeAt(i);
+      }
+      const blob = new Blob([byteArray], { type: "video/mp4" });
       await saveMediaBlob(blob, `${job.title || "islamic-reel"}.mp4`, "video/mp4");
       toast.success("Видеото е свалено успешно!");
     } catch (e) {

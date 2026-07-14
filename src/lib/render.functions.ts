@@ -805,3 +805,19 @@ export const deleteServerRenderJob = createServerFn({ method: "POST" })
     return { success: true };
   });
 
+export const getServerRenderJobDownloadUrl = createServerFn({ method: "POST" })
+  .validator((input: { id: string; title?: string }) => input)
+  .handler(async ({ data: { id, title } }) => {
+    const fs = (await import("fs")).promises;
+    const path = await import("path");
+    const dir = await getJobsDir();
+    const targetMp4 = path.join(dir, `${id}.mp4`);
+
+    // Verify the file exists
+    await fs.access(targetMp4);
+
+    const filename = (title || "islamic-reel").replace(/[^a-z0-9._-]+/gi, "_") + ".mp4";
+    return {
+      downloadUrl: `/api/download/${id}?filename=${encodeURIComponent(filename)}`,
+    };
+  });
