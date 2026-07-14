@@ -32,15 +32,16 @@ export const runServerRender = createServerFn({ method: "POST" })
     ffmpeg.setFfmpegPath(ffmpegPath);
 
     const tempDir = os.tmpdir();
-    // Clean up stale temporary files older than 30 minutes to prevent "No space left on device" errors
+    const tmpDir = tempDir;
+    // Clean up stale temporary files older than 5 minutes to prevent "No space left on device" errors
     try {
       const now = Date.now();
       const files = await fs.readdir(tempDir);
       for (const f of files) {
-        if (/^(bg_|audio_|subs_|out_|quran_slice_)/.test(f)) {
+        if (/^(bg_|audio_|subs_|out_|quran_|align_audio_|tts-|py-tts-|broll_|norm_|concat_|multiscene_)/.test(f)) {
           const fp = path.join(tempDir, f);
           const st = await fs.stat(fp).catch(() => null);
-          if (st && now - st.mtimeMs > 30 * 60 * 1000) {
+          if (st && now - st.mtimeMs > 5 * 60 * 1000) {
             await fs.unlink(fp).catch(() => {});
           }
         }
@@ -54,6 +55,7 @@ export const runServerRender = createServerFn({ method: "POST" })
     const audioPath = path.join(tempDir, `audio_${sessionId}.mp3`);
     const assPath = path.join(tempDir, `subs_${sessionId}.ass`);
     const outPath = path.join(tempDir, `out_${sessionId}.mp4`);
+    const sessionTempFiles = new Set<string>([audioPath, assPath, outPath]);
 
     try {
       console.log("[server-render] Starting pure FFmpeg render...");
@@ -154,6 +156,7 @@ export const runServerRender = createServerFn({ method: "POST" })
           finalBgPath += ".jpg";
         }
         await fs.writeFile(finalBgPath, BufferMod.from(b64, "base64"));
+        sessionTempFiles.add(finalBgPath);
       } else {
         try {
           const res = await fetch(bgUrl, {
@@ -169,6 +172,7 @@ export const runServerRender = createServerFn({ method: "POST" })
           }
           const arrayBuf = await res.arrayBuffer();
           await fs.writeFile(finalBgPath, BufferMod.from(arrayBuf));
+          sessionTempFiles.add(finalBgPath);
         } catch (fetchErr) {
           console.warn("[server-render] Primary background fetch failed, using reliable fallback video:", fetchErr);
           const fallbackUrl = "https://videos.pexels.com/video-files/855029/855029-hd_1080_1920_30fps.mp4";
@@ -177,6 +181,7 @@ export const runServerRender = createServerFn({ method: "POST" })
           finalBgPath += ".mp4";
           const arrayBuf = await fbRes.arrayBuffer();
           await fs.writeFile(finalBgPath, BufferMod.from(arrayBuf));
+          sessionTempFiles.add(finalBgPath);
         }
       }
 
@@ -193,11 +198,13 @@ export const runServerRender = createServerFn({ method: "POST" })
               const buf = await r.arrayBuffer();
               await fs.writeFile(p, BufferMod.from(buf));
               bRollFiles.push(p);
+              sessionTempFiles.add(p);
             }
           }
           if (bRollFiles.length > 1) {
             const clipDur = Math.max(3.5, audioDur / bRollFiles.length);
             const concatListPath = path.join(tmpDir, `concat_${Date.now()}.txt`);
+            sessionTempFiles.add(concatListPath);
             const normalizedPaths: string[] = [];
 
             for (let i = 0; i < bRollFiles.length; i++) {
@@ -218,12 +225,14 @@ export const runServerRender = createServerFn({ method: "POST" })
                   .run();
               });
               normalizedPaths.push(normPath);
+              sessionTempFiles.add(normPath);
             }
 
             const concatContent = normalizedPaths.map((p) => `file '${p.replace(/\\/g, "/")}'`).join("\n");
             await fs.writeFile(concatListPath, concatContent);
 
             const multiSceneBg = path.join(tmpDir, `multiscene_${Date.now()}.mp4`);
+            sessionTempFiles.add(multiSceneBg);
             await new Promise((resolve, reject) => {
               ffmpeg()
                 .setFfmpegPath(ffmpegPath)
@@ -237,6 +246,7 @@ export const runServerRender = createServerFn({ method: "POST" })
             });
 
             finalBgPath = multiSceneBg;
+            sessionTempFiles.add(finalBgPath);
             isVideoBg = true;
             console.log("[server-render] Multi-scene B-Roll successfully built:", finalBgPath);
           }
@@ -616,21 +626,21 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
           } catch (e) {
             reject(e);
           } finally {
-            // Cleanup
+            // Cleanup all temporary files created during this render session
+            for (const fp of sessionTempFiles) {
+              await fs.unlink(fp).catch(() => {});
+            }
             await fs.unlink(finalBgPath).catch(() => {});
-            await fs.unlink(audioPath).catch(() => {});
-            await fs.unlink(assPath).catch(() => {});
-            await fs.unlink(outPath).catch(() => {});
           }
         })
         .on("error", async (err: any) => {
           console.error("[server-render] FFmpeg Error:", err.message);
           if (ffmpegStderr) console.error("[server-render] FFmpeg stderr log:\n", ffmpegStderr);
-          // Cleanup
+          // Cleanup all temporary files created during this render session
+          for (const fp of sessionTempFiles) {
+            await fs.unlink(fp).catch(() => {});
+          }
           await fs.unlink(finalBgPath).catch(() => {});
-          await fs.unlink(audioPath).catch(() => {});
-          await fs.unlink(assPath).catch(() => {});
-          await fs.unlink(outPath).catch(() => {});
           const errLines = ffmpegStderr
             .split("\n")
             .filter(l => l.trim() && !l.includes("libx264 @") && !l.includes("aac @") && !l.includes("frame=") && !l.includes("size="))
@@ -656,6 +666,22 @@ const getJobsDir = async () => {
   const path = await import("path");
   const dir = path.join(os.homedir(), ".islamicreels_jobs");
   await fs.mkdir(dir, { recursive: true }).catch(() => {});
+
+  // Clean up finished jobs older than 48 hours to prevent ENOSPC disk full errors
+  try {
+    const now = Date.now();
+    const files = await fs.readdir(dir);
+    for (const f of files) {
+      if (f.endsWith(".mp4")) {
+        const fp = path.join(dir, f);
+        const st = await fs.stat(fp).catch(() => null);
+        if (st && now - st.mtimeMs > 48 * 60 * 60 * 1000) {
+          await fs.unlink(fp).catch(() => {});
+        }
+      }
+    }
+  } catch {}
+
   return dir;
 };
 
