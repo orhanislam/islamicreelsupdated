@@ -156,7 +156,10 @@ export const suggestViralProposal = createServerFn({ method: "POST" })
 }
 Върни САМО валиден JSON.`;
 
-    const msgs = [{ role: "system", content: prompt }];
+    const msgs = [
+      { role: "system", content: prompt },
+      { role: "user", content: "Предложи 1 вирусна Ислямска тема сега според системните инструкции и върни валиден JSON." }
+    ] as any;
     const raw = await geminiChat("gemini-2.5-flash", msgs, true);
     let parsed: any;
     try {

@@ -47,6 +47,15 @@ export async function geminiChat(
       parts: [{ text: m.content }],
     }));
 
+  if (contents.length === 0) {
+    // Google Gemini API rejects generateContent if contents array is empty (INVALID_ARGUMENT 400).
+    // Ensure there is always a user turn even if only system message was passed.
+    contents.push({
+      role: "user",
+      parts: [{ text: systemInstruction?.parts?.[0]?.text || "Моля, изпълни инструкцията." }],
+    });
+  }
+
   const fetchWithModel = async (modelName: string, apiKey: string) => {
     const body: Record<string, unknown> = { contents };
     if (systemInstruction) body.system_instruction = systemInstruction;
@@ -98,7 +107,10 @@ export async function geminiChat(
     if (content) return content;
   }
 
-  throw new Error(`Лимитът за заявки е надвишен. Моля изчакайте 10 секунди и опитайте отново. (${lastErrorMsg})`);
+  if (lastErrorMsg.includes("429") || lastErrorMsg.includes("quota") || lastErrorMsg.includes("ResourceExhausted")) {
+    throw new Error(`Лимитът за заявки е надвишен. Моля изчакайте 10 секунди и опитайте отново. (${lastErrorMsg})`);
+  }
+  throw new Error(`Грешка при генерация от AI: ${lastErrorMsg || "Неуспешно свързване с Gemini API"}`);
 }
 
 /**
