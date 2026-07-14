@@ -60,9 +60,10 @@ export function verifyAndCorrectSubtitleSync(
     return { valid: false, correctedTimings: [], maxDriftMs: 0, warnings };
   }
 
-  // Step 2: Proportional Stretch & Anchor Align to match exact audio duration
+  // Step 2: Only compress if lastEnd exceeds safeMaxDur + 0.15 (to prevent out-of-bounds subtitles).
+  // NEVER stretch when lastEnd < safeMaxDur because trailing silence or background music must not delay spoken word timings!
   const lastEnd = parsed[parsed.length - 1].end;
-  const stretchRatio = (lastEnd > 0 && Math.abs(lastEnd - safeMaxDur) > 0.15)
+  const stretchRatio = (lastEnd > safeMaxDur + 0.15)
     ? safeMaxDur / lastEnd
     : 1;
 
