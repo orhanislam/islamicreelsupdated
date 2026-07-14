@@ -40,6 +40,16 @@ async function normalizeCatastrophicSsrResponse(response: Response): Promise<Res
 export default {
   async fetch(request: Request, env: unknown, ctx: unknown) {
     try {
+      const url = new URL(request.url);
+      if (url.pathname.startsWith("/api/download/")) {
+        const parts = url.pathname.split("/").filter(Boolean);
+        const id = parts[parts.length - 1];
+        if (id && /^[a-z0-9_-]+$/i.test(id)) {
+          const { handleVideoDownload } = await import("./lib/video-downloader");
+          return await handleVideoDownload(request, id, url.searchParams.get("filename") || "islamic-reel.mp4");
+        }
+      }
+
       const handler = await getServerEntry();
       const response = await handler.fetch(request, env, ctx);
       return await normalizeCatastrophicSsrResponse(response);
