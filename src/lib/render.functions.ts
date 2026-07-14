@@ -10,10 +10,22 @@ try {
   }
 } catch { /* ignore */ }
 
+let renderQueue: any = null;
+async function getRenderQueue() {
+  if (!renderQueue) {
+    const PQueueMod = await import("p-queue");
+    const PQueue = PQueueMod.default || PQueueMod;
+    renderQueue = new PQueue({ concurrency: 1 });
+  }
+  return renderQueue;
+}
+
 export const runServerRender = createServerFn({ method: "POST" })
   .validator((opts: any) => opts)
   .handler(async ({ data }) => {
-    const fs = (await import("fs")).promises;
+    const queue = await getRenderQueue();
+    return await queue.add(async () => {
+      const fs = (await import("fs")).promises;
     const os = await import("os");
     const path = await import("path");
     const BufferMod = (await import("node:buffer")).Buffer;
@@ -654,6 +666,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
       console.error("[server-render] Critical failure:", err);
       throw new Error(String(err));
     }
+    });
   });
 
 // ==========================================
