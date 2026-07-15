@@ -23,6 +23,13 @@ type ChatMsg = {
   reference?: string;
 };
 
+const DEFAULT_MESSAGES: ChatMsg[] = [
+  {
+    role: "assistant",
+    text: "Здравей! Аз съм твоят интелигентен Ислямски AI Видео Асистент с дълготрайна памет 🧠 и **постоянен чат на живо** (историята никога не се изчиства автоматично).\n\nКажи ми какво видео искаш да създадем или поискай **пакет от идеи за одобрение** (Коран, Хадиси и TikTok теми). Аз изготвям подробен план с предложения, от който можеш да избереш кои да генерираме!",
+  },
+];
+
 function AssistantPage() {
   const [prompt, setPrompt] = useState("");
   const [loading, setLoading] = useState(false);
@@ -33,26 +40,28 @@ function AssistantPage() {
   const [showMemory, setShowMemory] = useState(false);
   const [memory, setMemory] = useState<AiMemory | null>(null);
   const [newInstruction, setNewInstruction] = useState("");
-  const [messages, setMessages] = useState<ChatMsg[]>(() => {
-    try {
-      const saved = localStorage.getItem("islamic_assistant_chat_history_v3");
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-      }
-    } catch {}
-    return [
-      {
-        role: "assistant",
-        text: "Здравей! Аз съм твоят интелигентен Ислямски AI Видео Асистент с дълготрайна памет 🧠 и **постоянен чат на живо** (историята никога не се изчиства автоматично).\n\nКажи ми какво видео искаш да създадем или поискай **пакет от идеи за одобрение** (Коран, Хадиси и TikTok теми). Аз изготвям подробен план с предложения, от който можеш да избереш кои да генерираме!",
-      },
-    ];
-  });
+  const [messages, setMessages] = useState<ChatMsg[]>(DEFAULT_MESSAGES);
 
   useEffect(() => {
-    try {
-      localStorage.setItem("islamic_assistant_chat_history_v3", JSON.stringify(messages));
-    } catch {}
+    if (typeof window !== "undefined" && window.localStorage) {
+      try {
+        const saved = window.localStorage.getItem("islamic_assistant_chat_history_v3");
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            setMessages(parsed);
+          }
+        }
+      } catch {}
+    }
+  }, []);
+
+  useEffect(() => {
+    if (typeof window !== "undefined" && window.localStorage && messages !== DEFAULT_MESSAGES) {
+      try {
+        window.localStorage.setItem("islamic_assistant_chat_history_v3", JSON.stringify(messages));
+      } catch {}
+    }
   }, [messages]);
 
   useEffect(() => {
@@ -211,6 +220,92 @@ function AssistantPage() {
       toast.error(e?.message || "Грешка при генериране на вайръл предложение");
     } finally {
       setViralLoading(false);
+    }
+  };
+
+  const handleClearChat = () => {
+    if (typeof window !== "undefined" && !window.confirm("Сигурни ли сте, че искате да изчистите историята на чата?")) return;
+    playStudioClick("delete");
+    setMessages(DEFAULT_MESSAGES);
+    if (typeof window !== "undefined" && window.localStorage) {
+      try {
+        window.localStorage.setItem("islamic_assistant_chat_history_v3", JSON.stringify(DEFAULT_MESSAGES));
+      } catch {}
+    }
+    toast.success("Чатът е изчистен успешно!");
+  };
+
+  const handleBatchSuggest = async (countToSuggest: number) => {
+    try {
+      playStudioClick("start");
+      setViralLoading(true);
+      toast.message(`AI търси и подготвя план с ${countToSuggest} вайръл идеи (Коран, Хадиси и TikTok трендове)...`);
+      setMessages((prev) => [
+        ...prev,
+        { role: "user", text: `⚡ Изготви ми план с точно ${countToSuggest} вайръл идеи (Коран, Хадиси и TikTok теми) за одобрение.` },
+      ]);
+      const res = await suggestBatchViralProposals({ data: { count: countToSuggest } });
+      playStudioClick("success");
+      setMessages((prev) => [
+        ...prev,
+        {
+          role: "assistant",
+          text: res.reply,
+          proposals: res.proposals,
+          selectedProposalIndices: res.proposals.map((_, i) => i),
+        },
+      ]);
+    } catch (e: any) {
+      toast.error(e?.message || "Грешка при създаване на плана");
+    } finally {
+      setViralLoading(false);
+    }
+  };
+
+  const handleToggleProposalCheckbox = (msgIdx: number, propIdx: number) => {
+    setMessages((prev) =>
+      prev.map((m, idx) => {
+        if (idx !== msgIdx || !m.proposals) return m;
+        const currentSel = m.selectedProposalIndices || m.proposals.map((_, i) => i);
+        const newSel = currentSel.includes(propIdx)
+          ? currentSel.filter((i) => i !== propIdx)
+          : [...currentSel, propIdx].sort((a, b) => a - b);
+        return { ...m, selectedProposalIndices: newSel };
+      })
+    );
+  };
+
+  const handleApproveBatchProposals = async (msgIdx: number) => {
+    const msg = messages[msgIdx];
+    if (!msg || !msg.proposals) return;
+    const selectedIndices = msg.selectedProposalIndices || msg.proposals.map((_, i) => i);
+    const chosen = selectedIndices.map((i) => msg.proposals![i]).filter(Boolean);
+    if (chosen.length === 0) {
+      toast.error("Моля, отбележете поне 1 предложение с чекбокс!");
+      return;
+    }
+
+    try {
+      setConfirmingIdx(msgIdx);
+      playStudioClick("start");
+      toast.message(`🎬 Стартирам генерирането на ${chosen.length} одобрени видеа от плана...`);
+      for (let i = 0; i < chosen.length; i++) {
+        const prop = chosen[i];
+        await confirmAndGenerateVideo({ data: { proposal: prop } });
+      }
+      playStudioClick("success");
+      toast.success(`🎉 Успешно стартирани ${chosen.length} видеа за автономно рендиране на сървъра!`);
+      setMessages((prev) => [
+        ...prev,
+        {
+          role: "assistant",
+          text: `🎬 **Одобрено! Стартирах генерирането на ${chosen.length} видеа от твоя план!**\n\nВсички те се рендират автономно в облака. Можеш да ги следиш и да ги изтеглиш наведнъж в раздел **[Изтегляния](/downloads)**.`,
+        },
+      ]);
+    } catch (err: any) {
+      toast.error(err?.message || "Грешка при генериране на видеата");
+    } finally {
+      setConfirmingIdx(null);
     }
   };
 
