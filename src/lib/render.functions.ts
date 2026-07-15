@@ -45,19 +45,9 @@ export const runServerRender = createServerFn({ method: "POST" })
 
     const tempDir = os.tmpdir();
     const tmpDir = tempDir;
-    // Clean up stale temporary files older than 5 minutes to prevent "No space left on device" errors
+    // Clean up stale temporary files right before starting render to prevent "No space left on device" errors
     try {
-      const now = Date.now();
-      const files = await fs.readdir(tempDir);
-      for (const f of files) {
-        if (/^(bg_|audio_|subs_|out_|quran_|align_audio_|tts-|py-tts-|broll_|norm_|concat_|multiscene_)/.test(f)) {
-          const fp = path.join(tempDir, f);
-          const st = await fs.stat(fp).catch(() => null);
-          if (st && now - st.mtimeMs > 5 * 60 * 1000) {
-            await fs.unlink(fp).catch(() => {});
-          }
-        }
-      }
+      await aggressivelyCleanServerDisk(false);
     } catch {
       // ignore non-critical cleanup errors
     }
@@ -678,25 +668,44 @@ async function aggressivelyCleanServerDisk(forceAll = false) {
     const os = await import("os");
     const fs = (await import("fs")).promises;
     const path = await import("path");
+    const { exec } = await import("child_process");
     const now = Date.now();
 
-    // 1. Clean OS temp directory (/tmp)
-    try {
-      const tmpDir = os.tmpdir();
-      const tmpFiles = await fs.readdir(tmpDir);
-      const prefixes = ["broll_", "multiscene_", "norm_", "concat_", "sub_", "bg_", "py-tts-", "video_", "tmp-"];
-      for (const f of tmpFiles) {
-        const matchesPrefix = prefixes.some((p) => f.startsWith(p)) || f.endsWith(".mp4") || f.endsWith(".mp3") || f.endsWith(".vtt") || f.endsWith(".ass");
-        if (matchesPrefix) {
-          const fp = path.join(tmpDir, f);
-          const st = await fs.stat(fp).catch(() => null);
-          // If forceAll is true, or if file is older than 2 minutes, delete it
-          if (st && (forceAll || now - st.mtimeMs > 2 * 60 * 1000)) {
-            await fs.unlink(fp).catch(() => {});
+    // 0. If forceAll is true, synchronously await shell commands to flush PM2 logs, vacuum systemd journals, clean apt/npm caches, and purge temp/log folders
+    if (forceAll) {
+      await new Promise<void>((resolve) => {
+        const cmd = [
+          "pm2 flush 2>/dev/null",
+          "journalctl --vacuum-size=20M 2>/dev/null",
+          "journalctl --vacuum-time=1d 2>/dev/null",
+          "apt-get clean 2>/dev/null",
+          "npm cache clean --force 2>/dev/null",
+          "rm -rf /tmp/* /var/tmp/* /var/cache/* ~/.cache/* /root/.cache/* /home/*/.cache/* ~/.npm/* /root/.npm/* /home/*/.npm/* ~/.pm2/logs/* /root/.pm2/logs/* /home/*/.pm2/logs/* /var/log/*.gz /var/log/*/*/*.gz 2>/dev/null"
+        ].join("; ");
+        exec(cmd, { timeout: 15000 }, () => resolve());
+      });
+    }
+
+    // 1. Clean OS temp directory (/tmp) and explicit /tmp, /var/tmp
+    const tmpDirs = [os.tmpdir(), "/tmp", "/var/tmp", path.join(process.cwd(), "tmp"), path.join(process.cwd(), ".output", "tmp")];
+    for (const tmpDir of tmpDirs) {
+      try {
+        const tmpFiles = await fs.readdir(tmpDir).catch(() => []);
+        const prefixes = ["broll_", "multiscene_", "norm_", "concat_", "sub_", "bg_", "py-tts-", "video_", "tmp-", "align_audio_"];
+        for (const f of tmpFiles) {
+          const matchesPrefix = forceAll || prefixes.some((p) => f.startsWith(p)) || f.endsWith(".mp4") || f.endsWith(".mp3") || f.endsWith(".vtt") || f.endsWith(".ass") || f.endsWith(".jpg") || f.endsWith(".png");
+          if (matchesPrefix) {
+            const fp = path.join(tmpDir, f);
+            const st = await fs.stat(fp).catch(() => null);
+            // If forceAll is true, delete immediately (threshold 0); otherwise if older than 2 minutes
+            const threshold = forceAll ? 0 : 2 * 60 * 1000;
+            if (st && now - st.mtimeMs >= threshold) {
+              await fs.rm(fp, { recursive: true, force: true }).catch(() => {});
+            }
           }
         }
-      }
-    } catch {}
+      } catch {}
+    }
 
     // 2. Truncate PM2 log files (~/.pm2/logs and /root/.pm2/logs) to reclaim disk space immediately without closing open file descriptors
     const logDirs = [path.join(os.homedir(), ".pm2", "logs"), "/root/.pm2/logs", "/home/admin/.pm2/logs"];
@@ -707,8 +716,8 @@ async function aggressivelyCleanServerDisk(forceAll = false) {
           if (lf.endsWith(".log")) {
             const lPath = path.join(lDir, lf);
             const st = await fs.stat(lPath).catch(() => null);
-            // If log exceeds 10MB or if forceAll is true, truncate to 0 bytes
-            if (st && (forceAll || st.size > 10 * 1024 * 1024)) {
+            // If log exceeds 5MB or if forceAll is true, truncate to 0 bytes
+            if (st && (forceAll || st.size > 5 * 1024 * 1024)) {
               await fs.writeFile(lPath, "").catch(() => {});
             }
           }
@@ -716,18 +725,45 @@ async function aggressivelyCleanServerDisk(forceAll = false) {
       } catch {}
     }
 
-    // 3. Clean up old finished jobs in ~/.islamicreels_jobs (older than 6 hours normally, or all MP4s older than 1 hour if forceAll)
+    // 3. Clean up old finished or partial jobs in ~/.islamicreels_jobs
     try {
       const jobsDir = path.join(os.homedir(), ".islamicreels_jobs");
       const jFiles = await fs.readdir(jobsDir).catch(() => []);
-      for (const jf of jFiles) {
-        if (jf.endsWith(".mp4")) {
-          const jp = path.join(jobsDir, jf);
-          const st = await fs.stat(jp).catch(() => null);
-          const threshold = forceAll ? 1 * 60 * 60 * 1000 : 6 * 60 * 60 * 1000;
-          if (st && now - st.mtimeMs > threshold) {
-            await fs.unlink(jp).catch(() => {});
+      
+      // Check which jobs are currently actively rendering
+      let activeIds = new Set<string>();
+      try {
+        const jobsFile = path.join(jobsDir, "jobs.json");
+        const raw = await fs.readFile(jobsFile, "utf-8");
+        const jobsList = JSON.parse(raw);
+        if (Array.isArray(jobsList)) {
+          jobsList.forEach((j: any) => {
+            if (j && (j.status === "processing" || j.status === "rendering")) {
+              activeIds.add(j.id);
+            }
+          });
+          // If forceAll is true and jobsList is very large (> 30 jobs), trim old completed/error jobs
+          if (forceAll && jobsList.length > 30) {
+            const trimmed = jobsList.slice(0, 30);
+            await fs.writeFile(jobsFile, JSON.stringify(trimmed, null, 2), "utf-8").catch(() => {});
           }
+        }
+      } catch {}
+
+      for (const jf of jFiles) {
+        // Skip jobs.json directly
+        if (jf === "jobs.json") continue;
+        const jp = path.join(jobsDir, jf);
+        const st = await fs.stat(jp).catch(() => null);
+        
+        // Check if file belongs to an active job id
+        const isActivelyRendering = Array.from(activeIds).some((id) => jf.startsWith(id));
+        if (isActivelyRendering) continue;
+
+        // If forceAll is true, delete immediately (threshold 0) for all MP4s/audio/subs of old/failed jobs
+        const threshold = forceAll ? 0 : 6 * 60 * 60 * 1000;
+        if (st && now - st.mtimeMs >= threshold) {
+          await fs.rm(jp, { recursive: true, force: true }).catch(() => {});
         }
       }
     } catch {}
