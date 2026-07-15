@@ -38,6 +38,7 @@ function DownloadsPage() {
   const [loading, setLoading] = useState(true);
   const [downloadedIds, setDownloadedIds] = useState<Set<string>>(new Set());
   const [downloadingServerId, setDownloadingServerId] = useState<string | null>(null);
+  const [downloadingBatch, setDownloadingBatch] = useState(false);
   const [generatingThumbId, setGeneratingThumbId] = useState<string | null>(null);
   const [cleaningDisk, setCleaningDisk] = useState(false);
   const [preloadedUrls, setPreloadedUrls] = useState<Record<string, string>>({});
@@ -174,6 +175,36 @@ function DownloadsPage() {
     }
   };
 
+  const handleDownloadAllCompleted = async () => {
+    const completedServerJobs = serverJobs.filter((j) => j.status === "completed");
+    const allCount = completedServerJobs.length + items.length;
+    if (allCount === 0) {
+      toast.error("Няма готови видеа за сваляне");
+      return;
+    }
+    try {
+      setDownloadingBatch(true);
+      toast.message(`📦 Стартирам последователно сваляне на всички ${allCount} готови видеа...`);
+      for (let i = 0; i < completedServerJobs.length; i++) {
+        const job = completedServerJobs[i];
+        toast.message(`Сваляне на ${i + 1}/${allCount}: ${job.title}...`);
+        await handleDownloadServerJob(job);
+        await new Promise((r) => setTimeout(r, 800));
+      }
+      for (let i = 0; i < items.length; i++) {
+        const item = items[i];
+        toast.message(`Сваляне на ${completedServerJobs.length + i + 1}/${allCount}: ${item.title}...`);
+        await triggerDownload(item, false);
+        await new Promise((r) => setTimeout(r, 800));
+      }
+      toast.success(`🎉 Всички ${allCount} видеа са свалени успешно!`);
+    } catch (e) {
+      toast.error("Грешка при масовото сваляне");
+    } finally {
+      setDownloadingBatch(false);
+    }
+  };
+
   const handleDownloadThumbnail = async (id: string, title: string) => {
     try {
       setGeneratingThumbId(id);
@@ -259,6 +290,23 @@ function DownloadsPage() {
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
+          {(serverJobs.some((j) => j.status === "completed") || items.length > 0) && (
+            <button
+              onClick={handleDownloadAllCompleted}
+              disabled={downloadingBatch}
+              className="inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 px-4 py-2.5 text-sm font-bold text-black shadow-lg hover:from-emerald-400 hover:to-teal-500 transition cursor-pointer scale-105"
+            >
+              {downloadingBatch ? (
+                <>
+                  <Loader2 className="size-4 animate-spin" /> Сваляне на всички...
+                </>
+              ) : (
+                <>
+                  <Download className="size-4" /> 📦 Свали Всички Готови наведнъж ({serverJobs.filter((j) => j.status === "completed").length + items.length})
+                </>
+              )}
+            </button>
+          )}
           <button
             onClick={handleCleanServerDisk}
             disabled={cleaningDisk}

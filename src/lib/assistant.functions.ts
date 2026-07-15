@@ -65,10 +65,10 @@ CAPCUT-ПОДОБНИ ИНСТРУКЦИИ ЗА РЕДАКТИРАНЕ:
 Ако потребителят даде инструкции за редактиране, добави ги в proposal обекта.
 
 Трябва да върнеш JSON обект със следната структура:
-1. Ако потребителят иска видео или тема за видео:
+1. Ако потребителят иска ЕДНО видео или тема:
 {
   "reply": "Твоят учтив отговор на български език, в който представяш предложението и питаш дали му харесва.",
-  "newLearnedFact": "Ако в това съобщение потребителят ти е казал нещо важно за себе си или ново предпочитание за стил/фон, запиши го тук (иначе остави null)",
+  "newLearnedFact": "Ако в това съобщение потребителят ти е казал нещо важно за себе си или ново предпочитание, запиши го тук (иначе остави null)",
   "proposal": {
     "title": "Точно заглавие на български",
     "type": "hadith" или "quran",
@@ -129,6 +129,7 @@ CAPCUT-ПОДОБНИ ИНСТРУКЦИИ ЗА РЕДАКТИРАНЕ:
     return {
       reply: parsed.reply || "С какво мога да ти помогна днес?",
       proposal: (parsed.proposal as VideoProposal) || null,
+      proposals: Array.isArray(parsed.proposals) && parsed.proposals.length > 0 ? (parsed.proposals as VideoProposal[]) : null,
       memory,
     };
   });
@@ -188,6 +189,81 @@ export const suggestViralProposal = createServerFn({ method: "POST" })
     return {
       reply: parsed.reply,
       proposal: parsed.proposal as VideoProposal,
+    };
+  });
+
+export const suggestBatchViralProposals = createServerFn({ method: "POST" })
+  .validator((input: { count?: number; topic?: string } | undefined) => input || {})
+  .handler(async ({ data }: { data: { count?: number; topic?: string } }) => {
+    const countNum = data.count || 5;
+    const topicStr = data.topic || "смесено (Коран, Сахих Хадиси, TikTok Трендове, психологически уроци и истории)";
+
+    const prompt = `Ти си топ продуцент на вирусни Ислямски видеа (Reels & TikTok) на български език.
+Измисли и предложи ПАКЕТ ОТ ТОЧНО ${countNum} изключително силни, НЕБАНАЛНИ и психологически поразяващи теми/уроки за къси видеа в категория: "${topicStr}".
+
+СТРИКТНО ПРАВИЛО (DO NOT RECOMMEND COMMON TEXTS):
+1. Включи разнообразие: задължително предложи теми от Корана, теми от Сахих Хадиси (Бухари/Муслим), както и модерни TikTok Hormozi вирусни куки (напр. "3 неща, които убиват спокойствието ти според Исляма", "Защо Аллах забавя отговора на дуата ти", "Скритият знак, че си на прав път").
+2. Не предлагай общи или клиширани текстове. Всяко предложение трябва да има силен емоционален и житейски заряд.
+
+Върни JSON със следната структура:
+{
+  "reply": "Увлекателно представяне на български език на този специален пакет от ${countNum} вайръл идеи. Обясни накратко защо са избрани и покани потребителя да отбележи кои желае да одобри за генериране.",
+  "proposals": [
+    {
+      "title": "[TikTok Тренд] 3 неща, които отнемат спокойствието ти",
+      "type": "hadith",
+      "collection": "bukhari",
+      "number": 6424,
+      "summaryBg": "Българско обяснение на урока или сценария",
+      "themeBg": "Кинематографична атмосфера (напр. Златна зора и мъгла)",
+      "searchQuery": "sunrise golden hour fog nature cinematic",
+      "tiktokTheme": "hormozi",
+      "useBRoll": true,
+      "bRollInterval": 3,
+      "quality": "high"
+    }
+  ]
+}
+Върни САМО валиден JSON без маркдаун кавички.`;
+
+    const msgs = [
+      { role: "system", content: prompt },
+      { role: "user", content: `Предложи пакет от ${countNum} вирусни идеи сега според инструкциите и върни валиден JSON с масив proposals от точно ${countNum} елемента.` }
+    ] as any;
+
+    const raw = await geminiChat("gemini-2.5-flash", msgs, true);
+    let parsed: any;
+    try {
+      let clean = raw.replace(/```json\s*|\s*```/g, "").trim();
+      const firstBrace = clean.indexOf("{");
+      const lastBrace = clean.lastIndexOf("}");
+      if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+        clean = clean.substring(firstBrace, lastBrace + 1);
+      }
+      parsed = JSON.parse(clean);
+    } catch {
+      parsed = {
+        reply: `Ето специално подбран пакет от ${countNum} топ вирусни идеи от Корана, Хадисите и TikTok трендовете! Избери кои от тях да одобрим и генерираме:`,
+        proposals: VIRAL_SERIES_PRESETS.slice(0, countNum).map(p => ({
+          title: `[Коран / TikTok] ${p.ref}`,
+          type: "quran",
+          surah: p.surah,
+          ayah: p.ayah,
+          count: p.ayahEnd - p.ayah + 1,
+          summaryBg: p.summary,
+          themeBg: "Кинематографична атмосфера",
+          searchQuery: p.query,
+          tiktokTheme: "hormozi",
+          useBRoll: true,
+          bRollInterval: 3,
+          quality: "high"
+        }))
+      };
+    }
+
+    return {
+      reply: parsed.reply,
+      proposals: (parsed.proposals || []).slice(0, countNum) as VideoProposal[],
     };
   });
 
@@ -304,30 +380,58 @@ export const confirmAndGenerateVideo = createServerFn({ method: "POST" })
     };
   });
 
-export const startBatchViralSeries = createServerFn({ method: "POST" })
-  .handler(async (): Promise<{ success: boolean; count: number; message: string }> => {
-    // Generate a curated 3-part viral series
-    const series = [
-      { surah: 1, ayah: 1, ayahEnd: 2, ref: "Сура Ал-Фатиха (1:1-2)" },
-      { surah: 112, ayah: 1, ayahEnd: 4, ref: "Сура Ал-Ихлас (112:1-4)" },
-      { surah: 103, ayah: 1, ayahEnd: 3, ref: "Сура Ал-Аср (103:1-3)" },
-    ];
+export const approveAndRenderAssistantIdea = confirmAndGenerateVideo;
 
-    for (const item of series) {
-      await approveAndRenderAssistantIdea({
-        data: {
-          surah: item.surah,
-          ayah: item.ayah,
-          ayahEnd: item.ayahEnd,
-          reference: `${item.ref} • Пакетно Вайръл Видео`,
-        },
-      });
+export const VIRAL_SERIES_PRESETS = [
+  { surah: 1, ayah: 1, ayahEnd: 2, ref: "Сура Ал-Фатиха (1:1-2)", summary: "Откриването и благословията на Корана", query: "islamic calm mosque sunset nature" },
+  { surah: 112, ayah: 1, ayahEnd: 4, ref: "Сура Ал-Ихлас (112:1-4)", summary: "Единобожието и чистотата на вярата", query: "mountain light rays dramatic nature" },
+  { surah: 103, ayah: 1, ayahEnd: 3, ref: "Сура Ал-Аср (103:1-3)", summary: "Времето и спасението на човека", query: "hourglass time cinematic nature sunset" },
+  { surah: 94, ayah: 5, ayahEnd: 6, ref: "Сура Аш-Шарх (94:5-6)", summary: "С всяка трудност идва облекчение", query: "sunlight breaking through clouds hope" },
+  { surah: 2, ayah: 255, ayahEnd: 255, ref: "Аят ал-Курси (2:255)", summary: "Тронът на Аллах и великата защита", query: "stars night sky universe galaxy cinematic" },
+  { surah: 113, ayah: 1, ayahEnd: 5, ref: "Сура Ал-Фаляк (113:1-5)", summary: "Защита от всяко зло на пукнатината на зората", query: "sunrise golden hour fog cinematic nature" },
+  { surah: 114, ayah: 1, ayahEnd: 6, ref: "Сура Ан-Нас (114:1-6)", summary: "Убежище при Господаря на хората", query: "peaceful ocean waves calm nature" },
+  { surah: 108, ayah: 1, ayahEnd: 3, ref: "Сура Ал-Каусар (108:1-3)", summary: "Изобилието и реката в Рая", query: "waterfall crystal clear water river nature" },
+  { surah: 110, ayah: 1, ayahEnd: 3, ref: "Сура Ан-Наср (110:1-3)", summary: "Победата и прошката на Аллах", query: "triumph golden sunlight birds flying" },
+  { surah: 109, ayah: 1, ayahEnd: 6, ref: "Сура Ал-Кафирун (109:1-6)", summary: "За вас е вашата религия, а за мен е моята", query: "desert dunes peaceful horizon sunset" },
+];
+
+export const startBatchViralSeries = createServerFn({ method: "POST" })
+  .validator((input: { count?: number; selectedIndices?: number[] } | undefined) => input || {})
+  .handler(async ({ data }: { data: { count?: number; selectedIndices?: number[] } }): Promise<{ success: boolean; count: number; message: string }> => {
+    let chosen = VIRAL_SERIES_PRESETS.slice(0, data.count || 3);
+    if (data.selectedIndices && data.selectedIndices.length > 0) {
+      chosen = data.selectedIndices
+        .map((idx) => VIRAL_SERIES_PRESETS[idx])
+        .filter(Boolean);
+    }
+
+    for (const item of chosen) {
+      try {
+        await confirmAndGenerateVideo({
+          data: {
+            proposal: {
+              title: `${item.ref} • Пакетно Вайръл Видео`,
+              type: "quran",
+              surah: item.surah,
+              ayah: item.ayah,
+              count: item.ayahEnd - item.ayah + 1,
+              summaryBg: item.summary,
+              themeBg: "Кинематографична атмосфера",
+              searchQuery: item.query,
+              tiktokTheme: "hormozi",
+              quality: "high",
+            },
+          },
+        });
+      } catch (e) {
+        console.error(`[batch] Failed to start render for ${item.ref}:`, e);
+      }
     }
 
     return {
       success: true,
-      count: series.length,
-      message: `📦 Успешно стартирано пакетно генериране на ${series.length} професионални вайръл видеа! Можеш да следиш напредъка им в раздел Изтегляния.`,
+      count: chosen.length,
+      message: `📦 Успешно стартирано пакетно генериране на ${chosen.length} професионални вайръл видеа! Можеш да следиш напредъка им и да ги свалиш наведнъж в раздел Изтегляния.`,
     };
   });
 

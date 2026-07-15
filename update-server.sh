@@ -5,6 +5,12 @@ echo "=============================================="
 echo "🚀 Islamic Reels Studio — Clouding.io Update"
 echo "=============================================="
 
+echo "0. 🧹 Освобождаване на дисково пространство..."
+pm2 flush 2>/dev/null || true
+journalctl --vacuum-size=20M 2>/dev/null || true
+npm cache clean --force 2>/dev/null || true
+rm -rf /tmp/* /var/tmp/* ~/.cache/* /root/.cache/* ~/.pm2/logs/* /root/.pm2/logs/* /var/log/*.gz ./tmp ./.output/tmp 2>/dev/null || true
+
 echo "1. 📥 Изтегляне на най-новия код от GitHub..."
 git pull origin main
 

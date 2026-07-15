@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { toast } from "sonner";
-import { chatWithAssistant, suggestViralProposal, confirmAndGenerateVideo, startBatchViralSeries, type VideoProposal } from "@/lib/assistant.functions";
+import { chatWithAssistant, suggestViralProposal, suggestBatchViralProposals, confirmAndGenerateVideo, startBatchViralSeries, type VideoProposal } from "@/lib/assistant.functions";
 import { getAiMemory, updateAiMemory, type AiMemory } from "@/lib/memory.functions";
 import { playStudioClick } from "@/lib/sfx";
 
@@ -17,6 +17,8 @@ type ChatMsg = {
   role: "user" | "assistant";
   text: string;
   proposal?: VideoProposal | null;
+  proposals?: VideoProposal[] | null;
+  selectedProposalIndices?: number[];
   jobId?: string;
   reference?: string;
 };
@@ -25,17 +27,33 @@ function AssistantPage() {
   const [prompt, setPrompt] = useState("");
   const [loading, setLoading] = useState(false);
   const [batchLoading, setBatchLoading] = useState(false);
+  const [batchCount, setBatchCount] = useState<number>(5);
   const [viralLoading, setViralLoading] = useState(false);
   const [confirmingIdx, setConfirmingIdx] = useState<number | null>(null);
   const [showMemory, setShowMemory] = useState(false);
   const [memory, setMemory] = useState<AiMemory | null>(null);
   const [newInstruction, setNewInstruction] = useState("");
-  const [messages, setMessages] = useState<ChatMsg[]>([
-    {
-      role: "assistant",
-      text: "Здравей! Аз съм твоят интелигентен Ислямски AI Видео Асистент с дълготрайна памет 🧠.\n\nКажи ми какво видео искаш да създадем. Аз помня всички твои предпочитания и правила и първо ти изготвям предложение за одобрение!",
-    },
-  ]);
+  const [messages, setMessages] = useState<ChatMsg[]>(() => {
+    try {
+      const saved = localStorage.getItem("islamic_assistant_chat_history_v3");
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch {}
+    return [
+      {
+        role: "assistant",
+        text: "Здравей! Аз съм твоят интелигентен Ислямски AI Видео Асистент с дълготрайна памет 🧠 и **постоянен чат на живо** (историята никога не се изчиства автоматично).\n\nКажи ми какво видео искаш да създадем или поискай **пакет от идеи за одобрение** (Коран, Хадиси и TikTok теми). Аз изготвям подробен план с предложения, от който можеш да избереш кои да генерираме!",
+      },
+    ];
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("islamic_assistant_chat_history_v3", JSON.stringify(messages));
+    } catch {}
+  }, [messages]);
 
   useEffect(() => {
     getAiMemory().then((m) => setMemory(m)).catch(() => {});
@@ -149,19 +167,20 @@ function AssistantPage() {
     }
   };
 
-  const handleStartBatchSeries = async () => {
+  const handleStartBatchSeries = async (customCount?: number | React.MouseEvent) => {
+    const countToRun = typeof customCount === "number" ? customCount : batchCount;
     try {
       playStudioClick("start");
       setBatchLoading(true);
-      toast.message("Стартиране на пакетно генериране на 3 вайръл видеа...");
-      const res = await startBatchViralSeries();
+      toast.message(`Стартиране на пакетно генериране на ${countToRun} вайръл видеа...`);
+      const res = await startBatchViralSeries({ data: { count: countToRun } });
       playStudioClick("success");
       toast.success(res.message);
       setMessages((prev) => [
         ...prev,
         {
           role: "assistant",
-          text: `📦 **Пакетното генериране е стартирано!**\n\nСистемата генерира 3 вайръл видеа от Корана (Ал-Фатиха, Ал-Ихлас и Ал-Аср) с професионални субтитри. Можеш да ги следиш и свалиш в раздел **[Изтегляния](/downloads)**.`,
+          text: `📦 **Пакетното генериране е стартирано!**\n\nСистемата генерира ${countToRun} топ вайръл видеа от Корана с професионални субтитри. Можеш да ги следиш и да ги изтеглиш наведнъж в раздел **[Изтегляния](/downloads)**.`,
         },
       ]);
     } catch (e: any) {
@@ -209,14 +228,25 @@ function AssistantPage() {
             </p>
           </div>
         </div>
-        <Button
-          variant={showMemory ? "default" : "outline"}
-          onClick={() => setShowMemory(!showMemory)}
-          className="flex items-center gap-2 rounded-xl text-xs"
-        >
-          <Brain className="size-4" />
-          <span>{showMemory ? "Скрий паметта" : "🧠 Моята AI Памет & Правила"}</span>
-        </Button>
+        <div className="flex items-center gap-2 flex-wrap">
+          <Button
+            variant="destructive"
+            onClick={handleClearChat}
+            className="flex items-center gap-1.5 rounded-xl text-xs font-semibold px-3 cursor-pointer"
+            title="Изчисти чат историята на живо"
+          >
+            <Trash2 className="size-3.5" />
+            <span>Изчисти чата</span>
+          </Button>
+          <Button
+            variant={showMemory ? "default" : "outline"}
+            onClick={() => setShowMemory(!showMemory)}
+            className="flex items-center gap-2 rounded-xl text-xs cursor-pointer"
+          >
+            <Brain className="size-4" />
+            <span>{showMemory ? "Скрий паметта" : "🧠 Моята AI Памет & Правила"}</span>
+          </Button>
+        </div>
       </div>
 
       {showMemory && memory && (
@@ -320,13 +350,29 @@ function AssistantPage() {
             <Sparkles className="size-4" /> ПАКЕТЕН РЕЖИМ • ВАЙРЪЛ СЕРИЯ ОТ КОРАНА
           </div>
           <p className="text-xs text-muted-foreground mt-1">
-            С 1 клик генерирай автоматично серия от 3 топ видеа (Ал-Фатиха, Ал-Ихлас, Ал-Аср) с професионални субтитри.
+            Избери колко топ вайръл видеа да се генерират автоматично наведнъж (с Hormozi субтитри и кино B-Roll):
           </p>
+          <div className="flex flex-wrap items-center gap-2 mt-2.5">
+            {[3, 5, 8, 10].map((num) => (
+              <button
+                key={num}
+                type="button"
+                onClick={() => setBatchCount(num)}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition border cursor-pointer ${
+                  batchCount === num
+                    ? "bg-amber-500 text-black border-amber-400 shadow-md scale-105"
+                    : "bg-black/40 text-amber-300/80 border-amber-500/30 hover:bg-amber-500/20"
+                }`}
+              >
+                🔥 {num} видеа
+              </button>
+            ))}
+          </div>
         </div>
         <button
-          onClick={handleStartBatchSeries}
+          onClick={() => handleStartBatchSeries(batchCount)}
           disabled={batchLoading}
-          className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 px-4 py-2.5 text-xs font-bold text-black shadow-lg hover:from-amber-400 hover:to-amber-500 transition shrink-0 cursor-pointer"
+          className="inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 px-5 py-3 text-xs font-bold text-black shadow-lg hover:from-amber-400 hover:to-amber-500 transition shrink-0 cursor-pointer self-stretch sm:self-auto"
         >
           {batchLoading ? (
             <>
@@ -334,10 +380,35 @@ function AssistantPage() {
             </>
           ) : (
             <>
-              <Video className="size-4" /> Генерирай Серия от 3 Видеа
+              <Video className="size-4" /> 🚀 Генерирай Серия от {batchCount} Видеа
             </>
           )}
         </button>
+      </div>
+
+      {/* Batch Plan Suggestion Quick Toolbar */}
+      <div className="mb-4 rounded-2xl border border-teal-500/30 bg-gradient-to-r from-teal-500/10 via-emerald-500/5 to-transparent p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <div>
+          <div className="flex items-center gap-2 text-teal-400 font-bold text-sm">
+            <Brain className="size-4" /> ИНТЕЛИГЕНТЕН ПЛАН ЗА ВАЙРЪЛ ВИДЕА (Коран, Хадиси & TikTok)
+          </div>
+          <p className="text-xs text-muted-foreground mt-1">
+            AI изготвя план с разнородни теми за одобрение. Избери колко идеи искаш да ти предложи в чата:
+          </p>
+          <div className="flex flex-wrap items-center gap-2 mt-2.5">
+            {[3, 5, 8, 10].map((num) => (
+              <button
+                key={num}
+                type="button"
+                onClick={() => handleBatchSuggest(num)}
+                disabled={viralLoading || loading}
+                className="px-3.5 py-1.5 rounded-xl text-xs font-bold transition border cursor-pointer bg-teal-500/15 text-teal-300 border-teal-500/30 hover:bg-teal-500 hover:text-black shadow-sm"
+              >
+                📋 План за {num} идеи
+              </button>
+            ))}
+          </div>
+        </div>
       </div>
 
       <div className="mb-4 flex flex-wrap items-center gap-2">
@@ -348,7 +419,7 @@ function AssistantPage() {
           onClick={() => {
             setPrompt("Направи кратко вирусна TikTok видео идея за Хадис № 1 на Навауи (намеренията)");
           }}
-          className="rounded-full text-xs"
+          className="rounded-full text-xs cursor-pointer"
         >
           🌟 Хадис за намеренията (TikTok 9:16)
         </Button>
@@ -358,7 +429,7 @@ function AssistantPage() {
           onClick={() => {
             setPrompt("Направи TikTok видео за Сура Ал-Ихляс (112:1-4) със спокоен фон");
           }}
-          className="rounded-full text-xs"
+          className="rounded-full text-xs cursor-pointer"
         >
           🕋 Сура Ал-Ихляс
         </Button>
@@ -368,7 +439,7 @@ function AssistantPage() {
           onClick={() => {
             setPrompt("Направи TikTok видео за Аят Алкарси (Сура 2 аят 255)");
           }}
-          className="rounded-full text-xs"
+          className="rounded-full text-xs cursor-pointer"
         >
           📖 Аят ал-Курси
         </Button>
@@ -467,7 +538,7 @@ function AssistantPage() {
                         size="sm"
                         onClick={() => handleConfirmProposal(m.proposal!, idx)}
                         disabled={confirmingIdx !== null}
-                        className="rounded-lg bg-primary text-primary-foreground font-semibold hover:bg-primary/90"
+                        className="rounded-lg bg-primary text-primary-foreground font-semibold hover:bg-primary/90 cursor-pointer"
                       >
                         {confirmingIdx === idx ? (
                           <>
@@ -486,10 +557,89 @@ function AssistantPage() {
                         variant="outline"
                         size="sm"
                         onClick={() => setPrompt("Искам да променим следното в предложението: ")}
-                        className="rounded-lg text-xs"
+                        className="rounded-lg text-xs cursor-pointer"
                       >
                         <Pencil className="size-3.5 mr-1" />
                         Промени нещо
+                      </Button>
+                    </div>
+                  </div>
+                )}
+
+                {m.proposals && Array.isArray(m.proposals) && m.proposals.length > 0 && (
+                  <div className="mt-4 rounded-xl border border-teal-500/40 bg-card/95 p-4 shadow-md space-y-3">
+                    <div className="flex items-center justify-between border-b border-border/50 pb-2.5">
+                      <div className="flex items-center gap-2 font-bold text-teal-400">
+                        <Sparkles className="size-4" />
+                        <span>План с {m.proposals.length} вайръл предложения за одобрение</span>
+                      </div>
+                      <span className="rounded-full bg-teal-500/15 px-3 py-0.5 text-xs font-semibold text-teal-300 border border-teal-500/30">
+                        Очаква твоето одобрение
+                      </span>
+                    </div>
+
+                    <p className="text-xs text-muted-foreground">
+                      Отбележи с чекбокс (☑️) идеите, които искаш да генерираме, и натисни бутона за групово одобрение:
+                    </p>
+
+                    <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
+                      {m.proposals.map((prop, propIdx) => {
+                        const selectedIndices = m.selectedProposalIndices || m.proposals!.map((_, i) => i);
+                        const isChecked = selectedIndices.includes(propIdx);
+
+                        return (
+                          <div
+                            key={propIdx}
+                            onClick={() => handleToggleProposalCheckbox(idx, propIdx)}
+                            className={`flex items-start gap-3 p-3 rounded-xl border transition cursor-pointer ${
+                              isChecked
+                                ? "bg-teal-500/10 border-teal-500/40 text-foreground shadow-sm"
+                                : "bg-muted/40 border-border/50 text-muted-foreground opacity-60 hover:opacity-90"
+                            }`}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={isChecked}
+                              onChange={() => {}} // handled by parent div onClick
+                              className="mt-1 size-4 rounded border-teal-500 text-teal-500 focus:ring-teal-500 cursor-pointer"
+                            />
+                            <div className="flex-1 text-xs space-y-1">
+                              <div className="font-bold text-sm flex items-center gap-2 flex-wrap">
+                                <span className="text-teal-400">#{propIdx + 1}.</span>
+                                <span>{prop.title}</span>
+                                <span className="text-[10px] px-2 py-0.5 rounded-md bg-black/40 border border-border">
+                                  {prop.type === "hadith" ? "📖 Сахих Хадис" : "🕋 Коран / Тренд"}
+                                </span>
+                              </div>
+                              {prop.summaryBg && <p className="text-muted-foreground">{prop.summaryBg}</p>}
+                              <div className="flex flex-wrap gap-3 text-[11px] text-amber-400/90 pt-0.5">
+                                <span>🎨 {prop.themeBg || "Кино фон"}</span>
+                                <span>⚡ Стил: {prop.tiktokTheme || "hormozi"}</span>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    <div className="pt-2 flex flex-col sm:flex-row items-center gap-2">
+                      <Button
+                        size="default"
+                        onClick={() => handleApproveBatchProposals(idx)}
+                        disabled={confirmingIdx !== null}
+                        className="w-full sm:w-auto flex-1 rounded-xl bg-gradient-to-r from-teal-500 to-emerald-600 text-black font-bold shadow-lg hover:from-teal-400 hover:to-emerald-500 cursor-pointer py-5 text-sm"
+                      >
+                        {confirmingIdx === idx ? (
+                          <>
+                            <Loader2 className="size-4 mr-2 animate-spin" />
+                            Генериране на избраните видеа...
+                          </>
+                        ) : (
+                          <>
+                            <CheckCircle2 className="size-4 mr-2" />
+                            🎬 Одобри и Генерирай Избраните ({(m.selectedProposalIndices || m.proposals.map((_, i) => i)).length} от {m.proposals.length}) Видеа наведнъж
+                          </>
+                        )}
                       </Button>
                     </div>
                   </div>
