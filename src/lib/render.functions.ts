@@ -716,7 +716,6 @@ async function aggressivelyCleanServerDisk(forceAll = false) {
           if (lf.endsWith(".log")) {
             const lPath = path.join(lDir, lf);
             const st = await fs.stat(lPath).catch(() => null);
-            // If log exceeds 5MB or if forceAll is true, truncate to 0 bytes
             if (st && (forceAll || st.size > 5 * 1024 * 1024)) {
               await fs.writeFile(lPath, "").catch(() => {});
             }
@@ -730,8 +729,8 @@ async function aggressivelyCleanServerDisk(forceAll = false) {
       const jobsDir = path.join(os.homedir(), ".islamicreels_jobs");
       const jFiles = await fs.readdir(jobsDir).catch(() => []);
       
-      // Check which jobs are currently actively rendering
       let activeIds = new Set<string>();
+      let completedIds = new Set<string>();
       try {
         const jobsFile = path.join(jobsDir, "jobs.json");
         const raw = await fs.readFile(jobsFile, "utf-8");
@@ -740,30 +739,37 @@ async function aggressivelyCleanServerDisk(forceAll = false) {
           jobsList.forEach((j: any) => {
             if (j && (j.status === "processing" || j.status === "rendering")) {
               activeIds.add(j.id);
+            } else if (j && j.status === "completed") {
+              completedIds.add(j.id);
             }
           });
-          // If forceAll is true and jobsList is very large (> 30 jobs), trim old completed/error jobs
-          if (forceAll && jobsList.length > 30) {
-            const trimmed = jobsList.slice(0, 30);
+          if (forceAll && jobsList.length > 50) {
+            const trimmed = jobsList.slice(0, 50);
             await fs.writeFile(jobsFile, JSON.stringify(trimmed, null, 2), "utf-8").catch(() => {});
           }
         }
       } catch {}
 
       for (const jf of jFiles) {
-        // Skip jobs.json directly
         if (jf === "jobs.json") continue;
         const jp = path.join(jobsDir, jf);
         const st = await fs.stat(jp).catch(() => null);
+        if (!st) continue;
         
-        // Check if file belongs to an active job id
         const isActivelyRendering = Array.from(activeIds).some((id) => jf.startsWith(id));
         if (isActivelyRendering) continue;
 
-        // If forceAll is true, delete immediately (threshold 0) for all MP4s/audio/subs of old/failed jobs
-        const threshold = forceAll ? 0 : 6 * 60 * 60 * 1000;
-        if (st && now - st.mtimeMs >= threshold) {
-          await fs.rm(jp, { recursive: true, force: true }).catch(() => {});
+        const isCompletedJob = Array.from(completedIds).some((id) => jf.startsWith(id));
+        if (isCompletedJob) {
+          const completedThreshold = forceAll ? 24 * 60 * 60 * 1000 : 14 * 24 * 60 * 60 * 1000;
+          if (now - st.mtimeMs >= completedThreshold) {
+            await fs.rm(jp, { recursive: true, force: true }).catch(() => {});
+          }
+        } else {
+          const tempThreshold = forceAll ? 0 : 6 * 60 * 60 * 1000;
+          if (now - st.mtimeMs >= tempThreshold) {
+            await fs.rm(jp, { recursive: true, force: true }).catch(() => {});
+          }
         }
       }
     } catch {}
@@ -825,7 +831,7 @@ export const startServerRenderJob = createServerFn({ method: "POST" })
       const targetMp4 = path.join(dir, `${jobId}.mp4`);
       try {
         console.log(`[server-job] Starting background render for ${jobId}...`);
-        await aggressivelyCleanServerDisk(true);
+        await aggressivelyCleanServerDisk(false);
         const base64Data = await runServerRender({ data });
         const BufferMod = (await import("node:buffer")).Buffer;
         await fs.writeFile(targetMp4, BufferMod.from(base64Data, "base64"));
@@ -873,7 +879,7 @@ export const retryServerRenderJob = createServerFn({ method: "POST" })
       const targetMp4 = path.join(dir, `${id}.mp4`);
       try {
         console.log(`[server-job] Retrying background render for ${id}...`);
-        await aggressivelyCleanServerDisk(true);
+        await aggressivelyCleanServerDisk(false);
         const base64Data = await runServerRender({ data: jobData });
         const BufferMod = (await import("node:buffer")).Buffer;
         await fs.writeFile(targetMp4, BufferMod.from(base64Data, "base64"));

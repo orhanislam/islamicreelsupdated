@@ -169,7 +169,7 @@ function DownloadsPage() {
       await saveMediaBlob(blob, `${job.title || "islamic-reel"}.mp4`, "video/mp4");
       toast.success("Видеото е свалено успешно!");
     } catch (e) {
-      toast.error("Не успях да сваля видеото от сървъра");
+      toast.error("Файлът е бил изчистен от старата система. Натиснете иконата 🔄 до бутона 'Корица', за да го рендирате отново!");
     } finally {
       setDownloadingServerId(null);
     }
@@ -418,6 +418,13 @@ function DownloadsPage() {
                             Корица
                           </>
                         )}
+                      </button>
+                      <button
+                        onClick={() => handleRetryServerJob(job.id)}
+                        title="Рендирай отново (Ако файлът на сървъра е бил изчистен от старата система)"
+                        className="inline-flex items-center justify-center rounded-xl border border-primary/30 bg-primary/10 p-2.5 text-sm font-medium text-primary hover:bg-primary/20 transition cursor-pointer shrink-0"
+                      >
+                        <RefreshCw className="size-4" />
                       </button>
                     </>
                   ) : job.status === "rendering" ? (
