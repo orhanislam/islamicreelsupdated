@@ -10,7 +10,7 @@ import { getAiMemory, updateAiMemory } from "@/lib/memory.functions";
 
 export type VideoProposal = {
   title: string;
-  type: "hadith" | "quran";
+  type: "hadith" | "quran" | "tiktok" | "general";
   collection?: string;
   number?: number;
   surah?: number;
@@ -70,21 +70,21 @@ CAPCUT-ПОДОБНИ ИНСТРУКЦИИ ЗА РЕДАКТИРАНЕ:
   "reply": "Твоят учтив отговор на български език, в който представяш предложението и питаш дали му харесва.",
   "newLearnedFact": "Ако в това съобщение потребителят ти е казал нещо важно за себе си или ново предпочитание, запиши го тук (иначе остави null)",
   "proposal": {
-    "title": "Точно заглавие на български",
-    "type": "hadith" или "quran",
-    "collection": "nawawi40" | "bukhari" | "muslim" | "tirmidhi",
-    "number": номер на хадис,
-    "surah": номер на сура (1-114),
-    "ayah": начален аят,
-    "count": брой аяти (1-7),
-    "summaryBg": "Кратко описание или български превод на избрания текст",
+    "title": "Точно заглавие на български (напр. [Коран] Аят ал-Курси или [TikTok] 3 неща, които отнемат спокойствието)",
+    "type": "hadith" | "quran" | "tiktok" | "general",
+    "collection": "nawawi40" | "bukhari" | "muslim" | "tirmidhi" (ако type е hadith),
+    "number": число номер на хадиса (ако type е hadith),
+    "surah": точно число на сурата от 1 до 114 (ЗАДЪЛЖИТЕЛНО ако type е quran, напр. 2 за Ал-Бакара),
+    "ayah": точно число на началния аят (ЗАДЪЛЖИТЕЛНО ако type е quran, напр. 255),
+    "count": точно число брой аяти от 1 до 7 (ЗАДЪЛЖИТЕЛНО ако type е quran, напр. 1),
+    "summaryBg": "Кратко описание, български превод или пълен сценарий за озвучаване на български",
     "themeBg": "Визуална атмосфера на български",
-    "searchQuery": "ключови думи за фон на английски",
+    "searchQuery": "ключови думи за фон на английски (напр. sunrise fog nature cinematic)",
     "tiktokTheme": "hormozi" | "emerald" | "neon" | "classic" (по подразбиране "hormozi"),
-    "useBRoll": true/false (ако потребителят иска сменящи се B-Roll кадри),
-    "bRollInterval": число в секунди (на колко секунди да се сменя B-Roll кадъра, напр. 3),
-    "subtitlePosition": "bottom" | "middle" | "lower-third" (позиция на субтитрите),
-    "quality": "high" | "720p" (качество на видеото)
+    "useBRoll": true,
+    "bRollInterval": 3,
+    "subtitlePosition": "bottom" | "middle" | "lower-third",
+    "quality": "high"
   }
 }
 
@@ -205,18 +205,43 @@ export const suggestBatchViralProposals = createServerFn({ method: "POST" })
 1. Включи разнообразие: задължително предложи теми от Корана, теми от Сахих Хадиси (Бухари/Муслим), както и модерни TikTok Hormozi вирусни куки (напр. "3 неща, които убиват спокойствието ти според Исляма", "Защо Аллах забавя отговора на дуата ти", "Скритият знак, че си на прав път").
 2. Не предлагай общи или клиширани текстове. Всяко предложение трябва да има силен емоционален и житейски заряд.
 
-Върни JSON със следната структура:
+Върни JSON със следната структура, като при всяко предложение ЗАДЪЛЖИТЕЛНО попълваш точните числови параметри за съответния type:
 {
   "reply": "Увлекателно представяне на български език на този специален пакет от ${countNum} вайръл идеи. Обясни накратко защо са избрани и покани потребителя да отбележи кои желае да одобри за генериране.",
   "proposals": [
     {
-      "title": "[TikTok Тренд] 3 неща, които отнемат спокойствието ти",
+      "title": "[Коран] Аят ал-Курси • Тронът на Аллах (2:255)",
+      "type": "quran",
+      "surah": 2,
+      "ayah": 255,
+      "count": 1,
+      "summaryBg": "Аят ал-Курси е най-великият аят в Корана, даващ абсолютна защита и спокойствие на сърцето.",
+      "themeBg": "Космос, звезди и величествена златна светлина",
+      "searchQuery": "stars universe galaxy cinematic",
+      "tiktokTheme": "hormozi",
+      "useBRoll": true,
+      "bRollInterval": 3,
+      "quality": "high"
+    },
+    {
+      "title": "[Сахих Хадис] Защо Аллах изпраща изпитания",
       "type": "hadith",
       "collection": "bukhari",
-      "number": 6424,
-      "summaryBg": "Българско обяснение на урока или сценария",
-      "themeBg": "Кинематографична атмосфера (напр. Златна зора и мъгла)",
-      "searchQuery": "sunrise golden hour fog nature cinematic",
+      "number": 5645,
+      "summaryBg": "Когото Аллах желае да дари с добро, Той го подлага на изпитания за пречистване на душата.",
+      "themeBg": "Буря, която утихва в слънчева зора",
+      "searchQuery": "storm sunlight dramatic cinematic nature",
+      "tiktokTheme": "hormozi",
+      "useBRoll": true,
+      "bRollInterval": 3,
+      "quality": "high"
+    },
+    {
+      "title": "[TikTok Психология] 3 неща, които отнемат спокойствието ти според Исляма",
+      "type": "tiktok",
+      "summaryBg": "Първо: Завистта към чуждия успех, която изгаря добрите дела. Второ: Забравянето на благодарността за това, което вече имаш. Трето: Гняв за неща, които не можеш да контролираш.",
+      "themeBg": "Успокояваща природа, мъгла и изгряващо слънце",
+      "searchQuery": "peaceful nature sunrise fog cinematic",
       "tiktokTheme": "hormozi",
       "useBRoll": true,
       "bRollInterval": 3,
@@ -224,7 +249,7 @@ export const suggestBatchViralProposals = createServerFn({ method: "POST" })
     }
   ]
 }
-Върни САМО валиден JSON без маркдаун кавички.`;
+ВАЖНО: Ако предложението е от тип "quran", ЗАДЪЛЖИТЕЛНО попълни точни цели числа за "surah" (1-114), "ayah" (>0) и "count" (1-7)! НИКОГА не оставяй "surah" и "ayah" празни! Върни САМО валиден JSON без маркдаун кавички.`;
 
     const msgs = [
       { role: "system", content: prompt },
@@ -280,7 +305,7 @@ export const confirmAndGenerateVideo = createServerFn({ method: "POST" })
     let bulgarianWordTimings: any[] | undefined = undefined;
     let arabicWordCount: number | undefined = undefined;
 
-    if (proposal.type === "hadith") {
+    if (proposal.type === "hadith" || (!proposal.surah && !proposal.ayah && proposal.collection && proposal.number)) {
       const coll = proposal.collection || "nawawi40";
       const num = Number(proposal.number) || 1;
       const h = await fetchSunnahHadith({ data: { collection: coll, number: num } });
@@ -297,10 +322,62 @@ export const confirmAndGenerateVideo = createServerFn({ method: "POST" })
       } catch (e) {
         console.warn("Could not narrate hadith:", e);
       }
+    } else if (proposal.type === "tiktok" || proposal.type === "general" || (proposal.type !== "quran" && !proposal.surah && !proposal.ayah && !proposal.number && proposal.summaryBg)) {
+      bulgarian = proposal.summaryBg || proposal.title;
+      reference = proposal.title;
+      arabic = "";
+      english = "";
+
+      try {
+        const narr = await synthesizeHadithNarration({ data: { text: bulgarian } });
+        audioUrl = `data:${narr.mimeType || "audio/mp3"};base64,${narr.base64}`;
+        bulgarianWordTimings = narr.wordTimings;
+      } catch (e) {
+        console.warn("Could not narrate tiktok topic:", e);
+      }
     } else {
-      const surah = Number(proposal.surah) || 1;
-      const ayah = Number(proposal.ayah) || 1;
-      const count = Math.min(7, Math.max(1, Number(proposal.count) || 1));
+      let surah = Number(proposal.surah);
+      let ayah = Number(proposal.ayah);
+      let count = Math.min(7, Math.max(1, Number(proposal.count) || 1));
+
+      // Robust extraction: if surah/ayah are NaN, missing, or <= 0, parse from title/summary or keyword
+      if (isNaN(surah) || surah <= 0 || isNaN(ayah) || ayah <= 0) {
+        const textToSearch = `${proposal.title} ${proposal.summaryBg || ""}`;
+        const colonMatch = textToSearch.match(/\b(\d{1,3})\s*[:.]\s*(\d{1,3})(?:\s*-\s*(\d{1,3}))?\b/);
+        if (colonMatch) {
+          surah = parseInt(colonMatch[1], 10);
+          ayah = parseInt(colonMatch[2], 10);
+          if (colonMatch[3]) {
+            const end = parseInt(colonMatch[3], 10);
+            if (end >= ayah && end - ayah < 7) {
+              count = end - ayah + 1;
+            }
+          }
+        } else {
+          const lower = textToSearch.toLowerCase();
+          if (lower.includes("ихлас") || lower.includes("ikhlas")) {
+            surah = 112; ayah = 1; count = 4;
+          } else if (lower.includes("аср") || lower.includes("asr")) {
+            surah = 103; ayah = 1; count = 3;
+          } else if (lower.includes("курси") || lower.includes("kursi")) {
+            surah = 2; ayah = 255; count = 1;
+          } else if (lower.includes("шарх") || lower.includes("облекчение")) {
+            surah = 94; ayah = 5; count = 2;
+          } else if (lower.includes("фаляк") || lower.includes("фалак")) {
+            surah = 113; ayah = 1; count = 5;
+          } else if (lower.includes("наср") || lower.includes("победа")) {
+            surah = 110; ayah = 1; count = 3;
+          } else if (lower.includes("каусар") || lower.includes("изобилие")) {
+            surah = 108; ayah = 1; count = 3;
+          } else if (lower.includes("нас") || lower.includes("убежище")) {
+            surah = 114; ayah = 1; count = 6;
+          } else {
+            surah = isNaN(surah) || surah <= 0 ? 1 : surah;
+            ayah = isNaN(ayah) || ayah <= 0 ? 1 : ayah;
+          }
+        }
+      }
+
       const ayahEnd = ayah + count - 1;
       const q = await fetchAyah({ data: { surah, ayah, ayahEnd } });
       arabic = q.arabic;
