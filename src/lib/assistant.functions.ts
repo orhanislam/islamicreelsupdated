@@ -5,7 +5,7 @@ import { fetchAyah } from "@/lib/quran.functions";
 import { translateToBulgarian } from "@/lib/translate.functions";
 import { searchPexelsVideos } from "@/lib/pexels.functions";
 import { synthesizeHadithNarration } from "@/lib/tts.functions";
-import { startServerRenderJob } from "@/lib/render.functions";
+import { startServerRenderJob, getJobsDir } from "@/lib/render.functions";
 import { getAiMemory, updateAiMemory } from "@/lib/memory.functions";
 
 export type VideoProposal = {
@@ -510,5 +510,146 @@ export const startBatchViralSeries = createServerFn({ method: "POST" })
       count: chosen.length,
       message: `📦 Успешно стартирано пакетно генериране на ${chosen.length} професионални вайръл видеа! Можеш да следиш напредъка им и да ги свалиш наведнъж в раздел Изтегляния.`,
     };
+  });
+
+async function getHistoryFilePath() {
+  const path = await import("path");
+  const dir = await getJobsDir();
+  return path.join(dir, "assistant_chat_history.json");
+}
+
+export const getAssistantHistory = createServerFn({ method: "POST" })
+  .handler(async () => {
+    const fs = (await import("fs")).promises;
+    const file = await getHistoryFilePath();
+    try {
+      const txt = await fs.readFile(file, "utf-8");
+      return JSON.parse(txt);
+    } catch {
+      return [];
+    }
+  });
+
+export const saveAssistantHistory = createServerFn({ method: "POST" })
+  .validator((input: { messages: any[] }) => input)
+  .handler(async ({ data: { messages } }) => {
+    const fs = (await import("fs")).promises;
+    const file = await getHistoryFilePath();
+    await fs.writeFile(file, JSON.stringify(messages, null, 2), "utf-8");
+    return { success: true };
+  });
+
+export const clearAssistantHistory = createServerFn({ method: "POST" })
+  .handler(async () => {
+    const fs = (await import("fs")).promises;
+    const file = await getHistoryFilePath();
+    await fs.unlink(file).catch(() => {});
+    return { success: true };
+  });
+
+export const startBackgroundPlanGeneration = createServerFn({ method: "POST" })
+  .validator((input: { count?: number; topic?: string; userMsgText: string }) => input)
+  .handler(async ({ data }) => {
+    const fs = (await import("fs")).promises;
+    const file = await getHistoryFilePath();
+    let history: any[] = [];
+    try {
+      history = JSON.parse(await fs.readFile(file, "utf-8"));
+    } catch {}
+
+    const planId = `plan_${Date.now()}`;
+    const userMsg = { role: "user", text: data.userMsgText };
+    const planningMsg = {
+      role: "assistant",
+      text: `⏳ **AI изготвя плана с ${data.count || 5} вайръл идеи във фонов режим...**\n\nМожеш веднага да затвориш браузъра! Когато се върнеш тук след 15-20 секунди, готовият план за одобрение ще те чака на екрана.`,
+      isPlanning: true,
+      planId,
+    };
+
+    history.push(userMsg, planningMsg);
+    await fs.writeFile(file, JSON.stringify(history, null, 2), "utf-8");
+
+    // Start Gemini generation asynchronously in the background so closing browser does not drop it
+    (async () => {
+      try {
+        console.log(`[background-plan] Starting proposal generation for ${data.count || 5} ideas...`);
+        const res = await suggestBatchViralProposals({ data: { count: data.count, topic: data.topic } });
+        
+        let curHist: any[] = [];
+        try {
+          curHist = JSON.parse(await fs.readFile(file, "utf-8"));
+        } catch {}
+
+        const idx = curHist.findIndex((m: any) => m.planId === planId || m.isPlanning);
+        if (idx !== -1) {
+          curHist[idx] = {
+            role: "assistant",
+            text: res.reply,
+            proposals: res.proposals,
+            selectedProposalIndices: res.proposals.map((_, i: number) => i),
+          };
+        } else {
+          curHist.push({
+            role: "assistant",
+            text: res.reply,
+            proposals: res.proposals,
+            selectedProposalIndices: res.proposals.map((_, i: number) => i),
+          });
+        }
+        await fs.writeFile(file, JSON.stringify(curHist, null, 2), "utf-8");
+        console.log(`[background-plan] Plan generation COMPLETED and saved to history!`);
+      } catch (err: any) {
+        console.error(`[background-plan] Failed to generate plan:`, err);
+        let curHist: any[] = [];
+        try {
+          curHist = JSON.parse(await fs.readFile(file, "utf-8"));
+        } catch {}
+        const idx = curHist.findIndex((m: any) => m.planId === planId || m.isPlanning);
+        if (idx !== -1) {
+          curHist[idx] = {
+            role: "assistant",
+            text: `❌ Грешка при изготвяне на плана: ${err?.message || "Неуспешно свързване с AI"}. Моля, опитай отново.`,
+          };
+          await fs.writeFile(file, JSON.stringify(curHist, null, 2), "utf-8");
+        }
+      }
+    })();
+
+    return { success: true, planId };
+  });
+
+export const startBackgroundBatchGeneration = createServerFn({ method: "POST" })
+  .validator((input: { proposals: VideoProposal[] }) => input)
+  .handler(async ({ data: { proposals } }) => {
+    const fs = (await import("fs")).promises;
+    const file = await getHistoryFilePath();
+    let history: any[] = [];
+    try {
+      history = JSON.parse(await fs.readFile(file, "utf-8"));
+    } catch {}
+
+    const batchMsg = {
+      role: "assistant",
+      text: `🎬 **Одобрено! Стартирах фоновото генериране на ${proposals.length} видеа от твоя план!**\n\nВсички те са в облачната опашка за последователно рендиране. Можеш веднага да затвориш браузъра (дори на iPhone) — видеата се генерират автономно! Следи напредъка и ги свали в раздел **[Изтегляния](/downloads)**.`,
+    };
+    history.push(batchMsg);
+    await fs.writeFile(file, JSON.stringify(history, null, 2), "utf-8");
+
+    // Start processing proposals asynchronously in the background so closing browser does not stop the loop
+    (async () => {
+      console.log(`[background-batch] Starting async submission of ${proposals.length} proposals to render queue...`);
+      for (let i = 0; i < proposals.length; i++) {
+        const prop = proposals[i];
+        try {
+          console.log(`[background-batch] Processing proposal ${i + 1}/${proposals.length}: ${prop.title}`);
+          await confirmAndGenerateVideo({ data: { proposal: prop } });
+        } catch (err: any) {
+          console.error(`[background-batch] Error processing proposal ${i + 1}:`, err);
+        }
+      }
+      console.log(`[background-batch] All ${proposals.length} proposals successfully queued!`);
+    })();
+
+    return { success: true, count: proposals.length };
   });
 

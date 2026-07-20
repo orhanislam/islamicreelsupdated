@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { toast } from "sonner";
-import { chatWithAssistant, suggestViralProposal, suggestBatchViralProposals, confirmAndGenerateVideo, startBatchViralSeries, type VideoProposal } from "@/lib/assistant.functions";
+import { chatWithAssistant, suggestViralProposal, suggestBatchViralProposals, confirmAndGenerateVideo, startBatchViralSeries, getAssistantHistory, saveAssistantHistory, clearAssistantHistory, startBackgroundPlanGeneration, startBackgroundBatchGeneration, type VideoProposal } from "@/lib/assistant.functions";
 import { getAiMemory, updateAiMemory, type AiMemory } from "@/lib/memory.functions";
 import { playStudioClick } from "@/lib/sfx";
 
@@ -21,6 +21,8 @@ type ChatMsg = {
   selectedProposalIndices?: number[];
   jobId?: string;
   reference?: string;
+  isPlanning?: boolean;
+  planId?: string;
 };
 
 const DEFAULT_MESSAGES: ChatMsg[] = [
@@ -43,24 +45,65 @@ function AssistantPage() {
   const [messages, setMessages] = useState<ChatMsg[]>(DEFAULT_MESSAGES);
 
   useEffect(() => {
-    if (typeof window !== "undefined" && window.localStorage) {
+    let active = true;
+    const fetchHistory = async () => {
       try {
-        const saved = window.localStorage.getItem("islamic_assistant_chat_history_v3");
-        if (saved) {
-          const parsed = JSON.parse(saved);
-          if (Array.isArray(parsed) && parsed.length > 0) {
-            setMessages(parsed);
+        const serverMsgs = await getAssistantHistory();
+        if (active && Array.isArray(serverMsgs) && serverMsgs.length > 0) {
+          setMessages(serverMsgs);
+          if (typeof window !== "undefined" && window.localStorage) {
+            window.localStorage.setItem("islamic_assistant_chat_history_v3", JSON.stringify(serverMsgs));
           }
+          return;
         }
       } catch {}
-    }
+
+      if (typeof window !== "undefined" && window.localStorage) {
+        try {
+          const saved = window.localStorage.getItem("islamic_assistant_chat_history_v3");
+          if (saved) {
+            const parsed = JSON.parse(saved);
+            if (active && Array.isArray(parsed) && parsed.length > 0) {
+              setMessages(parsed);
+              saveAssistantHistory({ data: { messages: parsed } }).catch(() => {});
+            }
+          }
+        } catch {}
+      }
+    };
+    fetchHistory();
+
+    const interval = setInterval(async () => {
+      try {
+        const serverMsgs = await getAssistantHistory();
+        if (Array.isArray(serverMsgs) && serverMsgs.length > 0) {
+          setMessages((prev) => {
+            if (JSON.stringify(prev) !== JSON.stringify(serverMsgs)) {
+              if (typeof window !== "undefined" && window.localStorage) {
+                window.localStorage.setItem("islamic_assistant_chat_history_v3", JSON.stringify(serverMsgs));
+              }
+              return serverMsgs;
+            }
+            return prev;
+          });
+        }
+      } catch {}
+    }, 3000);
+
+    return () => {
+      active = false;
+      clearInterval(interval);
+    };
   }, []);
 
   useEffect(() => {
-    if (typeof window !== "undefined" && window.localStorage && messages !== DEFAULT_MESSAGES) {
-      try {
-        window.localStorage.setItem("islamic_assistant_chat_history_v3", JSON.stringify(messages));
-      } catch {}
+    if (messages !== DEFAULT_MESSAGES && messages.length > 0) {
+      if (typeof window !== "undefined" && window.localStorage) {
+        try {
+          window.localStorage.setItem("islamic_assistant_chat_history_v3", JSON.stringify(messages));
+        } catch {}
+      }
+      saveAssistantHistory({ data: { messages } }).catch(() => {});
     }
   }, [messages]);
 
@@ -223,7 +266,7 @@ function AssistantPage() {
     }
   };
 
-  const handleClearChat = () => {
+  const handleClearChat = async () => {
     if (typeof window !== "undefined" && !window.confirm("Сигурни ли сте, че искате да изчистите историята на чата?")) return;
     playStudioClick("delete");
     setMessages(DEFAULT_MESSAGES);
@@ -232,6 +275,7 @@ function AssistantPage() {
         window.localStorage.setItem("islamic_assistant_chat_history_v3", JSON.stringify(DEFAULT_MESSAGES));
       } catch {}
     }
+    await clearAssistantHistory().catch(() => {});
     toast.success("Чатът е изчистен успешно!");
   };
 
@@ -239,22 +283,17 @@ function AssistantPage() {
     try {
       playStudioClick("start");
       setViralLoading(true);
-      toast.message(`AI търси и подготвя план с ${countToSuggest} вайръл идеи (Коран, Хадиси и TikTok трендове)...`);
-      setMessages((prev) => [
-        ...prev,
-        { role: "user", text: `⚡ Изготви ми план с точно ${countToSuggest} вайръл идеи (Коран, Хадиси и TikTok теми) за одобрение.` },
-      ]);
-      const res = await suggestBatchViralProposals({ data: { count: countToSuggest } });
+      toast.message(`⚡ Стартирам фоново изготвяне на план с ${countToSuggest} вайръл идеи... Може да затворите браузъра!`);
+      const userText = `⚡ Изготви ми план с точно ${countToSuggest} вайръл идеи (Коран, Хадиси и TikTok теми) за одобрение.`;
+      await startBackgroundPlanGeneration({
+        data: { count: countToSuggest, userMsgText: userText },
+      });
       playStudioClick("success");
-      setMessages((prev) => [
-        ...prev,
-        {
-          role: "assistant",
-          text: res.reply,
-          proposals: res.proposals,
-          selectedProposalIndices: res.proposals.map((_, i) => i),
-        },
-      ]);
+      toast.success(`⏳ Планът се изготвя във фонов режим! Може да затворите браузъра на телефона! Когато се върнете, предложенията ще са тук.`);
+      const latest = await getAssistantHistory();
+      if (Array.isArray(latest) && latest.length > 0) {
+        setMessages(latest);
+      }
     } catch (e: any) {
       toast.error(e?.message || "Грешка при създаване на плана");
     } finally {
@@ -288,20 +327,14 @@ function AssistantPage() {
     try {
       setConfirmingIdx(msgIdx);
       playStudioClick("start");
-      toast.message(`🎬 Стартирам генерирането на ${chosen.length} одобрени видеа от плана...`);
-      for (let i = 0; i < chosen.length; i++) {
-        const prop = chosen[i];
-        await confirmAndGenerateVideo({ data: { proposal: prop } });
-      }
+      toast.message(`🎬 Изпращам ${chosen.length} одобрени видеа към фоновата облачна опашка... Може да затворите браузъра!`);
+      await startBackgroundBatchGeneration({ data: { proposals: chosen } });
       playStudioClick("success");
-      toast.success(`🎉 Успешно стартирани ${chosen.length} видеа за автономно рендиране на сървъра!`);
-      setMessages((prev) => [
-        ...prev,
-        {
-          role: "assistant",
-          text: `🎬 **Одобрено! Стартирах генерирането на ${chosen.length} видеа от твоя план!**\n\nВсички те се рендират автономно в облака. Можеш да ги следиш и да ги изтеглиш наведнъж в раздел **[Изтегляния](/downloads)**.`,
-        },
-      ]);
+      toast.success(`🎉 Успешно стартирани ${chosen.length} видеа за автономно рендиране на облака! Може веднага да излезете от браузъра.`);
+      const latest = await getAssistantHistory();
+      if (Array.isArray(latest) && latest.length > 0) {
+        setMessages(latest);
+      }
     } catch (err: any) {
       toast.error(err?.message || "Грешка при генериране на видеата");
     } finally {
