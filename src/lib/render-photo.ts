@@ -9,6 +9,8 @@ export type RenderOptions = {
   bulgarian: string;
   reference: string;
   style: "minimal" | "centered" | "lower-third";
+  tiktokTheme?: "hormozi" | "gold" | "emerald" | "neon" | "classic";
+  pacingMode?: "punchy" | "ayah";
 };
 
 const W = 1080;

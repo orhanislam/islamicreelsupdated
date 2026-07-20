@@ -32,3 +32,5 @@ dist-ssr
 *.sw?
 
 .vercel
+jobs_raw.txt
+*.raw.txt

@@ -891,25 +891,60 @@ export async function renderVideo(opts: VideoOptions): Promise<{ blob: Blob; mim
       ctx.textAlign = "center";
       ctx.lineJoin = "round";
 
-      // Pro TikTok caption styling: crisp opaque black outline without muddy shadow blur
+      // Pro TikTok/Reels caption styling: crisp opaque black outline with deep subtle drop shadow
       ctx.strokeStyle = "#000000";
-      ctx.lineWidth = Math.max(5, activePhrase.fontSize * 0.075);
-      ctx.shadowBlur = 0;
-      ctx.shadowOffsetY = 0;
-      for (let i = 0; i < activePhrase.lines.length; i++) {
-        const text = activePhrase.lines[i].join(" ");
-        const y = baseY + i * activePhrase.lineHeight;
-        ctx.strokeText(text, W / 2, y);
-      }
+      ctx.lineWidth = Math.max(6.5, activePhrase.fontSize * 0.09);
+      ctx.shadowColor = "rgba(0, 0, 0, 0.65)";
+      ctx.shadowBlur = Math.max(8, activePhrase.fontSize * 0.15);
+      ctx.shadowOffsetY = Math.max(3, activePhrase.fontSize * 0.05);
 
-      // Pure crisp white fill
-      ctx.shadowBlur = 0;
-      ctx.shadowOffsetY = 0;
-      ctx.fillStyle = "#ffffff";
+      const highlightKeywords = /^(Аллах|Коран|Корана|Пророк|Пророкът|Хадис|Сура|Аят|Рай|Дженнет|Дженнета|Дуа|Иман|Благословение|Милост|Търпение|Надежда|Успех|Мухаммад|Господ|Господар|Победа|Спокойствие|Защита|Сърце|Сърцето|Живот|Време|Времето|Истина|Истината|Светлина|Зло|Добро|Вяра|Вярата)[.,!?…]?$/i;
+      const themeColor = opts.tiktokTheme === "emerald" ? "#32CD32" : opts.tiktokTheme === "neon" ? "#00FFFF" : "#FFD700";
+
+      let currentWordOffset = 0;
       for (let i = 0; i < activePhrase.lines.length; i++) {
-        const text = activePhrase.lines[i].join(" ");
+        const lineWords = activePhrase.lines[i];
         const y = baseY + i * activePhrase.lineHeight;
-        ctx.fillText(text, W / 2, y);
+
+        // Calculate horizontal starting position for centered line
+        const totalLineWidth = lineWords.reduce((acc, w, idx) => {
+          return acc + ctx.measureText(w).width + (idx < lineWords.length - 1 ? ctx.measureText(" ").width : 0);
+        }, 0);
+        let cursorX = W / 2 - totalLineWidth / 2;
+
+        for (let wIdx = 0; wIdx < lineWords.length; wIdx++) {
+          const wordStr = lineWords[wIdx];
+          const globalIdx = activePhrase.startWord + currentWordOffset + wIdx;
+          const wTiming = wordTimes[globalIdx];
+          const isActive = wTiming && (elapsed >= wTiming.start && elapsed <= wTiming.end);
+          const isKeyword = highlightKeywords.test(wordStr);
+
+          const wordWidth = ctx.measureText(wordStr).width;
+          const centerX = cursorX + wordWidth / 2;
+
+          ctx.save();
+          if (isActive) {
+            // Active karaoke pop & glow
+            ctx.translate(centerX, y);
+            ctx.scale(1.14, 1.14);
+            ctx.translate(-centerX, -y);
+            ctx.fillStyle = themeColor;
+            ctx.shadowColor = themeColor;
+            ctx.shadowBlur = Math.max(14, activePhrase.fontSize * 0.25);
+          } else if (isKeyword) {
+            ctx.fillStyle = themeColor;
+          } else {
+            ctx.fillStyle = "#ffffff";
+          }
+
+          ctx.textAlign = "center";
+          ctx.strokeText(wordStr, centerX, y);
+          ctx.fillText(wordStr, centerX, y);
+          ctx.restore();
+
+          cursorX += wordWidth + ctx.measureText(" ").width;
+        }
+        currentWordOffset += lineWords.length;
       }
       ctx.restore();
       ctx.globalAlpha = 1;

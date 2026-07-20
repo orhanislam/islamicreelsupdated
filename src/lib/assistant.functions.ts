@@ -1,5 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
-import { geminiChat } from "@/lib/gemini";
+import { geminiChat, type ChatMessage } from "@/lib/gemini";
 import { fetchSunnahHadith } from "@/lib/sunnah.functions";
 import { fetchAyah } from "@/lib/quran.functions";
 import { translateToBulgarian } from "@/lib/translate.functions";
@@ -7,6 +7,7 @@ import { searchPexelsVideos } from "@/lib/pexels.functions";
 import { synthesizeHadithNarration } from "@/lib/tts.functions";
 import { startServerRenderJob, getJobsDir } from "@/lib/render.functions";
 import { getAiMemory, updateAiMemory } from "@/lib/memory.functions";
+import { createTask, updateTask, listTasks } from "@/lib/tasks-engine";
 
 export type VideoProposal = {
   title: string;
@@ -98,9 +99,9 @@ CAPCUT-ПОДОБНИ ИНСТРУКЦИИ ЗА РЕДАКТИРАНЕ:
 
 ВАЖНО: Върни САМО валиден JSON без маркдаун кавички.`;
 
-    const msgs = [
+    const msgs: ChatMessage[] = [
       { role: "system", content: systemPrompt },
-      ...data.history.map((m) => ({ role: m.role, content: m.content })),
+      ...data.history.map((m) => ({ role: m.role as "system" | "user" | "assistant", content: m.content })),
       { role: "user", content: data.prompt },
     ];
 
@@ -308,7 +309,7 @@ export const confirmAndGenerateVideo = createServerFn({ method: "POST" })
     let arabicWordCount: number | undefined = undefined;
 
     if (proposal.type === "hadith" || (!proposal.surah && !proposal.ayah && proposal.collection && proposal.number)) {
-      const coll = proposal.collection || "nawawi40";
+      const coll = (proposal.collection || "nawawi40") as "bukhari" | "muslim" | "tirmidhi" | "nawawi40";
       const num = Number(proposal.number) || 1;
       const h = await fetchSunnahHadith({ data: { collection: coll, number: num } });
       arabic = h.arabic;
@@ -455,6 +456,7 @@ export const confirmAndGenerateVideo = createServerFn({ method: "POST" })
     return {
       reply: `🎬 **Одобрено! Стартирах генерирането на видеото за „${reference}“ на сървъра!**\n\nМожеш да го намериш и свалиш веднага след рендиране от раздел **[Изтегляния](/downloads)**.`,
       jobStarted: true,
+      jobId,
       reference,
     };
   });
@@ -549,6 +551,126 @@ export const clearAssistantHistory = createServerFn({ method: "POST" })
     return { success: true };
   });
 
+let isBackgroundWorkerRunning = false;
+
+export async function triggerBackgroundTaskWorker() {
+  if (isBackgroundWorkerRunning) return;
+  isBackgroundWorkerRunning = true;
+  setTimeout(async () => {
+    try {
+      const tasks = await listTasks();
+      const nextTask = tasks.find((t) => t.status === "queued");
+      if (!nextTask) {
+        isBackgroundWorkerRunning = false;
+        return;
+      }
+
+      await updateTask(nextTask.id, { status: "processing", progress: 10, message: "Обработка на задачата..." });
+      const fs = (await import("fs")).promises;
+      const file = await getHistoryFilePath();
+
+      if (nextTask.type === "plan_generation") {
+        try {
+          await updateTask(nextTask.id, { progress: 30, message: "AI генерира вайръл идеи..." });
+          const res = await suggestBatchViralProposals({
+            data: { count: nextTask.payload.count, topic: nextTask.payload.topic },
+          });
+
+          await updateTask(nextTask.id, { progress: 80, message: "Записване в историята на чата..." });
+          let curHist: any[] = [];
+          try {
+            curHist = JSON.parse(await fs.readFile(file, "utf-8"));
+          } catch {}
+
+          const idx = curHist.findIndex((m: any) => m.planId === nextTask.id || m.isPlanning);
+          if (idx !== -1) {
+            curHist[idx] = {
+              role: "assistant",
+              text: res.reply,
+              proposals: res.proposals,
+              selectedProposalIndices: res.proposals.map((_, i: number) => i),
+              jobId: nextTask.id,
+            };
+          } else {
+            curHist.push({
+              role: "assistant",
+              text: res.reply,
+              proposals: res.proposals,
+              selectedProposalIndices: res.proposals.map((_, i: number) => i),
+              jobId: nextTask.id,
+            });
+          }
+          await fs.writeFile(file, JSON.stringify(curHist, null, 2), "utf-8");
+          await updateTask(nextTask.id, { status: "completed", progress: 100, message: "Планът е готов за одобрение!", result: res });
+        } catch (err: any) {
+          console.error(`[task-engine] Plan generation error:`, err);
+          let curHist: any[] = [];
+          try {
+            curHist = JSON.parse(await fs.readFile(file, "utf-8"));
+          } catch {}
+          const idx = curHist.findIndex((m: any) => m.planId === nextTask.id || m.isPlanning);
+          if (idx !== -1) {
+            curHist[idx] = {
+              role: "assistant",
+              text: `❌ Грешка при изготвяне на плана: ${err?.message || "Неуспешна връзка с AI"}. Моля, опитайте отново.`,
+            };
+            await fs.writeFile(file, JSON.stringify(curHist, null, 2), "utf-8");
+          }
+          await updateTask(nextTask.id, { status: "failed", progress: 100, error: err?.message || "Грешка при генериране" });
+        }
+      } else if (nextTask.type === "batch_generation") {
+        try {
+          const proposals = nextTask.payload.proposals || [];
+          for (let i = 0; i < proposals.length; i++) {
+            const prop = proposals[i];
+            const pct = Math.round(10 + ((i + 1) / proposals.length) * 85);
+            await updateTask(nextTask.id, {
+              progress: pct,
+              message: `Обработка на видео ${i + 1} от ${proposals.length}: ${prop.title}`,
+            });
+            await confirmAndGenerateVideo({ data: { proposal: prop } });
+          }
+          await updateTask(nextTask.id, {
+            status: "completed",
+            progress: 100,
+            message: `Успешно стартирани всички ${proposals.length} видеа в облачната опашка!`,
+          });
+        } catch (err: any) {
+          console.error(`[task-engine] Batch generation error:`, err);
+          await updateTask(nextTask.id, { status: "failed", progress: 100, error: err?.message || "Грешка в пакетното рендиране" });
+        }
+      }
+    } catch (err) {
+      console.error("[task-engine] Worker loop error:", err);
+    } finally {
+      isBackgroundWorkerRunning = false;
+      setTimeout(() => {
+        triggerBackgroundTaskWorker();
+      }, 500);
+    }
+  }, 10);
+}
+
+export const checkActiveBackgroundTasks = createServerFn({ method: "POST" })
+  .handler(async () => {
+    const tasks = await listTasks();
+    const activeTasks = tasks.filter((t) => t.status === "queued" || t.status === "processing");
+    if (activeTasks.length > 0) {
+      triggerBackgroundTaskWorker();
+    }
+    const fs = (await import("fs")).promises;
+    const file = await getHistoryFilePath();
+    let history = [];
+    try {
+      history = JSON.parse(await fs.readFile(file, "utf-8"));
+    } catch {}
+    return {
+      activeTasks,
+      hasActive: activeTasks.length > 0,
+      history,
+    };
+  });
+
 export const startBackgroundPlanGeneration = createServerFn({ method: "POST" })
   .validator((input: { count?: number; topic?: string; userMsgText: string }) => input)
   .handler(async ({ data }) => {
@@ -559,65 +681,26 @@ export const startBackgroundPlanGeneration = createServerFn({ method: "POST" })
       history = JSON.parse(await fs.readFile(file, "utf-8"));
     } catch {}
 
-    const planId = `plan_${Date.now()}`;
+    const task = await createTask(
+      "plan_generation",
+      `План с ${data.count || 5} идеи`,
+      "Изготвяне на вайръл план...",
+      { count: data.count, topic: data.topic, userMsgText: data.userMsgText }
+    );
+
     const userMsg = { role: "user", text: data.userMsgText };
     const planningMsg = {
       role: "assistant",
-      text: `⏳ **AI изготвя плана с ${data.count || 5} вайръл идеи във фонов режим...**\n\nМожеш веднага да затвориш браузъра! Когато се върнеш тук след 15-20 секунди, готовият план за одобрение ще те чака на екрана.`,
+      text: `⏳ **AI изготвя плана с ${data.count || 5} вайръл идеи във фонов режим...**\n\nМожеш веднага да затвориш браузъра! Когато се върнеш тук, готовият план за одобрение ще те чака на екрана.`,
       isPlanning: true,
-      planId,
+      planId: task.id,
     };
 
     history.push(userMsg, planningMsg);
     await fs.writeFile(file, JSON.stringify(history, null, 2), "utf-8");
+    triggerBackgroundTaskWorker();
 
-    // Start Gemini generation asynchronously in the background so closing browser does not drop it
-    (async () => {
-      try {
-        console.log(`[background-plan] Starting proposal generation for ${data.count || 5} ideas...`);
-        const res = await suggestBatchViralProposals({ data: { count: data.count, topic: data.topic } });
-        
-        let curHist: any[] = [];
-        try {
-          curHist = JSON.parse(await fs.readFile(file, "utf-8"));
-        } catch {}
-
-        const idx = curHist.findIndex((m: any) => m.planId === planId || m.isPlanning);
-        if (idx !== -1) {
-          curHist[idx] = {
-            role: "assistant",
-            text: res.reply,
-            proposals: res.proposals,
-            selectedProposalIndices: res.proposals.map((_, i: number) => i),
-          };
-        } else {
-          curHist.push({
-            role: "assistant",
-            text: res.reply,
-            proposals: res.proposals,
-            selectedProposalIndices: res.proposals.map((_, i: number) => i),
-          });
-        }
-        await fs.writeFile(file, JSON.stringify(curHist, null, 2), "utf-8");
-        console.log(`[background-plan] Plan generation COMPLETED and saved to history!`);
-      } catch (err: any) {
-        console.error(`[background-plan] Failed to generate plan:`, err);
-        let curHist: any[] = [];
-        try {
-          curHist = JSON.parse(await fs.readFile(file, "utf-8"));
-        } catch {}
-        const idx = curHist.findIndex((m: any) => m.planId === planId || m.isPlanning);
-        if (idx !== -1) {
-          curHist[idx] = {
-            role: "assistant",
-            text: `❌ Грешка при изготвяне на плана: ${err?.message || "Неуспешно свързване с AI"}. Моля, опитай отново.`,
-          };
-          await fs.writeFile(file, JSON.stringify(curHist, null, 2), "utf-8");
-        }
-      }
-    })();
-
-    return { success: true, planId };
+    return { success: true, planId: task.id };
   });
 
 export const startBackgroundBatchGeneration = createServerFn({ method: "POST" })
@@ -630,28 +713,22 @@ export const startBackgroundBatchGeneration = createServerFn({ method: "POST" })
       history = JSON.parse(await fs.readFile(file, "utf-8"));
     } catch {}
 
+    const task = await createTask(
+      "batch_generation",
+      `Пакет от ${proposals.length} видеа`,
+      "Изпращане към облачната опашка за рендиране...",
+      { proposals }
+    );
+
     const batchMsg = {
       role: "assistant",
-      text: `🎬 **Одобрено! Стартирах фоновото генериране на ${proposals.length} видеа от твоя план!**\n\nВсички те са в облачната опашка за последователно рендиране. Можеш веднага да затвориш браузъра (дори на iPhone) — видеата се генерират автономно! Следи напредъка и ги свали в раздел **[Изтегляния](/downloads)**.`,
+      text: `🎬 **Одобрено! Стартирах фоновото генериране на ${proposals.length} видеа от твоя план!**\n\nВсички те са записани в устойчивия фонов енджин и се предават към облачната опашка за последователно рендиране. Можеш веднага да затвориш браузъра (дори на iPhone) — видеата се генерират автономно! Следи напредъка и ги свали в раздел **[Изтегляния](/downloads)**.`,
     };
     history.push(batchMsg);
     await fs.writeFile(file, JSON.stringify(history, null, 2), "utf-8");
+    triggerBackgroundTaskWorker();
 
-    // Start processing proposals asynchronously in the background so closing browser does not stop the loop
-    (async () => {
-      console.log(`[background-batch] Starting async submission of ${proposals.length} proposals to render queue...`);
-      for (let i = 0; i < proposals.length; i++) {
-        const prop = proposals[i];
-        try {
-          console.log(`[background-batch] Processing proposal ${i + 1}/${proposals.length}: ${prop.title}`);
-          await confirmAndGenerateVideo({ data: { proposal: prop } });
-        } catch (err: any) {
-          console.error(`[background-batch] Error processing proposal ${i + 1}:`, err);
-        }
-      }
-      console.log(`[background-batch] All ${proposals.length} proposals successfully queued!`);
-    })();
-
-    return { success: true, count: proposals.length };
+    return { success: true, count: proposals.length, taskId: task.id };
   });
+
 

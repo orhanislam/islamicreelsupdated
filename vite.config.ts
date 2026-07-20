@@ -16,5 +16,5 @@ export default defineConfig({
     externals: {
       external: ["fluent-ffmpeg", "@ffmpeg-installer/ffmpeg"]
     }
-  }
+  } as any
 });

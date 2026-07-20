@@ -21,7 +21,7 @@ function getApiKeys(): string[] {
 // Shared helper for Google Gemini API calls.
 // Replaces all ai.gateway.lovable.dev calls with direct Google API access.
 
-type ChatMessage = { role: "system" | "user" | "assistant"; content: string };
+export type ChatMessage = { role: "system" | "user" | "assistant"; content: string };
 
 /**
  * Call the Google Gemini API (OpenAI-compatible endpoint) for chat completions.

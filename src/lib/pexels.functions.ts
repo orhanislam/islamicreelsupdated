@@ -198,47 +198,43 @@ export const searchPexelsPhotos = createServerFn({ method: "POST" })
     };
   });
 
+type Out = { id: number; link: string; poster: string; photographer: string; score: number; duration: number };
+function buildOut(vs: PexelsVideo[], targetMin = 30): Out[] {
+  const all = vs
+    .map((v) => {
+      const file = pickBestFile(v);
+      if (!file?.link) return null;
+      return {
+        id: v.id,
+        link: file.link,
+        poster: v.video_pictures?.[0]?.picture ?? "",
+        photographer: v.user?.name ?? "",
+        duration: v.duration ?? 0,
+        score: scoreVideo(v, file, targetMin),
+      };
+    })
+    .filter((x): x is Out => !!x);
+
+  const matchingDuration = all.filter((x) => x.duration >= targetMin);
+  if (targetMin >= 60 && matchingDuration.length === 0) {
+    return [];
+  }
+
+  const pool = matchingDuration.length > 0 ? matchingDuration : [];
+  pool.sort((a, b) => b.score - a.score);
+  return pool.slice(0, 16);
+}
+
 export const searchPexelsVideos = createServerFn({ method: "POST" })
   .inputValidator((input: { text: string; query?: string; avoid?: string[]; minDuration?: number }) => input)
   .handler(async ({ data }) => {
     const key = process.env.PEXELS_API_KEY;
     if (!key) throw new Error("Pexels не е конфигуриран");
-
-    type Out = { id: number; link: string; poster: string; photographer: string; score: number; duration: number };
-    const buildOut = (vs: PexelsVideo[]): Out[] => {
-      const targetMin = data.minDuration ?? 30;
-      const all = vs
-        .map((v) => {
-          const file = pickBestFile(v);
-          if (!file?.link) return null;
-          return {
-            id: v.id,
-            link: file.link,
-            poster: v.video_pictures?.[0]?.picture ?? "",
-            photographer: v.user?.name ?? "",
-            duration: v.duration ?? 0,
-            score: scoreVideo(v, file, targetMin),
-          };
-        })
-        .filter((x): x is Out => !!x);
-
-      // Strictly return videos that meet or exceed user's chosen minDuration (e.g. 60s)
-      const matchingDuration = all.filter((x) => x.duration >= targetMin);
-
-      // If user requested videos >= 60s and none exist, return empty array (do NOT show shorter videos)
-      if (targetMin >= 60 && matchingDuration.length === 0) {
-        return [];
-      }
-
-      const pool = matchingDuration.length > 0 ? matchingDuration : [];
-      // Sort matching videos by score (highest quality first)
-      pool.sort((a, b) => b.score - a.score);
-      return pool.slice(0, 16);
-    };
+    const targetMin = data.minDuration ?? 30;
 
     if (data.query?.trim()) {
       const vs = await pexelsVideoQuery(key, data.query.trim());
-      const built = buildOut(vs);
+      const built = buildOut(vs, targetMin);
       return {
         query: data.query.trim(),
         theme: "",
@@ -255,7 +251,7 @@ export const searchPexelsVideos = createServerFn({ method: "POST" })
     for (const q of analysis.queries) {
       tried.push(q);
       const vs = await pexelsVideoQuery(key, q);
-      const built = buildOut(vs);
+      const built = buildOut(vs, targetMin);
       if (built.length >= 3) {
         chosenQuery = q;
         videos = built;

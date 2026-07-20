@@ -1,3 +1,4 @@
+/// <reference path="../types/declarations.d.ts" />
 import { createServerFn } from "@tanstack/react-start";
 import type { Buffer } from "node:buffer";
 import { verifyAndCorrectSubtitleSync } from "./subtitle-sync.functions";
@@ -219,6 +220,7 @@ export const runServerRender = createServerFn({ method: "POST" })
                     "-vf scale=1080:1920:flags=lanczos:force_original_aspect_ratio=increase,crop=1080:1920,fps=30,eq=contrast=1.05:saturation=1.12",
                     "-c:v libx264",
                     "-preset ultrafast",
+                    "-pix_fmt yuv420p",
                     "-an",
                   ])
                   .output(normPath)
@@ -283,22 +285,24 @@ export const runServerRender = createServerFn({ method: "POST" })
 
       const tiktokTheme = data.tiktokTheme || "hormozi";
       let outlineColor = "&H00000000";
-      let outlineWidth = "5.5";
-      let shadowSize = "1.5";
+      let outlineWidth = "6.5";
+      let shadowSize = "2.5";
       let highlightColor = "&H0000D7FF&"; // Classic Gold
 
       if (tiktokTheme === "emerald") {
-        outlineColor = "&H00183010";
-        outlineWidth = "5.5";
+        outlineColor = "&H00102008";
+        outlineWidth = "6.5";
+        shadowSize = "2.5";
         highlightColor = "&H0032CD32&"; // Lime Green / Gold glow
       } else if (tiktokTheme === "neon") {
-        outlineColor = "&H00201505";
-        outlineWidth = "5";
+        outlineColor = "&H00181000";
+        outlineWidth = "6.0";
+        shadowSize = "2.5";
         highlightColor = "&H00FFFF00&"; // Neon Cyan/Gold
       } else if (tiktokTheme === "classic") {
         outlineColor = "&H00000000";
-        outlineWidth = "4";
-        shadowSize = "0";
+        outlineWidth = "5.0";
+        shadowSize = "1.5";
         highlightColor = "&H0000D7FF&";
       }
 
@@ -466,12 +470,10 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         }
 
         // Crisp stable subtitle style: 100% scale at all times with no word-shifting zoom distortion
-        const instantAnimTag = "\\fscx100\\fscy100\\fad(0,0)";
-
         const bounds = data.ayahBounds;
         if (Array.isArray(bounds) && bounds.length > 0) {
-          // FULL-AYAH BLOCK SYNCHRONIZER: One complete Ayah per subtitle block from ayah.start to ayah.end
-          // No fade between consecutive ayahs — instant swap for crisp transitions
+          // FULL-AYAH BLOCK ACTIVE KARAOKE: One complete Ayah per subtitle block from ayah.start to ayah.end,
+          // dynamically sliced so the currently spoken word pops and glows in real time!
           const totalEngLen = bounds.reduce((acc: number, b: any) => acc + (b.english ? b.english.length : 10), 0) || 1;
           let wordIdx = 0;
           for (let bIdx = 0; bIdx < bounds.length; bIdx++) {
@@ -485,12 +487,13 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
               const ratio = (b.english ? b.english.length : 10) / totalEngLen;
               const count = isLast ? (words.length - wordIdx) : Math.max(1, Math.round(words.length * ratio));
               ayahWords = words.slice(wordIdx, Math.min(words.length, wordIdx + count));
-              wordIdx += ayahWords.length;
             }
 
             if (ayahWords.length > 0) {
+              const startWordIdx = wordIdx;
+              wordIdx += ayahWords.length;
+
               const start = Number(b.start) || 0;
-              // Connect end to the next ayah's start for seamless coverage
               const nextStart = !isLast && bounds[bIdx + 1] ? Number(bounds[bIdx + 1].start) : null;
               const rawEnd = Number(b.end) || (start + 5);
               const end = nextStart !== null ? Math.min(rawEnd, nextStart) : rawEnd;
@@ -498,21 +501,44 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
               const fs = wordCount > 40 ? 38 : wordCount > 28 ? 44 : wordCount > 18 ? 50 : wordCount > 10 ? 56 : 64;
               const wpl = wordCount > 40 ? 9 : wordCount > 28 ? 8 : wordCount > 18 ? 7 : wordCount > 10 ? 6 : 5;
               const highlightKeywords = /^(Аллах|Коран|Корана|Пророк|Пророкът|Хадис|Сура|Аят|Рай|Дженнет|Дженнета|Дуа|Иман|Благословение|Милост|Търпение|Надежда|Успех|Мухаммад|Господ|Господар|Победа|Спокойствие|Защита|Сърце|Сърцето|Живот|Време|Времето|Истина|Истината|Светлина|Зло|Добро|Вяра|Вярата)[.,!?…]?$/i;
-              let formattedText = "";
-              for (let w = 0; w < ayahWords.length; w++) {
-                const wordStr = ayahWords[w];
-                const styledWord = highlightKeywords.test(wordStr) ? `{\\c${highlightColor}\\b1}${wordStr}{\\r}` : wordStr;
-                formattedText += styledWord + " ";
-                if ((w + 1) % wpl === 0 && w < ayahWords.length - 1) {
-                  formattedText = formattedText.trimEnd() + "\\N";
+
+              for (let wIdx = 0; wIdx < ayahWords.length; wIdx++) {
+                const globalIdx = startWordIdx + wIdx;
+                const wordStart = timings[globalIdx]?.start ?? start;
+                const nextWordStart = wIdx + 1 < ayahWords.length
+                  ? (timings[globalIdx + 1]?.start ?? end)
+                  : end;
+
+                const sliceStart = Math.max(start, wIdx === 0 ? start : wordStart);
+                const sliceEnd = Math.min(end, wIdx === ayahWords.length - 1 ? end : nextWordStart);
+                if (sliceEnd <= sliceStart) continue;
+
+                let formattedText = "";
+                for (let w = 0; w < ayahWords.length; w++) {
+                  const wordStr = ayahWords[w];
+                  const isKeyword = highlightKeywords.test(wordStr);
+                  const isActive = w === wIdx;
+                  if (isActive) {
+                    formattedText += `{\\c${highlightColor}\\b1\\t(0,60,\\fscx114\\fscy114)\\t(60,150,\\fscx100\\fscy100)}${wordStr}{\\r} `;
+                  } else if (isKeyword) {
+                    formattedText += `{\\c${highlightColor}\\b1}${wordStr}{\\r} `;
+                  } else {
+                    formattedText += `{\\c&H00FFFFFF&}${wordStr}{\\r} `;
+                  }
+                  if ((w + 1) % wpl === 0 && w < ayahWords.length - 1) {
+                    formattedText = formattedText.trimEnd() + "\\N";
+                  }
                 }
+                formattedText = formattedText.trim();
+                const microPop = (isFirst && wIdx === 0)
+                  ? `\\fad(150,0)\\t(0,100,\\fscx104\\fscy104)\\t(100,180,\\fscx100\\fscy100)`
+                  : ``;
+                const useAnim = (isLast && wIdx === ayahWords.length - 1) ? `${microPop}\\fad(0,120)` : microPop;
+                const ayahStyleTag = data.style === "bottom"
+                  ? `{\\an2\\pos(540,1540)\\fs${fs}${useAnim}}`
+                  : `{\\an5\\pos(540,960)\\fs${fs}${useAnim}}`;
+                ass += `Dialogue: 0,${formatTime(sliceStart)},${formatTime(sliceEnd)},Bulgarian,,0,0,0,,${ayahStyleTag}${formattedText}\n`;
               }
-              formattedText = formattedText.trim();
-              const useAnim = isFirst ? `\\fad(150,0)` : isLast ? `\\fad(0,120)` : instantAnimTag;
-              const ayahStyleTag = data.style === "bottom"
-                ? `{\\an2\\pos(540,1600)\\fs${fs}${useAnim}}`
-                : `{\\an5\\pos(540,960)\\fs${fs}${useAnim}}`;
-              ass += `Dialogue: 0,${formatTime(start)},${formatTime(end)},Bulgarian,,0,0,0,,${ayahStyleTag}${formattedText}\n`;
             }
           }
         } else {
@@ -542,8 +568,8 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
           let prevEnd = 0;
           for (let idx = 0; idx < phrases.length; idx++) {
             const p = phrases[idx];
-            const isFirst = idx === 0;
-            const isLast = idx === phrases.length - 1;
+            const isFirstPhrase = idx === 0;
+            const isLastPhrase = idx === phrases.length - 1;
             
             // Ensure exact synchronization with the start of the first word in the phrase
             let start = timings[p.startIdx]?.start ?? prevEnd;
@@ -560,16 +586,47 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             let end = Math.min(nextPhraseStart, Math.max(start + 0.3, lastWordEnd + 0.12));
 
             const highlightKeywords = /^(Аллах|Коран|Корана|Пророк|Пророкът|Хадис|Сура|Аят|Рай|Дженнет|Дженнета|Дуа|Иман|Благословение|Милост|Търпение|Надежда|Успех|Мухаммад|Господ|Господар|Победа|Спокойствие|Защита|Сърце|Сърцето|Живот|Време|Времето|Истина|Истината|Светлина|Зло|Добро|Вяра|Вярата)[.,!?…]?$/i;
-            const textLine = p.words
-              .map((w) => (highlightKeywords.test(w) ? `{\\c${highlightColor}\\b1}${w}{\\r}` : w))
-              .join(" ");
 
-            const microPop = isFirst
-              ? `\\fad(120,0)\\t(0,100,\\fscx106\\fscy106)\\t(100,200,\\fscx100\\fscy100)`
-              : `\\t(0,90,\\fscx105\\fscy105)\\t(90,180,\\fscx100\\fscy100)`;
-            const useAnim = isLast ? `${microPop}\\fad(0,100)` : microPop;
-            const phraseStyleTag = `{\\an2\\pos(540,1540)\\fscx100\\fscy100${useAnim}}`;
-            ass += `Dialogue: 0,${formatTime(start)},${formatTime(end)},Bulgarian,,0,0,0,,${phraseStyleTag}${textLine}\n`;
+            // MASTERCLASS ACTIVE WORD KARAOKE SLICING:
+            // Slice the phrase interval [start, end] into distinct ASS events for each active word so that
+            // every single word pops and glows exactly at the millisecond the narrator speaks it!
+            for (let wIdx = 0; wIdx < p.words.length; wIdx++) {
+              const globalIdx = p.startIdx + wIdx;
+              const wordStart = timings[globalIdx]?.start ?? start;
+              const nextWordStart = wIdx + 1 < p.words.length
+                ? (timings[globalIdx + 1]?.start ?? end)
+                : end;
+
+              const sliceStart = Math.max(start, wIdx === 0 ? start : wordStart);
+              const sliceEnd = Math.min(end, wIdx === p.words.length - 1 ? end : nextWordStart);
+              if (sliceEnd <= sliceStart) continue;
+
+              const textLine = p.words
+                .map((w, i) => {
+                  const isKeyword = highlightKeywords.test(w);
+                  const isActive = i === wIdx;
+                  if (isActive) {
+                    // Active spoken word: instant micro-pop scale with glowing highlight color
+                    return `{\\c${highlightColor}\\b1\\t(0,60,\\fscx114\\fscy114)\\t(60,150,\\fscx100\\fscy100)}${w}{\\r}`;
+                  } else if (isKeyword) {
+                    // Important Islamic keyword retain their gold/neon highlight
+                    return `{\\c${highlightColor}\\b1}${w}{\\r}`;
+                  } else {
+                    // Clean crisp white font for inactive words
+                    return `{\\c&H00FFFFFF&}${w}`;
+                  }
+                })
+                .join(" ");
+
+              const microPop = (isFirstPhrase && wIdx === 0)
+                ? `\\fad(120,0)\\t(0,100,\\fscx105\\fscy105)\\t(100,180,\\fscx100\\fscy100)`
+                : ``;
+              const useAnim = (isLastPhrase && wIdx === p.words.length - 1) ? `${microPop}\\fad(0,100)` : microPop;
+              const phraseStyleTag = data.style === "bottom"
+                ? `{\\an2\\pos(540,1540)\\fscx100\\fscy100${useAnim}}`
+                : `{\\an5\\pos(540,960)\\fscx100\\fscy100${useAnim}}`;
+              ass += `Dialogue: 0,${formatTime(sliceStart)},${formatTime(sliceEnd)},Bulgarian,,0,0,0,,${phraseStyleTag}${textLine}\n`;
+            }
             prevEnd = end;
           }
         }
@@ -607,16 +664,22 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
           "-map [v]",
           "-map [a]",
           "-c:v libx264",
-          "-profile:v high",
-          "-level 4.2",
+          "-profile:v main",
+          "-level 4.0",
           "-pix_fmt yuv420p",
+          "-colorspace bt709",
+          "-color_trc bt709",
+          "-color_primaries bt709",
+          "-movflags +faststart",
           "-preset veryfast",
           "-crf 17",
           "-r 30",
           "-g 60",
           "-c:a aac",
+          "-profile:a aac_low",
           "-b:a 192k",
-          "-ar 44100",
+          "-ar 48000",
+          "-ac 2",
           `-t ${Number(audioDur).toFixed(2)}`,
           "-threads 0"
         ])
@@ -800,11 +863,22 @@ export const getJobsDir = async () => {
   await fs.mkdir(dir, { recursive: true }).catch(() => {});
 
   await aggressivelyCleanServerDisk(false);
+  scheduleServerMaintenance();
 
   return dir;
 };
 
-async function loadJobs() {
+export type ServerJobRecord = {
+  id: string;
+  title: string;
+  status: "queued" | "rendering" | "completed" | "error";
+  createdAt: number;
+  completedAt?: number;
+  data?: any;
+  error?: string;
+};
+
+async function loadJobs(): Promise<ServerJobRecord[]> {
   const fs = (await import("fs")).promises;
   const path = await import("path");
   const dir = await getJobsDir();
@@ -984,3 +1058,23 @@ export const cleanServerDiskSpace = createServerFn({ method: "POST" })
     await aggressivelyCleanServerDisk(true);
     return { success: true };
   });
+
+let maintenanceTimerStarted = false;
+export function scheduleServerMaintenance() {
+  if (maintenanceTimerStarted) return;
+  maintenanceTimerStarted = true;
+  console.log("[server-maintenance] Automatic server health & temp cleanup worker initialized.");
+
+  setTimeout(() => {
+    aggressivelyCleanServerDisk(true).catch((e) => console.error("[server-maintenance] Boot cleanup error:", e));
+  }, 30 * 1000);
+
+  setInterval(() => {
+    console.log("[server-maintenance] Running scheduled 6-hour disk & PM2 log maintenance...");
+    aggressivelyCleanServerDisk(true).catch((e) => console.error("[server-maintenance] Scheduled cleanup error:", e));
+  }, 6 * 60 * 60 * 1000);
+}
+
+if (typeof process !== "undefined" && !maintenanceTimerStarted) {
+  try { scheduleServerMaintenance(); } catch {}
+}

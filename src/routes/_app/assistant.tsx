@@ -1,12 +1,14 @@
 import React, { useState, useEffect } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { Bot, Send, Loader2, Sparkles, Download, CheckCircle2, Video, Pencil, Brain, Trash2, Plus } from "lucide-react";
+import { Bot, Send, Loader2, Sparkles, Download, CheckCircle2, Video, Pencil, Brain, Trash2, Plus, Copy, Image as ImageIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { toast } from "sonner";
-import { chatWithAssistant, suggestViralProposal, suggestBatchViralProposals, confirmAndGenerateVideo, startBatchViralSeries, getAssistantHistory, saveAssistantHistory, clearAssistantHistory, startBackgroundPlanGeneration, startBackgroundBatchGeneration, type VideoProposal } from "@/lib/assistant.functions";
+import { chatWithAssistant, suggestViralProposal, suggestBatchViralProposals, confirmAndGenerateVideo, startBatchViralSeries, getAssistantHistory, saveAssistantHistory, clearAssistantHistory, startBackgroundPlanGeneration, startBackgroundBatchGeneration, checkActiveBackgroundTasks, type VideoProposal } from "@/lib/assistant.functions";
 import { getAiMemory, updateAiMemory, type AiMemory } from "@/lib/memory.functions";
+import { generateViralThumbnail } from "@/lib/thumbnail.functions";
+import { formatViralSocialCaption } from "@/lib/caption.functions";
 import { playStudioClick } from "@/lib/sfx";
 
 export const Route = createFileRoute("/_app/assistant")({
@@ -43,12 +45,45 @@ function AssistantPage() {
   const [memory, setMemory] = useState<AiMemory | null>(null);
   const [newInstruction, setNewInstruction] = useState("");
   const [messages, setMessages] = useState<ChatMsg[]>(DEFAULT_MESSAGES);
+  const [generatingThumbTitle, setGeneratingThumbTitle] = useState<string | null>(null);
+  const [activeTasks, setActiveTasks] = useState<any[]>([]);
+
+  const handleDownloadThumbnail = async (title: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    try {
+      setGeneratingThumbTitle(title);
+      toast.message("Генериране на професионална вайръл корица (Thumbnail)...");
+      const res = await generateViralThumbnail({ data: { title } });
+      const a = document.createElement("a");
+      a.href = res.dataUrl;
+      a.download = `${title || "islamic-reel"}_thumbnail.jpg`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      toast.success("Вайръл корицата е свалена успешно!");
+    } catch (err) {
+      toast.error("Не успях да създам корицата");
+    } finally {
+      setGeneratingThumbTitle(null);
+    }
+  };
+
+  const handleCopyTikTokCaption = (title: string, summary?: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    const text = formatViralSocialCaption(title, summary);
+    navigator.clipboard.writeText(text);
+    toast.success("📋 Професионалният TikTok/Reels текст е копиран в клипборда!");
+  };
 
   useEffect(() => {
     let active = true;
     const fetchHistory = async () => {
       try {
-        const serverMsgs = await getAssistantHistory();
+        const checkRes = await checkActiveBackgroundTasks();
+        if (active && checkRes.activeTasks) {
+          setActiveTasks(checkRes.activeTasks);
+        }
+        const serverMsgs = checkRes.history && checkRes.history.length > 0 ? checkRes.history : await getAssistantHistory();
         if (active && Array.isArray(serverMsgs) && serverMsgs.length > 0) {
           setMessages(serverMsgs);
           if (typeof window !== "undefined" && window.localStorage) {
@@ -75,7 +110,11 @@ function AssistantPage() {
 
     const interval = setInterval(async () => {
       try {
-        const serverMsgs = await getAssistantHistory();
+        const checkRes = await checkActiveBackgroundTasks();
+        if (checkRes.activeTasks) {
+          setActiveTasks(checkRes.activeTasks);
+        }
+        const serverMsgs = checkRes.history && checkRes.history.length > 0 ? checkRes.history : await getAssistantHistory();
         if (Array.isArray(serverMsgs) && serverMsgs.length > 0) {
           setMessages((prev) => {
             if (JSON.stringify(prev) !== JSON.stringify(serverMsgs)) {
@@ -268,7 +307,7 @@ function AssistantPage() {
 
   const handleClearChat = async () => {
     if (typeof window !== "undefined" && !window.confirm("Сигурни ли сте, че искате да изчистите историята на чата?")) return;
-    playStudioClick("delete");
+    playStudioClick("click");
     setMessages(DEFAULT_MESSAGES);
     if (typeof window !== "undefined" && window.localStorage) {
       try {
@@ -376,6 +415,34 @@ function AssistantPage() {
           </Button>
         </div>
       </div>
+
+      {activeTasks.length > 0 && (
+        <Card className="mb-6 border-amber-500/50 bg-amber-500/10 p-4 rounded-2xl shadow-md space-y-2 animate-pulse">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2 font-semibold text-amber-500 text-sm">
+              <Loader2 className="size-4 animate-spin" />
+              <span>🚀 Активни автономни задачи на облачния сървър ({activeTasks.length})</span>
+            </div>
+            <span className="text-xs text-muted-foreground font-mono">Може спокойно да затворите браузъра (iPhone/Mobile)</span>
+          </div>
+          <div className="space-y-1.5 pt-1">
+            {activeTasks.map((t) => (
+              <div key={t.id} className="text-xs bg-background/80 p-2.5 rounded-xl border border-border/40 flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2 truncate">
+                  <span className="font-semibold text-foreground">{t.title}:</span>
+                  <span className="text-muted-foreground truncate">{t.message}</span>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <div className="w-20 bg-muted rounded-full h-2 overflow-hidden">
+                    <div className="bg-amber-500 h-full transition-all duration-300" style={{ width: `${t.progress || 10}%` }} />
+                  </div>
+                  <span className="font-mono text-[11px] font-bold text-amber-500">{t.progress || 10}%</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
 
       {showMemory && memory && (
         <Card className="mb-6 border border-primary/30 bg-card/95 p-5 shadow-md space-y-4 rounded-2xl">
@@ -690,6 +757,29 @@ function AssistantPage() {
                         <Pencil className="size-3.5 mr-1" />
                         Промени нещо
                       </Button>
+
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={(e) => handleCopyTikTokCaption(m.proposal!.title, m.proposal!.summaryBg, e)}
+                        className="rounded-lg text-xs border-teal-500/40 text-teal-400 hover:bg-teal-500/10 cursor-pointer"
+                        title="Копирай TikTok Заглавие & Описание"
+                      >
+                        <Copy className="size-3.5 mr-1" />
+                        TikTok Текст
+                      </Button>
+
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={(e) => handleDownloadThumbnail(m.proposal!.title, e)}
+                        disabled={generatingThumbTitle === m.proposal!.title}
+                        className="rounded-lg text-xs border-amber-500/40 text-amber-400 hover:bg-amber-500/10 cursor-pointer"
+                        title="Свали професионална корица за видеото"
+                      >
+                        {generatingThumbTitle === m.proposal!.title ? <Loader2 className="size-3.5 mr-1 animate-spin" /> : <ImageIcon className="size-3.5 mr-1" />}
+                        Корица
+                      </Button>
                     </div>
                   </div>
                 )}
@@ -744,6 +834,26 @@ function AssistantPage() {
                                 <span>🎨 {prop.themeBg || "Кино фон"}</span>
                                 <span>⚡ Стил: {prop.tiktokTheme || "hormozi"}</span>
                               </div>
+                              <div className="flex items-center gap-1.5 pt-1.5 border-t border-border/30 mt-1" onClick={(e) => e.stopPropagation()}>
+                                <button
+                                  type="button"
+                                  onClick={(e) => handleCopyTikTokCaption(prop.title, prop.summaryBg, e)}
+                                  className="inline-flex items-center gap-1 rounded-md bg-teal-500/10 px-2 py-1 text-[11px] font-medium text-teal-400 hover:bg-teal-500/20 border border-teal-500/30 transition cursor-pointer"
+                                  title="Копирай TikTok Заглавие и Описание с хаштагове"
+                                >
+                                  <Copy className="size-3" /> TikTok Текст
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={(e) => handleDownloadThumbnail(prop.title, e)}
+                                  disabled={generatingThumbTitle === prop.title}
+                                  className="inline-flex items-center gap-1 rounded-md bg-amber-500/10 px-2 py-1 text-[11px] font-medium text-amber-400 hover:bg-amber-500/20 border border-amber-500/30 transition cursor-pointer"
+                                  title="Свали професионална 9:16 корица за това видео"
+                                >
+                                  {generatingThumbTitle === prop.title ? <Loader2 className="size-3 animate-spin" /> : <ImageIcon className="size-3" />}
+                                  Корица
+                                </button>
+                              </div>
                             </div>
                           </div>
                         );
@@ -774,7 +884,7 @@ function AssistantPage() {
                 )}
 
                 {m.jobId && (
-                  <div className="mt-3 flex items-center gap-2 border-t border-border/40 pt-3">
+                  <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-border/40 pt-3">
                     <Link
                       to="/downloads"
                       className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground shadow hover:bg-primary/90 transition"
@@ -782,9 +892,22 @@ function AssistantPage() {
                       <Download className="size-3.5" />
                       Отвори Изтегляния
                     </Link>
-                    <span className="text-xs opacity-75">
-                      Файловете са в Изтегляния
-                    </span>
+                    <button
+                      type="button"
+                      onClick={() => handleCopyTikTokCaption(m.proposal ? m.proposal.title : "Ислямско видео")}
+                      className="inline-flex items-center gap-1 rounded-lg border border-teal-500/40 bg-teal-500/10 px-2.5 py-1.5 text-xs font-medium text-teal-400 hover:bg-teal-500/20 transition cursor-pointer"
+                    >
+                      <Copy className="size-3" /> TikTok Текст
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleDownloadThumbnail(m.proposal ? m.proposal.title : "Ислямско видео")}
+                      disabled={generatingThumbTitle === (m.proposal ? m.proposal.title : "Ислямско видео")}
+                      className="inline-flex items-center gap-1 rounded-lg border border-amber-500/40 bg-amber-500/10 px-2.5 py-1.5 text-xs font-medium text-amber-400 hover:bg-amber-500/20 transition cursor-pointer"
+                    >
+                      {generatingThumbTitle === (m.proposal ? m.proposal.title : "Ислямско видео") ? <Loader2 className="size-3 animate-spin" /> : <ImageIcon className="size-3" />}
+                      Корица
+                    </button>
                   </div>
                 )}
               </div>

@@ -1,3 +1,4 @@
+/// <reference path="../types/declarations.d.ts" />
 import { createServerFn } from "@tanstack/react-start";
 import * as googleTTS from "google-tts-api";
 import mp3Duration from "mp3-duration";
@@ -304,6 +305,10 @@ export const synthesizeHadithNarration = createServerFn({ method: "POST" })
         console.warn("Audio alignment fallback:", alignErr);
       }
     }
+
+    const { verifyAndCorrectSubtitleSync } = await import("./subtitle-sync.functions");
+    const verified = verifyAndCorrectSubtitleSync(wordTimings, duration);
+    wordTimings = verified.correctedTimings;
 
     return {
       base64: audioBuffer.toString("base64"),

@@ -1,3 +1,4 @@
+/// <reference path="../types/declarations.d.ts" />
 import { createServerFn } from "@tanstack/react-start";
 
 export type WordSegment = { start: number; end: number; word?: string };
