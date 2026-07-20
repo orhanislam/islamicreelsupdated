@@ -216,7 +216,7 @@ export const runServerRender = createServerFn({ method: "POST" })
                   .setFfmpegPath(ffmpegPath)
                   .outputOptions([
                     `-t ${clipDur}`,
-                    "-vf scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,fps=30",
+                    "-vf scale=1080:1920:flags=lanczos:force_original_aspect_ratio=increase,crop=1080:1920,fps=30,eq=contrast=1.05:saturation=1.12",
                     "-c:v libx264",
                     "-preset ultrafast",
                     "-an",
@@ -285,17 +285,21 @@ export const runServerRender = createServerFn({ method: "POST" })
       let outlineColor = "&H00000000";
       let outlineWidth = "5.5";
       let shadowSize = "1.5";
+      let highlightColor = "&H0000D7FF&"; // Classic Gold
 
       if (tiktokTheme === "emerald") {
         outlineColor = "&H00183010";
         outlineWidth = "5.5";
+        highlightColor = "&H0032CD32&"; // Lime Green / Gold glow
       } else if (tiktokTheme === "neon") {
         outlineColor = "&H00201505";
         outlineWidth = "5";
+        highlightColor = "&H00FFFF00&"; // Neon Cyan/Gold
       } else if (tiktokTheme === "classic") {
         outlineColor = "&H00000000";
         outlineWidth = "4";
         shadowSize = "0";
+        highlightColor = "&H0000D7FF&";
       }
 
       let ass = `[Script Info]
@@ -493,9 +497,12 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
               const wordCount = ayahWords.length;
               const fs = wordCount > 40 ? 38 : wordCount > 28 ? 44 : wordCount > 18 ? 50 : wordCount > 10 ? 56 : 64;
               const wpl = wordCount > 40 ? 9 : wordCount > 28 ? 8 : wordCount > 18 ? 7 : wordCount > 10 ? 6 : 5;
+              const highlightKeywords = /^(Аллах|Коран|Корана|Пророк|Пророкът|Хадис|Сура|Аят|Рай|Дженнет|Дженнета|Дуа|Иман|Благословение|Милост|Търпение|Надежда|Успех|Мухаммад|Господ|Господар|Победа|Спокойствие|Защита|Сърце|Сърцето|Живот|Време|Времето|Истина|Истината|Светлина|Зло|Добро|Вяра|Вярата)[.,!?…]?$/i;
               let formattedText = "";
               for (let w = 0; w < ayahWords.length; w++) {
-                formattedText += ayahWords[w] + " ";
+                const wordStr = ayahWords[w];
+                const styledWord = highlightKeywords.test(wordStr) ? `{\\c${highlightColor}\\b1}${wordStr}{\\r}` : wordStr;
+                formattedText += styledWord + " ";
                 if ((w + 1) % wpl === 0 && w < ayahWords.length - 1) {
                   formattedText = formattedText.trimEnd() + "\\N";
                 }
@@ -552,12 +559,15 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             const lastWordEnd = timings[p.endIdx - 1]?.end ?? (start + 1.5);
             let end = Math.min(nextPhraseStart, Math.max(start + 0.3, lastWordEnd + 0.12));
 
-            const highlightKeywords = /^(Аллах|Коран|Корана|Пророк|Пророкът|Хадис|Сура|Аят|Рай|Дженнет|Дуа|Иман|Благословение|Милост|Търпение|Надежда|Успех|Мухаммад|Господ|Господар)[.,!?]?$/i;
+            const highlightKeywords = /^(Аллах|Коран|Корана|Пророк|Пророкът|Хадис|Сура|Аят|Рай|Дженнет|Дженнета|Дуа|Иман|Благословение|Милост|Търпение|Надежда|Успех|Мухаммад|Господ|Господар|Победа|Спокойствие|Защита|Сърце|Сърцето|Живот|Време|Времето|Истина|Истината|Светлина|Зло|Добро|Вяра|Вярата)[.,!?…]?$/i;
             const textLine = p.words
-              .map((w) => (highlightKeywords.test(w) ? `{\\c&H0000D7FF&}${w}{\\r}` : w))
+              .map((w) => (highlightKeywords.test(w) ? `{\\c${highlightColor}\\b1}${w}{\\r}` : w))
               .join(" ");
 
-            const useAnim = isFirst ? `\\fad(120,0)` : isLast ? `\\fad(0,100)` : instantAnimTag;
+            const microPop = isFirst
+              ? `\\fad(120,0)\\t(0,100,\\fscx106\\fscy106)\\t(100,200,\\fscx100\\fscy100)`
+              : `\\t(0,90,\\fscx105\\fscy105)\\t(90,180,\\fscx100\\fscy100)`;
+            const useAnim = isLast ? `${microPop}\\fad(0,100)` : microPop;
             const phraseStyleTag = `{\\an2\\pos(540,1540)\\fscx100\\fscy100${useAnim}}`;
             ass += `Dialogue: 0,${formatTime(start)},${formatTime(end)},Bulgarian,,0,0,0,,${phraseStyleTag}${textLine}\n`;
             prevEnd = end;
@@ -590,8 +600,8 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         let ffmpegStderr = "";
 
         cmd.complexFilter([
-          `[0:v]crop='min(iw,ih*9/16)':'min(iw*16/9,ih)',scale=${width}:${height}:flags=bicubic,eq=contrast=1.06:saturation=1.14:brightness=-0.06,subtitles='${escapedAssPath}'[v]`,
-          `[1:a]acompressor=threshold=-18dB:ratio=2.5:attack=5:release=50,bass=g=3:f=110:w=0.6,loudnorm=I=-14:LRA=11:TP=-1.5[a]`
+          `[0:v]crop='min(iw,ih*9/16)':'min(iw*16/9,ih)',scale=${width}:${height}:flags=lanczos,eq=contrast=1.08:saturation=1.16:brightness=-0.04:gamma=0.98,unsharp=5:5:0.8:3:3:0.4,vignette=PI/4,subtitles='${escapedAssPath}'[v]`,
+          `[1:a]highpass=f=45,treble=g=2:f=3500:w=0.7,acompressor=threshold=-18dB:ratio=2.5:attack=5:release=50,bass=g=3:f=110:w=0.6,loudnorm=I=-14:LRA=9:TP=-1.0[a]`
         ])
         .outputOptions([
           "-map [v]",
@@ -782,7 +792,7 @@ async function aggressivelyCleanServerDisk(forceAll = false) {
   } catch {}
 }
 
-const getJobsDir = async () => {
+export const getJobsDir = async () => {
   const os = await import("os");
   const fs = (await import("fs")).promises;
   const path = await import("path");

@@ -111,27 +111,38 @@ function scoreVideo(v: PexelsVideo, file: PexelsVideoFile, targetMin = 30): numb
   let s = 0;
   const meta = JSON.stringify(v).toLowerCase();
   if (meta.includes("black and white") || meta.includes("monochrome") || meta.includes("grayscale") || meta.includes("greyscale") || meta.includes("silhouette") || meta.includes("dark sky")) {
-    s -= 25; // Heavily penalize black and white / monochrome stock videos
+    s -= 40; // Heavily penalize black and white / monochrome stock videos
   }
   const aspect = file.width > 0 ? file.height / file.width : 0;
-  s += Math.max(0, 5 - Math.abs(aspect - 16 / 9) * 5); // up to +5
-  if (file.height >= 1280) s += 3;
-  if (file.height >= 1920) s += 2;
+  // Reward true vertical 9:16 orientation (aspect around 1.77)
+  s += Math.max(0, 10 - Math.abs(aspect - 16 / 9) * 8);
+  if (file.height >= 1280) s += 6;
+  if (file.height >= 1920) s += 8;
+  if (file.height >= 3840) s += 10; // 4K vertical bonus
+  if ((file.fps ?? 0) >= 30) s += 5;
+  if ((file.fps ?? 0) >= 60) s += 4;
+
   const d = v.duration ?? 10;
-  if (d >= targetMin) s += 15;
+  if (d >= targetMin) s += 20;
+  else if (d >= 15) s += 5;
+
+  // Keyword bonuses for cinematic quality
+  if (meta.includes("4k") || meta.includes("cinematic") || meta.includes("drone") || meta.includes("nature") || meta.includes("sunset") || meta.includes("waterfall") || meta.includes("stars")) {
+    s += 8;
+  }
   return s;
 }
 
 function pickBestFile(v: PexelsVideo): PexelsVideoFile | undefined {
   const mp4s = (v.video_files || []).filter((f) => f.file_type === "video/mp4");
   if (!mp4s.length) return (v.video_files || [])[0];
-  // Sort by resolution quality: vertical orientation first, then highest pixel count up to crisp HD/Full HD
+  // Sort by resolution quality: vertical orientation first, then highest pixel count up to crisp HD/4K
   mp4s.sort((a, b) => {
     const aVert = a.height >= a.width ? 1 : 0;
     const bVert = b.height >= b.width ? 1 : 0;
     if (aVert !== bVert) return bVert - aVert;
-    const aTargetScore = Math.min(a.height, 1920);
-    const bTargetScore = Math.min(b.height, 1920);
+    const aTargetScore = Math.min(a.height, 3840);
+    const bTargetScore = Math.min(b.height, 3840);
     return bTargetScore - aTargetScore || (b.width * b.height) - (a.width * a.height);
   });
   return mp4s[0];
