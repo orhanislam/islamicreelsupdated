@@ -251,6 +251,12 @@ export const runServerRender = createServerFn({ method: "POST" })
             sessionTempFiles.add(finalBgPath);
             isVideoBg = true;
             console.log("[server-render] Multi-scene B-Roll successfully built:", finalBgPath);
+
+            // Immediately delete intermediate clips and concat file to free up 100MB+ disk space before audio/subtitle processing
+            for (const p of [...bRollFiles, ...normalizedPaths, concatListPath]) {
+              await fs.unlink(p).catch(() => {});
+              sessionTempFiles.delete(p);
+            }
           }
         } catch (bRollErr) {
           console.warn("[server-render] Multi-scene B-Roll failed, falling back to primary bg:", bRollErr);
@@ -737,7 +743,7 @@ async function aggressivelyCleanServerDisk(forceAll = false) {
         const jobsList = JSON.parse(raw);
         if (Array.isArray(jobsList)) {
           jobsList.forEach((j: any) => {
-            if (j && (j.status === "processing" || j.status === "rendering")) {
+            if (j && (j.status === "processing" || j.status === "rendering" || j.status === "queued")) {
               activeIds.add(j.id);
             } else if (j && j.status === "completed") {
               completedIds.add(j.id);
@@ -809,6 +815,72 @@ async function saveJobs(jobs: any[]) {
   await fs.writeFile(file, JSON.stringify(jobs, null, 2), "utf-8");
 }
 
+// Sequential in-memory job queue to guarantee concurrency = 1
+// Prevents ENOSPC (no space left on device) and CPU/RAM exhaustion when batch rendering many videos at once
+type QueuedRenderJob = {
+  id: string;
+  data: any;
+  title: string;
+};
+
+const backgroundRenderQueue: QueuedRenderJob[] = [];
+let isQueueProcessing = false;
+
+async function processRenderQueue() {
+  if (isQueueProcessing) return;
+  isQueueProcessing = true;
+
+  while (backgroundRenderQueue.length > 0) {
+    const item = backgroundRenderQueue.shift()!;
+    const fs = (await import("fs")).promises;
+    const path = await import("path");
+    const dir = await getJobsDir();
+    const targetMp4 = path.join(dir, `${item.id}.mp4`);
+
+    try {
+      console.log(`[server-queue] Starting queued render for ${item.id} (${item.title})... Queue remaining: ${backgroundRenderQueue.length}`);
+      
+      const startJobs = await loadJobs();
+      const sIdx = startJobs.findIndex((j: any) => j.id === item.id);
+      if (sIdx !== -1) {
+        startJobs[sIdx].status = "rendering";
+        await saveJobs(startJobs);
+      }
+
+      // 1. Thorough disk cleanup right before starting EACH job to ensure 100% free /tmp space
+      await aggressivelyCleanServerDisk(true);
+
+      const base64Data = await runServerRender({ data: item.data });
+      const BufferMod = (await import("node:buffer")).Buffer;
+      await fs.writeFile(targetMp4, BufferMod.from(base64Data, "base64"));
+
+      const curJobs = await loadJobs();
+      const idx = curJobs.findIndex((j: any) => j.id === item.id);
+      if (idx !== -1) {
+        curJobs[idx].status = "completed";
+        curJobs[idx].completedAt = Date.now();
+        await saveJobs(curJobs);
+      }
+      console.log(`[server-queue] Render ${item.id} COMPLETED successfully!`);
+
+      // 2. Post-render cleanup of intermediate temp files before next job
+      await aggressivelyCleanServerDisk(false);
+    } catch (err: any) {
+      console.error(`[server-queue] Render ${item.id} FAILED:`, err);
+      const curJobs = await loadJobs();
+      const idx = curJobs.findIndex((j: any) => j.id === item.id);
+      if (idx !== -1) {
+        curJobs[idx].status = "error";
+        curJobs[idx].error = String(err?.message || err);
+        await saveJobs(curJobs);
+      }
+      await aggressivelyCleanServerDisk(false);
+    }
+  }
+
+  isQueueProcessing = false;
+}
+
 export const startServerRenderJob = createServerFn({ method: "POST" })
   .validator((input: { data: any; title: string }) => input)
   .handler(async ({ data: { data, title } }) => {
@@ -817,46 +889,16 @@ export const startServerRenderJob = createServerFn({ method: "POST" })
     jobs.unshift({
       id: jobId,
       title: title || "Ислямско видео (Фонов рендер)",
-      status: "rendering",
+      status: "queued",
       createdAt: Date.now(),
       data,
     });
     await saveJobs(jobs);
 
-    // Start FFmpeg asynchronously in the background so closing Safari does not stop it
-    (async () => {
-      const fs = (await import("fs")).promises;
-      const path = await import("path");
-      const dir = await getJobsDir();
-      const targetMp4 = path.join(dir, `${jobId}.mp4`);
-      try {
-        console.log(`[server-job] Starting background render for ${jobId}...`);
-        await aggressivelyCleanServerDisk(false);
-        const base64Data = await runServerRender({ data });
-        const BufferMod = (await import("node:buffer")).Buffer;
-        await fs.writeFile(targetMp4, BufferMod.from(base64Data, "base64"));
+    backgroundRenderQueue.push({ id: jobId, data, title: title || "Ислямско видео" });
+    processRenderQueue().catch((e) => console.error("[server-queue] Queue processing error:", e));
 
-        const curJobs = await loadJobs();
-        const idx = curJobs.findIndex((j: any) => j.id === jobId);
-        if (idx !== -1) {
-          curJobs[idx].status = "completed";
-          curJobs[idx].completedAt = Date.now();
-          await saveJobs(curJobs);
-        }
-        console.log(`[server-job] Background render ${jobId} COMPLETED!`);
-      } catch (err: any) {
-        console.error(`[server-job] Background render ${jobId} FAILED:`, err);
-        const curJobs = await loadJobs();
-        const idx = curJobs.findIndex((j: any) => j.id === jobId);
-        if (idx !== -1) {
-          curJobs[idx].status = "error";
-          curJobs[idx].error = String(err.message || err);
-          await saveJobs(curJobs);
-        }
-      }
-    })();
-
-    return { jobId, status: "rendering" };
+    return { jobId, status: "queued" };
   });
 
 export const retryServerRenderJob = createServerFn({ method: "POST" })
@@ -868,39 +910,13 @@ export const retryServerRenderJob = createServerFn({ method: "POST" })
       throw new Error("Job or render data not found");
     }
     const jobData = jobs[idx].data;
-    jobs[idx].status = "rendering";
+    const jobTitle = jobs[idx].title || id;
+    jobs[idx].status = "queued";
     jobs[idx].error = undefined;
     await saveJobs(jobs);
 
-    (async () => {
-      const fs = (await import("fs")).promises;
-      const path = await import("path");
-      const dir = await getJobsDir();
-      const targetMp4 = path.join(dir, `${id}.mp4`);
-      try {
-        console.log(`[server-job] Retrying background render for ${id}...`);
-        await aggressivelyCleanServerDisk(false);
-        const base64Data = await runServerRender({ data: jobData });
-        const BufferMod = (await import("node:buffer")).Buffer;
-        await fs.writeFile(targetMp4, BufferMod.from(base64Data, "base64"));
-
-        const curJobs = await loadJobs();
-        const curIdx = curJobs.findIndex((j: any) => j.id === id);
-        if (curIdx !== -1) {
-          curJobs[curIdx].status = "completed";
-          curJobs[curIdx].completedAt = Date.now();
-          await saveJobs(curJobs);
-        }
-      } catch (err: any) {
-        const curJobs = await loadJobs();
-        const curIdx = curJobs.findIndex((j: any) => j.id === id);
-        if (curIdx !== -1) {
-          curJobs[curIdx].status = "error";
-          curJobs[curIdx].error = String(err.message || err);
-          await saveJobs(curJobs);
-        }
-      }
-    })();
+    backgroundRenderQueue.push({ id, data: jobData, title: jobTitle });
+    processRenderQueue().catch((e) => console.error("[server-queue] Queue processing error:", e));
 
     return { success: true };
   });

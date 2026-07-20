@@ -370,6 +370,12 @@ function DownloadsPage() {
                       Рендира се на сървъра...
                     </span>
                   )}
+                  {job.status === "queued" && (
+                    <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-500/10 px-3 py-1 text-xs font-medium text-amber-500 border border-amber-500/20">
+                      <Loader2 className="size-3.5 animate-spin" />
+                      Чака в опашка (1 по 1)...
+                    </span>
+                  )}
                   {job.status === "completed" && (
                     <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2.5 py-1 text-xs font-medium text-emerald-500 border border-emerald-500/20">
                       <CheckCircle2 className="size-3.5" />
@@ -427,9 +433,11 @@ function DownloadsPage() {
                         <RefreshCw className="size-4" />
                       </button>
                     </>
-                  ) : job.status === "rendering" ? (
+                  ) : job.status === "rendering" || job.status === "queued" ? (
                     <div className="flex-1 text-xs text-muted-foreground text-center py-2 bg-muted/40 rounded-xl">
-                      Можеш да затвориш Safari — видеото ще е готово тук!
+                      {job.status === "rendering"
+                        ? "Можеш да затвориш браузъра — видеото се рендира тук!"
+                        : "В опашка за последователно рендиране, за да не се претовари диска!"}
                     </div>
                   ) : (
                     <div className="flex-1 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 px-3 py-2 bg-rose-500/10 rounded-xl border border-rose-500/20">
