@@ -217,9 +217,10 @@ export const runServerRender = createServerFn({ method: "POST" })
                   .setFfmpegPath(ffmpegPath)
                   .outputOptions([
                     `-t ${clipDur}`,
-                    "-vf scale=1080:1920:flags=lanczos:force_original_aspect_ratio=increase,crop=1080:1920,fps=30,eq=contrast=1.05:saturation=1.12",
+                    "-vf scale=1080:1920:flags=lanczos:force_original_aspect_ratio=increase,crop=1080:1920,fps=30",
                     "-c:v libx264",
-                    "-preset ultrafast",
+                    "-preset veryfast",
+                    "-crf 18",
                     "-pix_fmt yuv420p",
                     "-an",
                   ])
@@ -702,8 +703,19 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
           try {
             const stat = await fs.stat(outPath);
             console.log(`[server-render] FFmpeg finished successfully. MP4 size: ${stat.size} bytes`);
-            const buf = await fs.readFile(outPath);
-            resolve(buf.toString("base64"));
+            if (data && data.targetOutputPath && typeof data.targetOutputPath === "string") {
+              const dest = data.targetOutputPath;
+              console.log(`[server-render] Direct move to targetOutputPath: ${dest} (Zero-RAM Base64 elimination)`);
+              await fs.mkdir(path.dirname(dest), { recursive: true }).catch(() => {});
+              await fs.rename(outPath, dest).catch(async () => {
+                await fs.copyFile(outPath, dest);
+                await fs.unlink(outPath).catch(() => {});
+              });
+              resolve(JSON.stringify({ directWrite: true, filePath: dest, size: stat.size }));
+            } else {
+              const buf = await fs.readFile(outPath);
+              resolve(buf.toString("base64"));
+            }
           } catch (e) {
             reject(e);
           } finally {
@@ -910,9 +922,46 @@ type QueuedRenderJob = {
 const backgroundRenderQueue: QueuedRenderJob[] = [];
 let isQueueProcessing = false;
 
+async function recoverInterruptedJobs() {
+  try {
+    const jobs = await loadJobs();
+    let modified = false;
+    for (const j of jobs) {
+      if (j && (j.status === "rendering" || j.status === "queued") && j.data) {
+        if (j.status === "rendering") {
+          console.log(`[server-recovery] Recovering interrupted job ${j.id} (${j.title}) -> setting back to queued.`);
+          j.status = "queued";
+          modified = true;
+        }
+        if (!backgroundRenderQueue.some((item) => item.id === j.id)) {
+          backgroundRenderQueue.push({ id: j.id, data: j.data, title: j.title || "Ислямско видео" });
+        }
+      }
+    }
+    if (modified) {
+      await saveJobs(jobs);
+    }
+    if (backgroundRenderQueue.length > 0 && !isQueueProcessing) {
+      processRenderQueue().catch((e) => console.error("[server-recovery] Queue resume error:", e));
+    }
+  } catch (e) {
+    console.error("[server-recovery] Error recovering jobs:", e);
+  }
+}
+
 async function processRenderQueue() {
   if (isQueueProcessing) return;
   isQueueProcessing = true;
+
+  try {
+    const allJobs = await loadJobs();
+    const queuedInFile = allJobs.filter((j: any) => j.status === "queued" && j.data);
+    for (const qj of queuedInFile) {
+      if (!backgroundRenderQueue.some((item) => item.id === qj.id)) {
+        backgroundRenderQueue.push({ id: qj.id, data: qj.data, title: qj.title || "Ислямско видео" });
+      }
+    }
+  } catch {}
 
   while (backgroundRenderQueue.length > 0) {
     const item = backgroundRenderQueue.shift()!;
@@ -934,9 +983,24 @@ async function processRenderQueue() {
       // 1. Thorough disk cleanup right before starting EACH job to ensure 100% free /tmp space
       await aggressivelyCleanServerDisk(true);
 
-      const base64Data = await runServerRender({ data: item.data });
-      const BufferMod = (await import("node:buffer")).Buffer;
-      await fs.writeFile(targetMp4, BufferMod.from(base64Data, "base64"));
+      const renderResult = await runServerRender({
+        data: { ...item.data, targetOutputPath: targetMp4 }
+      });
+
+      let directWriteSuccess = false;
+      if (typeof renderResult === "string" && renderResult.startsWith("{")) {
+        try {
+          const parsed = JSON.parse(renderResult);
+          if (parsed.directWrite && parsed.filePath) {
+            directWriteSuccess = true;
+          }
+        } catch {}
+      }
+
+      if (!directWriteSuccess && typeof renderResult === "string") {
+        const BufferMod = (await import("node:buffer")).Buffer;
+        await fs.writeFile(targetMp4, BufferMod.from(renderResult, "base64"));
+      }
 
       const curJobs = await loadJobs();
       const idx = curJobs.findIndex((j: any) => j.id === item.id);
@@ -1067,11 +1131,13 @@ export function scheduleServerMaintenance() {
 
   setTimeout(() => {
     aggressivelyCleanServerDisk(true).catch((e) => console.error("[server-maintenance] Boot cleanup error:", e));
-  }, 30 * 1000);
+    recoverInterruptedJobs().catch((e) => console.error("[server-maintenance] Boot recovery error:", e));
+  }, 3 * 1000);
 
   setInterval(() => {
     console.log("[server-maintenance] Running scheduled 6-hour disk & PM2 log maintenance...");
     aggressivelyCleanServerDisk(true).catch((e) => console.error("[server-maintenance] Scheduled cleanup error:", e));
+    recoverInterruptedJobs().catch((e) => console.error("[server-maintenance] Scheduled recovery error:", e));
   }, 6 * 60 * 60 * 1000);
 }
 

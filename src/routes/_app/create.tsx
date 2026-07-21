@@ -989,8 +989,8 @@ function CreatePage() {
                 <Select value={renderMode} onValueChange={(v) => { setRenderMode(v as "client" | "server"); clearRendered(); }}>
                   <SelectTrigger className="font-ui bg-background/60"><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="client">⚡ В браузъра (Бързо, безплатно, PC/Mac)</SelectItem>
-                    <SelectItem value="server">🚀 На сървъра (Clouding.io, за iPhone/Mobile)</SelectItem>
+                    <SelectItem value="server">🚀 Сървърно рендиране (Препоръчано 1080p, Фонов режим за всички устройства)</SelectItem>
+                    <SelectItem value="client">⚡ Клиентско в браузъра (Чернова / Бърз преглед за PC/Mac)</SelectItem>
                   </SelectContent>
                 </Select>
               </div>

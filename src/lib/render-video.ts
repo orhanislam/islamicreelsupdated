@@ -281,7 +281,7 @@ function drawReferencePill(ctx: CanvasRenderingContext2D, text: string) {
 
 export async function renderVideo(opts: VideoOptions): Promise<{ blob: Blob; mimeType: string }> {
   if (typeof MediaRecorder === "undefined") {
-    throw new Error("Този браузър не поддържа видео рендиране. На iPhone използвай последната версия на Safari/Chrome.");
+    throw new Error("Този браузър не поддържа директно видео рендиране. Избери 'Сървърно рендиране' от падащото меню за 100% стабилност.");
   }
 
   const ios = isIOSDevice();
@@ -493,7 +493,7 @@ export async function renderVideo(opts: VideoOptions): Promise<{ blob: Blob; mim
 
   const requestedMimeType = pickMimeType(ios);
   if (ios && !requestedMimeType.includes("mp4")) {
-    throw new Error("iPhone не поддържа MP4 рендиране в този браузър. Обнови iOS/Safari и опитай отново.");
+    throw new Error("iPhone не поддържа MP4 в този браузър. Моля, превключи на 'Сървърно рендиране' за професионално 1080p качество без прекъсване.");
   }
   const recorder = new MediaRecorder(videoStream, {
     mimeType: requestedMimeType,
@@ -1128,7 +1128,7 @@ export async function renderVideo(opts: VideoOptions): Promise<{ blob: Blob; mim
 
     const fallbackTimer = window.setTimeout(() => {
       if (chunks.length) finalize();
-      else reject(new Error("iPhone не финализира видеото. Опитай по-кратък текст или друг фон."));
+      else reject(new Error("iPhone/Safari не финализира видеото поради недостиг на памет. Моля, превключи на 'Сървърно рендиране (Фонов режим)'."));
     }, ios ? 20_000 : 5_000);
 
     window.setTimeout(() => {
@@ -1150,11 +1150,11 @@ export async function renderVideo(opts: VideoOptions): Promise<{ blob: Blob; mim
   });
   if (blob.size < 1024) {
     detachCanvas();
-    throw new Error("Видеото не се записа правилно. Опитай пак, без стоково видео фон или с по-кратък текст.");
+    throw new Error("Видеото не се записа правилно в браузъра. Моля, превключи на 'Сървърно рендиране (Фонов режим)' за 100% гарантиран резултат.");
   }
   if (ios && !recordedMimeType.includes("mp4")) {
     detachCanvas();
-    throw new Error("iPhone получи неподдържан видео формат. Обнови iOS/Safari и рендирай отново.");
+    throw new Error("iPhone получи неподдържан формат от браузъра. Превключи на 'Сървърно рендиране (Фонов режим)'.");
   }
   if (audioSource && audioEndedAtWall === null) { try { audioSource.stop(); } catch { /* ignore */ } }
   if (bgVideo) { bgVideo.pause(); bgVideo.src = ""; }
