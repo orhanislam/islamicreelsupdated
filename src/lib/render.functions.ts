@@ -279,16 +279,31 @@ export const runServerRender = createServerFn({ method: "POST" })
       };
 
       const isLowerThird = data.style === "lower-third";
-      // Anchor top-down in the lower half (Alignment 8 = top-center at MarginV = 1150)
-      // so when text wraps or grows, lines continue vertically downwards.
-      const bulgarianAlign = 8;
-      const bulgarianMarginV = 1150;
+      const subPos = data.subtitlePosition || "tiktok";
+      let bulgarianAlign = 8;
+      let bulgarianMarginV = 1180; // TikTok safe area default above caption
+
+      if (subPos === "reels") {
+        bulgarianAlign = 8;
+        bulgarianMarginV = 1120;
+      } else if (subPos === "shorts") {
+        bulgarianAlign = 8;
+        bulgarianMarginV = 1150;
+      } else if (subPos === "center") {
+        bulgarianAlign = 5;
+        bulgarianMarginV = 960;
+      } else if (data.style === "bottom" || isLowerThird) {
+        bulgarianAlign = 8;
+        bulgarianMarginV = 1180;
+      }
 
       const tiktokTheme = data.tiktokTheme || "hormozi";
       let outlineColor = "&H00000000";
       let outlineWidth = "6.5";
       let shadowSize = "2.5";
       let highlightColor = "&H0000D7FF&"; // Classic Gold
+      let borderStyle = "1";
+      let backColor = "&H66000000";
 
       if (tiktokTheme === "emerald") {
         outlineColor = "&H00102008";
@@ -305,6 +320,18 @@ export const runServerRender = createServerFn({ method: "POST" })
         outlineWidth = "5.0";
         shadowSize = "1.5";
         highlightColor = "&H0000D7FF&";
+      } else if (tiktokTheme === "fire") {
+        outlineColor = "&H00001866";
+        outlineWidth = "6.5";
+        shadowSize = "2.5";
+        highlightColor = "&H000066FF&"; // Flaming Orange Gold
+      } else if (tiktokTheme === "box") {
+        borderStyle = "3";
+        backColor = "&HAA000000";
+        outlineColor = "&H00000000";
+        outlineWidth = "8.0";
+        shadowSize = "0";
+        highlightColor = "&H0000D7FF&";
       }
 
       let ass = `[Script Info]
@@ -315,7 +342,7 @@ PlayResY: 1920
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
 Style: Arabic,Scheherazade New,100,&H00FFFFFF,&H000000FF,&H00000000,&H80000000,-1,0,0,0,100,100,0,0,1,3,0,8,50,50,300,1
-Style: Bulgarian,Outfit,120,&H00FFFFFF,&H0000D7FF,${outlineColor},&H66000000,-1,0,0,0,100,100,0,0,1,${outlineWidth},${shadowSize},${bulgarianAlign},100,100,1120,1
+Style: Bulgarian,Outfit,120,&H00FFFFFF,&H0000D7FF,${outlineColor},${backColor},-1,0,0,0,100,100,0,0,${borderStyle},${outlineWidth},${shadowSize},${bulgarianAlign},100,100,${bulgarianMarginV},1
 Style: Reference,Outfit,46,&H005DC9F4,&H000000FF,&H00000000,&H80000000,-1,0,0,0,100,100,0,0,1,3,1,8,50,50,280,1
 
 [Events]
@@ -502,6 +529,10 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
               const fs = wordCount > 40 ? 38 : wordCount > 28 ? 44 : wordCount > 18 ? 50 : wordCount > 10 ? 56 : 64;
               const wpl = wordCount > 40 ? 9 : wordCount > 28 ? 8 : wordCount > 18 ? 7 : wordCount > 10 ? 6 : 5;
               const highlightKeywords = /^(Аллах|Коран|Корана|Пророк|Пророкът|Хадис|Сура|Аят|Рай|Дженнет|Дженнета|Дуа|Иман|Благословение|Милост|Търпение|Надежда|Успех|Мухаммад|Господ|Господар|Победа|Спокойствие|Защита|Сърце|Сърцето|Живот|Време|Времето|Истина|Истината|Светлина|Зло|Добро|Вяра|Вярата)[.,!?…]?$/i;
+              const isCustomOrKeyword = (wordStr: string) => {
+                const cleanW = wordStr.replace(/[^\p{L}\p{N}]/gu, "");
+                return (Array.isArray(data.customKeywords) && data.customKeywords.includes(cleanW)) || highlightKeywords.test(wordStr);
+              };
 
               for (let wIdx = 0; wIdx < ayahWords.length; wIdx++) {
                 const globalIdx = startWordIdx + wIdx;
@@ -517,7 +548,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                 let formattedText = "";
                 for (let w = 0; w < ayahWords.length; w++) {
                   const wordStr = ayahWords[w];
-                  const isKeyword = highlightKeywords.test(wordStr);
+                  const isKeyword = isCustomOrKeyword(wordStr);
                   const isActive = w === wIdx;
                   if (isActive) {
                     formattedText += `{\\c${highlightColor}\\b1\\t(0,60,\\fscx114\\fscy114)\\t(60,150,\\fscx100\\fscy100)}${wordStr}{\\r} `;
@@ -535,17 +566,17 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                   ? `\\fad(150,0)\\t(0,100,\\fscx104\\fscy104)\\t(100,180,\\fscx100\\fscy100)`
                   : ``;
                 const useAnim = (isLast && wIdx === ayahWords.length - 1) ? `${microPop}\\fad(0,120)` : microPop;
-                const ayahStyleTag = data.style === "bottom"
-                  ? `{\\an2\\pos(540,1540)\\fs${fs}${useAnim}}`
-                  : `{\\an5\\pos(540,960)\\fs${fs}${useAnim}}`;
+                const posTag = subPos === "center" ? `\\an5\\pos(540,960)` : `\\an8\\pos(540,${bulgarianMarginV})`;
+                const ayahStyleTag = `{${posTag}\\fs${fs}${useAnim}}`;
                 ass += `Dialogue: 0,${formatTime(sliceStart)},${formatTime(sliceEnd)},Bulgarian,,0,0,0,,${ayahStyleTag}${formattedText}\n`;
               }
             }
           }
         } else {
-          // Group words into short viral TikTok-style punchy phrases (2 to 4 words max)
-          const MAX_WORDS = 4;
-          const MIN_WORDS = 2;
+          // Group words into short viral TikTok-style punchy phrases (2 to 4 words max) OR single word pop
+          const isSingleWordMode = data.subtitleSlicingMode === "single";
+          const MAX_WORDS = isSingleWordMode ? 1 : 4;
+          const MIN_WORDS = isSingleWordMode ? 1 : 2;
           type Phrase = { words: string[]; startIdx: number; endIdx: number };
           const phrases: Phrase[] = [];
           let cur: string[] = [];
@@ -556,8 +587,16 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             curStart += cur.length;
             cur = [];
           };
+
           for (let i = 0; i < words.length; i++) {
             const w = words[i];
+            // Acoustic Pause Slicing: if natural breathing gap (> 0.25s) exists right before this word, flush preceding phrase immediately
+            if (!isSingleWordMode && cur.length > 0 && timings[i] && timings[i - 1]) {
+              const gap = timings[i].start - timings[i - 1].end;
+              if (gap > 0.25) {
+                flush();
+              }
+            }
             cur.push(w);
             const endsPunct = /[.!?…]$/.test(w) || (/[,;:—]$/.test(w) && cur.length >= MIN_WORDS);
             if ((endsPunct && cur.length >= MIN_WORDS) || cur.length >= MAX_WORDS) {
@@ -584,9 +623,13 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 
             // End when the last word in the phrase finishes, plus a slight tail (0.12s) for natural reading
             const lastWordEnd = timings[p.endIdx - 1]?.end ?? (start + 1.5);
-            let end = Math.min(nextPhraseStart, Math.max(start + 0.3, lastWordEnd + 0.12));
+            let end = Math.min(nextPhraseStart, Math.max(start + 0.2, lastWordEnd + (isSingleWordMode ? 0.06 : 0.12)));
 
             const highlightKeywords = /^(Аллах|Коран|Корана|Пророк|Пророкът|Хадис|Сура|Аят|Рай|Дженнет|Дженнета|Дуа|Иман|Благословение|Милост|Търпение|Надежда|Успех|Мухаммад|Господ|Господар|Победа|Спокойствие|Защита|Сърце|Сърцето|Живот|Време|Времето|Истина|Истината|Светлина|Зло|Добро|Вяра|Вярата)[.,!?…]?$/i;
+            const isCustomOrKeyword = (wordStr: string) => {
+              const cleanW = wordStr.replace(/[^\p{L}\p{N}]/gu, "");
+              return (Array.isArray(data.customKeywords) && data.customKeywords.includes(cleanW)) || highlightKeywords.test(wordStr);
+            };
 
             // MASTERCLASS ACTIVE WORD KARAOKE SLICING:
             // Slice the phrase interval [start, end] into distinct ASS events for each active word so that
@@ -604,13 +647,13 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 
               const textLine = p.words
                 .map((w, i) => {
-                  const isKeyword = highlightKeywords.test(w);
+                  const isKeyword = isCustomOrKeyword(w);
                   const isActive = i === wIdx;
                   if (isActive) {
                     // Active spoken word: instant micro-pop scale with glowing highlight color
-                    return `{\\c${highlightColor}\\b1\\t(0,60,\\fscx114\\fscy114)\\t(60,150,\\fscx100\\fscy100)}${w}{\\r}`;
+                    return `{\\c${highlightColor}\\b1\\t(0,60,\\fscx116\\fscy116)\\t(60,150,\\fscx100\\fscy100)}${w}{\\r}`;
                   } else if (isKeyword) {
-                    // Important Islamic keyword retain their gold/neon highlight
+                    // Important Islamic/Custom keyword retain their gold/neon highlight
                     return `{\\c${highlightColor}\\b1}${w}{\\r}`;
                   } else {
                     // Clean crisp white font for inactive words
@@ -623,9 +666,8 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                 ? `\\fad(120,0)\\t(0,100,\\fscx105\\fscy105)\\t(100,180,\\fscx100\\fscy100)`
                 : ``;
               const useAnim = (isLastPhrase && wIdx === p.words.length - 1) ? `${microPop}\\fad(0,100)` : microPop;
-              const phraseStyleTag = data.style === "bottom"
-                ? `{\\an2\\pos(540,1540)\\fscx100\\fscy100${useAnim}}`
-                : `{\\an5\\pos(540,960)\\fscx100\\fscy100${useAnim}}`;
+              const posTag = subPos === "center" ? `\\an5\\pos(540,960)` : `\\an8\\pos(540,${bulgarianMarginV})`;
+              const phraseStyleTag = `{${posTag}\\fscx100\\fscy100${useAnim}}`;
               ass += `Dialogue: 0,${formatTime(sliceStart)},${formatTime(sliceEnd)},Bulgarian,,0,0,0,,${phraseStyleTag}${textLine}\n`;
             }
             prevEnd = end;

@@ -106,8 +106,10 @@ function CreatePage() {
 
   // caption style + output format
   const [captionStyle, setCaptionStyle] = useState<RenderOptions["style"]>("lower-third");
-  const [tiktokTheme, setTiktokTheme] = useState<"hormozi" | "gold" | "emerald" | "neon" | "classic">("hormozi");
+  const [tiktokTheme, setTiktokTheme] = useState<"hormozi" | "gold" | "emerald" | "neon" | "classic" | "fire" | "box">("hormozi");
   const [pacingMode, setPacingMode] = useState<"punchy" | "ayah">("punchy");
+  const [subtitlePosition, setSubtitlePosition] = useState<"tiktok" | "reels" | "shorts" | "center">("tiktok");
+  const [subtitleSlicingMode, setSubtitleSlicingMode] = useState<"phrase" | "single">("phrase");
   const [aligningSync, setAligningSync] = useState(false);
   const [showTimingEditor, setShowTimingEditor] = useState(false);
   const [format, setFormat] = useState<"photo" | "video">("video");
@@ -482,6 +484,8 @@ function CreatePage() {
           style: captionStyle,
           tiktokTheme,
           pacingMode,
+          subtitlePosition,
+          subtitleSlicingMode,
         });
         if (renderedUrl) URL.revokeObjectURL(renderedUrl);
         setRenderedUrl(URL.createObjectURL(blob));
@@ -530,6 +534,8 @@ function CreatePage() {
           style: captionStyle,
           tiktokTheme,
           pacingMode,
+          subtitlePosition,
+          subtitleSlicingMode,
           audioUrl: audio,
           requireAudio: Boolean(audio),
           fallbackDuration: 8,
@@ -1014,6 +1020,8 @@ function CreatePage() {
                     <SelectItem value="emerald">💎 Изумруд (#32CD32) — Ислямско зелено + Златен акцент</SelectItem>
                     <SelectItem value="neon">⚡ Неон (#00FFFF) — Модерен кибер-циан</SelectItem>
                     <SelectItem value="classic">❄️ Класически бял — Минималистичен стил</SelectItem>
+                    <SelectItem value="fire">🔥 Огнен Оранжев (#FF6600) — Енергичен акцент</SelectItem>
+                    <SelectItem value="box">📦 Box Style (Тъмна подложка за 100% четливост)</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -1024,6 +1032,28 @@ function CreatePage() {
                   <SelectContent>
                     <SelectItem value="punchy">🚀 Ударен темп (2-4 думи на ред — TikTok/Reels)</SelectItem>
                     <SelectItem value="ayah">📖 Пълен аят / дълга фраза — класическо четене</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label className="font-ui text-xs font-semibold uppercase tracking-wider text-muted-foreground">Позиция (Safe Area Profile)</Label>
+                <Select value={subtitlePosition} onValueChange={(v) => { setSubtitlePosition(v as any); clearRendered(); }}>
+                  <SelectTrigger className="font-ui bg-background/60"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="tiktok">📱 TikTok (Горна над долни икони)</SelectItem>
+                    <SelectItem value="reels">🎬 Instagram Reels (Оптимизирано)</SelectItem>
+                    <SelectItem value="shorts">▶️ YouTube Shorts (Оптимизирано)</SelectItem>
+                    <SelectItem value="center">🎯 Център (В средата на екрана)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label className="font-ui text-xs font-semibold uppercase tracking-wider text-muted-foreground">Караоке анимация</Label>
+                <Select value={subtitleSlicingMode} onValueChange={(v) => { setSubtitleSlicingMode(v as any); clearRendered(); }}>
+                  <SelectTrigger className="font-ui bg-background/60"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="phrase">⚡ Фразово (2-4 думи с микро-скок на активната)</SelectItem>
+                    <SelectItem value="single">💥 Дума по дума (1 дума на екран - Viral Pop)</SelectItem>
                   </SelectContent>
                 </Select>
               </div>

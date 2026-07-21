@@ -114,3 +114,134 @@ export function verifyAndCorrectSubtitleSync(
     warnings,
   };
 }
+
+/**
+ * Bulk shifts all subtitle timestamps by offsetSec (+/-).
+ * Automatically clamps to >= 0 and <= maxDurationSec.
+ */
+export function shiftAllTimings(
+  timings: ValidatedWordTiming[],
+  offsetSec: number,
+  maxDurationSec: number = 600
+): ValidatedWordTiming[] {
+  if (!Array.isArray(timings) || timings.length === 0) return [];
+  const shifted = timings.map((t) => {
+    let start = Math.max(0, t.start + offsetSec);
+    let end = Math.max(start + 0.1, t.end + offsetSec);
+    if (start >= maxDurationSec) {
+      start = Math.max(0, maxDurationSec - 0.2);
+      end = maxDurationSec;
+    }
+    if (end > maxDurationSec) {
+      end = maxDurationSec;
+    }
+    return {
+      word: t.word,
+      start: Number(start.toFixed(3)),
+      end: Number(end.toFixed(3)),
+    };
+  });
+  return verifyAndCorrectSubtitleSync(shifted, maxDurationSec).correctedTimings;
+}
+
+/**
+ * Format seconds into SRT (HH:MM:SS,mmm) or VTT (HH:MM:SS.mmm) timestamp.
+ */
+function formatSubtitleTime(secs: number, separator: "," | "." = ","): string {
+  const totalMs = Math.max(0, Math.round(secs * 1000));
+  const ms = totalMs % 1000;
+  const totalS = Math.floor(totalMs / 1000);
+  const s = totalS % 60;
+  const totalM = Math.floor(totalS / 60);
+  const m = totalM % 60;
+  const h = Math.floor(totalM / 60);
+  return `${h.toString().padStart(2, "0")}:${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}${separator}${ms.toString().padStart(3, "0")}`;
+}
+
+/**
+ * Export word timings to standard SubRip (.SRT) format.
+ */
+export function exportToSRT(timings: ValidatedWordTiming[]): string {
+  if (!Array.isArray(timings) || timings.length === 0) return "";
+  return timings
+    .map((t, idx) => {
+      const srtStart = formatSubtitleTime(t.start, ",");
+      const srtEnd = formatSubtitleTime(t.end, ",");
+      return `${idx + 1}\n${srtStart} --> ${srtEnd}\n${t.word}\n`;
+    })
+    .join("\n");
+}
+
+/**
+ * Export word timings to standard WebVTT (.VTT) format.
+ */
+export function exportToVTT(timings: ValidatedWordTiming[]): string {
+  if (!Array.isArray(timings) || timings.length === 0) return "WEBVTT\n\n";
+  const blocks = timings
+    .map((t, idx) => {
+      const vttStart = formatSubtitleTime(t.start, ".");
+      const vttEnd = formatSubtitleTime(t.end, ".");
+      return `${idx + 1}\n${vttStart} --> ${vttEnd}\n${t.word}`;
+    })
+    .join("\n\n");
+  return `WEBVTT\n\n${blocks}\n`;
+}
+
+/**
+ * Parse standard .SRT or .VTT content into ValidatedWordTiming[].
+ * Supports both comma (HH:MM:SS,mmm) and dot (HH:MM:SS.mmm) timestamps.
+ */
+export function parseSRT(content: string): ValidatedWordTiming[] {
+  if (!content || typeof content !== "string") return [];
+  const lines = content
+    .replace(/WEBVTT[^\n]*/gi, "")
+    .replace(/\r\n/g, "\n")
+    .replace(/\r/g, "\n")
+    .split("\n");
+
+  const timings: ValidatedWordTiming[] = [];
+  const timeRegex = /([0-9]{1,2}:[0-9]{2}:[0-9]{2}[,/.][0-9]{2,3}|[0-9]{1,2}:[0-9]{2}[,/.][0-9]{2,3})\s*-->\s*([0-9]{1,2}:[0-9]{2}:[0-9]{2}[,/.][0-9]{2,3}|[0-9]{1,2}:[0-9]{2}[,/.][0-9]{2,3})/;
+
+  const parseToSec = (timeStr: string): number => {
+    const clean = timeStr.replace(/,/g, ".");
+    const parts = clean.split(":");
+    if (parts.length === 3) {
+      const h = parseFloat(parts[0]) || 0;
+      const m = parseFloat(parts[1]) || 0;
+      const s = parseFloat(parts[2]) || 0;
+      return h * 3600 + m * 60 + s;
+    } else if (parts.length === 2) {
+      const m = parseFloat(parts[0]) || 0;
+      const s = parseFloat(parts[1]) || 0;
+      return m * 60 + s;
+    }
+    return parseFloat(clean) || 0;
+  };
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim();
+    const match = timeRegex.exec(line);
+    if (match) {
+      const start = parseToSec(match[1]);
+      const end = parseToSec(match[2]);
+      // Next non-empty line is the word/text
+      let textLine = "";
+      let j = i + 1;
+      while (j < lines.length && lines[j].trim() !== "" && !/^[0-9]+$/.test(lines[j].trim())) {
+        if (textLine) textLine += " ";
+        textLine += lines[j].trim();
+        j++;
+      }
+      if (textLine) {
+        timings.push({
+          word: textLine,
+          start: Number(start.toFixed(3)),
+          end: Number(Math.max(start + 0.1, end).toFixed(3)),
+        });
+      }
+      i = j - 1;
+    }
+  }
+
+  return timings;
+}

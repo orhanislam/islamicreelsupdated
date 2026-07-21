@@ -8,9 +8,12 @@ export type RenderOptions = {
   arabic?: string;
   bulgarian: string;
   reference: string;
-  style: "minimal" | "centered" | "lower-third";
-  tiktokTheme?: "hormozi" | "gold" | "emerald" | "neon" | "classic";
+  style: "minimal" | "centered" | "lower-third" | "bottom";
+  tiktokTheme?: "hormozi" | "gold" | "emerald" | "neon" | "classic" | "fire" | "box";
   pacingMode?: "punchy" | "ayah";
+  subtitlePosition?: "tiktok" | "reels" | "shorts" | "center";
+  subtitleSlicingMode?: "phrase" | "single";
+  customKeywords?: string[];
 };
 
 const W = 1080;
