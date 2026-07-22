@@ -857,7 +857,7 @@ async function aggressivelyCleanServerDisk(forceAll = false) {
       } catch {}
     }
 
-    // 3. Clean up old finished or partial jobs in ~/.islamicreels_jobs
+    // 3. Clean up old finished or partial jobs in ~/.islamicreels_jobs (STRICT 5GB SSD PROTECTION)
     try {
       const jobsDir = path.join(os.homedir(), ".islamicreels_jobs");
       const jFiles = await fs.readdir(jobsDir).catch(() => []);
@@ -876,32 +876,50 @@ async function aggressivelyCleanServerDisk(forceAll = false) {
               completedIds.add(j.id);
             }
           });
-          if (forceAll && jobsList.length > 50) {
-            const trimmed = jobsList.slice(0, 50);
+          // STRICT CAP: Keep at most 8 jobs total in JSON to prevent disk/metadata bloat
+          if (jobsList.length > 8) {
+            const trimmed = jobsList.slice(0, 8);
             await fs.writeFile(jobsFile, JSON.stringify(trimmed, null, 2), "utf-8").catch(() => {});
           }
         }
       } catch {}
 
+      // Collect stats for all completed or orphan files in jobs directory to sort by age
+      const fileStats: { name: string; path: string; mtimeMs: number; isActive: boolean; isCompleted: boolean }[] = [];
       for (const jf of jFiles) {
         if (jf === "jobs.json") continue;
         const jp = path.join(jobsDir, jf);
         const st = await fs.stat(jp).catch(() => null);
         if (!st) continue;
-        
         const isActivelyRendering = Array.from(activeIds).some((id) => jf.startsWith(id));
-        if (isActivelyRendering) continue;
-
         const isCompletedJob = Array.from(completedIds).some((id) => jf.startsWith(id));
-        if (isCompletedJob) {
-          const completedThreshold = forceAll ? 24 * 60 * 60 * 1000 : 14 * 24 * 60 * 60 * 1000;
-          if (now - st.mtimeMs >= completedThreshold) {
-            await fs.rm(jp, { recursive: true, force: true }).catch(() => {});
+        fileStats.push({ name: jf, path: jp, mtimeMs: st.mtimeMs, isActive: isActivelyRendering, isCompleted: isCompletedJob });
+      }
+
+      // Sort newest to oldest
+      fileStats.sort((a, b) => b.mtimeMs - a.mtimeMs);
+
+      let completedCount = 0;
+      for (const fsItem of fileStats) {
+        if (fsItem.isActive) continue;
+
+        if (fsItem.isCompleted || fsItem.name.endsWith(".mp4")) {
+          completedCount++;
+          // STRICT LIMIT: If we already kept 8 completed MP4 files, delete any older ones immediately regardless of age
+          if (completedCount > 8) {
+            await fs.rm(fsItem.path, { recursive: true, force: true }).catch(() => {});
+            continue;
+          }
+          // Age threshold: 3 hours for forceAll, 24 hours for routine check
+          const completedThreshold = forceAll ? 3 * 60 * 60 * 1000 : 24 * 60 * 60 * 1000;
+          if (now - fsItem.mtimeMs >= completedThreshold) {
+            await fs.rm(fsItem.path, { recursive: true, force: true }).catch(() => {});
           }
         } else {
-          const tempThreshold = forceAll ? 0 : 6 * 60 * 60 * 1000;
-          if (now - st.mtimeMs >= tempThreshold) {
-            await fs.rm(jp, { recursive: true, force: true }).catch(() => {});
+          // Temporary/orphan files in job dir: delete immediately on forceAll or after 2 hours
+          const tempThreshold = forceAll ? 0 : 2 * 60 * 60 * 1000;
+          if (now - fsItem.mtimeMs >= tempThreshold) {
+            await fs.rm(fsItem.path, { recursive: true, force: true }).catch(() => {});
           }
         }
       }
