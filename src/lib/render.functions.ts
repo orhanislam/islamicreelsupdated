@@ -1131,7 +1131,27 @@ export const retryServerRenderJob = createServerFn({ method: "POST" })
 
 export const listServerRenderJobs = createServerFn({ method: "POST" })
   .handler(async () => {
-    return await loadJobs();
+    const fs = (await import("fs")).promises;
+    const path = await import("path");
+    const dir = await getJobsDir();
+    const jobs = await loadJobs();
+    const validJobs: ServerJobRecord[] = [];
+    let updated = false;
+    for (const j of jobs) {
+      if (j && j.status === "completed") {
+        const fileExists = await fs.stat(path.join(dir, `${j.id}.mp4`)).catch(() => null);
+        if (!fileExists) {
+          j.status = "error";
+          j.error = "Видеото е било автоматично почистено от диска на сървъра. Натиснете бутона 🔄 за повторно рендиране.";
+          updated = true;
+        }
+      }
+      validJobs.push(j);
+    }
+    if (updated) {
+      await saveJobs(validJobs);
+    }
+    return validJobs;
   });
 
 export const getServerRenderJobBase64 = createServerFn({ method: "POST" })
@@ -1141,9 +1161,12 @@ export const getServerRenderJobBase64 = createServerFn({ method: "POST" })
     const path = await import("path");
     const dir = await getJobsDir();
     const targetMp4 = path.join(dir, `${id}.mp4`);
-    const BufferMod = (await import("node:buffer")).Buffer;
-    const buf = await fs.readFile(targetMp4);
-    return buf.toString("base64");
+    try {
+      const buf = await fs.readFile(targetMp4);
+      return buf.toString("base64");
+    } catch (err: any) {
+      throw new Error("Видеото не е намерено на диска на сървъра. Моля, рендирайте го отново.");
+    }
   });
 
 export const deleteServerRenderJob = createServerFn({ method: "POST" })

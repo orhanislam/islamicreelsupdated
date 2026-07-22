@@ -88,30 +88,7 @@ function DownloadsPage() {
     return () => clearInterval(timer);
   }, []);
 
-  // Automatically preload server MP4 files in the background so clicking download is instant!
-  useEffect(() => {
-    serverJobs.forEach(async (job) => {
-      if (job.status === "completed" && !preloadedUrls[job.id] && !preloadingRef.current.has(job.id)) {
-        preloadingRef.current.add(job.id);
-        try {
-          const base64 = await getServerRenderJobBase64({ data: { id: job.id } });
-          const res = await fetch("data:video/mp4;base64," + base64);
-          const blob = await res.blob();
-          const url = URL.createObjectURL(blob);
-          setPreloadedUrls((prev) => ({ ...prev, [job.id]: url }));
-          confetti({
-            particleCount: 65,
-            spread: 75,
-            origin: { y: 0.65 },
-            colors: ["#FFD700", "#10B981", "#3B82F6", "#F59E0B"],
-          });
-        } catch (err) {
-          console.error("Failed to preload server video:", err);
-          preloadingRef.current.delete(job.id);
-        }
-      }
-    });
-  }, [serverJobs]);
+  // Note: We fetch base64 video data on-demand upon download or explicit click to save network bandwidth and avoid ENOSPC/memory spikes.
 
   // Auto-trigger download for local items when opened
   useEffect(() => {
