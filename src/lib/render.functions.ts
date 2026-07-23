@@ -21,11 +21,10 @@ async function getRenderQueue() {
   return renderQueue;
 }
 
-export const runServerRender = createServerFn({ method: "POST" })
-  .validator((opts: any) => opts)
-  .handler(async ({ data }) => {
-    const queue = await getRenderQueue();
-    return await queue.add(async () => {
+export async function executeRenderTask(opts: any): Promise<any> {
+  const data = opts.data || opts;
+  const queue = await getRenderQueue();
+  return await queue.add(async () => {
       const fs = (await import("fs")).promises;
     const os = await import("os");
     const path = await import("path");
@@ -790,6 +789,12 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
       throw new Error(String(err));
     }
     });
+  }
+
+export const runServerRender = createServerFn({ method: "POST" })
+  .validator((opts: any) => opts)
+  .handler(async ({ data }) => {
+    return await executeRenderTask(data);
   });
 
 // ==========================================
@@ -1043,7 +1048,7 @@ async function processRenderQueue() {
       // 1. Thorough disk cleanup right before starting EACH job to ensure 100% free /tmp space
       await aggressivelyCleanServerDisk(true);
 
-      const renderResult = await runServerRender({
+      const renderResult = await executeRenderTask({
         data: { ...item.data, targetOutputPath: targetMp4 }
       });
 
