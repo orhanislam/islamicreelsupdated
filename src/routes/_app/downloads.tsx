@@ -123,39 +123,34 @@ function DownloadsPage() {
     try {
       toast.message("Подготвям видеото за изтегляне от сървъра...");
 
+      const { downloadUrl } = await getServerRenderJobDownloadUrl({
+        data: { id: job.id, title: job.title },
+      });
+
       // On iOS Safari, attempt native Share Sheet ("Save Video" directly into Photos app)
       if (isIOSMediaDevice()) {
         try {
-          const { downloadUrl } = await getServerRenderJobDownloadUrl({
-            data: { id: job.id, title: job.title },
-          });
-          // Attempt native Save to Photos via Web Share API / Blob fetch first
           const res = await saveMediaFromUrl(downloadUrl, `${job.title || "islamic-reel"}.mp4`, "video/mp4");
           if (res === "shared") {
             toast.success("Видеото е запазено или споделено успешно!");
             return;
           }
-          // If native share sheet was skipped, open the direct download URL
-          window.location.href = downloadUrl;
-          toast.success("Видеото се изтегля в Safari! Провери долу в лентата за изтегляния.");
-          return;
         } catch (e) {
-          console.warn("[downloads] iOS streaming/share failed, trying base64 fallback:", e);
+          console.warn("[downloads] iOS streaming/share failed:", e);
         }
       }
 
-      // Desktop browsers: use base64 blob (fast and reliable)
-      const base64 = await getServerRenderJobBase64({ data: { id: job.id } });
-      const byteChars = atob(base64);
-      const byteArray = new Uint8Array(byteChars.length);
-      for (let i = 0; i < byteChars.length; i++) {
-        byteArray[i] = byteChars.charCodeAt(i);
-      }
-      const blob = new Blob([byteArray], { type: "video/mp4" });
-      await saveMediaBlob(blob, `${job.title || "islamic-reel"}.mp4`, "video/mp4");
-      toast.success("Видеото е свалено успешно!");
+      // Universal robust native download via streaming endpoint (zero memory crash risk)
+      const a = document.createElement("a");
+      a.href = downloadUrl;
+      a.download = `${job.title || "islamic-reel"}.mp4`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      toast.success("Изтеглянето стартира! Провери лентата за изтегляния.");
+
     } catch (e) {
-      toast.error("Файлът е бил изчистен от старата система. Натиснете иконата 🔄 до бутона 'Корица', за да го рендирате отново!");
+      toast.error("Файлът не беше намерен. Възможно е да е изчистен. Натисни 🔄 за повторно рендиране!");
     } finally {
       setDownloadingServerId(null);
     }
@@ -209,8 +204,13 @@ function DownloadsPage() {
         const folderName = sanitizeFilename(`${i + 1}_${job.title || "islamic_video"}`);
         const folder = zip.folder(folderName) || zip;
 
-        const base64 = await getServerRenderJobBase64({ data: { id: job.id } });
-        folder.file(`${folderName}.mp4`, base64, { base64: true });
+        const { downloadUrl } = await getServerRenderJobDownloadUrl({ data: { id: job.id, title: job.title } });
+        const res = await fetch(downloadUrl);
+        if (res.ok) {
+          const blob = await res.blob();
+          folder.file(`${folderName}.mp4`, blob);
+        }
+        
         const captionText = formatViralSocialCaption(job.title || "Ислямска мъдрост");
         folder.file(`${folderName}_tiktok_caption.txt`, captionText);
         try {
@@ -251,8 +251,12 @@ function DownloadsPage() {
       const folderName = sanitizeFilename(job.title || "islamic_video");
       const folder = zip.folder(folderName) || zip;
 
-      const base64 = await getServerRenderJobBase64({ data: { id: job.id } });
-      folder.file(`${folderName}_video.mp4`, base64, { base64: true });
+      const { downloadUrl } = await getServerRenderJobDownloadUrl({ data: { id: job.id, title: job.title } });
+      const res = await fetch(downloadUrl);
+      if (res.ok) {
+        const blob = await res.blob();
+        folder.file(`${folderName}_video.mp4`, blob);
+      }
 
       const captionText = formatViralSocialCaption(job.title || "Ислямска мъдрост");
       folder.file(`${folderName}_tiktok_caption.txt`, captionText);
