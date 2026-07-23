@@ -174,8 +174,10 @@ function CreatePage() {
         setContent({ ...c, ayahBounds: t.ayahBounds });
       }
       toast.success(t.cached ? "От кеша" : "Преведено");
+      return true;
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : "Грешка");
+      return false;
     } finally { setLoading(false); setTranslating(false); }
   };
 
@@ -217,8 +219,10 @@ function CreatePage() {
       const t = await runTranslate({ data: { arabic: h.arabic, english: h.english, sourceRef: h.reference } });
       setBulgarian(t.bulgarian);
       toast.success(`${h.reference} · ${h.grade ?? "Sahih"}`);
+      return true;
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : "Грешка");
+      return false;
     } finally { setLoading(false); setTranslating(false); }
   };
 
@@ -237,8 +241,10 @@ function CreatePage() {
       const t = await runTranslate({ data: { arabic: h.arabic, english: h.english, sourceRef: h.reference } });
       setBulgarian(t.bulgarian);
       toast.success(`${h.reference} · ${h.grade ?? "Sahih"}`);
+      return true;
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : "Грешка");
+      return false;
     } finally { setLoading(false); setTranslating(false); }
   };
 
@@ -252,38 +258,51 @@ function CreatePage() {
     } finally { setSuggestingViral(false); }
   };
 
-  const approveViral = async (item: ViralItem) => {
-    if (item.kind === "ayah") {
-      const m = item.ref.match(/(\d+)\s*[:.\s-]\s*(\d+)/);
-      if (!m) return toast.error("Невалидна препратка");
-      setTab("ayah");
-      setSurah(+m[1]); setAyah(+m[2]);
-      await loadAyah(+m[1], +m[2]);
-    } else {
-      const collMatch = item.ref.toLowerCase().match(/(bukhari|muslim|dawud|tirmidhi|nasai|majah|nawawi)/);
-      const m = item.ref.match(/(\d+)/);
-      const n = m ? +m[1] : 1;
-      
-      setTab("hadith");
-      if (collMatch) {
-         let coll = collMatch[1] as string;
-         if (coll === 'dawud') coll = 'abudawud';
-         
-         if (coll === 'nawawi') {
-           setHadithSource("nawawi40");
-           setHadithNum(n);
-           await loadHadith(n);
-         } else {
-           setHadithSource(coll as SunnahCollection);
-           setSunnahNum(n);
-           await loadSunnah(coll as SunnahCollection, n, false); // Don't require sahih strict filter just in case AI recommended a hasan one
-         }
+  const [approvingId, setApprovingId] = useState<number | null>(null);
+
+  const approveViral = async (item: ViralItem, index: number) => {
+    setApprovingId(index);
+    try {
+      if (item.kind === "ayah") {
+        const m = item.ref.match(/(\d+)\s*[:.\s-]\s*(\d+)/);
+        if (!m) {
+          toast.error(`Невалидна препратка към Коран: ${item.ref}. Очаква се формат СУРА:АЯТ (напр. 2:255)`);
+          return;
+        }
+        setSurah(+m[1]); setAyah(+m[2]);
+        const success = await loadAyah(+m[1], +m[2]);
+        if (success !== false) setTab("ayah");
       } else {
-         // Fallback to Bukhari if collection not recognizable
-         setHadithSource("bukhari");
-         setSunnahNum(n);
-         await loadSunnah("bukhari", n, false);
+        const collMatch = item.ref.toLowerCase().match(/(bukhari|muslim|dawud|tirmidhi|nasai|majah|nawawi)/);
+        const m = item.ref.match(/(\d+)/);
+        const n = m ? +m[1] : 1;
+        
+        if (collMatch) {
+           let coll = collMatch[1] as string;
+           if (coll === 'dawud') coll = 'abudawud';
+           
+           if (coll === 'nawawi') {
+             setHadithSource("nawawi40");
+             setHadithNum(n);
+             const success = await loadHadith(n);
+             if (success !== false) setTab("hadith");
+           } else {
+             setHadithSource(coll as SunnahCollection);
+             setSunnahNum(n);
+             const success = await loadSunnah(coll as SunnahCollection, n, false);
+             if (success !== false) setTab("hadith");
+           }
+        } else {
+           setHadithSource("bukhari");
+           setSunnahNum(n);
+           const success = await loadSunnah("bukhari", n, false);
+           if (success !== false) setTab("hadith");
+        }
       }
+    } catch (e: any) {
+      toast.error(e.message || "Грешка при одобряване");
+    } finally {
+      setApprovingId(null);
     }
   };
 
@@ -825,7 +844,10 @@ function CreatePage() {
                       <p className="font-semibold mt-1">{v.title_bg}</p>
                       <p className="text-sm text-muted-foreground">{v.reason_bg}</p>
                     </div>
-                    <Button size="sm" onClick={() => approveViral(v)}>Одобри</Button>
+                    <Button size="sm" onClick={() => approveViral(v, i)} disabled={approvingId === i}>
+                      {approvingId === i ? <Loader2 className="size-4 animate-spin mr-1" /> : null}
+                      Одобри
+                    </Button>
                   </Card>
                 ))}
               </div>
