@@ -636,12 +636,6 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             const lastWordEnd = timings[p.endIdx - 1]?.end ?? (start + 1.5);
             let end = Math.min(nextPhraseStart, Math.max(start + 0.2, lastWordEnd + (isSingleWordMode ? 0.06 : 0.12)));
 
-            const highlightKeywords = /^(Аллах|Коран|Корана|Пророк|Пророкът|Хадис|Сура|Аят|Рай|Дженнет|Дженнета|Дуа|Иман|Благословение|Милост|Търпение|Надежда|Успех|Мухаммад|Господ|Господар|Победа|Спокойствие|Защита|Сърце|Сърцето|Живот|Време|Времето|Истина|Истината|Светлина|Зло|Добро|Вяра|Вярата)[.,!?…]?$/i;
-            const isCustomOrKeyword = (wordStr: string) => {
-              const cleanW = wordStr.replace(/[^\p{L}\p{N}]/gu, "");
-              return (Array.isArray(data.customKeywords) && data.customKeywords.includes(cleanW)) || highlightKeywords.test(wordStr);
-            };
-
             // MASTERCLASS ACTIVE WORD KARAOKE SLICING:
             // Slice the phrase interval [start, end] into distinct ASS events for each active word so that
             // every single word pops and glows exactly at the millisecond the narrator speaks it!
@@ -658,13 +652,9 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 
               const textLine = p.words
                 .map((w, i) => {
-                  const isKeyword = isCustomOrKeyword(w);
                   const isActive = i === wIdx;
                   if (isActive) {
                     // Active spoken word: glow with highlight color, NO width-shifting scaling
-                    return `{\\c${highlightColor}}${w}`;
-                  } else if (isKeyword) {
-                    // Important Islamic/Custom keyword retain their gold/neon highlight
                     return `{\\c${highlightColor}}${w}`;
                   } else {
                     // Clean crisp white font for inactive words
