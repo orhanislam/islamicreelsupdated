@@ -6,7 +6,7 @@ import { translateToBulgarian } from "@/lib/translate.functions";
 import { searchPexelsVideos } from "@/lib/pexels.functions";
 import { synthesizeHadithNarration } from "@/lib/tts.functions";
 import { startServerRenderJob, getJobsDir } from "@/lib/render.functions";
-import { getAiMemory, updateAiMemory } from "@/lib/memory.functions";
+import { getAiMemory, updateAiMemory, recordProposalUsages } from "@/lib/memory.functions";
 import { createTask, updateTask, listTasks } from "@/lib/tasks-engine";
 
 export type VideoProposal = {
@@ -32,6 +32,8 @@ export const chatWithAssistant = createServerFn({ method: "POST" })
   .validator((input: { prompt: string; history: { role: string; content: string }[] }) => input)
   .handler(async ({ data }) => {
     const memory = await getAiMemory();
+    const historyList = (memory.usageHistory || []).map(x => `- ${x.identifier}`).join("\n");
+    const historyContext = historyList ? `\n\nСКОРОШНО ИЗПОЛЗВАНИ ТЕМИ (СТРИКТНО ЗАБРАНЕНО Е ДА ГИ ПРЕДЛАГАШ ОТНОВО):\n${historyList}` : "";
 
     const memoryContext = `
 === ПАМЕТ НА АСИСТЕНТА ЗА ПОТРЕБИТЕЛЯ ===
@@ -44,7 +46,7 @@ ${memory.learnedFacts.length ? memory.learnedFacts.join("\n") : "Няма зап
 Трябва стриктно да спазваш горните инструкции при всяко предложение за видео и всеки отговор!`;
 
     const systemPrompt = `Ти си ПРОФЕСИОНАЛЕН ПРОДУЦЕНТ И РЕЖИСЬОР на вирусни Ислямски видеа (Reels & TikTok) на Български език с дълготрайна памет.
-${memoryContext}
+${memoryContext}${historyContext}
 
 ВАЖНО ПРАВИЛО: Ти ВИНАГИ ПИТАШ потребителя за одобрение преди да се генерира видеото!
 Когато потребителят поиска видео, ти НЕ генерираш видеото веднага, а му предлагаш детайлен план (proposal), за да го одобри.
@@ -133,6 +135,13 @@ CAPCUT-ПОДОБНИ ИНСТРУКЦИИ ЗА РЕДАКТИРАНЕ:
       }
     }
 
+    const proposalsToRecord = [];
+    if (parsed.proposal) proposalsToRecord.push(parsed.proposal);
+    if (Array.isArray(parsed.proposals)) proposalsToRecord.push(...parsed.proposals);
+    if (proposalsToRecord.length > 0) {
+      await recordProposalUsages({ data: { proposals: proposalsToRecord } }).catch(() => {});
+    }
+
     return {
       reply: parsed.reply || "С какво мога да ти помогна днес?",
       proposal: (parsed.proposal as VideoProposal) || null,
@@ -143,8 +152,12 @@ CAPCUT-ПОДОБНИ ИНСТРУКЦИИ ЗА РЕДАКТИРАНЕ:
 
 export const suggestViralProposal = createServerFn({ method: "POST" })
   .handler(async () => {
+    const memory = await getAiMemory();
+    const historyList = (memory.usageHistory || []).map(x => `- ${x.identifier}`).join("\n");
+    const historyContext = historyList ? `\n\nСКОРОШНО ИЗПОЛЗВАНИ ТЕМИ (СТРИКТНО ЗАБРАНЕНО Е ДА ГИ ПРЕДЛАГАШ ОТНОВО):\n${historyList}` : "";
+
     const prompt = `Ти си топ продуцент на вирусни Ислямски видеа (Reels & TikTok) на български език.
-Измисли и предложи ЕДНА изключително силна, НЕБАНАЛНА и психологически поразяваща тема/урок от Корана или Сахих Хадис за видео.
+Измисли и предложи ЕДНА изключително силна, НЕБАНАЛНА и психологически поразяваща тема/урок от Корана или Сахих Хадис за видео.${historyContext}
 
 СТРИКТНО ПРАВИЛО: DO NOT RECOMMEND COMMON TEXTS. Не предлагай общи, банални или често срещани текстове. Избери текст с дълбоко житейско послание за изпитанията, душата, надеждата, мълчанието или скритата мъдрост.
 
@@ -196,6 +209,11 @@ SALAFI HALAL ПРИНЦИПИ (СТРИКТНО ЗАДЪЛЖИТЕЛНО):
         }
       };
     }
+    
+    if (parsed.proposal) {
+      await recordProposalUsages({ data: { proposals: [parsed.proposal] } }).catch(() => {});
+    }
+
     return {
       reply: parsed.reply,
       proposal: parsed.proposal as VideoProposal,
@@ -207,9 +225,13 @@ export const suggestBatchViralProposals = createServerFn({ method: "POST" })
   .handler(async ({ data }: { data: { count?: number; topic?: string } }) => {
     const countNum = data.count || 5;
     const topicStr = data.topic || "смесено (Коран, Сахих Хадиси, TikTok Трендове, психологически уроци и истории)";
+    
+    const memory = await getAiMemory();
+    const historyList = (memory.usageHistory || []).map(x => `- ${x.identifier}`).join("\n");
+    const historyContext = historyList ? `\n\nСКОРОШНО ИЗПОЛЗВАНИ ТЕМИ (СТРИКТНО ЗАБРАНЕНО Е ДА ГИ ПРЕДЛАГАШ ОТНОВО):\n${historyList}` : "";
 
     const prompt = `Ти си ПРОФЕСИОНАЛЕН ПРОДУЦЕНТ И РЕЖИСЬОР на вирусни Ислямски видеа (Reels & TikTok) на български език.
-Измисли и предложи ПАКЕТ ОТ ТОЧНО ${countNum} изключително силни, НЕБАНАЛНИ и психологически поразяващи теми/уроки за къси видеа в категория: "${topicStr}".
+Измисли и предложи ПАКЕТ ОТ ТОЧНО ${countNum} изключително силни, НЕБАНАЛНИ и психологически поразяващи теми/уроки за къси видеа в категория: "${topicStr}".${historyContext}
 
 ПРОФЕСИОНАЛНИ СТРИКТНИ ПРАВИЛА (PRO WORKFLOW):
 1. Включи разнообразие: задължително предложи теми от Корана, теми от Сахих Хадиси (Бухари/Муслим), както и модерни TikTok Hormozi вирусни куки (напр. "3 неща, които убиват спокойствието ти според Исляма", "Защо Аллах забавя отговора на дуата ти", "Скритият знак, че си на прав път").
@@ -295,6 +317,10 @@ export const suggestBatchViralProposals = createServerFn({ method: "POST" })
           quality: "high"
         }))
       };
+    }
+
+    if (Array.isArray(parsed.proposals) && parsed.proposals.length > 0) {
+      await recordProposalUsages({ data: { proposals: parsed.proposals } }).catch(() => {});
     }
 
     return {
