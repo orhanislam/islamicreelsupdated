@@ -178,9 +178,16 @@ export async function executeRenderTask(opts: any): Promise<any> {
         } catch (fetchErr) {
           console.warn("[server-render] Primary background fetch failed, using reliable fallback video:", fetchErr);
           const fallbackUrl = "https://videos.pexels.com/video-files/855029/855029-hd_1080_1920_30fps.mp4";
-          const fbRes = await fetch(fallbackUrl);
+          const fbRes = await fetch(fallbackUrl, {
+            headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" }
+          });
           isVideoBg = true;
-          finalBgPath += ".mp4";
+          if (!finalBgPath.endsWith(".mp4")) finalBgPath += ".mp4";
+          
+          if (!fbRes.ok) {
+             console.error(`[server-render] Fallback video also failed with status ${fbRes.status}`);
+             throw new Error(`Background video fetch failed! Primary err: ${fetchErr}`);
+          }
           const arrayBuf = await fbRes.arrayBuffer();
           await fs.writeFile(finalBgPath, BufferMod.from(arrayBuf));
           sessionTempFiles.add(finalBgPath);
@@ -681,6 +688,13 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 
       // 4. Run FFmpeg
       console.log(`[server-render] Generating MP4 with FFmpeg...`);
+      try {
+        const _files = await fs.readdir(tempDir);
+        console.log(`[server-render] Temp files currently in dir:`, _files);
+        const _fs = await import("fs");
+        console.log(`[server-render] Does ${finalBgPath} exist?`, _fs.existsSync(finalBgPath));
+      } catch(e){}
+
       return new Promise<string>((resolve, reject) => {
         let cmd = ffmpeg();
         

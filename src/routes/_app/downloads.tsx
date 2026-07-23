@@ -140,13 +140,15 @@ function DownloadsPage() {
         }
       }
 
+      // For iOS Safari: Open in a new tab because blob/direct downloads sometimes fail inside PWA or standalone
+      if (isIOSMediaDevice()) {
+        window.open(downloadUrl, "_blank");
+        return;
+      }
+
       // Universal robust native download via streaming endpoint (zero memory crash risk)
-      const a = document.createElement("a");
-      a.href = downloadUrl;
-      a.download = `${job.title || "islamic-reel"}.mp4`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
+      // window.location.assign triggers the native download manager seamlessly and bypasses async popup blockers on Android
+      window.location.assign(downloadUrl);
       toast.success("Изтеглянето стартира! Провери лентата за изтегляния.");
 
     } catch (e) {

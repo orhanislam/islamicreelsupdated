@@ -381,35 +381,46 @@ export const confirmAndGenerateVideo = createServerFn({ method: "POST" })
         }
       }
 
-      const ayahEnd = ayah + count - 1;
-      const q = await fetchAyah({ data: { surah, ayah, ayahEnd } });
-      arabic = q.arabic;
-      english = q.english;
-      reference = `Сура ${q.surahName} (${surah}:${ayah}${count > 1 ? `-${ayah + count - 1}` : ""})`;
-      audioUrl = q.audioUrl;
-      wordSegments = q.wordSegments;
-      ayahBounds = q.ayahBounds;
-      arabicWordCount = q.arabicWordCount;
+      try {
+        const ayahEnd = ayah + count - 1;
+        const q = await fetchAyah({ data: { surah, ayah, ayahEnd } });
+        arabic = q.arabic;
+        english = q.english;
+        reference = `Сура ${q.surahName} (${surah}:${ayah}${count > 1 ? `-${ayah + count - 1}` : ""})`;
+        audioUrl = q.audioUrl;
+        wordSegments = q.wordSegments;
+        ayahBounds = q.ayahBounds;
+        arabicWordCount = q.arabicWordCount;
 
-      const t = await translateToBulgarian({
-        data: {
-          english: q.english,
-          sourceRef: reference,
-          arabic: q.arabic,
-          ayahBounds: q.ayahBounds,
-        },
-      });
-      bulgarian = t.bulgarian;
+        const t = await translateToBulgarian({
+          data: {
+            english: q.english,
+            sourceRef: reference,
+            arabic: q.arabic,
+            ayahBounds: q.ayahBounds,
+          },
+        });
+        bulgarian = t.bulgarian;
+      } catch (err) {
+        console.error(`[assistant] Error fetching Quran data or translating for ${surah}:${ayah}:`, err);
+        throw new Error(`Failed to load or translate Quran text: ${err}`);
+      }
     }
 
-    const vidSearch = await searchPexelsVideos({
-      data: {
-        text: proposal.searchQuery || "islamic calm sunset nature mosque",
-        minDuration: 30,
-      },
-    });
-
-    const bestVid = vidSearch.videos?.[0]?.link || "https://videos.pexels.com/video-files/855029/855029-hd_1080_1920_30fps.mp4";
+    let bestVid = "https://videos.pexels.com/video-files/855029/855029-hd_1080_1920_30fps.mp4";
+    try {
+      const vidSearch = await searchPexelsVideos({
+        data: {
+          text: proposal.searchQuery || "islamic calm sunset nature mosque",
+          minDuration: 30,
+        },
+      });
+      if (vidSearch.videos && vidSearch.videos.length > 0) {
+        bestVid = vidSearch.videos[0].link;
+      }
+    } catch (err) {
+      console.warn("[assistant] Pexels search failed, using fallback bg:", err);
+    }
 
     // Fetch multi-scene B-Roll if requested
     let bRollUrls: string[] | undefined;
