@@ -43,8 +43,30 @@ function DownloadsPage() {
 
   const handleCopyTikTokCaption = (title: string) => {
     const text = formatViralSocialCaption(title);
-    navigator.clipboard.writeText(text);
-    toast.success("📋 Професионалният TikTok/Reels текст е копиран в клипборда!");
+    if (navigator.clipboard && window.isSecureContext) {
+      navigator.clipboard.writeText(text)
+        .then(() => toast.success("📋 Професионалният TikTok/Reels текст е копиран в клипборда!"))
+        .catch(() => fallbackCopy(text));
+    } else {
+      fallbackCopy(text);
+    }
+  };
+
+  const fallbackCopy = (text: string) => {
+    try {
+      const textArea = document.createElement("textarea");
+      textArea.value = text;
+      textArea.style.position = "fixed";
+      textArea.style.left = "-999999px";
+      document.body.appendChild(textArea);
+      textArea.focus();
+      textArea.select();
+      document.execCommand('copy');
+      textArea.remove();
+      toast.success("📋 Професионалният TikTok/Reels текст е копиран в клипборда!");
+    } catch (err) {
+      toast.error("Грешка при копиране на текста");
+    }
   };
 
   const handleCleanServerDisk = async () => {
@@ -319,7 +341,8 @@ function DownloadsPage() {
       const res = await generateViralThumbnail({ data: { title } });
       const a = document.createElement("a");
       a.href = res.dataUrl;
-      a.download = `${title || "islamic-reel"}_thumbnail.jpg`;
+      const safeTitle = (title || "islamic-reel").replace(/[<>:"/\\|?*]+/g, "_").trim();
+      a.download = `${safeTitle}_thumbnail.jpg`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
