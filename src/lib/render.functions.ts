@@ -540,42 +540,47 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                 return (Array.isArray(data.customKeywords) && data.customKeywords.includes(cleanW)) || highlightKeywords.test(wordStr);
               };
 
-              for (let wIdx = 0; wIdx < ayahWords.length; wIdx++) {
-                const globalIdx = startWordIdx + wIdx;
-                const wordStart = timings[globalIdx]?.start ?? start;
-                const nextWordStart = wIdx + 1 < ayahWords.length
-                  ? (timings[globalIdx + 1]?.start ?? end)
-                  : end;
-
-                const sliceStart = Math.max(start, wIdx === 0 ? start : wordStart);
-                const sliceEnd = Math.min(end, wIdx === ayahWords.length - 1 ? end : nextWordStart);
-                if (sliceEnd <= sliceStart) continue;
-
-                let formattedText = "";
-                for (let w = 0; w < ayahWords.length; w++) {
-                  const wordStr = ayahWords[w];
-                  const isKeyword = isCustomOrKeyword(wordStr);
-                  const isActive = w === wIdx;
-                  if (isActive) {
-                    formattedText += `{\\c${highlightColor}}${wordStr} `;
-                  } else if (isKeyword) {
-                    formattedText += `{\\c${highlightColor}}${wordStr} `;
-                  } else {
-                    formattedText += `{\\c&H00FFFFFF&}${wordStr} `;
-                  }
-                  if ((w + 1) % wpl === 0 && w < ayahWords.length - 1) {
-                    formattedText = formattedText.trimEnd() + "\\N";
-                  }
+              let formattedText = "";
+              let currentAssTime = start;
+              
+              for (let w = 0; w < ayahWords.length; w++) {
+                const globalIdx = startWordIdx + w;
+                const wordStart = Math.max(currentAssTime, timings[globalIdx]?.start ?? currentAssTime);
+                const nextWordStart = w + 1 < ayahWords.length ? (timings[globalIdx + 1]?.start ?? end) : end;
+                
+                // If there's a gap before this word starts, add an empty karaoke wait
+                const gapSec = wordStart - currentAssTime;
+                if (gapSec > 0.05) {
+                  const gapCs = Math.round(gapSec * 100);
+                  formattedText += `{\\k${gapCs}}`;
+                  currentAssTime += gapSec;
                 }
-                formattedText = formattedText.trim();
-                const microPop = (isFirst && wIdx === 0)
-                  ? `\\fad(150,0)\\t(0,100,\\fscx104\\fscy104)\\t(100,180,\\fscx100\\fscy100)`
-                  : ``;
-                const useAnim = (isLast && wIdx === ayahWords.length - 1) ? `${microPop}\\fad(0,120)` : microPop;
-                const posTag = subPos === "center" ? `\\an5\\pos(540,960)` : `\\an8\\pos(540,${bulgarianMarginV})`;
-                const ayahStyleTag = `{${posTag}\\fs${fs}${useAnim}}`;
-                ass += `Dialogue: 0,${formatTime(sliceStart)},${formatTime(sliceEnd)},Bulgarian,,0,0,0,,${ayahStyleTag}${formattedText}\n`;
+                
+                let wordDurSec = Math.max(0, nextWordStart - wordStart);
+                const durationCs = Math.round(wordDurSec * 100);
+                
+                const wordStr = ayahWords[w];
+                
+                // \\kf does a smooth wipe from Secondary to Primary color over durationCs
+                formattedText += `{\\kf${durationCs}}${wordStr} `;
+                currentAssTime += wordDurSec;
+                
+                if ((w + 1) % wpl === 0 && w < ayahWords.length - 1) {
+                  formattedText = formattedText.trimEnd() + "\\N";
+                }
               }
+              formattedText = formattedText.trim();
+              
+              const microPop = isFirst
+                ? `\\fad(150,0)\\t(0,100,\\fscx104\\fscy104)\\t(100,180,\\fscx100\\fscy100)`
+                : ``;
+              const useAnim = isLast ? `${microPop}\\fad(0,120)` : microPop;
+              const posTag = subPos === "center" ? `\\an5\\pos(540,960)` : `\\an8\\pos(540,${bulgarianMarginV})`;
+              
+              // \\1c is the fill color (active), \\2c is the base color (unfilled)
+              const ayahStyleTag = `{${posTag}\\fs${fs}\\1c${highlightColor}\\2c&H00E0E0E0&${useAnim}}`;
+              
+              ass += `Dialogue: 0,${formatTime(start)},${formatTime(end)},Bulgarian,,0,0,0,,${ayahStyleTag}${formattedText}\n`;
             }
           }
         } else {
