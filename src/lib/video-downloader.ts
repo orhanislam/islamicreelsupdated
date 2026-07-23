@@ -35,9 +35,13 @@ export async function handleVideoDownload(request: Request, id: string, rawFilen
 
   const rangeHeader = request.headers.get("range");
 
+  const userAgent = request.headers.get("user-agent") || "";
+  const isIOS = /iPhone|iPad|iPod/i.test(userAgent);
+  const disposition = isIOS ? "inline" : "attachment";
+
   const commonHeaders: Record<string, string> = {
     "Content-Type": "video/mp4",
-    "Content-Disposition": `attachment; filename="${filename}"`,
+    "Content-Disposition": `${disposition}; filename="${filename}"`,
     "Accept-Ranges": "bytes",
     "Cache-Control": "no-cache, no-store, must-revalidate",
     "X-Content-Type-Options": "nosniff",
