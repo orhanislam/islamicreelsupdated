@@ -40,7 +40,7 @@ async function analyzeVisualThemes(text: string, avoid: string[] = []): Promise<
           role: "system",
           content:
             "Анализираш ислямски текст (аят или хадис) и връщаш JSON със стоково-видео подсказки за вертикален TikTok фон.\n" +
-            "Изисквания: БЕЗ хора/лица, БЕЗ животни, БЕЗ религиозни символи (джамии, Корани, тасбих, флагове), БЕЗ текст в кадъра.\n" +
+            "Изисквания: БЕЗ хора/лица, БЕЗ животни, БЕЗ религиозни символи (джамии, Корани, тасбих, флагове), БЕЗ текст в кадъра. СТРИКТНИ SALAFI HALAL ПРИНЦИПИ: Забранени са всякакви човешки същества, части от тялото, лица или животни.\n" +
             "ВАЖНО ЗА ЦВЕТОВЕТЕ: НИКОГА не предлагай черно-бели, тъмни или мрачни (black and white / monochrome / grayscale / dark / gloomy / shadow / silhouette / storm / fog) видеа! Всички заявки ТРЯБВА да търсят ВАЙБРАНТНИ, СВЕТЛИ и ЦВЕТНИ кадри (напр. \"vibrant sunset\", \"golden hour nature\", \"colorful sky\", \"emerald green valley\", \"turquoise water\", \"warm sunlight\").\n" +
             "Предпочитай красива цветна природа (вода, слънчева светлина, планини, зелени гори, небе, изгрев/залез), архитектурни детайли, златен час, океан.\n" +
             "Извличаш СМИСЪЛА — ако текстът говори за търпение → тиха вода на слънце; за милост → дъжд над зелена долина със слънчева светлина; за светлина/напътствие → топъл изгрев, фенер, звезди; за съдния ден → бурен океан със залез; за знание → отворена книга на топла светлина; за рай → водопад, цветя, слънчева градина; за смърт/отвъдното → спокоен златен залез.\n" +
@@ -110,6 +110,13 @@ async function pexelsVideoQuery(key: string, query: string, perPage = 80) {
 function scoreVideo(v: PexelsVideo, file: PexelsVideoFile, targetMin = 30): number {
   let s = 0;
   const meta = JSON.stringify(v).toLowerCase();
+
+  // SALAFI HALAL FILTER: Strongly penalize videos with humans or animals in metadata
+  const haramRegex = /\b(man|woman|men|women|people|person|face|faces|human|humans|girl|boy|crowd|animal|dog|cat|bird|fish)\b/i;
+  if (haramRegex.test(meta)) {
+    s -= 1000;
+  }
+
   if (meta.includes("black and white") || meta.includes("monochrome") || meta.includes("grayscale") || meta.includes("greyscale") || meta.includes("silhouette") || meta.includes("dark sky")) {
     s -= 40; // Heavily penalize black and white / monochrome stock videos
   }
