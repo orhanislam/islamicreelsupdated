@@ -557,7 +557,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                   const isKeyword = isCustomOrKeyword(wordStr);
                   const isActive = w === wIdx;
                   if (isActive) {
-                    formattedText += `{\\c${highlightColor}\\b1\\t(0,60,\\fscx114\\fscy114)\\t(60,150,\\fscx100\\fscy100)}${wordStr}{\\r} `;
+                    formattedText += `{\\c${highlightColor}\\b1}${wordStr}{\\r} `;
                   } else if (isKeyword) {
                     formattedText += `{\\c${highlightColor}\\b1}${wordStr}{\\r} `;
                   } else {
@@ -656,8 +656,8 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                   const isKeyword = isCustomOrKeyword(w);
                   const isActive = i === wIdx;
                   if (isActive) {
-                    // Active spoken word: instant micro-pop scale with glowing highlight color
-                    return `{\\c${highlightColor}\\b1\\t(0,60,\\fscx116\\fscy116)\\t(60,150,\\fscx100\\fscy100)}${w}{\\r}`;
+                    // Active spoken word: glow with highlight color, NO width-shifting scaling
+                    return `{\\c${highlightColor}\\b1}${w}{\\r}`;
                   } else if (isKeyword) {
                     // Important Islamic/Custom keyword retain their gold/neon highlight
                     return `{\\c${highlightColor}\\b1}${w}{\\r}`;
