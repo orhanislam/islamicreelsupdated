@@ -543,7 +543,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 
               let formattedText = "";
               let currentAssTime = start;
-              const isArabicReciter = data.narration === "arabic_reciter";
+              const isArabicReciter = data.pacingMode === "ayah" && Boolean(data.ayahBounds && data.ayahBounds.length > 0);
               
               if (isArabicReciter) {
                 // 100% PERFECT AYAH-LEVEL SYNC: No karaoke guesswork. 
