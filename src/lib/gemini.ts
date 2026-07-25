@@ -167,3 +167,48 @@ export async function geminiGenerateImage(
 
   throw new Error(`Грешка при генериране на изображение от Gemini: ${lastError}`);
 }
+
+/**
+ * Uses Gemini to perfectly align translated text (Bulgarian) to exact Arabic word timings.
+ * Returns an array of word timings for the target language.
+ */
+export async function alignCrossLingualSubtitles(
+  ayahBounds: any[]
+): Promise<{ word: string; start: number; end: number }[]> {
+  const apiKeys = getApiKeys();
+  if (!apiKeys.length) throw new Error("GEMINI_API_KEY не е конфигуриран в .env");
+
+  const promptText = `Ти си експерт по видео субтитри и лингвистика. Твоята задача е да синхронизираш БЪЛГАРСКИТЕ преведени думи с точните времеви маркери (start/end) на изговорените АРАБСКИ думи.
+По-долу има списък с аяти. За всеки аят имаш:
+1. Арабските думи и техните точни времеви маркери в секунди.
+2. Българският превод за този аят.
+
+Моля, разпредели българските думи по време, така че да съвпадат максимално точно със смисъла на арабските думи. Ако една българска дума покрива няколко арабски, събери времето им. Ако няколко български думи покриват една арабска, раздели времето й по равно между тях. Българските думи трябва да са в оригиналния си ред. Времевите маркери трябва да са плавни и логични (да не избързват).
+
+ВЪРНИ САМО ВАЛИДЕН JSON масив от обекти, без markdown форматиране, без обяснения. Формат:
+[
+  { "word": "Слава", "start": 0.52, "end": 0.95 },
+  { "word": "на", "start": 0.95, "end": 1.2 }
+]
+
+Ето данните за синхронизация:
+${ayahBounds.map(a => `
+АЯТ ${a.ayah}:
+Български превод: ${a.bulgarian}
+Арабски тайминги: ${JSON.stringify(a.segments?.map((s:any) => ({ word: s.arabic, start: s.start, end: s.end })) || [])}
+`).join('\n')}
+`;
+
+  try {
+    const rawResponse = await geminiChat("gemini-2.5-flash", [
+      { role: "user", content: promptText }
+    ], false);
+    
+    const jsonStr = rawResponse.replace(/```json/g, "").replace(/```/g, "").trim();
+    const timings = JSON.parse(jsonStr);
+    return Array.isArray(timings) ? timings : [];
+  } catch (e) {
+    console.warn("[gemini] Cross-lingual alignment failed to parse JSON:", e);
+    return [];
+  }
+}
