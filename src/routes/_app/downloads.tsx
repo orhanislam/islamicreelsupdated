@@ -41,32 +41,36 @@ function DownloadsPage() {
   const [preloadedUrls, setPreloadedUrls] = useState<Record<string, string>>({});
   const preloadingRef = useRef<Set<string>>(new Set());
 
-  const handleCopyTikTokCaption = (title: string) => {
-    const text = formatViralSocialCaption(title);
+  const copyToClipboard = (text: string, successMsg?: string) => {
+    const msg = successMsg || "📋 Професионалният TikTok/Reels текст е копиран в клипборда!";
+    const fallbackCopyLocal = (t: string) => {
+      try {
+        const textArea = document.createElement("textarea");
+        textArea.value = t;
+        textArea.style.position = "fixed";
+        textArea.style.left = "-999999px";
+        document.body.appendChild(textArea);
+        textArea.focus();
+        textArea.select();
+        document.execCommand('copy');
+        textArea.remove();
+        toast.success(msg);
+      } catch (err) {
+        toast.error("Грешка при копиране");
+      }
+    };
+
     if (navigator.clipboard && window.isSecureContext) {
       navigator.clipboard.writeText(text)
-        .then(() => toast.success("📋 Професионалният TikTok/Reels текст е копиран в клипборда!"))
-        .catch(() => fallbackCopy(text));
+        .then(() => toast.success(msg))
+        .catch(() => fallbackCopyLocal(text));
     } else {
-      fallbackCopy(text);
+      fallbackCopyLocal(text);
     }
   };
 
-  const fallbackCopy = (text: string) => {
-    try {
-      const textArea = document.createElement("textarea");
-      textArea.value = text;
-      textArea.style.position = "fixed";
-      textArea.style.left = "-999999px";
-      document.body.appendChild(textArea);
-      textArea.focus();
-      textArea.select();
-      document.execCommand('copy');
-      textArea.remove();
-      toast.success("📋 Професионалният TikTok/Reels текст е копиран в клипборда!");
-    } catch (err) {
-      toast.error("Грешка при копиране на текста");
-    }
+  const handleCopyTikTokCaption = (title: string) => {
+    copyToClipboard(formatViralSocialCaption(title));
   };
 
   const handleCleanServerDisk = async () => {
@@ -522,22 +526,20 @@ function DownloadsPage() {
                 <div className="mt-auto flex items-center gap-2">
                   {job.status === "completed" ? (
                     <>
-                      <button
-                        onClick={() => handleDownloadServerJob(job)}
-                        disabled={downloadingServerId === job.id}
+                      <a
+                        href={`/api/jobs/download?id=${job.id}&title=${encodeURIComponent(job.title || "islamic-reel")}`}
+                        download={`${job.title || "islamic-reel"}.mp4`}
                         className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-xl bg-primary px-3.5 py-2.5 text-sm font-medium text-primary-foreground shadow hover:bg-primary/90 transition cursor-pointer"
                       >
-                        {downloadingServerId === job.id ? (
-                          <>
-                            <Loader2 className="size-4 animate-spin" />
-                            Сваля се...
-                          </>
-                        ) : (
-                          <>
-                            <Download className="size-4" />
-                            Свали MP4
-                          </>
-                        )}
+                        <Download className="size-4" />
+                        Задръж да свалиш
+                      </a>
+                      <button
+                        onClick={() => copyToClipboard(`${window.location.origin}/api/jobs/download?id=${job.id}&title=${encodeURIComponent(job.title || "islamic-reel")}`, "Линкът е копиран! Отвори браузъра Safari и го постави там, за да изтеглиш.")}
+                        className="inline-flex items-center justify-center rounded-xl bg-secondary px-3.5 py-2.5 text-sm font-medium text-secondary-foreground shadow hover:bg-secondary/90 transition cursor-pointer"
+                        title="Копирай линк за Safari"
+                      >
+                        <Copy className="size-4" />
                       </button>
                       <button
                         onClick={() => handleCopyTikTokCaption(job.title)}
