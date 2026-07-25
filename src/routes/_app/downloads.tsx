@@ -527,15 +527,15 @@ function DownloadsPage() {
                   {job.status === "completed" ? (
                     <>
                       <a
-                        href={`/api/jobs/download?id=${job.id}&title=${encodeURIComponent(job.title || "islamic-reel")}`}
-                        download={`${job.title || "islamic-reel"}.mp4`}
+                        href={`/api/download/${job.id}?filename=${encodeURIComponent((job.title || "islamic-reel").replace(/[^a-z0-9._-]+/gi, "_") + ".mp4")}`}
+                        download={`${(job.title || "islamic-reel").replace(/[^a-z0-9._-]+/gi, "_")}.mp4`}
                         className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-xl bg-primary px-3.5 py-2.5 text-sm font-medium text-primary-foreground shadow hover:bg-primary/90 transition cursor-pointer"
                       >
                         <Download className="size-4" />
                         Задръж да свалиш
                       </a>
                       <button
-                        onClick={() => copyToClipboard(`${window.location.origin}/api/jobs/download?id=${job.id}&title=${encodeURIComponent(job.title || "islamic-reel")}`, "Линкът е копиран! Отвори браузъра Safari и го постави там, за да изтеглиш.")}
+                        onClick={() => copyToClipboard(`${window.location.origin}/api/download/${job.id}?filename=${encodeURIComponent((job.title || "islamic-reel").replace(/[^a-z0-9._-]+/gi, "_") + ".mp4")}`, "Линкът е копиран! Отвори браузъра Safari и го постави там, за да изтеглиш.")}
                         className="inline-flex items-center justify-center rounded-xl bg-secondary px-3.5 py-2.5 text-sm font-medium text-secondary-foreground shadow hover:bg-secondary/90 transition cursor-pointer"
                         title="Копирай линк за Safari"
                       >
