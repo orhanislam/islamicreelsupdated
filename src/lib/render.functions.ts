@@ -223,9 +223,9 @@ export async function executeRenderTask(opts: any): Promise<any> {
                   .setFfmpegPath(ffmpegPath)
                   .outputOptions([
                     `-t ${clipDur}`,
-                    "-vf scale=1080:1920:flags=lanczos:force_original_aspect_ratio=increase,crop=1080:1920,fps=30",
+                    "-vf scale=1080:1920:flags=bicubic:force_original_aspect_ratio=increase,crop=1080:1920,fps=30",
                     "-c:v libx264",
-                    "-preset veryfast",
+                    "-preset superfast",
                     "-crf 18",
                     "-pix_fmt yuv420p",
                     "-an",
@@ -708,7 +708,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         let ffmpegStderr = "";
 
         cmd.complexFilter([
-          `[0:v]crop='min(iw,ih*9/16)':'min(iw*16/9,ih)',scale=${width}:${height}:flags=lanczos,eq=contrast=1.08:saturation=1.16:brightness=-0.04:gamma=0.98,unsharp=5:5:0.8:3:3:0.4,vignette=PI/4,subtitles='${escapedAssPath}'[v]`,
+          `[0:v]crop='min(iw,ih*9/16)':'min(iw*16/9,ih)',scale=${width}:${height}:flags=bicubic,eq=contrast=1.05:saturation=1.1,vignette=PI/4,subtitles='${escapedAssPath}'[v]`,
           `[1:a]highpass=f=45,treble=g=2:f=3500:w=0.7,acompressor=threshold=-18dB:ratio=2.5:attack=5:release=50,bass=g=3:f=110:w=0.6,loudnorm=I=-14:LRA=9:TP=-1.0[a]`
         ])
         .outputOptions([
@@ -722,7 +722,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
           "-color_trc bt709",
           "-color_primaries bt709",
           "-movflags +faststart",
-          "-preset veryfast",
+          "-preset superfast",
           "-crf 17",
           "-r 30",
           "-g 60",
