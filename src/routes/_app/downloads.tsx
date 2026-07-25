@@ -149,24 +149,11 @@ function DownloadsPage() {
         data: { id: job.id, title: job.title },
       });
 
-      // On iOS Safari, attempt native Share Sheet ("Save Video" directly into Photos app)
-      if (isIOSMediaDevice()) {
-        try {
-          const res = await saveMediaFromUrl(downloadUrl, `${job.title || "islamic-reel"}.mp4`, "video/mp4");
-          if (res === "shared") {
-            toast.success("Видеото е запазено или споделено успешно!");
-            return;
-          }
-        } catch (e) {
-          console.warn("[downloads] iOS streaming/share failed:", e);
-        }
-      }
-
-
       // Universal robust native download via streaming endpoint (zero memory crash risk)
-      // window.location.assign triggers the native download manager seamlessly and bypasses async popup blockers on Android
+      // window.location.assign triggers the native download manager seamlessly and bypasses async popup blockers on Android,
+      // and on iOS PWA it opens the native QuickTime player (since we serve it inline) where the user can save it.
       window.location.assign(downloadUrl);
-      toast.success("Изтеглянето стартира! Провери лентата за изтегляния.");
+      toast.success("Изтеглянето стартира!");
 
     } catch (e) {
       toast.error("Файлът не беше намерен. Възможно е да е изчистен. Натисни 🔄 за повторно рендиране!");
