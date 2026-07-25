@@ -367,41 +367,39 @@ export const confirmAndGenerateVideo = createServerFn({ method: "POST" })
       let ayah = Number(proposal.ayah);
       let count = Math.min(7, Math.max(1, Number(proposal.count) || 1));
 
-      // Robust extraction: if surah/ayah are NaN, missing, or <= 0, parse from title/summary or keyword
-      if (isNaN(surah) || surah <= 0 || isNaN(ayah) || ayah <= 0) {
-        const textToSearch = `${proposal.title} ${proposal.summaryBg || ""}`;
-        const colonMatch = textToSearch.match(/\b(\d{1,3})\s*[:.]\s*(\d{1,3})(?:\s*-\s*(\d{1,3}))?\b/);
-        if (colonMatch) {
-          surah = parseInt(colonMatch[1], 10);
-          ayah = parseInt(colonMatch[2], 10);
-          if (colonMatch[3]) {
-            const end = parseInt(colonMatch[3], 10);
-            if (end >= ayah && end - ayah < 7) {
-              count = end - ayah + 1;
-            }
+      // ALWAYS trust the title first (WYSIWYG) if it contains [Коран X:Y] format
+      const textToSearch = `${proposal.title} ${proposal.summaryBg || ""}`;
+      const colonMatch = textToSearch.match(/\b(\d{1,3})\s*[:.]\s*(\d{1,3})(?:\s*-\s*(\d{1,3}))?\b/);
+      if (colonMatch) {
+        surah = parseInt(colonMatch[1], 10);
+        ayah = parseInt(colonMatch[2], 10);
+        if (colonMatch[3]) {
+          const end = parseInt(colonMatch[3], 10);
+          if (end >= ayah && end - ayah < 7) {
+            count = end - ayah + 1;
           }
+        }
+      } else if (isNaN(surah) || surah <= 0 || isNaN(ayah) || ayah <= 0) {
+        const lower = textToSearch.toLowerCase();
+        if (lower.includes("ихлас") || lower.includes("ikhlas")) {
+          surah = 112; ayah = 1; count = 4;
+        } else if (lower.includes("аср") || lower.includes("asr")) {
+          surah = 103; ayah = 1; count = 3;
+        } else if (lower.includes("курси") || lower.includes("kursi")) {
+          surah = 2; ayah = 255; count = 1;
+        } else if (lower.includes("шарх") || lower.includes("облекчение")) {
+          surah = 94; ayah = 5; count = 2;
+        } else if (lower.includes("фаляк") || lower.includes("фалак")) {
+          surah = 113; ayah = 1; count = 5;
+        } else if (lower.includes("наср") || lower.includes("победа")) {
+          surah = 110; ayah = 1; count = 3;
+        } else if (lower.includes("каусар") || lower.includes("изобилие")) {
+          surah = 108; ayah = 1; count = 3;
+        } else if (lower.includes("нас") || lower.includes("убежище")) {
+          surah = 114; ayah = 1; count = 6;
         } else {
-          const lower = textToSearch.toLowerCase();
-          if (lower.includes("ихлас") || lower.includes("ikhlas")) {
-            surah = 112; ayah = 1; count = 4;
-          } else if (lower.includes("аср") || lower.includes("asr")) {
-            surah = 103; ayah = 1; count = 3;
-          } else if (lower.includes("курси") || lower.includes("kursi")) {
-            surah = 2; ayah = 255; count = 1;
-          } else if (lower.includes("шарх") || lower.includes("облекчение")) {
-            surah = 94; ayah = 5; count = 2;
-          } else if (lower.includes("фаляк") || lower.includes("фалак")) {
-            surah = 113; ayah = 1; count = 5;
-          } else if (lower.includes("наср") || lower.includes("победа")) {
-            surah = 110; ayah = 1; count = 3;
-          } else if (lower.includes("каусар") || lower.includes("изобилие")) {
-            surah = 108; ayah = 1; count = 3;
-          } else if (lower.includes("нас") || lower.includes("убежище")) {
-            surah = 114; ayah = 1; count = 6;
-          } else {
-            surah = isNaN(surah) || surah <= 0 ? 1 : surah;
-            ayah = isNaN(ayah) || ayah <= 0 ? 1 : ayah;
-          }
+          surah = isNaN(surah) || surah <= 0 ? 1 : surah;
+          ayah = isNaN(ayah) || ayah <= 0 ? 1 : ayah;
         }
       }
 
