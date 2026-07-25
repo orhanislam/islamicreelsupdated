@@ -533,8 +533,8 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
               let end = nextStart !== null ? Math.min(rawEnd, nextStart) : rawEnd;
               if (end <= start) end = start + 0.5; // Prevent ASS inverted timestamp crash
               const wordCount = ayahWords.length;
-              const fs = wordCount > 40 ? 38 : wordCount > 28 ? 44 : wordCount > 18 ? 50 : wordCount > 10 ? 56 : 64;
-              const wpl = wordCount > 40 ? 9 : wordCount > 28 ? 8 : wordCount > 18 ? 7 : wordCount > 10 ? 6 : 5;
+              const fs = wordCount > 40 ? 48 : wordCount > 28 ? 54 : wordCount > 18 ? 62 : wordCount > 10 ? 72 : 82;
+              const wpl = wordCount > 40 ? 7 : wordCount > 28 ? 6 : wordCount > 18 ? 5 : wordCount > 10 ? 4 : 3;
               const highlightKeywords = /^(Аллах|Коран|Корана|Пророк|Пророкът|Хадис|Сура|Аят|Рай|Дженнет|Дженнета|Дуа|Иман|Благословение|Милост|Търпение|Надежда|Успех|Мухаммад|Господ|Господар|Победа|Спокойствие|Защита|Сърце|Сърцето|Живот|Време|Времето|Истина|Истината|Светлина|Зло|Добро|Вяра|Вярата)[.,!?…]?$/i;
               const isCustomOrKeyword = (wordStr: string) => {
                 const cleanW = wordStr.replace(/[^\p{L}\p{N}]/gu, "");
