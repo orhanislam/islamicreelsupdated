@@ -542,49 +542,15 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                 return (Array.isArray(data.customKeywords) && data.customKeywords.includes(cleanW)) || highlightKeywords.test(wordStr);
               };
 
-              let formattedText = "";
-              let currentAssTime = start;
-              const isArabicReciter = data.pacingMode === "ayah" && Boolean(data.ayahBounds && data.ayahBounds.length > 0);
-              
-              if (isArabicReciter) {
-                // 100% PERFECT AYAH-LEVEL SYNC: No karaoke guesswork. 
-                // Display the entire translation for the exact duration of the Arabic Ayah audio.
-                formattedText = ayahWords.join(" ");
-                // Break into lines for readability
-                const lines = [];
-                for (let i = 0; i < ayahWords.length; i += wpl) {
-                  lines.push(ayahWords.slice(i, i + wpl).join(" "));
-                }
-                formattedText = lines.join("\\N");
-              } else {
-                for (let w = 0; w < ayahWords.length; w++) {
-                  const globalIdx = startWordIdx + w;
-                  const wordStart = Math.max(currentAssTime, timings[globalIdx]?.start ?? currentAssTime);
-                  const nextWordStart = w + 1 < ayahWords.length ? (timings[globalIdx + 1]?.start ?? end) : end;
-                  
-                  // If there's a gap before this word starts, add an empty karaoke wait
-                  const gapSec = wordStart - currentAssTime;
-                  if (gapSec > 0.05) {
-                    const gapCs = Math.round(gapSec * 100);
-                    formattedText += `{\\k${gapCs}}`;
-                    currentAssTime += gapSec;
-                  }
-                  
-                  let wordDurSec = Math.max(0, nextWordStart - wordStart);
-                  const durationCs = Math.round(wordDurSec * 100);
-                  
-                  const wordStr = ayahWords[w];
-                  
-                  // \\kf does a smooth wipe from Secondary to Primary color over durationCs
-                  formattedText += `{\\kf${durationCs}}${wordStr} `;
-                  currentAssTime += wordDurSec;
-                  
-                  if ((w + 1) % wpl === 0 && w < ayahWords.length - 1) {
-                    formattedText = formattedText.trimEnd() + "\\N";
-                  }
-                }
+              // 100% PERFECT AYAH-LEVEL SYNC: No karaoke guesswork for Quran. 
+              // Display the entire translation for the exact duration of the audio.
+              let formattedText = ayahWords.join(" ");
+              // Break into lines for readability
+              const lines = [];
+              for (let i = 0; i < ayahWords.length; i += wpl) {
+                lines.push(ayahWords.slice(i, i + wpl).join(" "));
               }
-              formattedText = formattedText.trim();
+              formattedText = lines.join("\\N");
               
               const microPop = isFirst
                 ? `\\fad(150,0)\\t(0,100,\\fscx104\\fscy104)\\t(100,180,\\fscx100\\fscy100)`
@@ -592,10 +558,8 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
               const useAnim = isLast ? `${microPop}\\fad(0,120)` : microPop;
               const posTag = subPos === "center" ? `\\an5\\pos(540,960)` : `\\an8\\pos(540,${bulgarianMarginV})`;
               
-              // If Ayah-level, we just use the highlightColor natively without the karaoke fill \1c/\2c trick
-              const ayahStyleTag = isArabicReciter 
-                ? `{${posTag}\\fs${fs}\\1c${highlightColor}${useAnim}}` 
-                : `{${posTag}\\fs${fs}\\1c${highlightColor}\\2c&H00E0E0E0&${useAnim}}`;
+              // Quran always uses plain static text, no karaoke wiping, solid white color
+              const ayahStyleTag = `{${posTag}\\fs${fs}\\1c&H00FFFFFF&${useAnim}}`;
               
               ass += `Dialogue: 0,${formatTime(start)},${formatTime(end)},Bulgarian,,0,0,0,,${ayahStyleTag}${formattedText}\n`;
             }
