@@ -57,7 +57,8 @@ export async function executeRenderTask(opts: any): Promise<any> {
     const audioPath = path.join(tempDir, `audio_${sessionId}.mp3`);
     const assPath = path.join(tempDir, `subs_${sessionId}.ass`);
     const outPath = path.join(tempDir, `out_${sessionId}.mp4`);
-    const sessionTempFiles = new Set<string>([audioPath, assPath, outPath]);
+    const sessionTempFiles = new Set<string>([audioPath, assPath, outPath, bgPath + ".mp4", bgPath + ".jpg"]);
+    for (const p of sessionTempFiles) activeRenderSessionFiles.add(p);
 
     try {
       console.log("[server-render] Starting pure FFmpeg render...");
@@ -812,6 +813,8 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
     } catch (err: unknown) {
       console.error("[server-render] Critical failure:", err);
       throw new Error(String(err));
+    } finally {
+      for (const p of sessionTempFiles) activeRenderSessionFiles.delete(p);
     }
     });
   }
@@ -825,6 +828,8 @@ export const runServerRender = createServerFn({ method: "POST" })
 // ==========================================
 // BACKGROUND SERVER JOBS (SURVIVE BROWSER CLOSE)
 // ==========================================
+
+export const activeRenderSessionFiles = new Set<string>();
 
 async function aggressivelyCleanServerDisk(forceAll = false) {
   try {
@@ -859,6 +864,7 @@ async function aggressivelyCleanServerDisk(forceAll = false) {
           const matchesPrefix = forceAll || prefixes.some((p) => f.startsWith(p)) || f.endsWith(".mp4") || f.endsWith(".mp3") || f.endsWith(".vtt") || f.endsWith(".ass") || f.endsWith(".jpg") || f.endsWith(".png");
           if (matchesPrefix) {
             const fp = path.join(tmpDir, f);
+            if (activeRenderSessionFiles.has(fp)) continue; // PROTECTION
             const st = await fs.stat(fp).catch(() => null);
             // If forceAll is true, delete immediately (threshold 0); otherwise if older than 2 minutes
             const threshold = forceAll ? 0 : 2 * 60 * 1000;
@@ -1243,7 +1249,6 @@ export function scheduleServerMaintenance() {
   console.log("[server-maintenance] Automatic server health & temp cleanup worker initialized.");
 
   setTimeout(() => {
-    aggressivelyCleanServerDisk(true).catch((e) => console.error("[server-maintenance] Boot cleanup error:", e));
     recoverInterruptedJobs().catch((e) => console.error("[server-maintenance] Boot recovery error:", e));
   }, 3 * 1000);
 
