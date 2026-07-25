@@ -307,7 +307,7 @@ export async function executeRenderTask(opts: any): Promise<any> {
       let outlineColor = "&H00000000";
       let outlineWidth = "6.5";
       let shadowSize = "2.5";
-      let highlightColor = "&H0000D7FF&"; // Classic Gold
+      let highlightColor = "&H00D7FF&"; // Classic Gold
       let borderStyle = "1";
       let backColor = "&H66000000";
 
@@ -315,29 +315,29 @@ export async function executeRenderTask(opts: any): Promise<any> {
         outlineColor = "&H00102008";
         outlineWidth = "6.5";
         shadowSize = "2.5";
-        highlightColor = "&H0032CD32&"; // Lime Green / Gold glow
+        highlightColor = "&H32CD32&"; // Lime Green / Gold glow
       } else if (tiktokTheme === "neon") {
         outlineColor = "&H00181000";
         outlineWidth = "6.0";
         shadowSize = "2.5";
-        highlightColor = "&H00FFFF00&"; // Neon Cyan/Gold
+        highlightColor = "&HFFFF00&"; // Neon Cyan/Gold
       } else if (tiktokTheme === "classic") {
         outlineColor = "&H00000000";
         outlineWidth = "5.0";
         shadowSize = "1.5";
-        highlightColor = "&H0000D7FF&";
+        highlightColor = "&H00D7FF&";
       } else if (tiktokTheme === "fire") {
         outlineColor = "&H00001866";
         outlineWidth = "6.5";
         shadowSize = "2.5";
-        highlightColor = "&H000066FF&"; // Flaming Orange Gold
+        highlightColor = "&H0066FF&"; // Flaming Orange Gold
       } else if (tiktokTheme === "box") {
         borderStyle = "3";
         backColor = "&HAA000000";
         outlineColor = "&H00000000";
         outlineWidth = "8.0";
         shadowSize = "0";
-        highlightColor = "&H0000D7FF&";
+        highlightColor = "&H00D7FF&";
       }
 
       let ass = `[Script Info]
@@ -530,7 +530,8 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
               const start = Number(b.start) || 0;
               const nextStart = !isLast && bounds[bIdx + 1] ? Number(bounds[bIdx + 1].start) : null;
               const rawEnd = Number(b.end) || (start + 5);
-              const end = nextStart !== null ? Math.min(rawEnd, nextStart) : rawEnd;
+              let end = nextStart !== null ? Math.min(rawEnd, nextStart) : rawEnd;
+              if (end <= start) end = start + 0.5; // Prevent ASS inverted timestamp crash
               const wordCount = ayahWords.length;
               const fs = wordCount > 40 ? 38 : wordCount > 28 ? 44 : wordCount > 18 ? 50 : wordCount > 10 ? 56 : 64;
               const wpl = wordCount > 40 ? 9 : wordCount > 28 ? 8 : wordCount > 18 ? 7 : wordCount > 10 ? 6 : 5;
