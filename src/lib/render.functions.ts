@@ -592,7 +592,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
               
               // If Ayah-level, we just use the highlightColor natively without the karaoke fill \1c/\2c trick
               const ayahStyleTag = isArabicReciter 
-                ? `{${posTag}\\fs${fs}\\c${highlightColor}${useAnim}}` 
+                ? `{${posTag}\\fs${fs}\\1c${highlightColor}${useAnim}}` 
                 : `{${posTag}\\fs${fs}\\1c${highlightColor}\\2c&H00E0E0E0&${useAnim}}`;
               
               ass += `Dialogue: 0,${formatTime(start)},${formatTime(end)},Bulgarian,,0,0,0,,${ayahStyleTag}${formattedText}\n`;
