@@ -112,6 +112,11 @@
   * { border-color: var(--color-border); }
   body { 
     background-color: var(--color-background); 
+    background-image: 
+      radial-gradient(at 0% 0%, color-mix(in oklab, var(--color-primary) 15%, transparent) 0px, transparent 50%),
+      radial-gradient(at 100% 0%, color-mix(in oklab, var(--color-accent) 10%, transparent) 0px, transparent 50%),
+      radial-gradient(at 100% 100%, color-mix(in oklab, var(--color-primary) 10%, transparent) 0px, transparent 50%);
+    background-attachment: fixed;
     color: var(--color-foreground); 
     font-family: var(--font-sans);
     -webkit-font-smoothing: antialiased;
