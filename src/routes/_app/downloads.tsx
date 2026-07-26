@@ -19,7 +19,13 @@ import { generateViralThumbnail } from "@/lib/thumbnail.functions";
 import { formatViralSocialCaption } from "@/lib/caption.functions";
 import { clearAllBackgroundTasks } from "@/lib/assistant.functions";
 import { saveMediaBlob, saveMediaFromUrl, isIOSMediaDevice, sanitizeFilename } from "@/lib/download-media";
-import { Download, Trash2, CheckCircle2, ArrowLeft, Video, Film, RefreshCw, Loader2, AlertCircle, CloudCheck, Image as ImageIcon, Sparkles, Copy, Package } from "lucide-react";
+import { Download, Trash2, CheckCircle2, ArrowLeft, Video, Film, RefreshCw, Loader2, AlertCircle, CloudCheck, Image as ImageIcon, Sparkles, Copy, Package, MoreVertical } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
 import confetti from "canvas-confetti";
 import JSZip from "jszip";
@@ -27,6 +33,29 @@ import JSZip from "jszip";
 export const Route = createFileRoute("/_app/downloads")({
   component: DownloadsPage,
 });
+
+function VideoPreview({ blob }: { blob: Blob }) {
+  const [url, setUrl] = useState<string>("");
+
+  useEffect(() => {
+    const objectUrl = URL.createObjectURL(blob);
+    setUrl(objectUrl);
+    return () => {
+      URL.revokeObjectURL(objectUrl);
+    };
+  }, [blob]);
+
+  if (!url) return null;
+
+  return (
+    <video
+      src={url}
+      controls
+      playsInline
+      className="w-full h-full object-contain"
+    />
+  );
+}
 
 function DownloadsPage() {
   const [items, setItems] = useState<DownloadItem[]>([]);
@@ -537,57 +566,55 @@ function DownloadsPage() {
                         Задръж да свалиш
                       </a>
                       <button
-                        onClick={() => copyToClipboard(`${window.location.origin}/api/download/${job.id}?filename=${encodeURIComponent((job.title || "islamic-reel").replace(/[^a-z0-9._-]+/gi, "_") + ".mp4")}`, "Линкът е копиран! Отвори браузъра Safari и го постави там, за да изтеглиш.")}
-                        className="inline-flex items-center justify-center rounded-xl bg-secondary px-3.5 py-2.5 text-sm font-medium text-secondary-foreground shadow hover:bg-secondary/90 transition cursor-pointer"
-                        title="Копирай линк за Safari"
-                      >
-                        <Copy className="size-4" />
-                      </button>
-                      <button
-                        onClick={() => handleCopyTikTokCaption(job.title)}
-                        title="Копирай TikTok Заглавие & Описание с хаштагове"
-                        className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-teal-500/40 bg-teal-500/10 px-3 py-2.5 text-sm font-medium text-teal-400 hover:bg-teal-500/20 transition cursor-pointer shrink-0"
-                      >
-                        <Copy className="size-4" />
-                        TikTok Текст
-                      </button>
-                      <button
-                        onClick={() => handleDownloadThumbnail(job.id, job.title)}
-                        disabled={generatingThumbId === job.id}
-                        title="Генерирай Вайръл TikTok Корица (Thumbnail)"
-                        className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-amber-500/40 bg-amber-500/10 px-3 py-2.5 text-sm font-medium text-amber-400 hover:bg-amber-500/20 transition cursor-pointer shrink-0"
-                      >
-                        {generatingThumbId === job.id ? (
-                          <Loader2 className="size-4 animate-spin" />
-                        ) : (
-                          <>
-                            <ImageIcon className="size-4" />
-                            Корица
-                          </>
-                        )}
-                      </button>
-                      <button
-                        onClick={() => handleDownloadSocialKit(job)}
-                        disabled={downloadingKitId === job.id}
-                        title="1-Click Viral Social Kit (Видео + Текст + Корица в 1 ZIP файл)"
-                        className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-amber-500/20 to-primary/20 border border-amber-500/50 px-3 py-2.5 text-sm font-bold text-amber-400 hover:bg-amber-500/30 transition cursor-pointer shrink-0"
-                      >
-                        {downloadingKitId === job.id ? (
-                          <Loader2 className="size-4 animate-spin" />
-                        ) : (
-                          <>
-                            <Package className="size-4" />
-                            Social Kit (ZIP)
-                          </>
-                        )}
-                      </button>
-                      <button
                         onClick={() => handleRetryServerJob(job.id)}
-                        title="Рендирай отново (Ако файлът на сървъра е бил изчистен от старата система)"
-                        className="inline-flex items-center justify-center rounded-xl border border-primary/30 bg-primary/10 p-2.5 text-sm font-medium text-primary hover:bg-primary/20 transition cursor-pointer shrink-0"
+                        title="Рендирай отново"
+                        className="inline-flex items-center justify-center size-10 rounded-xl border border-primary/30 bg-primary/10 p-2.5 text-sm font-medium text-primary hover:bg-primary/20 transition cursor-pointer shrink-0"
                       >
                         <RefreshCw className="size-4" />
                       </button>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <button
+                            className="inline-flex items-center justify-center gap-1 rounded-xl border border-border/80 bg-secondary px-3 py-2.5 text-sm font-medium text-secondary-foreground hover:bg-secondary/80 transition cursor-pointer shrink-0"
+                            title="Още опции"
+                          >
+                            <MoreVertical className="size-4" />
+                            <span className="text-xs font-semibold">Още</span>
+                          </button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="w-56">
+                          <DropdownMenuItem
+                            onClick={() => handleCopyTikTokCaption(job.title)}
+                            className="cursor-pointer"
+                          >
+                            <Copy className="size-4 mr-2 text-teal-400" />
+                            <span>TikTok Текст</span>
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onClick={() => handleDownloadThumbnail(job.id, job.title)}
+                            disabled={generatingThumbId === job.id}
+                            className="cursor-pointer"
+                          >
+                            <ImageIcon className="size-4 mr-2 text-amber-400" />
+                            <span>Cover Image (Корица)</span>
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onClick={() => handleDownloadSocialKit(job)}
+                            disabled={downloadingKitId === job.id}
+                            className="cursor-pointer"
+                          >
+                            <Package className="size-4 mr-2 text-primary" />
+                            <span>Social Kit (ZIP)</span>
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onClick={() => copyToClipboard(`${window.location.origin}/api/download/${job.id}?filename=${encodeURIComponent((job.title || "islamic-reel").replace(/[^a-z0-9._-]+/gi, "_") + ".mp4")}`, "Линкът е копиран! Отвори браузъра Safari и го постави там, за да изтеглиш.")}
+                            className="cursor-pointer"
+                          >
+                            <Copy className="size-4 mr-2" />
+                            <span>Copy Link (Safari)</span>
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </>
                   ) : job.status === "rendering" || job.status === "queued" ? (
                     <div className="flex-1 space-y-2 py-3 px-3 bg-blue-500/5 border border-blue-500/20 rounded-xl">
@@ -674,15 +701,10 @@ function DownloadsPage() {
                 </div>
 
                 <div className="my-2 rounded-xl overflow-hidden bg-black/40 aspect-[9/16] max-h-72 flex items-center justify-center border border-border/40">
-                  <video
-                    src={URL.createObjectURL(item.blob)}
-                    controls
-                    playsInline
-                    className="w-full h-full object-contain"
-                  />
+                  <VideoPreview blob={item.blob} />
                 </div>
 
-                <div className="mt-4 flex items-center gap-2 flex-wrap">
+                <div className="mt-4 flex items-center gap-2">
                   <button
                     onClick={() => triggerDownload(item, true)}
                     className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-xl bg-primary px-3 py-2.5 text-sm font-medium text-primary-foreground shadow hover:bg-primary/90 transition cursor-pointer"
@@ -690,44 +712,49 @@ function DownloadsPage() {
                     <Download className="size-4" />
                     MP4
                   </button>
-                  <button
-                    onClick={() => handleCopyTikTokCaption(item.title || "islamic-reel")}
-                    title="Копирай TikTok Заглавие & Описание с хаштагове"
-                    className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-teal-500/40 bg-teal-500/10 px-3 py-2.5 text-sm font-medium text-teal-400 hover:bg-teal-500/20 transition cursor-pointer shrink-0"
-                  >
-                    <Copy className="size-4" />
-                    TikTok Текст
-                  </button>
-                  <button
-                    onClick={() => handleDownloadThumbnail(item.id, item.title || "islamic-reel")}
-                    disabled={generatingThumbId === item.id}
-                    title="Генерирай Вайръл TikTok Корица (Thumbnail)"
-                    className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-amber-500/40 bg-amber-500/10 px-3 py-2.5 text-sm font-medium text-amber-400 hover:bg-amber-500/20 transition cursor-pointer shrink-0"
-                  >
-                    {generatingThumbId === item.id ? (
-                      <Loader2 className="size-4 animate-spin" />
-                    ) : (
-                      <>
-                        <ImageIcon className="size-4" />
-                        Корица
-                      </>
-                    )}
-                  </button>
-                  <button
-                    onClick={() => handleDownloadLocalSocialKit(item)}
-                    disabled={downloadingKitId === item.id}
-                    title="1-Click Viral Social Kit (Видео + Текст + Корица в 1 ZIP файл)"
-                    className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-amber-500/20 to-primary/20 border border-amber-500/50 px-3 py-2.5 text-sm font-bold text-amber-400 hover:bg-amber-500/30 transition cursor-pointer shrink-0"
-                  >
-                    {downloadingKitId === item.id ? (
-                      <Loader2 className="size-4 animate-spin" />
-                    ) : (
-                      <>
-                        <Package className="size-4" />
-                        Social Kit (ZIP)
-                      </>
-                    )}
-                  </button>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <button
+                        className="inline-flex items-center justify-center gap-1 rounded-xl border border-border/80 bg-secondary px-3 py-2.5 text-sm font-medium text-secondary-foreground hover:bg-secondary/80 transition cursor-pointer shrink-0"
+                        title="Още опции"
+                      >
+                        <MoreVertical className="size-4" />
+                        <span className="text-xs font-semibold">Още</span>
+                      </button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-56">
+                      <DropdownMenuItem
+                        onClick={() => handleCopyTikTokCaption(item.title || "islamic-reel")}
+                        className="cursor-pointer"
+                      >
+                        <Copy className="size-4 mr-2 text-teal-400" />
+                        <span>TikTok Текст</span>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        onClick={() => handleDownloadThumbnail(item.id, item.title || "islamic-reel")}
+                        disabled={generatingThumbId === item.id}
+                        className="cursor-pointer"
+                      >
+                        <ImageIcon className="size-4 mr-2 text-amber-400" />
+                        <span>Cover Image (Корица)</span>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        onClick={() => handleDownloadLocalSocialKit(item)}
+                        disabled={downloadingKitId === item.id}
+                        className="cursor-pointer"
+                      >
+                        <Package className="size-4 mr-2 text-primary" />
+                        <span>Social Kit (ZIP)</span>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        onClick={() => copyToClipboard(item.title || "islamic-reel", "Заглавието е копирано!")}
+                        className="cursor-pointer"
+                      >
+                        <Copy className="size-4 mr-2" />
+                        <span>Copy Link / Заглавие</span>
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                   <button
                     onClick={() => handleRemoveLocal(item.id)}
                     className="inline-flex items-center justify-center size-10 rounded-xl border border-border/80 text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition cursor-pointer shrink-0"

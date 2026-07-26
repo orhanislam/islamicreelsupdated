@@ -246,17 +246,23 @@ async function checkVideoForHaram(video: PexelsVideo): Promise<boolean> {
     // Премахваме повтарящи се индекси (ако видеото има само 1-2 картинки)
     const uniqueIndices = [...new Set(indices)];
     
-    const images: { base64: string; mimeType: string }[] = [];
-    
-    for (const idx of uniqueIndices) {
-      const pictureUrl = pics[idx].picture;
-      const res = await fetch(pictureUrl);
-      if (!res.ok) continue;
-      const arrayBuffer = await res.arrayBuffer();
-      const base64Image = Buffer.from(arrayBuffer).toString("base64");
-      const mimeType = res.headers.get("content-type") || "image/jpeg";
-      images.push({ base64: base64Image, mimeType });
-    }
+    const downloadedImages = await Promise.all(
+      uniqueIndices.map(async (idx) => {
+        try {
+          const pictureUrl = pics[idx].picture;
+          const res = await fetch(pictureUrl);
+          if (!res.ok) return null;
+          const arrayBuffer = await res.arrayBuffer();
+          const base64Image = Buffer.from(arrayBuffer).toString("base64");
+          const mimeType = res.headers.get("content-type") || "image/jpeg";
+          return { base64: base64Image, mimeType };
+        } catch {
+          return null;
+        }
+      })
+    );
+
+    const images = downloadedImages.filter((img): img is { base64: string; mimeType: string } => img !== null);
     
     if (images.length === 0) return false;
     
@@ -278,24 +284,22 @@ async function checkVideoForHaram(video: PexelsVideo): Promise<boolean> {
 
 export async function getHalalVideos(vs: PexelsVideo[], targetMin: number, neededCount = 3): Promise<Out[]> {
   const built = buildOut(vs, targetMin);
-  const safeVideos: Out[] = [];
-  
-  for (let i = 0; i < built.length; i++) {
-    const outVid = built[i];
-    const originalPexelsVideo = vs.find(v => v.id === outVid.id);
-    
-    if (safeVideos.length >= neededCount) break;
-    
-    if (originalPexelsVideo) {
+  const candidates = built.slice(0, Math.max(neededCount * 3, 8));
+
+  const results = await Promise.all(
+    candidates.map(async (outVid) => {
+      const originalPexelsVideo = vs.find((v) => v.id === outVid.id);
+      if (!originalPexelsVideo) return { outVid, isHaram: false };
       const isHaram = await checkVideoForHaram(originalPexelsVideo);
-      if (!isHaram) {
-        safeVideos.push(outVid);
-      }
-    } else {
-      safeVideos.push(outVid);
-    }
-  }
-  return safeVideos;
+      return { outVid, isHaram };
+    })
+  );
+
+  const safeVideos = results
+    .filter((r) => !r.isHaram)
+    .map((r) => r.outVid);
+
+  return safeVideos.slice(0, neededCount);
 }
 
 export const searchPexelsVideos = createServerFn({ method: "POST" })

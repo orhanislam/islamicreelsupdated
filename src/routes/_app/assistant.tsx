@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { Bot, Send, Loader2, Sparkles, Download, CheckCircle2, Video, Pencil, Brain, Trash2, Plus, Copy, Image as ImageIcon } from "lucide-react";
+import { Bot, Send, Loader2, Sparkles, Download, CheckCircle2, Video, Pencil, Brain, Trash2, Plus, Copy, Image as ImageIcon, BookOpen, ScrollText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
@@ -34,6 +34,28 @@ const DEFAULT_MESSAGES: ChatMsg[] = [
   },
 ];
 
+export const VIRAL_QURAN_PRESETS = [
+  { surah: 112, ayah: 1, count: 4, title: "Сура Ал-Ихляс (112:1-4)", prompt: "Направи TikTok видео за Сура Ал-Ихляс (112:1-4) със спокоен кинематографичен фон" },
+  { surah: 2, ayah: 255, count: 1, title: "Аят ал-Курси (2:255)", prompt: "Направи TikTok видео за Аят Алкарси (Сура 2 аят 255) с нощно небе и звезди" },
+  { surah: 94, ayah: 5, count: 2, title: "Сура Аш-Шарх (94:5-6)", prompt: "Направи TikTok видео за Сура Аш-Шарх (94:5-6) - С всяка трудност идва облекчение" },
+  { surah: 103, ayah: 1, count: 3, title: "Сура Ал-Аср (103:1-3)", prompt: "Направи TikTok видео за Сура Ал-Аср (103:1-3) за времето и спасението" },
+  { surah: 113, ayah: 1, count: 5, title: "Сура Ал-Фаляк (113:1-5)", prompt: "Направи TikTok видео за Сура Ал-Фаляк (113:1-5) за защита при изгрев слънце" },
+  { surah: 114, ayah: 1, count: 6, title: "Сура Ан-Нас (114:1-6)", prompt: "Направи TikTok видео за Сура Ан-Нас (114:1-6) за духовно спокойствие" },
+  { surah: 108, ayah: 1, count: 3, title: "Сура Ал-Каусар (108:1-3)", prompt: "Направи TikTok видео за Сура Ал-Каусар (108:1-3) за райското изобилие" },
+  { surah: 67, ayah: 1, count: 3, title: "Сура Ал-Мулк (67:1-3)", prompt: "Направи TikTok видео за Сура Ал-Мулк (67:1-3) за величието на сътворението" },
+  { surah: 55, ayah: 13, count: 1, title: "Сура Ар-Рахман (55:13)", prompt: "Направи TikTok видео за Сура Ар-Рахман (55:13) - Кое от благата на вашия Господ ще излъжете?" },
+  { surah: 39, ayah: 53, count: 1, title: "Сура Аз-Зумар (39:53)", prompt: "Направи TikTok видео за Сура Аз-Зумар (39:53) - Не губете надежда в милостта на Аллах" }
+];
+
+export const VIRAL_HADITH_PRESETS = [
+  { collection: "nawawi40", number: 1, title: "Хадис № 1 на Навауи (Намеренията)", prompt: "Направи вирално TikTok видео за Хадис № 1 на Навауи (Делата се ценят според намеренията)" },
+  { collection: "bukhari", number: 6424, title: "Сахих ал-Бухари #6424 (Изпитанията)", prompt: "Направи вирално TikTok видео за Сахих ал-Бухари #6424 за скритата милост в изпитанията" },
+  { collection: "nawawi40", number: 5, title: "Хадис № 5 на Навауи (Чистота на вярата)", prompt: "Направи вирално TikTok видео за Хадис № 5 на Навауи за искреността в религията" },
+  { collection: "muslim", number: 2564, title: "Сахих Муслим #2564 (Добротата)", prompt: "Направи вирално TikTok видео за Сахих Муслим #2564 за силата на благородните обръщения" },
+  { collection: "tirmidhi", number: 1987, title: "Сунан Ат-Тирмизи #1987 (Търпението)", prompt: "Направи вирално TikTok видео за Сахих Хадис от Тирмизи за вътрешния мир и сабр" },
+  { collection: "nawawi40", number: 13, title: "Хадис № 13 на Навауи (Братска обич)", prompt: "Направи вирално TikTok видео за Хадис № 13 на Навауи - Никога не си истински вярващ, докато не пожелаеш за брата си това, което желаеш за себе си" }
+];
+
 function AssistantPage() {
   const [prompt, setPrompt] = useState("");
   const [loading, setLoading] = useState(false);
@@ -47,6 +69,70 @@ function AssistantPage() {
   const [messages, setMessages] = useState<ChatMsg[]>(DEFAULT_MESSAGES);
   const [generatingThumbTitle, setGeneratingThumbTitle] = useState<string | null>(null);
   const [activeTasks, setActiveTasks] = useState<any[]>([]);
+
+  const [usedQuranKeys, setUsedQuranKeys] = useState<string[]>(() => {
+    if (typeof window !== "undefined" && window.localStorage) {
+      try {
+        const parsed = JSON.parse(window.localStorage.getItem("islamic_used_quran_keys") || "[]");
+        return Array.isArray(parsed) ? parsed : [];
+      } catch {
+        return [];
+      }
+    }
+    return [];
+  });
+
+  const [usedHadithKeys, setUsedHadithKeys] = useState<string[]>(() => {
+    if (typeof window !== "undefined" && window.localStorage) {
+      try {
+        const parsed = JSON.parse(window.localStorage.getItem("islamic_used_hadith_keys") || "[]");
+        return Array.isArray(parsed) ? parsed : [];
+      } catch {
+        return [];
+      }
+    }
+    return [];
+  });
+
+  const handleNextQuranQuickAction = () => {
+    playStudioClick();
+    const unpicked = VIRAL_QURAN_PRESETS.filter(
+      (p) => !usedQuranKeys.includes(`quran:${p.surah}:${p.ayah}`)
+    );
+    const pool = unpicked.length > 0 ? unpicked : VIRAL_QURAN_PRESETS;
+    const selected = pool[Math.floor(Math.random() * pool.length)];
+    const key = `quran:${selected.surah}:${selected.ayah}`;
+
+    const updated = unpicked.length === 1 ? [key] : [...usedQuranKeys, key];
+    setUsedQuranKeys(updated);
+    if (typeof window !== "undefined" && window.localStorage) {
+      try {
+        window.localStorage.setItem("islamic_used_quran_keys", JSON.stringify(updated));
+      } catch {}
+    }
+    setPrompt(selected.prompt);
+    toast.message(`🕋 Избран нов аят: ${selected.title}`);
+  };
+
+  const handleNextHadithQuickAction = () => {
+    playStudioClick();
+    const unpicked = VIRAL_HADITH_PRESETS.filter(
+      (p) => !usedHadithKeys.includes(`hadith:${p.collection}:${p.number}`)
+    );
+    const pool = unpicked.length > 0 ? unpicked : VIRAL_HADITH_PRESETS;
+    const selected = pool[Math.floor(Math.random() * pool.length)];
+    const key = `hadith:${selected.collection}:${selected.number}`;
+
+    const updated = unpicked.length === 1 ? [key] : [...usedHadithKeys, key];
+    setUsedHadithKeys(updated);
+    if (typeof window !== "undefined" && window.localStorage) {
+      try {
+        window.localStorage.setItem("islamic_used_hadith_keys", JSON.stringify(updated));
+      } catch {}
+    }
+    setPrompt(selected.prompt);
+    toast.message(`📜 Избран нов хадис: ${selected.title}`);
+  };
 
   const handleDownloadThumbnail = async (title: string, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
@@ -534,110 +620,152 @@ function AssistantPage() {
         </Card>
       )}
 
-      {/* Viral AI Suggestion Card */}
-      <div className="mb-4 rounded-2xl border border-red-500/30 bg-gradient-to-r from-red-500/10 via-orange-500/5 to-transparent p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2 text-red-400 font-bold text-sm">
-            <Sparkles className="size-4" /> ВАЙРЪЛ AI ГЕНЕРАТОР
+      {/* Banner Cards Container with responsive spacing */}
+      <div className="space-y-3 sm:space-y-4 mb-3 sm:mb-4">
+        {/* Viral AI Suggestion Card */}
+        <div className="rounded-2xl border border-red-500/30 bg-gradient-to-r from-red-500/10 via-orange-500/5 to-transparent p-3.5 sm:p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4">
+          <div>
+            <div className="flex items-center gap-2 text-red-400 font-bold text-sm">
+              <Sparkles className="size-4" /> ВАЙРЪЛ AI ГЕНЕРАТОР
+            </div>
+            <p className="text-xs text-muted-foreground mt-1">
+              AI избира уникална, дълбока и рядко цитирана тема от Корана или Хадисите. Без банални текстове — само вирусни!
+            </p>
           </div>
-          <p className="text-xs text-muted-foreground mt-1">
-            AI избира уникална, дълбока и рядко цитирана тема от Корана или Хадисите. Без банални текстове — само вирусни!
-          </p>
+          <button
+            onClick={handleViralSuggest}
+            disabled={viralLoading || loading}
+            className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-red-500 to-orange-500 px-5 py-2.5 text-xs font-bold text-white shadow-lg hover:from-red-400 hover:to-orange-400 transition shrink-0 cursor-pointer"
+          >
+            {viralLoading ? (
+              <>
+                <Loader2 className="size-4 animate-spin" /> Търсене...
+              </>
+            ) : (
+              <>
+                🔥 Вайръл Тема
+              </>
+            )}
+          </button>
         </div>
-        <button
-          onClick={handleViralSuggest}
-          disabled={viralLoading || loading}
-          className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-red-500 to-orange-500 px-5 py-2.5 text-xs font-bold text-white shadow-lg hover:from-red-400 hover:to-orange-400 transition shrink-0 cursor-pointer"
+
+        {/* Viral Hadith Generator Card */}
+        <div className="rounded-2xl border border-blue-500/30 bg-gradient-to-r from-blue-500/10 via-cyan-500/5 to-transparent p-3.5 sm:p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4">
+          <div>
+            <div className="flex items-center gap-2 text-blue-400 font-bold text-sm">
+              <ScrollText className="size-4" /> ВАЙРЪЛ ХАДИС ГЕНЕРАТОР
+            </div>
+            <p className="text-xs text-muted-foreground mt-1">
+              Генерирай уникално видео с автентичен (Sahih) хадис. Системата пази история и винаги ти дава различен!
+            </p>
+          </div>
+          <button
+            onClick={handleNextHadithQuickAction}
+            disabled={loading}
+            className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-blue-500 to-cyan-600 px-5 py-2.5 text-xs font-bold text-white shadow-lg hover:from-blue-400 hover:to-cyan-500 transition shrink-0 cursor-pointer"
+          >
+            📜 Вайръл Хадис
+          </button>
+        </div>
+
+        {/* Batch Series Luxury Card */}
+        <div className="rounded-2xl border border-amber-500/30 bg-gradient-to-r from-amber-500/10 via-amber-500/5 to-transparent p-3.5 sm:p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4">
+          <div>
+            <div className="flex items-center gap-2 text-amber-400 font-bold text-sm">
+              <Sparkles className="size-4" /> ПАКЕТЕН РЕЖИМ • ВАЙРЪЛ СЕРИЯ ОТ КОРАНА
+            </div>
+            <p className="text-xs text-muted-foreground mt-1">
+              Избери колко топ вайръл видеа да се генерират автоматично наведнъж (с Hormozi субтитри и кино B-Roll):
+            </p>
+            <div className="flex flex-wrap items-center gap-2 mt-2.5">
+              {[3, 5, 8, 10].map((num) => (
+                <button
+                  key={num}
+                  type="button"
+                  onClick={() => setBatchCount(num)}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition border cursor-pointer ${
+                    batchCount === num
+                      ? "bg-amber-500 text-black border-amber-400 shadow-md scale-105"
+                      : "bg-black/40 text-amber-300/80 border-amber-500/30 hover:bg-amber-500/20"
+                  }`}
+                >
+                  🔥 {num} видеа
+                </button>
+              ))}
+            </div>
+          </div>
+          <button
+            onClick={() => handleStartBatchSeries(batchCount)}
+            disabled={batchLoading}
+            className="inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 px-5 py-3 text-xs font-bold text-black shadow-lg hover:from-amber-400 hover:to-amber-500 transition shrink-0 cursor-pointer self-stretch sm:self-auto"
+          >
+            {batchLoading ? (
+              <>
+                <Loader2 className="size-4 animate-spin" /> Генериране...
+              </>
+            ) : (
+              <>
+                <Video className="size-4" /> 🚀 Генерирай Серия от {batchCount} Видеа
+              </>
+            )}
+          </button>
+        </div>
+
+        {/* Batch Plan Suggestion Quick Toolbar */}
+        <div className="rounded-2xl border border-teal-500/30 bg-gradient-to-r from-teal-500/10 via-emerald-500/5 to-transparent p-3.5 sm:p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4">
+          <div>
+            <div className="flex items-center gap-2 text-teal-400 font-bold text-sm">
+              <Brain className="size-4" /> ИНТЕЛИГЕНТЕН ПЛАН ЗА ВАЙРЪЛ ВИДЕА (Коран, Хадиси & TikTok)
+            </div>
+            <p className="text-xs text-muted-foreground mt-1">
+              AI изготвя план с разнородни теми за одобрение. Избери колко идеи искаш да ти предложи в чата:
+            </p>
+            <div className="flex flex-wrap items-center gap-2 mt-2.5">
+              {[3, 5, 8, 10].map((num) => (
+                <button
+                  key={num}
+                  type="button"
+                  onClick={() => handleBatchSuggest(num)}
+                  disabled={viralLoading || loading}
+                  className="px-3.5 py-1.5 rounded-xl text-xs font-bold transition border cursor-pointer bg-teal-500/15 text-teal-300 border-teal-500/30 hover:bg-teal-500 hover:text-black shadow-sm"
+                >
+                  📋 План за {num} идеи
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="mb-3 sm:mb-4 flex items-center gap-2 overflow-x-auto pb-1.5 max-w-full">
+        <span className="text-xs font-semibold text-muted-foreground mr-1 shrink-0">⚡ Бързи TikTok идеи:</span>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={handleNextQuranQuickAction}
+          className="rounded-full text-xs cursor-pointer shrink-0 glass hover:bg-primary/10 border-primary/40 text-foreground transition flex items-center gap-1.5 shadow-sm"
+          title="Генерирай нов неповторен аят от Корана"
         >
-          {viralLoading ? (
-            <>
-              <Loader2 className="size-4 animate-spin" /> Търсене...
-            </>
-          ) : (
-            <>
-              🔥 Вайръл Тема
-            </>
-          )}
-        </button>
-      </div>
-
-      {/* Batch Series Luxury Card */}
-      <div className="mb-6 rounded-2xl border border-amber-500/30 bg-gradient-to-r from-amber-500/10 via-amber-500/5 to-transparent p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2 text-amber-400 font-bold text-sm">
-            <Sparkles className="size-4" /> ПАКЕТЕН РЕЖИМ • ВАЙРЪЛ СЕРИЯ ОТ КОРАНА
-          </div>
-          <p className="text-xs text-muted-foreground mt-1">
-            Избери колко топ вайръл видеа да се генерират автоматично наведнъж (с Hormozi субтитри и кино B-Roll):
-          </p>
-          <div className="flex flex-wrap items-center gap-2 mt-2.5">
-            {[3, 5, 8, 10].map((num) => (
-              <button
-                key={num}
-                type="button"
-                onClick={() => setBatchCount(num)}
-                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition border cursor-pointer ${
-                  batchCount === num
-                    ? "bg-amber-500 text-black border-amber-400 shadow-md scale-105"
-                    : "bg-black/40 text-amber-300/80 border-amber-500/30 hover:bg-amber-500/20"
-                }`}
-              >
-                🔥 {num} видеа
-              </button>
-            ))}
-          </div>
-        </div>
-        <button
-          onClick={() => handleStartBatchSeries(batchCount)}
-          disabled={batchLoading}
-          className="inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 px-5 py-3 text-xs font-bold text-black shadow-lg hover:from-amber-400 hover:to-amber-500 transition shrink-0 cursor-pointer self-stretch sm:self-auto"
+          <BookOpen className="size-3.5 text-primary" />
+          <span>🕋 Вирален Коран</span>
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={handleNextHadithQuickAction}
+          className="rounded-full text-xs cursor-pointer shrink-0 glass hover:bg-amber-500/10 border-amber-500/40 text-foreground transition flex items-center gap-1.5 shadow-sm"
+          title="Генерирай нов неповторен Сахих Хадис"
         >
-          {batchLoading ? (
-            <>
-              <Loader2 className="size-4 animate-spin" /> Генериране...
-            </>
-          ) : (
-            <>
-              <Video className="size-4" /> 🚀 Генерирай Серия от {batchCount} Видеа
-            </>
-          )}
-        </button>
-      </div>
-
-      {/* Batch Plan Suggestion Quick Toolbar */}
-      <div className="mb-4 rounded-2xl border border-teal-500/30 bg-gradient-to-r from-teal-500/10 via-emerald-500/5 to-transparent p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2 text-teal-400 font-bold text-sm">
-            <Brain className="size-4" /> ИНТЕЛИГЕНТЕН ПЛАН ЗА ВАЙРЪЛ ВИДЕА (Коран, Хадиси & TikTok)
-          </div>
-          <p className="text-xs text-muted-foreground mt-1">
-            AI изготвя план с разнородни теми за одобрение. Избери колко идеи искаш да ти предложи в чата:
-          </p>
-          <div className="flex flex-wrap items-center gap-2 mt-2.5">
-            {[3, 5, 8, 10].map((num) => (
-              <button
-                key={num}
-                type="button"
-                onClick={() => handleBatchSuggest(num)}
-                disabled={viralLoading || loading}
-                className="px-3.5 py-1.5 rounded-xl text-xs font-bold transition border cursor-pointer bg-teal-500/15 text-teal-300 border-teal-500/30 hover:bg-teal-500 hover:text-black shadow-sm"
-              >
-                📋 План за {num} идеи
-              </button>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      <div className="mb-4 flex flex-wrap items-center gap-2">
-        <span className="text-xs font-semibold text-muted-foreground mr-1">⚡ Бързи TikTok идеи:</span>
+          <ScrollText className="size-3.5 text-amber-400" />
+          <span>📜 Вирални Хадиси</span>
+        </Button>
         <Button
           variant="outline"
           size="sm"
           onClick={() => {
             setPrompt("Направи кратко вирусна TikTok видео идея за Хадис № 1 на Навауи (намеренията)");
           }}
-          className="rounded-full text-xs cursor-pointer"
+          className="rounded-full text-xs cursor-pointer shrink-0"
         >
           🌟 Хадис за намеренията (TikTok 9:16)
         </Button>
@@ -647,7 +775,7 @@ function AssistantPage() {
           onClick={() => {
             setPrompt("Направи TikTok видео за Сура Ал-Ихляс (112:1-4) със спокоен фон");
           }}
-          className="rounded-full text-xs cursor-pointer"
+          className="rounded-full text-xs cursor-pointer shrink-0"
         >
           🕋 Сура Ал-Ихляс
         </Button>
@@ -657,13 +785,13 @@ function AssistantPage() {
           onClick={() => {
             setPrompt("Направи TikTok видео за Аят Алкарси (Сура 2 аят 255)");
           }}
-          className="rounded-full text-xs cursor-pointer"
+          className="rounded-full text-xs cursor-pointer shrink-0"
         >
           📖 Аят ал-Курси
         </Button>
       </div>
 
-      <Card className="glass-card flex h-[640px] flex-col overflow-hidden border border-border/80 shadow-lg">
+      <Card className="glass-card flex h-[500px] md:h-[640px] max-h-[70vh] flex-1 flex-col overflow-hidden border border-border/80 shadow-lg">
         <div className="flex-1 space-y-4 overflow-y-auto p-6">
           {messages.map((m, idx) => (
             <div

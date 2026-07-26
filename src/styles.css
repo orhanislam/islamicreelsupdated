@@ -1,5 +1,6 @@
 @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap');
 @import url('https://fonts.googleapis.com/css2?family=Amiri:wght@400;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;600;700&display=swap');
 @import "tailwindcss" source(none);
 @source "../src";
 @import "tw-animate-css";
@@ -54,8 +55,8 @@
 }
 
 @keyframes pulse-glow {
-  0%, 100% { opacity: 1; box-shadow: 0 0 15px rgba(var(--primary), 0.4); }
-  50% { opacity: .7; box-shadow: 0 0 25px rgba(var(--primary), 0.8); }
+  0%, 100% { opacity: 1; box-shadow: 0 0 15px oklch(from var(--primary) l c h / 0.4); }
+  50% { opacity: .7; box-shadow: 0 0 25px oklch(from var(--primary) l c h / 0.8); }
 }
 
 :root {
@@ -133,9 +134,9 @@
 
 @layer utilities {
   .glass {
-    @apply bg-background/60 backdrop-blur-xl border border-white/10 shadow-xl;
+    @apply bg-background/60 backdrop-blur-xl border border-border/60 shadow-xl;
   }
   .glass-card {
-    @apply bg-card/60 backdrop-blur-md border border-white/5 shadow-lg;
+    @apply bg-card/60 backdrop-blur-md border border-border/60 shadow-lg;
   }
 }

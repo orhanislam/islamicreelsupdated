@@ -839,7 +839,7 @@ async function aggressivelyCleanServerDisk(forceAll = false) {
           "journalctl --vacuum-time=1d 2>/dev/null",
           "apt-get clean 2>/dev/null",
           "npm cache clean --force 2>/dev/null",
-          "rm -rf /tmp/* /var/tmp/* /var/cache/* ~/.cache/* /root/.cache/* /home/*/.cache/* ~/.npm/* /root/.npm/* /home/*/.npm/* ~/.pm2/logs/* /root/.pm2/logs/* /home/*/.pm2/logs/* /var/log/*.gz /var/log/*/*/*.gz 2>/dev/null"
+          "rm -rf /var/cache/* ~/.cache/* /root/.cache/* /home/*/.cache/* ~/.npm/* /root/.npm/* /home/*/.npm/* ~/.pm2/logs/* /root/.pm2/logs/* /home/*/.pm2/logs/* /var/log/*.gz /var/log/*/*/*.gz 2>/dev/null"
         ].join("; ");
         exec(cmd, { timeout: 15000 }, () => resolve());
       });
@@ -850,15 +850,14 @@ async function aggressivelyCleanServerDisk(forceAll = false) {
     for (const tmpDir of tmpDirs) {
       try {
         const tmpFiles = await fs.readdir(tmpDir).catch(() => []);
-        const prefixes = ["broll_", "multiscene_", "norm_", "concat_", "sub_", "bg_", "py-tts-", "video_", "tmp-", "align_audio_"];
+        const prefixes = ["reel_", "render_", "audio_", "frame_", "bg_", "export_"];
         for (const f of tmpFiles) {
-          const matchesPrefix = forceAll || prefixes.some((p) => f.startsWith(p)) || f.endsWith(".mp4") || f.endsWith(".mp3") || f.endsWith(".vtt") || f.endsWith(".ass") || f.endsWith(".jpg") || f.endsWith(".png");
+          const matchesPrefix = prefixes.some((p) => f.startsWith(p));
           if (matchesPrefix) {
             const fp = path.join(tmpDir, f);
             if (activeRenderSessionFiles.has(fp)) continue; // PROTECTION
             const st = await fs.stat(fp).catch(() => null);
-            // If forceAll is true, delete immediately (threshold 0); otherwise if older than 2 minutes
-            const threshold = forceAll ? 0 : 2 * 60 * 1000;
+            const threshold = forceAll ? 0 : 30 * 60 * 1000;
             if (st && now - st.mtimeMs >= threshold) {
               await fs.rm(fp, { recursive: true, force: true }).catch(() => {});
             }
@@ -906,7 +905,18 @@ async function aggressivelyCleanServerDisk(forceAll = false) {
           // STRICT CAP: Keep at most 8 jobs total in JSON to prevent disk/metadata bloat
           if (jobsList.length > 8) {
             const trimmed = jobsList.slice(0, 8);
-            await fs.writeFile(jobsFile, JSON.stringify(trimmed, null, 2), "utf-8").catch(() => {});
+            const tmpJobsFile = `${jobsFile}.tmp.${Date.now()}`;
+            let success = false;
+            try {
+              await fs.writeFile(tmpJobsFile, JSON.stringify(trimmed, null, 2), "utf-8");
+              await fs.rename(tmpJobsFile, jobsFile);
+              success = true;
+            } catch {
+            } finally {
+              if (!success) {
+                await fs.unlink(tmpJobsFile).catch(() => {});
+              }
+            }
           }
         }
       } catch {}
@@ -977,6 +987,14 @@ export type ServerJobRecord = {
   error?: string;
 };
 
+let jobsWriteLock: Promise<any> = Promise.resolve();
+
+export function withJobsLock<T>(fn: () => Promise<T>): Promise<T> {
+  const next = jobsWriteLock.then(() => fn(), () => fn());
+  jobsWriteLock = next.catch(() => {});
+  return next;
+}
+
 async function loadJobs(): Promise<ServerJobRecord[]> {
   const fs = (await import("fs")).promises;
   const path = await import("path");
@@ -990,12 +1008,28 @@ async function loadJobs(): Promise<ServerJobRecord[]> {
   }
 }
 
-async function saveJobs(jobs: any[]) {
+async function writeJobsFile(jobs: any[]) {
   const fs = (await import("fs")).promises;
   const path = await import("path");
   const dir = await getJobsDir();
   const file = path.join(dir, "jobs.json");
-  await fs.writeFile(file, JSON.stringify(jobs, null, 2), "utf-8");
+  const tmpPath = path.join(dir, `jobs.json.tmp.${Date.now()}.${Math.random().toString(36).slice(2)}`);
+  let success = false;
+  try {
+    await fs.writeFile(tmpPath, JSON.stringify(jobs, null, 2), "utf-8");
+    await fs.rename(tmpPath, file);
+    success = true;
+  } catch (err) {
+    throw err;
+  } finally {
+    if (!success) {
+      await fs.unlink(tmpPath).catch(() => {});
+    }
+  }
+}
+
+async function saveJobs(jobs: any[]) {
+  return withJobsLock(() => writeJobsFile(jobs));
 }
 
 // Sequential in-memory job queue to guarantee concurrency = 1
@@ -1011,23 +1045,25 @@ let isQueueProcessing = false;
 
 async function recoverInterruptedJobs() {
   try {
-    const jobs = await loadJobs();
-    let modified = false;
-    for (const j of jobs) {
-      if (j && (j.status === "rendering" || j.status === "queued") && j.data) {
-        if (j.status === "rendering") {
-          console.log(`[server-recovery] Recovering interrupted job ${j.id} (${j.title}) -> setting back to queued.`);
-          j.status = "queued";
-          modified = true;
-        }
-        if (!backgroundRenderQueue.some((item) => item.id === j.id)) {
-          backgroundRenderQueue.push({ id: j.id, data: j.data, title: j.title || "Ислямско видео" });
+    await withJobsLock(async () => {
+      const jobs = await loadJobs();
+      let modified = false;
+      for (const j of jobs) {
+        if (j && (j.status === "rendering" || j.status === "queued") && j.data) {
+          if (j.status === "rendering") {
+            console.log(`[server-recovery] Recovering interrupted job ${j.id} (${j.title}) -> setting back to queued.`);
+            j.status = "queued";
+            modified = true;
+          }
+          if (!backgroundRenderQueue.some((item) => item.id === j.id)) {
+            backgroundRenderQueue.push({ id: j.id, data: j.data, title: j.title || "Ислямско видео" });
+          }
         }
       }
-    }
-    if (modified) {
-      await saveJobs(jobs);
-    }
+      if (modified) {
+        await writeJobsFile(jobs);
+      }
+    });
     if (backgroundRenderQueue.length > 0 && !isQueueProcessing) {
       processRenderQueue().catch((e) => console.error("[server-recovery] Queue resume error:", e));
     }
@@ -1060,12 +1096,14 @@ async function processRenderQueue() {
     try {
       console.log(`[server-queue] Starting queued render for ${item.id} (${item.title})... Queue remaining: ${backgroundRenderQueue.length}`);
       
-      const startJobs = await loadJobs();
-      const sIdx = startJobs.findIndex((j: any) => j.id === item.id);
-      if (sIdx !== -1) {
-        startJobs[sIdx].status = "rendering";
-        await saveJobs(startJobs);
-      }
+      await withJobsLock(async () => {
+        const startJobs = await loadJobs();
+        const sIdx = startJobs.findIndex((j: any) => j.id === item.id);
+        if (sIdx !== -1) {
+          startJobs[sIdx].status = "rendering";
+          await writeJobsFile(startJobs);
+        }
+      });
 
       // 1. Thorough disk cleanup right before starting EACH job to ensure 100% free /tmp space
       await aggressivelyCleanServerDisk(true);
@@ -1089,26 +1127,30 @@ async function processRenderQueue() {
         await fs.writeFile(targetMp4, BufferMod.from(renderResult, "base64"));
       }
 
-      const curJobs = await loadJobs();
-      const idx = curJobs.findIndex((j: any) => j.id === item.id);
-      if (idx !== -1) {
-        curJobs[idx].status = "completed";
-        curJobs[idx].completedAt = Date.now();
-        await saveJobs(curJobs);
-      }
+      await withJobsLock(async () => {
+        const curJobs = await loadJobs();
+        const idx = curJobs.findIndex((j: any) => j.id === item.id);
+        if (idx !== -1) {
+          curJobs[idx].status = "completed";
+          curJobs[idx].completedAt = Date.now();
+          await writeJobsFile(curJobs);
+        }
+      });
       console.log(`[server-queue] Render ${item.id} COMPLETED successfully!`);
 
       // 2. Post-render cleanup of intermediate temp files before next job
       await aggressivelyCleanServerDisk(false);
     } catch (err: any) {
       console.error(`[server-queue] Render ${item.id} FAILED:`, err);
-      const curJobs = await loadJobs();
-      const idx = curJobs.findIndex((j: any) => j.id === item.id);
-      if (idx !== -1) {
-        curJobs[idx].status = "error";
-        curJobs[idx].error = String(err?.message || err);
-        await saveJobs(curJobs);
-      }
+      await withJobsLock(async () => {
+        const curJobs = await loadJobs();
+        const idx = curJobs.findIndex((j: any) => j.id === item.id);
+        if (idx !== -1) {
+          curJobs[idx].status = "error";
+          curJobs[idx].error = String(err?.message || err);
+          await writeJobsFile(curJobs);
+        }
+      });
       await aggressivelyCleanServerDisk(false);
     }
   }
@@ -1120,15 +1162,17 @@ export const startServerRenderJob = createServerFn({ method: "POST" })
   .validator((input: { data: any; title: string }) => input)
   .handler(async ({ data: { data, title } }) => {
     const jobId = `job_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
-    const jobs = await loadJobs();
-    jobs.unshift({
-      id: jobId,
-      title: title || "Ислямско видео (Фонов рендер)",
-      status: "queued",
-      createdAt: Date.now(),
-      data,
+    await withJobsLock(async () => {
+      const jobs = await loadJobs();
+      jobs.unshift({
+        id: jobId,
+        title: title || "Ислямско видео (Фонов рендер)",
+        status: "queued",
+        createdAt: Date.now(),
+        data,
+      });
+      await writeJobsFile(jobs);
     });
-    await saveJobs(jobs);
 
     backgroundRenderQueue.push({ id: jobId, data, title: title || "Ислямско видео" });
     processRenderQueue().catch((e) => console.error("[server-queue] Queue processing error:", e));
@@ -1139,16 +1183,20 @@ export const startServerRenderJob = createServerFn({ method: "POST" })
 export const retryServerRenderJob = createServerFn({ method: "POST" })
   .validator((input: { id: string }) => input)
   .handler(async ({ data: { id } }) => {
-    const jobs = await loadJobs();
-    const idx = jobs.findIndex((j: any) => j.id === id);
-    if (idx === -1 || !jobs[idx].data) {
-      throw new Error("Job or render data not found");
-    }
-    const jobData = jobs[idx].data;
-    const jobTitle = jobs[idx].title || id;
-    jobs[idx].status = "queued";
-    jobs[idx].error = undefined;
-    await saveJobs(jobs);
+    let jobData: any;
+    let jobTitle: string;
+    await withJobsLock(async () => {
+      const jobs = await loadJobs();
+      const idx = jobs.findIndex((j: any) => j.id === id);
+      if (idx === -1 || !jobs[idx].data) {
+        throw new Error("Job or render data not found");
+      }
+      jobData = jobs[idx].data;
+      jobTitle = jobs[idx].title || id;
+      jobs[idx].status = "queued";
+      jobs[idx].error = undefined;
+      await writeJobsFile(jobs);
+    });
 
     backgroundRenderQueue.push({ id, data: jobData, title: jobTitle });
     processRenderQueue().catch((e) => console.error("[server-queue] Queue processing error:", e));
@@ -1161,24 +1209,26 @@ export const listServerRenderJobs = createServerFn({ method: "POST" })
     const fs = (await import("fs")).promises;
     const path = await import("path");
     const dir = await getJobsDir();
-    const jobs = await loadJobs();
-    const validJobs: ServerJobRecord[] = [];
-    let updated = false;
-    for (const j of jobs) {
-      if (j && j.status === "completed") {
-        const fileExists = await fs.stat(path.join(dir, `${j.id}.mp4`)).catch(() => null);
-        if (!fileExists) {
-          j.status = "error";
-          j.error = "Видеото е било автоматично почистено от диска на сървъра. Натиснете бутона 🔄 за повторно рендиране.";
-          updated = true;
+    return await withJobsLock(async () => {
+      const jobs = await loadJobs();
+      const validJobs: ServerJobRecord[] = [];
+      let updated = false;
+      for (const j of jobs) {
+        if (j && j.status === "completed") {
+          const fileExists = await fs.stat(path.join(dir, `${j.id}.mp4`)).catch(() => null);
+          if (!fileExists) {
+            j.status = "error";
+            j.error = "Видеото е било автоматично почистено от диска на сървъра. Натиснете бутона 🔄 за повторно рендиране.";
+            updated = true;
+          }
         }
+        validJobs.push(j);
       }
-      validJobs.push(j);
-    }
-    if (updated) {
-      await saveJobs(validJobs);
-    }
-    return validJobs;
+      if (updated) {
+        await writeJobsFile(validJobs);
+      }
+      return validJobs;
+    });
   });
 
 export const getServerRenderJobBase64 = createServerFn({ method: "POST" })
@@ -1204,9 +1254,11 @@ export const deleteServerRenderJob = createServerFn({ method: "POST" })
     const dir = await getJobsDir();
     const targetMp4 = path.join(dir, `${id}.mp4`);
     await fs.unlink(targetMp4).catch(() => {});
-    const curJobs = await loadJobs();
-    const updated = curJobs.filter((j: any) => j.id !== id);
-    await saveJobs(updated);
+    await withJobsLock(async () => {
+      const curJobs = await loadJobs();
+      const updated = curJobs.filter((j: any) => j.id !== id);
+      await writeJobsFile(updated);
+    });
     return { success: true };
   });
 

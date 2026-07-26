@@ -60,22 +60,40 @@ function pickBlock(html: string, className: string): string | null {
   return null;
 }
 
+const HADITH_COLLECTION_CACHE = new Map<string, Promise<any>>();
+
+async function fetchHadithCollectionJson(url: string): Promise<any> {
+  const existing = HADITH_COLLECTION_CACHE.get(url);
+  if (existing) {
+    return existing;
+  }
+  const fetchPromise = (async () => {
+    const res = await fetch(url);
+    if (!res.ok) {
+      throw new Error(`Грешка при изтегляне на колекцията: ${res.status}`);
+    }
+    return await res.json();
+  })().catch((err) => {
+    HADITH_COLLECTION_CACHE.delete(url);
+    throw err;
+  });
+
+  HADITH_COLLECTION_CACHE.set(url, fetchPromise);
+  return fetchPromise;
+}
+
 async function scrape(collection: SunnahCollection, number: number): Promise<SunnahHadith> {
   const apiCollection = collection === "nawawi40" ? "nawawi" : collection;
   
   // To perfectly match sunnah.com numbering (especially for Muslim which uses different indices),
   // we fetch the full collection (which is cached heavily by Cloudflare CDN) and search by arabicnumber.
-  const [araRes, engRes] = await Promise.all([
-    fetch(`https://cdn.jsdelivr.net/gh/fawazahmed0/hadith-api@1/editions/ara-${apiCollection}.min.json`),
-    fetch(`https://cdn.jsdelivr.net/gh/fawazahmed0/hadith-api@1/editions/eng-${apiCollection}.min.json`)
+  const araUrl = `https://cdn.jsdelivr.net/gh/fawazahmed0/hadith-api@1/editions/ara-${apiCollection}.min.json`;
+  const engUrl = `https://cdn.jsdelivr.net/gh/fawazahmed0/hadith-api@1/editions/eng-${apiCollection}.min.json`;
+
+  const [araJson, engJson] = await Promise.all([
+    fetchHadithCollectionJson(araUrl),
+    fetchHadithCollectionJson(engUrl),
   ]);
-
-  if (!araRes.ok || !engRes.ok) {
-    throw new Error(`Грешка при изтегляне на колекцията: ${araRes.status} / ${engRes.status}`);
-  }
-
-  const araJson = await araRes.json();
-  const engJson = await engRes.json();
 
   // Find the exact hadith. Sunnah.com's main number usually matches the `arabicnumber` (e.g. Sahih Muslim).
   // If not found by arabicnumber, we fallback to the sequential `hadithnumber`.

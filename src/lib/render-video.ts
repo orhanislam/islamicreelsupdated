@@ -31,6 +31,8 @@ let W = 1080;
 let H = 1920;
 let SAFE = { top: 320, bottom: 280, side: 180 };
 
+const HIGHLIGHT_KEYWORDS = /^(Аллах|Коран|Корана|Пророк|Пророкът|Хадис|Сура|Аят|Рай|Дженнет|Дженнета|Дуа|Иман|Благословение|Милост|Търпение|Надежда|Успех|Мухаммад|Господ|Господар|Победа|Спокойствие|Защита|Сърце|Сърцето|Живот|Време|Времето|Истина|Истината|Светлина|Зло|Добро|Вяра|Вярата)[.,!?…]?$/i;
+
 function configureCanvasSize(ios: boolean, quality?: "1080p" | "720p") {
   const is1080p = quality !== "720p"; // Strictly 1080p (1080x1920) by default
   const scale = is1080p ? 1 : 720 / 1080;
@@ -295,95 +297,104 @@ export async function renderVideo(opts: VideoOptions): Promise<{ blob: Blob; mim
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = "high";
   let attachedCanvas: HTMLCanvasElement | null = null;
+  let createdObjectUrl: string | null = null;
   const detachCanvas = () => {
     if (attachedCanvas?.isConnected) attachedCanvas.remove();
     attachedCanvas = null;
+    if (createdObjectUrl) {
+      URL.revokeObjectURL(createdObjectUrl);
+      createdObjectUrl = null;
+    }
   };
-  if (ios) {
-    // iOS can suspend MediaRecorder tracks from canvases that are never
-    // attached to the page. Keep a tiny live canvas mounted during render.
-    canvas.style.cssText = [
-      "position:fixed",
-      "top:0",
-      "left:0",
-      `width:${W}px`,
-      `height:${H}px`,
-    ].join(";");
-    
-    const wrapper = document.createElement("div");
-    wrapper.style.cssText = [
-      "position:fixed",
-      "top:0",
-      "left:0",
-      "width:20px",
-      "height:20px",
-      "overflow:hidden",
-      "z-index:9999",
-      "pointer-events:none",
-      "opacity:0.02"
-    ].join(";");
-    
-    wrapper.appendChild(canvas);
-    document.body.appendChild(wrapper);
-    attachedCanvas = wrapper as any;
-  }
+
+  let bgVideo: HTMLVideoElement | null = null;
+  let audioCtx: AudioContext | null = null;
+  let audioSource: AudioBufferSourceNode | null = null;
+  let audioEndedAtWall: number | null = null;
 
   try {
-    await Promise.all([
-      document.fonts.load("700 72px 'Cormorant Garamond'"),
-      document.fonts.load("500 28px 'Inter'"),
-    ]);
-  } catch { /* best-effort */ }
-
-  // background — video has priority on desktop. On iOS Safari, recording a
-  // canvas that is continuously fed by an HTMLVideoElement is still unreliable:
-  // the visual track can freeze or the recorder can fail around the source
-  // clip's loop boundary while audio keeps going. For iPhone/iPad we render
-  // from the selected poster/image with Ken Burns movement instead, which keeps
-  // the subtitle/video timeline deterministic until the narration ends.
-  let bgVideo: HTMLVideoElement | null = null;
-  const useBackgroundVideo = Boolean(opts.backgroundVideoUrl);
-  if (useBackgroundVideo && opts.backgroundVideoUrl) {
-    bgVideo = document.createElement("video");
-    bgVideo.crossOrigin = "anonymous";
-    let videoSrc = opts.backgroundVideoUrl;
-    try {
-      // Preload the entire video into RAM to prevent network buffering
-      // from pausing the video during the real-time render.
-      const res = await fetch(videoSrc, { cache: "force-cache" });
-      if (res.ok) {
-        const b = await res.blob();
-        videoSrc = URL.createObjectURL(b);
-      }
-    } catch { /* ignore, use original URL */ }
-    bgVideo.src = videoSrc;
-    bgVideo.muted = true;
-    // Do not use native loop on iOS/stock clips: the loop boundary can pause
-    // canvas capture around ~15–20s. We control looping manually in drawFrame.
-    bgVideo.loop = false;
-    bgVideo.playsInline = true;
-    bgVideo.preload = "auto";
-    keepBackgroundVideoLooping(bgVideo);
-    const ready = await waitForVideoReady(bgVideo, 10_000);
-    if (!ready) {
-      console.warn("[render-video] background video unavailable, falling back to image");
-      bgVideo.src = "";
-      bgVideo = null;
+    if (ios) {
+      // iOS can suspend MediaRecorder tracks from canvases that are never
+      // attached to the page. Keep a tiny live canvas mounted during render.
+      canvas.style.cssText = [
+        "position:fixed",
+        "top:0",
+        "left:0",
+        `width:${W}px`,
+        `height:${H}px`,
+      ].join(";");
+      
+      const wrapper = document.createElement("div");
+      wrapper.style.cssText = [
+        "position:fixed",
+        "top:0",
+        "left:0",
+        "width:20px",
+        "height:20px",
+        "overflow:hidden",
+        "z-index:9999",
+        "pointer-events:none",
+        "opacity:0.02"
+      ].join(";");
+      
+      wrapper.appendChild(canvas);
+      document.body.appendChild(wrapper);
+      attachedCanvas = wrapper as any;
     }
-  }
-  const bg = !bgVideo && opts.backgroundUrl ? await loadImage(opts.backgroundUrl).catch(() => null) : null;
 
-  // audio — decoded into an AudioBuffer so it is guaranteed to be captured by
-  // MediaRecorder. createMediaElementSource silently outputs silence when the
-  // audio URL is cross-origin without permissive CORS, which previously
-   let audioCtx: AudioContext | null = null;
-  let audioDest: MediaStreamAudioDestinationNode | null = null;
-  let audioSource: AudioBufferSourceNode | null = null;
-  let audioStartCtxTime = 0;
-  let audioEndedAtWall: number | null = null;
-  let renderStartedAt = 0;
-  let duration = opts.fallbackDuration ?? 8;
-  let audioBufDuration = 0;
+    try {
+      await Promise.all([
+        document.fonts.load("700 72px 'Cormorant Garamond'"),
+        document.fonts.load("500 28px 'Inter'"),
+      ]);
+    } catch { /* best-effort */ }
+
+    // background — video has priority on desktop. On iOS Safari, recording a
+    // canvas that is continuously fed by an HTMLVideoElement is still unreliable:
+    // the visual track can freeze or the recorder can fail around the source
+    // clip's loop boundary while audio keeps going. For iPhone/iPad we render
+    // from the selected poster/image with Ken Burns movement instead, which keeps
+    // the subtitle/video timeline deterministic until the narration ends.
+    const useBackgroundVideo = Boolean(opts.backgroundVideoUrl);
+    if (useBackgroundVideo && opts.backgroundVideoUrl) {
+      bgVideo = document.createElement("video");
+      bgVideo.crossOrigin = "anonymous";
+      let videoSrc = opts.backgroundVideoUrl;
+      try {
+        // Preload the entire video into RAM to prevent network buffering
+        // from pausing the video during the real-time render.
+        const res = await fetch(videoSrc, { cache: "force-cache" });
+        if (res.ok) {
+          const b = await res.blob();
+          videoSrc = URL.createObjectURL(b);
+          createdObjectUrl = videoSrc;
+        }
+      } catch { /* ignore, use original URL */ }
+      bgVideo.src = videoSrc;
+      bgVideo.muted = true;
+      // Do not use native loop on iOS/stock clips: the loop boundary can pause
+      // canvas capture around ~15–20s. We control looping manually in drawFrame.
+      bgVideo.loop = false;
+      bgVideo.playsInline = true;
+      bgVideo.preload = "auto";
+      keepBackgroundVideoLooping(bgVideo);
+      const ready = await waitForVideoReady(bgVideo, 10_000);
+      if (!ready) {
+        console.warn("[render-video] background video unavailable, falling back to image");
+        bgVideo.src = "";
+        bgVideo = null;
+      }
+    }
+    const bg = !bgVideo && opts.backgroundUrl ? await loadImage(opts.backgroundUrl).catch(() => null) : null;
+
+    // audio — decoded into an AudioBuffer so it is guaranteed to be captured by
+    // MediaRecorder. createMediaElementSource silently outputs silence when the
+    // audio URL is cross-origin without permissive CORS, which previously
+    let audioDest: MediaStreamAudioDestinationNode | null = null;
+    let audioStartCtxTime = 0;
+    let renderStartedAt = 0;
+    let duration = opts.fallbackDuration ?? 8;
+    let audioBufDuration = 0;
   
   if (opts.audioUrl) {
     try {
@@ -740,6 +751,39 @@ export async function renderVideo(opts: VideoOptions): Promise<{ blob: Blob; mim
   let currentPhraseShownSince = -1;
   let lastPhraseIdx = -1;
 
+  // Cache static linear/radial gradients to avoid per-frame GC pressure in drawFrame
+  let cachedBgGrad: CanvasGradient | null = null;
+  let cachedOvGrad: CanvasGradient | null = null;
+  let cachedVigGrad: CanvasGradient | null = null;
+
+  const getBgGrad = () => {
+    if (!cachedBgGrad) {
+      cachedBgGrad = ctx.createLinearGradient(0, 0, 0, H);
+      cachedBgGrad.addColorStop(0, "#0d2a24");
+      cachedBgGrad.addColorStop(1, "#1a4d3e");
+    }
+    return cachedBgGrad;
+  };
+
+  const getOvGrad = () => {
+    if (!cachedOvGrad) {
+      cachedOvGrad = ctx.createLinearGradient(0, 0, 0, H);
+      cachedOvGrad.addColorStop(0, "rgba(0,0,0,0.25)");
+      cachedOvGrad.addColorStop(0.5, "rgba(0,0,0,0.05)");
+      cachedOvGrad.addColorStop(1, "rgba(0,0,0,0.45)");
+    }
+    return cachedOvGrad;
+  };
+
+  const getVigGrad = () => {
+    if (!cachedVigGrad) {
+      cachedVigGrad = ctx.createRadialGradient(W / 2, H / 2, H * 0.35, W / 2, H / 2, H * 0.7);
+      cachedVigGrad.addColorStop(0, "rgba(0,0,0,0)");
+      cachedVigGrad.addColorStop(1, "rgba(0,0,0,0.20)");
+    }
+    return cachedVigGrad;
+  };
+
   const drawFrame = (elapsed: number) => {
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = "high";
@@ -827,22 +871,15 @@ export async function renderVideo(opts: VideoOptions): Promise<{ blob: Blob; mim
       backgroundDrawn = true;
     }
     if (!backgroundDrawn) {
-      const g = ctx.createLinearGradient(0, 0, 0, H);
-      g.addColorStop(0, "#0d2a24");
-      g.addColorStop(1, "#1a4d3e");
-      ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+      ctx.fillStyle = getBgGrad();
+      ctx.fillRect(0, 0, W, H);
     }
 
     // overlay + vignette (lightened to keep stock videos vibrant and colorful)
-    const ov = ctx.createLinearGradient(0, 0, 0, H);
-    ov.addColorStop(0, "rgba(0,0,0,0.25)");
-    ov.addColorStop(0.5, "rgba(0,0,0,0.05)");
-    ov.addColorStop(1, "rgba(0,0,0,0.45)");
-    ctx.fillStyle = ov; ctx.fillRect(0, 0, W, H);
-    const vig = ctx.createRadialGradient(W / 2, H / 2, H * 0.35, W / 2, H / 2, H * 0.7);
-    vig.addColorStop(0, "rgba(0,0,0,0)");
-    vig.addColorStop(1, "rgba(0,0,0,0.20)");
-    ctx.fillStyle = vig; ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = getOvGrad();
+    ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = getVigGrad();
+    ctx.fillRect(0, 0, W, H);
 
     // corner accents (skip for minimal)
     if (opts.style !== "minimal") {
@@ -898,7 +935,6 @@ export async function renderVideo(opts: VideoOptions): Promise<{ blob: Blob; mim
       ctx.shadowBlur = Math.max(8, activePhrase.fontSize * 0.15);
       ctx.shadowOffsetY = Math.max(3, activePhrase.fontSize * 0.05);
 
-      const highlightKeywords = /^(Аллах|Коран|Корана|Пророк|Пророкът|Хадис|Сура|Аят|Рай|Дженнет|Дженнета|Дуа|Иман|Благословение|Милост|Търпение|Надежда|Успех|Мухаммад|Господ|Господар|Победа|Спокойствие|Защита|Сърце|Сърцето|Живот|Време|Времето|Истина|Истината|Светлина|Зло|Добро|Вяра|Вярата)[.,!?…]?$/i;
       const themeColor = opts.tiktokTheme === "emerald" ? "#32CD32" : opts.tiktokTheme === "neon" ? "#00FFFF" : "#FFD700";
 
       let currentWordOffset = 0;
@@ -917,7 +953,7 @@ export async function renderVideo(opts: VideoOptions): Promise<{ blob: Blob; mim
           const globalIdx = activePhrase.startWord + currentWordOffset + wIdx;
           const wTiming = wordTimes[globalIdx];
           const isActive = wTiming && (elapsed >= wTiming.start && elapsed <= wTiming.end);
-          const isKeyword = highlightKeywords.test(wordStr);
+          const isKeyword = HIGHLIGHT_KEYWORDS.test(wordStr);
 
           const wordWidth = ctx.measureText(wordStr).width;
           const centerX = cursorX + wordWidth / 2;
@@ -1020,7 +1056,10 @@ export async function renderVideo(opts: VideoOptions): Promise<{ blob: Blob; mim
     const finish = () => {
       if (!done) {
         done = true;
-        if (rafId !== null) cancelAnimationFrame(rafId);
+        if (rafId !== null) {
+          if (ios) window.clearTimeout(rafId);
+          else cancelAnimationFrame(rafId);
+        }
         clearTimeout(safety);
         resolveDraw();
       }
@@ -1148,18 +1187,18 @@ export async function renderVideo(opts: VideoOptions): Promise<{ blob: Blob; mim
       }
     }, ios ? 3500 : 350);
   });
-  if (blob.size < 1024) {
+    if (blob.size < 1024) {
+      throw new Error("Видеото не се записа правилно в браузъра. Моля, превключи на 'Сървърно рендиране (Фонов режим)' за 100% гарантиран резултат.");
+    }
+    if (ios && !recordedMimeType.includes("mp4")) {
+      throw new Error("iPhone получи неподдържан формат от браузъра. Превключи на 'Сървърно рендиране (Фонов режим)'.");
+    }
+    return { blob, mimeType: recordedMimeType };
+  } finally {
+    if (audioSource && audioEndedAtWall === null) { try { audioSource.stop(); } catch { /* ignore */ } }
+    if (bgVideo) { bgVideo.pause(); bgVideo.src = ""; }
+    if (audioCtx) await audioCtx.close().catch(() => undefined);
     detachCanvas();
-    throw new Error("Видеото не се записа правилно в браузъра. Моля, превключи на 'Сървърно рендиране (Фонов режим)' за 100% гарантиран резултат.");
   }
-  if (ios && !recordedMimeType.includes("mp4")) {
-    detachCanvas();
-    throw new Error("iPhone получи неподдържан формат от браузъра. Превключи на 'Сървърно рендиране (Фонов режим)'.");
-  }
-  if (audioSource && audioEndedAtWall === null) { try { audioSource.stop(); } catch { /* ignore */ } }
-  if (bgVideo) { bgVideo.pause(); bgVideo.src = ""; }
-  if (audioCtx) await audioCtx.close().catch(() => undefined);
-  detachCanvas();
-  return { blob, mimeType: recordedMimeType };
 }
 
