@@ -5,7 +5,7 @@
 // vertical candidates, score them, and return the best ones.
 
 import { createServerFn } from "@tanstack/react-start";
-import { geminiChat } from "@/lib/gemini";
+import { geminiChat, geminiImageAnalysis } from "@/lib/gemini";
 
 type Mood = "calm" | "majestic" | "reflective" | "hopeful" | "solemn";
 type Analysis = { theme: string; mood: Mood; queries: string[] };
@@ -143,14 +143,14 @@ function scoreVideo(v: PexelsVideo, file: PexelsVideoFile, targetMin = 30): numb
 function pickBestFile(v: PexelsVideo): PexelsVideoFile | undefined {
   const mp4s = (v.video_files || []).filter((f) => f.file_type === "video/mp4");
   if (!mp4s.length) return (v.video_files || [])[0];
-  // Sort by resolution quality: vertical orientation first, then highest pixel count up to crisp HD/4K
+  // Sort by resolution quality: vertical orientation first, then closest to 1080p (1920px height) to save CPU
   mp4s.sort((a, b) => {
     const aVert = a.height >= a.width ? 1 : 0;
     const bVert = b.height >= b.width ? 1 : 0;
     if (aVert !== bVert) return bVert - aVert;
-    const aTargetScore = Math.min(a.height, 3840);
-    const bTargetScore = Math.min(b.height, 3840);
-    return bTargetScore - aTargetScore || (b.width * b.height) - (a.width * a.height);
+    const aDiff = Math.abs(a.height - 1920);
+    const bDiff = Math.abs(b.height - 1920);
+    return aDiff - bDiff;
   });
   return mp4s[0];
 }
@@ -229,7 +229,73 @@ function buildOut(vs: PexelsVideo[], targetMin = 30): Out[] {
 
   const pool = matchingDuration.length > 0 ? matchingDuration : [];
   pool.sort((a, b) => b.score - a.score);
-  return pool.slice(0, 16);
+  return pool;
+}
+
+async function checkVideoForHaram(video: PexelsVideo): Promise<boolean> {
+  if (!video.video_pictures || video.video_pictures.length === 0) return false;
+  
+  try {
+    // Взимаме до 3 кадъра: начало, среда, край
+    const pics = video.video_pictures;
+    const indices = [
+      0,
+      Math.floor(pics.length / 2),
+      pics.length - 1
+    ];
+    // Премахваме повтарящи се индекси (ако видеото има само 1-2 картинки)
+    const uniqueIndices = [...new Set(indices)];
+    
+    const images: { base64: string; mimeType: string }[] = [];
+    
+    for (const idx of uniqueIndices) {
+      const pictureUrl = pics[idx].picture;
+      const res = await fetch(pictureUrl);
+      if (!res.ok) continue;
+      const arrayBuffer = await res.arrayBuffer();
+      const base64Image = Buffer.from(arrayBuffer).toString("base64");
+      const mimeType = res.headers.get("content-type") || "image/jpeg";
+      images.push({ base64: base64Image, mimeType });
+    }
+    
+    if (images.length === 0) return false;
+    
+    const prompt = `Анализирай тези няколко кадъра от видео и определи дали съдържат елементи, които са строго забранени (харам) за ислямско публично видео. 
+Търси за: открит аурат (нескромно облекло, шорти на мъже, тесни/разкриващи дрехи на жени, непокрита коса на жени), музикални инструменти, танци, алкохол/наркотици, прасета, кучета, насилие, идоли/кръстове. 
+Отговори САМО с 'HARAM' (ако има такива елементи дори в ЕДИН от кадрите) или 'HALAL' (ако ВСИЧКИ кадри са напълно безопасни - напр. природа, абстракция, скромни хора, архитектура, небе). Няма нужда от обяснения.`;
+
+    const answer = await geminiImageAnalysis(images, prompt);
+    if (answer.toUpperCase().includes("HARAM")) {
+      console.log(`[pexels] Отхвърлено видео поради ХАРАМ елементи: ID ${video.id}`);
+      return true;
+    }
+    return false;
+  } catch (e) {
+    console.error("[pexels] Грешка при проверка за харам:", e);
+    return false; // При грешка по-добре да го пуснем, отколкото да блокираме напълно
+  }
+}
+
+export async function getHalalVideos(vs: PexelsVideo[], targetMin: number, neededCount = 3): Promise<Out[]> {
+  const built = buildOut(vs, targetMin);
+  const safeVideos: Out[] = [];
+  
+  for (let i = 0; i < built.length; i++) {
+    const outVid = built[i];
+    const originalPexelsVideo = vs.find(v => v.id === outVid.id);
+    
+    if (safeVideos.length >= neededCount) break;
+    
+    if (originalPexelsVideo) {
+      const isHaram = await checkVideoForHaram(originalPexelsVideo);
+      if (!isHaram) {
+        safeVideos.push(outVid);
+      }
+    } else {
+      safeVideos.push(outVid);
+    }
+  }
+  return safeVideos;
 }
 
 export const searchPexelsVideos = createServerFn({ method: "POST" })
@@ -241,13 +307,13 @@ export const searchPexelsVideos = createServerFn({ method: "POST" })
 
     if (data.query?.trim()) {
       const vs = await pexelsVideoQuery(key, data.query.trim());
-      const built = buildOut(vs, targetMin);
+      const safeBuilt = await getHalalVideos(vs, targetMin, 4);
       return {
         query: data.query.trim(),
         theme: "",
         mood: "calm" as Mood,
         queriesTried: [data.query.trim()],
-        videos: built,
+        videos: safeBuilt,
       };
     }
 
@@ -258,15 +324,15 @@ export const searchPexelsVideos = createServerFn({ method: "POST" })
     for (const q of analysis.queries) {
       tried.push(q);
       const vs = await pexelsVideoQuery(key, q);
-      const built = buildOut(vs, targetMin);
-      if (built.length >= 3) {
+      const safeBuilt = await getHalalVideos(vs, targetMin, 3);
+      if (safeBuilt.length >= 3) {
         chosenQuery = q;
-        videos = built;
+        videos = safeBuilt;
         break;
       }
       // Keep the best partial result as we go so we never return empty.
-      if (built.length > videos.length) {
-        videos = built;
+      if (safeBuilt.length > videos.length) {
+        videos = safeBuilt;
         chosenQuery = q;
       }
     }

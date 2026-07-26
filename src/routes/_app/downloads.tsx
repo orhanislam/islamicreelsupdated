@@ -17,6 +17,7 @@ import {
 } from "@/lib/render.functions";
 import { generateViralThumbnail } from "@/lib/thumbnail.functions";
 import { formatViralSocialCaption } from "@/lib/caption.functions";
+import { clearAllBackgroundTasks } from "@/lib/assistant.functions";
 import { saveMediaBlob, saveMediaFromUrl, isIOSMediaDevice, sanitizeFilename } from "@/lib/download-media";
 import { Download, Trash2, CheckCircle2, ArrowLeft, Video, Film, RefreshCw, Loader2, AlertCircle, CloudCheck, Image as ImageIcon, Sparkles, Copy, Package } from "lucide-react";
 import { toast } from "sonner";
@@ -364,6 +365,7 @@ function DownloadsPage() {
   };
 
   const handleClearAll = async () => {
+    await clearAllBackgroundTasks();
     await clearDownloadsQueue();
     for (const j of serverJobs) {
       await deleteServerRenderJob({ data: { id: j.id } });

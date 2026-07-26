@@ -7,7 +7,7 @@ import { searchPexelsVideos } from "@/lib/pexels.functions";
 import { synthesizeHadithNarration } from "@/lib/tts.functions";
 import { startServerRenderJob, getJobsDir } from "@/lib/render.functions";
 import { getAiMemory, updateAiMemory, recordProposalUsages } from "@/lib/memory.functions";
-import { createTask, updateTask, listTasks } from "@/lib/tasks-engine";
+import { createTask, updateTask, listTasks, clearAllTasks } from "@/lib/tasks-engine";
 
 export type VideoProposal = {
   title: string;
@@ -248,7 +248,8 @@ export const suggestBatchViralProposals = createServerFn({ method: "POST" })
 1. Включи разнообразие: ЗАДЪЛЖИТЕЛНО предлагай САМО реални аяти от Корана и теми от Сахих Хадиси. АБСОЛЮТНО СА ЗАБРАНЕНИ измислени цитати.
 2. ИЗРИЧНО ЗАБРАНЕНО Е да включваш най-популярните текстове като Сура Ал-Бакара 2:255, Сура Ад-Духа (93) или Сура Юсуф! Искаме рядко цитирани, дълбоки и неклиширани текстове. Всяко предложение трябва да започва със зашеметяваща кука (viral hook).
 3. Задължително включвай кинематографични настройки за всяко видео: "useBRoll": true, "bRollInterval": 3 и "quality": "high".
-4. ВИНАГИ включвай точния източник в 'title' на български език във формат: [Коран {surah}:{ayah}] Заглавие или [Сахих {collection} #{number}] Заглавие.
+ВИНАГИ включвай точния източник в 'title' на български език във формат: [Коран {surah}:{ayah}] Заглавие или [Сахих {collection} #{number}] Заглавие.
+5. ИЗРИЧНО Е ЗАБРАНЕНО ДА КОПИРАШ ПРИМЕРНИТЕ АЯТИ И ХАДИСИ ОТ ДОЛНИЯ JSON (напр. 2:255 или 5645)! ГЕНЕРИРАЙ ИЗЦЯЛО НОВИ И УНИКАЛНИ ПРЕДЛОЖЕНИЯ!
 
 Върни JSON със следната структура, като при всяко предложение ЗАДЪЛЖИТЕЛНО попълваш точните числови параметри за съответния type:
 {
@@ -380,8 +381,8 @@ export const confirmAndGenerateVideo = createServerFn({ method: "POST" })
       let count = Math.min(7, Math.max(1, Number(proposal.count) || 1));
 
       // ALWAYS trust the title first (WYSIWYG) if it contains [Коран X:Y] format
-      const textToSearch = `${proposal.title} ${proposal.summaryBg || ""}`;
-      const colonMatch = textToSearch.match(/\b(\d{1,3})\s*[:.]\s*(\d{1,3})(?:\s*-\s*(\d{1,3}))?\b/);
+      // IMPORTANT: ONLY search the title! Do not search summaryBg, as it might contain random numbers like 39:53.
+      const colonMatch = proposal.title.match(/\b(\d{1,3})\s*[:.]\s*(\d{1,3})(?:\s*-\s*(\d{1,3}))?\b/);
       if (colonMatch) {
         surah = parseInt(colonMatch[1], 10);
         ayah = parseInt(colonMatch[2], 10);
@@ -392,7 +393,7 @@ export const confirmAndGenerateVideo = createServerFn({ method: "POST" })
           }
         }
       } else if (isNaN(surah) || surah <= 0 || isNaN(ayah) || ayah <= 0) {
-        const lower = textToSearch.toLowerCase();
+        const lower = proposal.title.toLowerCase();
         if (lower.includes("ихлас") || lower.includes("ikhlas")) {
           surah = 112; ayah = 1; count = 4;
         } else if (lower.includes("аср") || lower.includes("asr")) {
@@ -708,6 +709,12 @@ export async function triggerBackgroundTaskWorker() {
     }
   }, 10);
 }
+
+export const clearAllBackgroundTasks = createServerFn({ method: "POST" })
+  .handler(async () => {
+    await clearAllTasks();
+    return { success: true };
+  });
 
 export const checkActiveBackgroundTasks = createServerFn({ method: "POST" })
   .handler(async () => {

@@ -97,3 +97,7 @@ export async function clearCompletedTasks(): Promise<void> {
   const active = tasks.filter((t) => t.status === "queued" || t.status === "processing");
   await saveTasksList(active);
 }
+
+export async function clearAllTasks(): Promise<void> {
+  await saveTasksList([]);
+}

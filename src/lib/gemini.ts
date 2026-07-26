@@ -60,7 +60,9 @@ export async function geminiChat(
     const body: Record<string, unknown> = { contents };
     if (systemInstruction) body.system_instruction = systemInstruction;
     if (jsonMode) {
-      body.generationConfig = { responseMimeType: "application/json" };
+      body.generationConfig = { responseMimeType: "application/json", temperature: 1.2 };
+    } else {
+      body.generationConfig = { temperature: 1.2 };
     }
 
     return fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`, {
@@ -111,6 +113,55 @@ export async function geminiChat(
     throw new Error(`Лимитът за заявки е надвишен. Моля изчакайте 10 секунди и опитайте отново. (${lastErrorMsg})`);
   }
   throw new Error(`Грешка при генерация от AI: ${lastErrorMsg || "Неуспешно свързване с Gemini API"}`);
+}
+
+/**
+ * Analyzes an image (base64) using Gemini 2.5 Flash Vision.
+ * Used for Haram filtering.
+ */
+export async function geminiImageAnalysis(
+  images: { base64: string; mimeType: string }[],
+  prompt: string,
+): Promise<string> {
+  const apiKeys = getApiKeys();
+  if (!apiKeys.length) throw new Error("GEMINI_API_KEY не е конфигуриран в .env");
+
+  const imageParts = images.map((img) => ({
+    inlineData: { mimeType: img.mimeType, data: img.base64 },
+  }));
+
+  const contents = [
+    {
+      role: "user",
+      parts: [
+        { text: prompt },
+        ...imageParts,
+      ],
+    },
+  ];
+
+  let lastErrorMsg = "";
+  for (const apiKey of apiKeys) {
+    try {
+      const body = { contents, generationConfig: { temperature: 0.1 } };
+      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+
+      if (!res.ok) {
+        lastErrorMsg = `${res.status} ${res.statusText} - ${await res.text()}`;
+        continue;
+      }
+      const json = await res.json();
+      const content = (json.candidates?.[0]?.content?.parts?.[0]?.text ?? "").trim();
+      if (content) return content;
+    } catch (e: any) {
+      lastErrorMsg = e.message;
+    }
+  }
+  throw new Error(`Грешка при визуален анализ от AI: ${lastErrorMsg}`);
 }
 
 /**

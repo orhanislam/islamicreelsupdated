@@ -11,12 +11,32 @@ try {
   }
 } catch { /* ignore */ }
 
+class SimpleQueue {
+  private queue: (() => Promise<void>)[] = [];
+  private pending = false;
+  add(task: () => Promise<void>) {
+    return new Promise<void>((resolve, reject) => {
+      this.queue.push(async () => {
+        try { await task(); resolve(); } catch(e) { reject(e); }
+      });
+      this.runNext();
+    });
+  }
+  private async runNext() {
+    if (this.pending || this.queue.length === 0) return;
+    this.pending = true;
+    const task = this.queue.shift();
+    if (task) await task();
+    this.pending = false;
+    this.runNext();
+  }
+}
+
 let renderQueue: any = null;
+
 async function getRenderQueue() {
   if (!renderQueue) {
-    const PQueueMod = await import("p-queue");
-    const PQueue = PQueueMod.default || PQueueMod;
-    renderQueue = new PQueue({ concurrency: 1 });
+    renderQueue = new SimpleQueue();
   }
   return renderQueue;
 }
@@ -226,8 +246,8 @@ export async function executeRenderTask(opts: any): Promise<any> {
                     `-t ${clipDur}`,
                     "-vf scale=1080:1920:flags=bicubic:force_original_aspect_ratio=increase,crop=1080:1920,fps=30",
                     "-c:v libx264",
-                    "-preset superfast",
-                    "-crf 18",
+                    "-preset ultrafast",
+                    "-crf 26",
                     "-pix_fmt yuv420p",
                     "-an",
                   ])
@@ -306,31 +326,31 @@ export async function executeRenderTask(opts: any): Promise<any> {
 
       const tiktokTheme = data.tiktokTheme || "hormozi";
       let outlineColor = "&H00000000";
-      let outlineWidth = "6.5";
-      let shadowSize = "2.5";
+      let outlineWidth = "9.5";
+      let shadowSize = "4.5";
       let highlightColor = "&H00D7FF&"; // Classic Gold
       let borderStyle = "1";
       let backColor = "&H66000000";
 
       if (tiktokTheme === "emerald") {
         outlineColor = "&H00102008";
-        outlineWidth = "6.5";
-        shadowSize = "2.5";
+        outlineWidth = "9.5";
+        shadowSize = "4.5";
         highlightColor = "&H32CD32&"; // Lime Green / Gold glow
       } else if (tiktokTheme === "neon") {
         outlineColor = "&H00181000";
-        outlineWidth = "6.0";
-        shadowSize = "2.5";
+        outlineWidth = "9.0";
+        shadowSize = "4.5";
         highlightColor = "&HFFFF00&"; // Neon Cyan/Gold
       } else if (tiktokTheme === "classic") {
         outlineColor = "&H00000000";
-        outlineWidth = "5.0";
-        shadowSize = "1.5";
+        outlineWidth = "8.0";
+        shadowSize = "3.5";
         highlightColor = "&H00D7FF&";
       } else if (tiktokTheme === "fire") {
         outlineColor = "&H00001866";
-        outlineWidth = "6.5";
-        shadowSize = "2.5";
+        outlineWidth = "9.5";
+        shadowSize = "4.5";
         highlightColor = "&H0066FF&"; // Flaming Orange Gold
       } else if (tiktokTheme === "box") {
         borderStyle = "3";
@@ -631,26 +651,31 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
               const sliceEnd = Math.min(end, wIdx === p.words.length - 1 ? end : nextWordStart);
               if (sliceEnd <= sliceStart) continue;
 
-              const textLine = p.words
+              const microPop = (isFirstPhrase && wIdx === 0)
+                ? `\\fad(120,0)\\t(0,100,\\fscx112\\fscy112)\\t(100,180,\\fscx100\\fscy100)`
+                : ``;
+              const useAnim = (isLastPhrase && wIdx === p.words.length - 1) ? `${microPop}\\fad(0,100)` : microPop;
+              
+              // Active word scale: if the word is active, scale it up slightly for an aggressive pop
+              const activeScale = `\\fscx110\\fscy110`;
+              const inactiveScale = `\\fscx100\\fscy100`;
+              
+              const posTag = subPos === "center" ? `\\an5\\pos(540,960)` : `\\an8\\pos(540,${bulgarianMarginV})`;
+              const phraseStyleTag = `{${posTag}${useAnim}}`;
+              
+              // Apply active scale only to the active word
+              const scaledTextLine = p.words
                 .map((w, i) => {
                   const isActive = i === wIdx;
                   if (isActive) {
-                    // Active spoken word: glow with highlight color, NO width-shifting scaling
-                    return `{\\c${highlightColor}}${w}`;
+                    return `{${activeScale}\\c${highlightColor}}${w}`;
                   } else {
-                    // Clean crisp white font for inactive words
-                    return `{\\c&H00FFFFFF&}${w}`;
+                    return `{${inactiveScale}\\c&H00FFFFFF&}${w}`;
                   }
                 })
                 .join(" ");
 
-              const microPop = (isFirstPhrase && wIdx === 0)
-                ? `\\fad(120,0)\\t(0,100,\\fscx105\\fscy105)\\t(100,180,\\fscx100\\fscy100)`
-                : ``;
-              const useAnim = (isLastPhrase && wIdx === p.words.length - 1) ? `${microPop}\\fad(0,100)` : microPop;
-              const posTag = subPos === "center" ? `\\an5\\pos(540,960)` : `\\an8\\pos(540,${bulgarianMarginV})`;
-              const phraseStyleTag = `{${posTag}\\fscx100\\fscy100${useAnim}}`;
-              ass += `Dialogue: 0,${formatTime(sliceStart)},${formatTime(sliceEnd)},Bulgarian,,0,0,0,,${phraseStyleTag}${textLine}\n`;
+              ass += `Dialogue: 0,${formatTime(sliceStart)},${formatTime(sliceEnd)},Bulgarian,,0,0,0,,${phraseStyleTag}${scaledTextLine}\n`;
             }
             prevEnd = end;
           }
@@ -689,7 +714,9 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         let ffmpegStderr = "";
 
         cmd.complexFilter([
-          `[0:v]crop='min(iw,ih*9/16)':'min(iw*16/9,ih)',scale=${width}:${height}:flags=bicubic,eq=contrast=1.05:saturation=1.1,vignette=PI/4,subtitles='${escapedAssPath}'[v]`,
+          // Apply drawbox to darken the bottom part of the screen where subtitles usually appear (height: 800px from the bottom)
+          // Then overlay subtitles
+          `[0:v]crop='min(iw,ih*9/16)':'min(iw*16/9,ih)',scale=${width}:${height}:flags=bicubic,eq=contrast=1.05:saturation=1.1,vignette=PI/4,drawbox=y=ih-800:color=black@0.55:width=iw:height=800:t=fill,subtitles='${escapedAssPath}'[v]`,
           `[1:a]highpass=f=45,treble=g=2:f=3500:w=0.7,acompressor=threshold=-18dB:ratio=2.5:attack=5:release=50,bass=g=3:f=110:w=0.6,loudnorm=I=-14:LRA=9:TP=-1.0[a]`
         ])
         .outputOptions([
@@ -703,8 +730,8 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
           "-color_trc bt709",
           "-color_primaries bt709",
           "-movflags +faststart",
-          "-preset superfast",
-          "-crf 17",
+          "-preset ultrafast",
+          "-crf 26",
           "-r 30",
           "-g 60",
           "-c:a aac",
@@ -1223,6 +1250,6 @@ export function scheduleServerMaintenance() {
   }, 6 * 60 * 60 * 1000);
 }
 
-if (typeof process !== "undefined" && !maintenanceTimerStarted) {
+if (typeof window === "undefined" && typeof process !== "undefined" && !maintenanceTimerStarted) {
   try { scheduleServerMaintenance(); } catch {}
 }
