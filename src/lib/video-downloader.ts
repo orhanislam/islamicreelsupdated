@@ -37,7 +37,8 @@ export async function handleVideoDownload(request: Request, id: string, rawFilen
 
   const userAgent = request.headers.get("user-agent") || "";
   const isIOS = /iPhone|iPad|iPod/i.test(userAgent);
-  const disposition = isIOS ? "inline" : "attachment";
+  // Force attachment disposition so all devices (especially iOS) instantly download instead of playing inline
+  const disposition = "attachment";
 
   const commonHeaders: Record<string, string> = {
     "Content-Type": "video/mp4",

@@ -177,22 +177,18 @@ function DownloadsPage() {
   const handleDownloadServerJob = async (job: ServerJob) => {
     setDownloadingServerId(job.id);
     try {
-      toast.message("Подготвям видеото за изтегляне от сървъра...");
-
-      const { downloadUrl } = await getServerRenderJobDownloadUrl({
-        data: { id: job.id, title: job.title },
-      });
+      const filename = (job.title || "islamic-reel").replace(/[^a-z0-9._-]+/gi, "_") + ".mp4";
+      const downloadUrl = `/api/download/${job.id}?filename=${encodeURIComponent(filename)}`;
 
       // Universal robust native download via streaming endpoint (zero memory crash risk)
       // window.location.assign triggers the native download manager seamlessly and bypasses async popup blockers on Android,
-      // and on iOS PWA it opens the native QuickTime player (since we serve it inline) where the user can save it.
+      // and on iOS it instantly prompts the native Download dialog because we forced Content-Disposition: attachment on the server.
       window.location.assign(downloadUrl);
-      toast.success("Изтеглянето стартира!");
-
+      toast.success("Изтеглянето стартира веднага!");
     } catch (e) {
-      toast.error("Файлът не беше намерен. Възможно е да е изчистен. Натисни 🔄 за повторно рендиране!");
+      toast.error("Възникна грешка при изтеглянето. Възможно е файлът да е изчистен.");
     } finally {
-      setDownloadingServerId(null);
+      setTimeout(() => setDownloadingServerId(null), 1000);
     }
   };
 
