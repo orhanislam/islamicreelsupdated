@@ -307,57 +307,38 @@ export async function executeRenderTask(opts: any): Promise<any> {
 
       const isLowerThird = data.style === "lower-third";
       const subPos = data.subtitlePosition || "tiktok";
-      let bulgarianAlign = 8;
-      let bulgarianMarginV = 1180; // TikTok safe area default above caption
+      let bulgarianAlign = 5; // Center alignment
+      let bulgarianMarginV = 850; // TikTok Safe Area (Center-Top)
 
       if (subPos === "reels") {
-        bulgarianAlign = 8;
-        bulgarianMarginV = 1120;
+        bulgarianMarginV = 850;
       } else if (subPos === "shorts") {
-        bulgarianAlign = 8;
-        bulgarianMarginV = 1150;
+        bulgarianMarginV = 850;
       } else if (subPos === "center") {
-        bulgarianAlign = 5;
         bulgarianMarginV = 960;
       } else if (data.style === "bottom" || isLowerThird) {
         bulgarianAlign = 8;
-        bulgarianMarginV = 1180;
+        bulgarianMarginV = 1250; // safely above title
       }
 
       const tiktokTheme = data.tiktokTheme || "hormozi";
+      // Minimalistic modern style: white with subtle shadow, no background box
       let outlineColor = "&H00000000";
-      let outlineWidth = "9.5";
-      let shadowSize = "4.5";
-      let highlightColor = "&H00D7FF&"; // Classic Gold
+      let outlineWidth = "0"; // No thick outline
+      let shadowSize = "3.5"; // Little shadow
+      let highlightColor = "&H32CD32&"; // Default highlight
       let borderStyle = "1";
-      let backColor = "&H66000000";
+      let backColor = "&H00000000"; // Completely transparent background
 
       if (tiktokTheme === "emerald") {
-        outlineColor = "&H00102008";
-        outlineWidth = "9.5";
-        shadowSize = "4.5";
-        highlightColor = "&H32CD32&"; // Lime Green / Gold glow
+        highlightColor = "&H32CD32&"; // Lime Green
       } else if (tiktokTheme === "neon") {
-        outlineColor = "&H00181000";
-        outlineWidth = "9.0";
-        shadowSize = "4.5";
         highlightColor = "&HFFFF00&"; // Neon Cyan/Gold
       } else if (tiktokTheme === "classic") {
-        outlineColor = "&H00000000";
-        outlineWidth = "8.0";
-        shadowSize = "3.5";
         highlightColor = "&H00D7FF&";
       } else if (tiktokTheme === "fire") {
-        outlineColor = "&H00001866";
-        outlineWidth = "9.5";
-        shadowSize = "4.5";
         highlightColor = "&H0066FF&"; // Flaming Orange Gold
       } else if (tiktokTheme === "box") {
-        borderStyle = "3";
-        backColor = "&HAA000000";
-        outlineColor = "&H00000000";
-        outlineWidth = "8.0";
-        shadowSize = "0";
         highlightColor = "&H00D7FF&";
       }
 
@@ -554,7 +535,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
               let end = nextStart !== null ? Math.min(rawEnd, nextStart) : rawEnd;
               if (end <= start) end = start + 0.5; // Prevent ASS inverted timestamp crash
               const wordCount = ayahWords.length;
-              const fs = wordCount > 40 ? 48 : wordCount > 28 ? 54 : wordCount > 18 ? 62 : wordCount > 10 ? 72 : 82;
+              const fs = wordCount > 40 ? 58 : wordCount > 28 ? 68 : wordCount > 18 ? 80 : wordCount > 10 ? 92 : 105;
               const wpl = wordCount > 40 ? 7 : wordCount > 28 ? 6 : wordCount > 18 ? 5 : wordCount > 10 ? 4 : 3;
               const highlightKeywords = /^(Аллах|Коран|Корана|Пророк|Пророкът|Хадис|Сура|Аят|Рай|Дженнет|Дженнета|Дуа|Иман|Благословение|Милост|Търпение|Надежда|Успех|Мухаммад|Господ|Господар|Победа|Спокойствие|Защита|Сърце|Сърцето|Живот|Време|Времето|Истина|Истината|Светлина|Зло|Добро|Вяра|Вярата)[.,!?…]?$/i;
               const isCustomOrKeyword = (wordStr: string) => {
@@ -572,11 +553,9 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
               }
               formattedText = lines.join("\\N");
               
-              const microPop = isFirst
-                ? `\\fad(150,0)\\t(0,100,\\fscx104\\fscy104)\\t(100,180,\\fscx100\\fscy100)`
-                : ``;
-              const useAnim = isLast ? `${microPop}\\fad(0,120)` : microPop;
-              const posTag = subPos === "center" ? `\\an5\\pos(540,960)` : `\\an8\\pos(540,${bulgarianMarginV})`;
+              // Removed microPop to fix timing bug and ensure consistency
+              const useAnim = isLast ? `\\fad(0,120)` : ``;
+              const posTag = subPos === "center" ? `\\an5\\pos(540,960)` : `\\an${bulgarianAlign}\\pos(540,${bulgarianMarginV})`;
               
               // Quran always uses plain static text, no karaoke wiping, solid white color
               const ayahStyleTag = `{${posTag}\\fs${fs}\\1c&H00FFFFFF&${useAnim}}`;
@@ -651,16 +630,14 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
               const sliceEnd = Math.min(end, wIdx === p.words.length - 1 ? end : nextWordStart);
               if (sliceEnd <= sliceStart) continue;
 
-              const microPop = (isFirstPhrase && wIdx === 0)
-                ? `\\fad(120,0)\\t(0,100,\\fscx112\\fscy112)\\t(100,180,\\fscx100\\fscy100)`
-                : ``;
-              const useAnim = (isLastPhrase && wIdx === p.words.length - 1) ? `${microPop}\\fad(0,100)` : microPop;
+              // Removed microPop to ensure consistency
+              const useAnim = (isLastPhrase && wIdx === p.words.length - 1) ? `\\fad(0,100)` : ``;
               
               // Active word scale: if the word is active, scale it up slightly for an aggressive pop
               const activeScale = `\\fscx110\\fscy110`;
               const inactiveScale = `\\fscx100\\fscy100`;
               
-              const posTag = subPos === "center" ? `\\an5\\pos(540,960)` : `\\an8\\pos(540,${bulgarianMarginV})`;
+              const posTag = subPos === "center" ? `\\an5\\pos(540,960)` : `\\an${bulgarianAlign}\\pos(540,${bulgarianMarginV})`;
               const phraseStyleTag = `{${posTag}${useAnim}}`;
               
               // Apply active scale only to the active word
