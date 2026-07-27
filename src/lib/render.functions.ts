@@ -307,28 +307,29 @@ export async function executeRenderTask(opts: any): Promise<any> {
 
       const isLowerThird = data.style === "lower-third";
       const subPos = data.subtitlePosition || "tiktok";
-      let bulgarianAlign = 5; // Center alignment
-      let bulgarianMarginV = 850; // TikTok Safe Area (Center-Top)
+      let bulgarianAlign = 2; // Bottom-Center alignment
+      let bulgarianMarginV = 1350; // Maximally down without hitting TikTok title
 
       if (subPos === "reels") {
-        bulgarianMarginV = 850;
+        bulgarianMarginV = 1350;
       } else if (subPos === "shorts") {
-        bulgarianMarginV = 850;
+        bulgarianMarginV = 1350;
       } else if (subPos === "center") {
+        bulgarianAlign = 5;
         bulgarianMarginV = 960;
       } else if (data.style === "bottom" || isLowerThird) {
-        bulgarianAlign = 8;
-        bulgarianMarginV = 1250; // safely above title
+        bulgarianAlign = 2;
+        bulgarianMarginV = 1350; 
       }
 
       const tiktokTheme = data.tiktokTheme || "hormozi";
-      // Minimalistic modern style: white text, very thin crisp black outline, and elegant soft shadow
-      let outlineColor = "&H00000000"; // Solid black outline
-      let outlineWidth = "1.5"; // Very thin border for crispness on bright backgrounds
-      let shadowSize = "4.5"; // Soft readable drop shadow
-      let highlightColor = "&H32CD32&"; // Default highlight
-      let borderStyle = "1"; // 1 = Outline + Drop Shadow
-      let backColor = "&H88000000"; // Black shadow, semi-transparent (alpha ~50%)
+      // Minimalistic modern style: white text, blurred shadow, no harsh outline
+      let outlineColor = "&H00000000"; 
+      let outlineWidth = "0"; // No sharp outline
+      let shadowSize = "6.5"; // Large shadow (will be blurred via inline tag)
+      let highlightColor = "&H32CD32&"; 
+      let borderStyle = "1"; 
+      let backColor = "&H99000000"; // Black shadow, slightly more opaque
 
       if (tiktokTheme === "emerald") {
         highlightColor = "&H32CD32&"; // Lime Green
@@ -536,7 +537,8 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
               if (end <= start) end = start + 0.5; // Prevent ASS inverted timestamp crash
               const wordCount = ayahWords.length;
               const fs = wordCount > 40 ? 58 : wordCount > 28 ? 68 : wordCount > 18 ? 80 : wordCount > 10 ? 92 : 105;
-              const wpl = wordCount > 40 ? 7 : wordCount > 28 ? 6 : wordCount > 18 ? 5 : wordCount > 10 ? 4 : 3;
+              // Narrower wrapping so text doesn't overlap the TikTok right-side buttons
+              const wpl = wordCount > 40 ? 5 : wordCount > 28 ? 4 : wordCount > 18 ? 4 : wordCount > 10 ? 3 : 2;
               const highlightKeywords = /^(Аллах|Коран|Корана|Пророк|Пророкът|Хадис|Сура|Аят|Рай|Дженнет|Дженнета|Дуа|Иман|Благословение|Милост|Търпение|Надежда|Успех|Мухаммад|Господ|Господар|Победа|Спокойствие|Защита|Сърце|Сърцето|Живот|Време|Времето|Истина|Истината|Светлина|Зло|Добро|Вяра|Вярата)[.,!?…]?$/i;
               const isCustomOrKeyword = (wordStr: string) => {
                 const cleanW = wordStr.replace(/[^\p{L}\p{N}]/gu, "");
@@ -555,10 +557,11 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
               
               // Removed microPop to fix timing bug and ensure consistency
               const useAnim = isLast ? `\\fad(0,120)` : ``;
+              // Added \blur6 for a beautiful blurred shadow effect
               const posTag = subPos === "center" ? `\\an5\\pos(540,960)` : `\\an${bulgarianAlign}\\pos(540,${bulgarianMarginV})`;
               
               // Quran always uses plain static text, no karaoke wiping, solid white color
-              const ayahStyleTag = `{${posTag}\\fs${fs}\\1c&H00FFFFFF&${useAnim}}`;
+              const ayahStyleTag = `{${posTag}\\blur6\\fs${fs}\\1c&H00FFFFFF&${useAnim}}`;
               
               ass += `Dialogue: 0,${formatTime(start)},${formatTime(end)},Bulgarian,,0,0,0,,${ayahStyleTag}${formattedText}\n`;
             }
@@ -637,8 +640,9 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
               const activeScale = `\\fscx110\\fscy110`;
               const inactiveScale = `\\fscx100\\fscy100`;
               
+              // Added \blur6 for a beautiful blurred shadow effect
               const posTag = subPos === "center" ? `\\an5\\pos(540,960)` : `\\an${bulgarianAlign}\\pos(540,${bulgarianMarginV})`;
-              const phraseStyleTag = `{${posTag}${useAnim}}`;
+              const phraseStyleTag = `{${posTag}\\blur6${useAnim}}`;
               
               // Apply active scale only to the active word
               const scaledTextLine = p.words
