@@ -575,6 +575,60 @@ export const startBatchViralSeries = createServerFn({ method: "POST" })
     };
   });
 
+export const VIRAL_HADITH_SERIES_PRESETS = [
+  { collection: "nawawi40", number: 1, title: "Хадис № 1 на Навауи (Намеренията)", summaryBg: "Делата се ценят според намеренията", query: "sunrise golden hour cinematic nature" },
+  { collection: "bukhari", number: 6424, title: "Сахих ал-Бухари #6424 (Изпитанията)", summaryBg: "Когото Аллах желае да дари с добро, Той го подлага на изпитания за пречистване.", query: "storm sunlight dramatic cinematic nature" },
+  { collection: "nawawi40", number: 5, title: "Хадис № 5 на Навауи (Чистота на вярата)", summaryBg: "Искреността в религията и отхвърлянето на нововъведенията.", query: "pure water crystal clear cinematic" },
+  { collection: "muslim", number: 2564, title: "Сахих Муслим #2564 (Добротата)", summaryBg: "Силата на благородните обръщения и милостта.", query: "peaceful garden flowers cinematic" },
+  { collection: "tirmidhi", number: 1987, title: "Сунан Ат-Тирмизи #1987 (Търпението)", summaryBg: "Вътрешният мир и сабр в трудни моменти.", query: "mountains calm fog cinematic" },
+  { collection: "nawawi40", number: 13, title: "Хадис № 13 на Навауи (Братска обич)", summaryBg: "Никога не си истински вярващ, докато не пожелаеш за брата си това, което желаеш за себе си.", query: "two birds flying together cinematic nature" },
+  { collection: "nawawi40", number: 9, title: "Хадис № 9 на Навауи (Задълженията)", summaryBg: "Изпълнявайте заповедите според възможностите си.", query: "walking path nature forest cinematic" },
+  { collection: "bukhari", number: 6065, title: "Сахих ал-Бухари #6065 (Мълчанието)", summaryBg: "Който вярва в Аллах и в Сетния ден, нека говори добро или да мълчи.", query: "calm lake reflection cinematic nature" },
+  { collection: "muslim", number: 2699, title: "Сахих Муслим #2699 (Пътят към знанието)", summaryBg: "Който поеме по път да търси знание, Аллах ще му улесни пътя към Рая.", query: "stars night sky universe galaxy cinematic" },
+  { collection: "nawawi40", number: 27, title: "Хадис № 27 на Навауи (Праведността)", summaryBg: "Праведността е добрият нрав, а грехът е това, което тревожи сърцето.", query: "peaceful ocean waves calm nature" },
+];
+
+export const startBatchViralHadithSeries = createServerFn({ method: "POST" })
+  .validator((input: { count?: number; selectedIndices?: number[] } | undefined) => input || {})
+  .handler(async ({ data }: { data: { count?: number; selectedIndices?: number[] } }): Promise<{ success: boolean; count: number; message: string }> => {
+    let chosen = VIRAL_HADITH_SERIES_PRESETS.slice(0, data.count || 3);
+    if (data.selectedIndices && data.selectedIndices.length > 0) {
+      chosen = data.selectedIndices
+        .map((idx) => VIRAL_HADITH_SERIES_PRESETS[idx])
+        .filter(Boolean);
+    }
+
+    for (const item of chosen) {
+      try {
+        await confirmAndGenerateVideo({
+          data: {
+            proposal: {
+              title: `[Сахих Хадис] ${item.title} • Пакетно Вайръл Видео`,
+              type: "hadith",
+              collection: item.collection,
+              number: item.number,
+              summaryBg: item.summaryBg,
+              themeBg: "Кинематографична атмосфера",
+              searchQuery: item.query,
+              tiktokTheme: "hormozi",
+              quality: "high",
+              useBRoll: true,
+              bRollInterval: 3,
+            },
+          },
+        });
+      } catch (e) {
+        console.error(`[batch] Failed to start render for hadith ${item.title}:`, e);
+      }
+    }
+
+    return {
+      success: true,
+      count: chosen.length,
+      message: `📦 Успешно стартирано пакетно генериране на ${chosen.length} професионални вайръл видеа с хадиси! Можеш да следиш напредъка им и да ги свалиш наведнъж в раздел Изтегляния.`,
+    };
+  });
+
 async function getHistoryFilePath() {
   const path = await import("path");
   const dir = await getJobsDir();

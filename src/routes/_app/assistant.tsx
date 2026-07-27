@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { toast } from "sonner";
-import { chatWithAssistant, suggestViralProposal, suggestBatchViralProposals, confirmAndGenerateVideo, startBatchViralSeries, getAssistantHistory, saveAssistantHistory, clearAssistantHistory, startBackgroundPlanGeneration, startBackgroundBatchGeneration, checkActiveBackgroundTasks, type VideoProposal } from "@/lib/assistant.functions";
+import { chatWithAssistant, suggestViralProposal, suggestBatchViralProposals, confirmAndGenerateVideo, startBatchViralSeries, startBatchViralHadithSeries, getAssistantHistory, saveAssistantHistory, clearAssistantHistory, startBackgroundPlanGeneration, startBackgroundBatchGeneration, checkActiveBackgroundTasks, type VideoProposal } from "@/lib/assistant.functions";
 import { getAiMemory, updateAiMemory, type AiMemory } from "@/lib/memory.functions";
 import { generateViralThumbnail } from "@/lib/thumbnail.functions";
 import { formatViralSocialCaption } from "@/lib/caption.functions";
@@ -61,6 +61,7 @@ function AssistantPage() {
   const [loading, setLoading] = useState(false);
   const [batchLoading, setBatchLoading] = useState(false);
   const [batchCount, setBatchCount] = useState<number>(5);
+  const [hadithBatchCount, setHadithBatchCount] = useState<number>(5);
   const [viralLoading, setViralLoading] = useState(false);
   const [confirmingIdx, setConfirmingIdx] = useState<number | null>(null);
   const [showMemory, setShowMemory] = useState(false);
@@ -390,6 +391,29 @@ function AssistantPage() {
     }
   };
 
+  const handleStartHadithBatchSeries = async (customCount?: number | React.MouseEvent) => {
+    const countToRun = typeof customCount === "number" ? customCount : hadithBatchCount;
+    try {
+      playStudioClick("start");
+      setBatchLoading(true);
+      toast.message(`Стартиране на пакетно генериране на ${countToRun} вайръл видеа с хадиси...`);
+      const res = await startBatchViralHadithSeries({ data: { count: countToRun } });
+      playStudioClick("success");
+      toast.success(res.message);
+      setMessages((prev) => [
+        ...prev,
+        {
+          role: "assistant",
+          text: `📦 **Пакетното генериране на Хадиси е стартирано!**\n\nСистемата генерира ${countToRun} топ вайръл видеа с Хадиси с професионални субтитри. Можеш да ги следиш и да ги изтеглиш наведнъж в раздел **[Изтегляния](/downloads)**.`,
+        },
+      ]);
+    } catch (e: any) {
+      toast.error(e?.message || "Грешка при стартиране на пакетното генериране");
+    } finally {
+      setBatchLoading(false);
+    }
+  };
+
   const handleViralSuggest = async () => {
     try {
       playStudioClick("start");
@@ -649,22 +673,46 @@ function AssistantPage() {
           </button>
         </div>
 
-        {/* Viral Hadith Generator Card */}
+        {/* Batch Viral Hadith Generator Card */}
         <div className="rounded-2xl border border-blue-500/30 bg-gradient-to-r from-blue-500/10 via-cyan-500/5 to-transparent p-3.5 sm:p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4">
           <div>
             <div className="flex items-center gap-2 text-blue-400 font-bold text-sm">
-              <ScrollText className="size-4" /> ВАЙРЪЛ ХАДИС ГЕНЕРАТОР
+              <ScrollText className="size-4" /> ПАКЕТЕН РЕЖИМ • ВАЙРЪЛ СЕРИЯ ОТ ХАДИСИ
             </div>
             <p className="text-xs text-muted-foreground mt-1">
-              Генерирай уникално видео с автентичен (Sahih) хадис. Системата пази история и винаги ти дава различен!
+              Избери колко автентични (Sahih) хадиса да се генерират автоматично наведнъж (с кинематографичен фон):
             </p>
+            <div className="flex flex-wrap items-center gap-2 mt-2.5">
+              {[3, 5, 8, 10].map((num) => (
+                <button
+                  key={num}
+                  type="button"
+                  onClick={() => setHadithBatchCount(num)}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition border cursor-pointer ${
+                    hadithBatchCount === num
+                      ? "bg-blue-500 text-white border-blue-400 shadow-md scale-105"
+                      : "bg-black/40 text-blue-300/80 border-blue-500/30 hover:bg-blue-500/20"
+                  }`}
+                >
+                  📜 {num} видеа
+                </button>
+              ))}
+            </div>
           </div>
           <button
-            onClick={handleNextHadithQuickAction}
-            disabled={loading}
-            className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-blue-500 to-cyan-600 px-5 py-2.5 text-xs font-bold text-white shadow-lg hover:from-blue-400 hover:to-cyan-500 transition shrink-0 cursor-pointer"
+            onClick={() => handleStartHadithBatchSeries(hadithBatchCount)}
+            disabled={batchLoading}
+            className="inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-blue-500 to-cyan-600 px-5 py-3 text-xs font-bold text-white shadow-lg hover:from-blue-400 hover:to-cyan-500 transition shrink-0 cursor-pointer self-stretch sm:self-auto"
           >
-            📜 Вайръл Хадис
+            {batchLoading ? (
+              <>
+                <Loader2 className="size-4 animate-spin" /> Генериране...
+              </>
+            ) : (
+              <>
+                <Video className="size-4" /> 🚀 Генерирай Серия от {hadithBatchCount} Видеа
+              </>
+            )}
           </button>
         </div>
 
