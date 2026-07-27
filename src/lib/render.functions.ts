@@ -322,13 +322,13 @@ export async function executeRenderTask(opts: any): Promise<any> {
       }
 
       const tiktokTheme = data.tiktokTheme || "hormozi";
-      // Minimalistic modern style: white with subtle shadow, no background box
-      let outlineColor = "&H00000000";
-      let outlineWidth = "0"; // No thick outline
-      let shadowSize = "3.5"; // Little shadow
+      // Minimalistic modern style: white text, very thin crisp black outline, and elegant soft shadow
+      let outlineColor = "&H00000000"; // Solid black outline
+      let outlineWidth = "1.5"; // Very thin border for crispness on bright backgrounds
+      let shadowSize = "4.5"; // Soft readable drop shadow
       let highlightColor = "&H32CD32&"; // Default highlight
-      let borderStyle = "1";
-      let backColor = "&H00000000"; // Completely transparent background
+      let borderStyle = "1"; // 1 = Outline + Drop Shadow
+      let backColor = "&H88000000"; // Black shadow, semi-transparent (alpha ~50%)
 
       if (tiktokTheme === "emerald") {
         highlightColor = "&H32CD32&"; // Lime Green
@@ -691,9 +691,8 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         let ffmpegStderr = "";
 
         cmd.complexFilter([
-          // Apply drawbox to darken the bottom part of the screen where subtitles usually appear (height: 800px from the bottom)
-          // Then overlay subtitles
-          `[0:v]crop='min(iw,ih*9/16)':'min(iw*16/9,ih)',scale=${width}:${height}:flags=bicubic,eq=contrast=1.05:saturation=1.1,vignette=PI/4,drawbox=y=ih-800:color=black@0.55:width=iw:height=800:t=fill,subtitles='${escapedAssPath}'[v]`,
+          // Video background remains fully visible. Light contrast bump for vibrancy, no black box overlay!
+          `[0:v]crop='min(iw,ih*9/16)':'min(iw*16/9,ih)',scale=${width}:${height}:flags=bicubic,eq=contrast=1.05:saturation=1.1,subtitles='${escapedAssPath}'[v]`,
           `[1:a]highpass=f=45,treble=g=2:f=3500:w=0.7,acompressor=threshold=-18dB:ratio=2.5:attack=5:release=50,bass=g=3:f=110:w=0.6,loudnorm=I=-14:LRA=9:TP=-1.0[a]`
         ])
         .outputOptions([
