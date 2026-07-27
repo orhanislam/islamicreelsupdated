@@ -325,7 +325,8 @@ export async function executeRenderTask(opts: any): Promise<any> {
       const tiktokTheme = data.tiktokTheme || "hormozi";
       // Minimalistic modern style: white text, blurred shadow, no harsh outline
       let outlineColor = "&H00000000"; 
-      let outlineWidth = "0"; // No sharp outline
+      // Setting outline > 0 ensures that \blur only blurs the shadow/outline, leaving the text sharp!
+      let outlineWidth = "2"; 
       let shadowSize = "6.5"; // Large shadow (will be blurred via inline tag)
       let highlightColor = "&H32CD32&"; 
       let borderStyle = "1"; 
