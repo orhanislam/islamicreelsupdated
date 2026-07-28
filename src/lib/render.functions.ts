@@ -637,9 +637,10 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
               // Removed microPop to ensure consistency
               const useAnim = (isLastPhrase && wIdx === p.words.length - 1) ? `\\fad(0,100)` : ``;
               
-              // Active word scale: if the word is active, scale it up slightly for an aggressive pop
-              const activeScale = `\\fscx110\\fscy110`;
-              const inactiveScale = `\\fscx100\\fscy100`;
+              // Fixed word scale: keep scale static so the phrase width doesn't change 
+              // dynamically and cause jarring line-wrap jumps mid-phrase!
+              const activeScale = ``;
+              const inactiveScale = ``;
               
               // Added \blur6 for a beautiful blurred shadow effect
               const posTag = subPos === "center" ? `\\an5\\pos(540,960)` : `\\an${bulgarianAlign}\\pos(540,${bulgarianMarginV})`;
