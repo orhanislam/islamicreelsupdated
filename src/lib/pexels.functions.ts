@@ -34,7 +34,7 @@ async function analyzeVisualThemes(text: string, avoid: string[] = []): Promise<
 
   try {
     const raw = await geminiChat(
-      "gemini-2.5-flash",
+      "gemini-3.6-flash",
       [
         {
           role: "system",

@@ -112,7 +112,7 @@ CAPCUT-ПОДОБНИ ИНСТРУКЦИИ ЗА РЕДАКТИРАНЕ:
       { role: "user", content: data.prompt },
     ];
 
-    const raw = await geminiChat("gemini-2.5-flash", msgs, true);
+    const raw = await geminiChat("gemini-3.6-flash", msgs, true);
     let parsed: any;
     try {
       let clean = raw.replace(/```json\s*|\s*```/g, "").trim();
@@ -189,7 +189,7 @@ SALAFI HALAL ПРИНЦИПИ (СТРИКТНО ЗАДЪЛЖИТЕЛНО):
       { role: "system", content: prompt },
       { role: "user", content: "Предложи 1 вирусна Ислямска тема сега според системните инструкции и върни валиден JSON." }
     ] as any;
-    const raw = await geminiChat("gemini-2.5-flash", msgs, true);
+    const raw = await geminiChat("gemini-3.6-flash", msgs, true);
     let parsed: any;
     try {
       let clean = raw.replace(/```json\s*|\s*```/g, "").trim();
@@ -291,7 +291,7 @@ export const suggestBatchViralProposals = createServerFn({ method: "POST" })
       { role: "user", content: `Предложи пакет от ${countNum} вирусни идеи сега според инструкциите и върни валиден JSON с масив proposals от точно ${countNum} елемента.` }
     ] as any;
 
-    const raw = await geminiChat("gemini-2.5-flash", msgs, true);
+    const raw = await geminiChat("gemini-3.6-flash", msgs, true);
     let parsed: any;
     try {
       let clean = raw.replace(/```json\s*|\s*```/g, "").trim();

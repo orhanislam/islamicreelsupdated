@@ -14,7 +14,6 @@ function getApiKeys(): string[] {
     }
   } catch {}
   if (process.env.GEMINI_API_KEY) keys.push(process.env.GEMINI_API_KEY);
-  keys.push(["AQ.Ab8RN6LhLDhb6BjZPD", "UkiNwLpxnxZ7Y6-i_9pcfetDTB69M7cg"].join(""));
   return Array.from(new Set(keys.filter(Boolean)));
 }
 
@@ -72,15 +71,13 @@ export async function geminiChat(
     });
   };
 
-  // Prioritize gemini-2.5-flash (Paid/Professional tier) first as requested by user
+  // Prioritize gemini-3.6-flash first
   const validModels = [
-    "gemini-2.5-flash",
-    "gemini-2.5-pro",
-    "gemini-2.0-flash",
-    "gemini-flash-latest",
-    "gemini-flash-lite-latest"
+    "gemini-3.6-flash",
+    "gemini-3.5-flash-lite",
+    "gemini-omni-flash-preview"
   ];
-  const targetModel = model || "gemini-2.5-flash";
+  const targetModel = model || "gemini-3.6-flash";
   const uniqueModels = Array.from(new Set([targetModel, ...validModels]));
   let lastErrorMsg = "";
 
@@ -100,9 +97,9 @@ export async function geminiChat(
     }
   }
 
-  // Pass 2: Wait 2 seconds and retry gemini-2.5-flash
+  // Pass 2: Wait 2 seconds and retry gemini-3.6-flash
   await new Promise((r) => setTimeout(r, 2000));
-  const retryRes = await fetchWithModel("gemini-2.5-flash", apiKeys[apiKeys.length - 1]).catch(() => null);
+  const retryRes = await fetchWithModel("gemini-3.6-flash", apiKeys[apiKeys.length - 1]).catch(() => null);
   if (retryRes && retryRes.ok) {
     const json = await retryRes.json();
     const content = (json.candidates?.[0]?.content?.parts?.[0]?.text ?? "").trim();
@@ -144,7 +141,7 @@ export async function geminiImageAnalysis(
   for (const apiKey of apiKeys) {
     try {
       const body = { contents, generationConfig: { temperature: 0.1 } };
-      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`, {
+      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=${apiKey}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
@@ -177,7 +174,7 @@ export async function geminiGenerateImage(
   let lastError = "";
   for (const apiKey of apiKeys) {
     const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${apiKey}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=${apiKey}`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -251,7 +248,7 @@ ${ayahBounds.map(a => `
 `;
 
   try {
-    const rawResponse = await geminiChat("gemini-2.5-flash", [
+    const rawResponse = await geminiChat("gemini-3.6-flash", [
       { role: "user", content: promptText }
     ], false);
     

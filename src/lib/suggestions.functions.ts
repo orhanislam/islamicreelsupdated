@@ -13,7 +13,7 @@ export const suggestViral = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     const constraint = data.kind === "ayah" ? "Само аяти." : data.kind === "hadith" ? "Само сахих хадиси." : "Аяти или сахих хадиси.";
     const raw = await geminiChat(
-      "gemini-2.5-flash",
+      "gemini-3.6-flash",
       [
         { role: "system", content: SYS },
         { role: "user", content: `Тема/настроение: ${data.theme}\n${constraint}` },

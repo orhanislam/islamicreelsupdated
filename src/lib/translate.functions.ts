@@ -61,7 +61,7 @@ export const translateToBulgarian = createServerFn({ method: "POST" })
           const prompt = `Източник: ${data.sourceRef}\n\nМоля, преведи следните аяти на БЪЛГАРСКИ ЕЗИК (на кирилица!).\nВАЖНО: НЕ връщай арабския текст! Върни САМО превода на български език!\nЗа всеки аят върни превода във формат:\n=== AYAH номер ===\nтекст на превода на български език\n\nАяти за превод:\n${uncached.map((b) => `Аят ${b.ayah}:\n${b.english || b.arabic || ""}`).join("\n\n")}`;
 
           const rawResp = await geminiChat(
-            "gemini-2.5-flash",
+            "gemini-3.6-flash",
             [
               { role: "system", content: SYSTEM },
               { role: "user", content: prompt },
@@ -124,7 +124,7 @@ export const translateToBulgarian = createServerFn({ method: "POST" })
           try {
             await new Promise((r) => setTimeout(r, 1000));
             const prompt2 = `Източник: ${data.sourceRef}\n\nМоля, преведи следните аяти на БЪЛГАРСКИ ЕЗИК (на кирилица!), като всеки аят започва с номера му в скоби (напр. (1) ...):\nНЕ връщай арабски текст!\n\n${stillMissing.map((b) => `(${b.ayah}) ${b.english || b.arabic || ""}`).join("\n\n")}`;
-            const raw2 = await geminiChat("gemini-2.5-flash", [
+            const raw2 = await geminiChat("gemini-3.6-flash", [
               { role: "system", content: SYSTEM },
               { role: "user", content: prompt2 },
             ]);
@@ -180,7 +180,7 @@ export const translateToBulgarian = createServerFn({ method: "POST" })
     const prompt = `Източник: ${data.sourceRef}\n\nМоля, преведи следния хадис/текст на ясен, литературен и точен БЪЛГАРСКИ ЕЗИК (на кирилица).\nНЕ връщай арабски текст! Върни САМО българския превод (без въведения и без коментари):\n\nАнглийски:\n${data.english}`;
 
     const raw = await geminiChat(
-      "gemini-2.5-flash",
+      "gemini-3.6-flash",
       [
         { role: "system", content: SYSTEM },
         { role: "user", content: prompt },

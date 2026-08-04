@@ -13,7 +13,7 @@ export const suggestBackgrounds = createServerFn({ method: "POST" })
   .inputValidator((input: { text: string; sourceRef: string }) => input)
   .handler(async ({ data }) => {
     const raw = await geminiChat(
-      "gemini-2.5-flash",
+      "gemini-3.6-flash",
       [
         { role: "system", content: PROMPT_SYSTEM },
         { role: "user", content: `Източник: ${data.sourceRef}\n\nТекст:\n${data.text}` },
