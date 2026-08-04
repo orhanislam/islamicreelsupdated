@@ -20,6 +20,9 @@ import { formatViralSocialCaption } from "@/lib/caption.functions";
 import { clearAllBackgroundTasks } from "@/lib/assistant.functions";
 import { saveMediaBlob, saveMediaFromUrl, isIOSMediaDevice, sanitizeFilename } from "@/lib/download-media";
 import { Download, Trash2, CheckCircle2, ArrowLeft, Video, Film, RefreshCw, Loader2, AlertCircle, CloudCheck, Image as ImageIcon, Sparkles, Copy, Package, MoreVertical } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { copyToClipboardFallback } from "@/lib/utils";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -71,36 +74,8 @@ function DownloadsPage() {
   const [preloadedUrls, setPreloadedUrls] = useState<Record<string, string>>({});
   const preloadingRef = useRef<Set<string>>(new Set());
 
-  const copyToClipboard = (text: string, successMsg?: string) => {
-    const msg = successMsg || "📋 Професионалният TikTok/Reels текст е копиран в клипборда!";
-    const fallbackCopyLocal = (t: string) => {
-      try {
-        const textArea = document.createElement("textarea");
-        textArea.value = t;
-        textArea.style.position = "fixed";
-        textArea.style.left = "-999999px";
-        document.body.appendChild(textArea);
-        textArea.focus();
-        textArea.select();
-        document.execCommand('copy');
-        textArea.remove();
-        toast.success(msg);
-      } catch (err) {
-        toast.error("Грешка при копиране");
-      }
-    };
-
-    if (navigator.clipboard && window.isSecureContext) {
-      navigator.clipboard.writeText(text)
-        .then(() => toast.success(msg))
-        .catch(() => fallbackCopyLocal(text));
-    } else {
-      fallbackCopyLocal(text);
-    }
-  };
-
   const handleCopyTikTokCaption = (title: string) => {
-    copyToClipboard(formatViralSocialCaption(title));
+    copyToClipboardFallback(formatViralSocialCaption(title));
   };
 
   const handleCleanServerDisk = async () => {
@@ -603,7 +578,7 @@ function DownloadsPage() {
                             <span>Social Kit (ZIP)</span>
                           </DropdownMenuItem>
                           <DropdownMenuItem
-                            onClick={() => copyToClipboard(`${window.location.origin}/api/download/${job.id}?filename=${encodeURIComponent((job.title || "islamic-reel").replace(/[^a-z0-9._-]+/gi, "_") + ".mp4")}`, "Линкът е копиран! Отвори браузъра Safari и го постави там, за да изтеглиш.")}
+                            onClick={() => copyToClipboardFallback(`${window.location.origin}/api/download/${job.id}?filename=${encodeURIComponent((job.title || "islamic-reel").replace(/[^a-z0-9._-]+/gi, "_") + ".mp4")}`, "Линкът е копиран! Отвори браузъра Safari и го постави там, за да изтеглиш.")}
                             className="cursor-pointer"
                           >
                             <Copy className="size-4 mr-2" />
@@ -743,7 +718,7 @@ function DownloadsPage() {
                         <span>Social Kit (ZIP)</span>
                       </DropdownMenuItem>
                       <DropdownMenuItem
-                        onClick={() => copyToClipboard(item.title || "islamic-reel", "Заглавието е копирано!")}
+                        onClick={() => copyToClipboardFallback(item.title || "islamic-reel", "Заглавието е копирано!")}
                         className="cursor-pointer"
                       >
                         <Copy className="size-4 mr-2" />

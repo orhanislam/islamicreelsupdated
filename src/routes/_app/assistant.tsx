@@ -4,6 +4,7 @@ import { Bot, Send, Loader2, Sparkles, Download, CheckCircle2, Video, Pencil, Br
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
+import { copyToClipboardFallback } from "@/lib/utils";
 import { toast } from "sonner";
 import { chatWithAssistant, suggestViralProposal, suggestBatchViralProposals, confirmAndGenerateVideo, startBatchViralSeries, startBatchViralHadithSeries, getAssistantHistory, saveAssistantHistory, clearAssistantHistory, startBackgroundPlanGeneration, startBackgroundBatchGeneration, checkActiveBackgroundTasks, type VideoProposal } from "@/lib/assistant.functions";
 import { getAiMemory, updateAiMemory, type AiMemory } from "@/lib/memory.functions";
@@ -159,30 +160,7 @@ function AssistantPage() {
   const handleCopyTikTokCaption = (title: string, summary?: string, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
     const text = formatViralSocialCaption(title, summary);
-    if (navigator.clipboard && window.isSecureContext) {
-      navigator.clipboard.writeText(text)
-        .then(() => toast.success("📋 Професионалният TikTok/Reels текст е копиран в клипборда!"))
-        .catch(() => fallbackCopy(text));
-    } else {
-      fallbackCopy(text);
-    }
-  };
-
-  const fallbackCopy = (text: string) => {
-    try {
-      const textArea = document.createElement("textarea");
-      textArea.value = text;
-      textArea.style.position = "fixed";
-      textArea.style.left = "-999999px";
-      document.body.appendChild(textArea);
-      textArea.focus();
-      textArea.select();
-      document.execCommand('copy');
-      textArea.remove();
-      toast.success("📋 Професионалният TikTok/Reels текст е копиран в клипборда!");
-    } catch (err) {
-      toast.error("Грешка при копиране на текста");
-    }
+    copyToClipboardFallback(text);
   };
 
   useEffect(() => {

@@ -22,6 +22,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { copyToClipboardFallback } from "@/lib/utils";
 import { Card } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -1267,8 +1268,7 @@ function CreatePage() {
                     onClick={() => {
                       const title = content?.source_ref || "Ислямска Мъдрост";
                       const text = formatViralSocialCaption(title, content?.bulgarian || bulgarian);
-                      navigator.clipboard.writeText(text);
-                      toast.success("📋 Професионалният TikTok/Reels текст е копиран в клипборда!");
+                      copyToClipboardFallback(text);
                     }}
                     className="border-teal-500/40 text-teal-400 hover:bg-teal-500/10 cursor-pointer"
                   >
