@@ -133,6 +133,9 @@ function DownloadsPage() {
 
   const triggerDownload = async (item: DownloadItem, manual = false) => {
     try {
+      if (manual) {
+        copyToClipboardFallback(formatViralSocialCaption(item.title || "Ислямска мъдрост"));
+      }
       await saveMediaBlob(item.blob, `${item.title || "nur-studio-video"}.${item.ext}`, item.mimeType);
       setDownloadedIds((prev) => new Set([...prev, item.id]));
       if (manual) {
@@ -555,7 +558,10 @@ function DownloadsPage() {
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end" className="w-56">
                           <DropdownMenuItem
-                            onClick={() => handleCopyTikTokCaption(job.title)}
+                            onSelect={(e) => {
+                              e.preventDefault();
+                              handleCopyTikTokCaption(job.title);
+                            }}
                             className="cursor-pointer"
                           >
                             <Copy className="size-4 mr-2 text-teal-400" />
@@ -578,7 +584,10 @@ function DownloadsPage() {
                             <span>Social Kit (ZIP)</span>
                           </DropdownMenuItem>
                           <DropdownMenuItem
-                            onClick={() => copyToClipboardFallback(`${window.location.origin}/api/download/${job.id}?filename=${encodeURIComponent((job.title || "islamic-reel").replace(/[^a-z0-9._-]+/gi, "_") + ".mp4")}`, "Линкът е копиран! Отвори браузъра Safari и го постави там, за да изтеглиш.")}
+                            onSelect={(e) => {
+                              e.preventDefault();
+                              copyToClipboardFallback(`${window.location.origin}/api/download/${job.id}?filename=${encodeURIComponent((job.title || "islamic-reel").replace(/[^a-z0-9._-]+/gi, "_") + ".mp4")}`, "Линкът е копиран! Отвори браузъра Safari и го постави там, за да изтеглиш.");
+                            }}
                             className="cursor-pointer"
                           >
                             <Copy className="size-4 mr-2" />
@@ -695,7 +704,10 @@ function DownloadsPage() {
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end" className="w-56">
                       <DropdownMenuItem
-                        onClick={() => handleCopyTikTokCaption(item.title || "islamic-reel")}
+                        onSelect={(e) => {
+                          e.preventDefault();
+                          handleCopyTikTokCaption(item.title || "islamic-reel");
+                        }}
                         className="cursor-pointer"
                       >
                         <Copy className="size-4 mr-2 text-teal-400" />
@@ -718,7 +730,10 @@ function DownloadsPage() {
                         <span>Social Kit (ZIP)</span>
                       </DropdownMenuItem>
                       <DropdownMenuItem
-                        onClick={() => copyToClipboardFallback(item.title || "islamic-reel", "Заглавието е копирано!")}
+                        onSelect={(e) => {
+                          e.preventDefault();
+                          copyToClipboardFallback(item.title || "islamic-reel", "Заглавието е копирано!");
+                        }}
                         className="cursor-pointer"
                       >
                         <Copy className="size-4 mr-2" />
