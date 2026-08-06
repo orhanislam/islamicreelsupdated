@@ -554,70 +554,7 @@ export const startBatchViralSeries = createServerFn({ method: "POST" })
   .handler(async ({ data }: { data: { count?: number; selectedIndices?: number[] } }): Promise<{ success: boolean; count: number; message: string }> => {
     let chosenProposals: VideoProposal[] = [];
 
-    if (data.selectedIndices && data.selectedIndices.length > 0) {
-      const chosen = data.selectedIndices
-        .map((idx) => VIRAL_SERIES_PRESETS[idx])
-        .filter(Boolean);
-      chosenProposals = chosen.map(item => ({
-        title: `${item.ref} • Пакетно Вайръл Видео`,
-        type: "quran",
-        surah: item.surah,
-        ayah: item.ayah,
-        count: item.ayahEnd - item.ayah + 1,
-        summaryBg: item.summary,
-        themeBg: "Кинематографична атмосфера",
-        searchQuery: item.query,
-        tiktokTheme: "hormozi",
-        quality: "high",
-        useBRoll: true,
-        bRollInterval: 3
-      }));
-    } else {
-      try {
-        const aiResponse = await suggestBatchViralProposals({ data: { count: data.count || 3, topic: "САМО Коран (ИЗБЯГВАЙ ПОВТОРЕНИЯ)" } });
-        chosenProposals = aiResponse.proposals || [];
-      } catch (e) {
-        console.error("[batch] AI generation failed, falling back to static presets:", e);
-      }
-      
-      if (chosenProposals.length === 0) {
-        const fallback = [...VIRAL_SERIES_PRESETS];
-        for (let i = fallback.length - 1; i > 0; i--) {
-          const j = Math.floor(Math.random() * (i + 1));
-          [fallback[i], fallback[j]] = [fallback[j], fallback[i]];
-        }
-        chosenProposals = fallback.slice(0, data.count || 3).map(item => ({
-          title: `${item.ref} • Пакетно Вайръл Видео`,
-          type: "quran",
-          surah: item.surah,
-          ayah: item.ayah,
-          count: item.ayahEnd - item.ayah + 1,
-          summaryBg: item.summary,
-          themeBg: "Кинематографична атмосфера",
-          searchQuery: item.query,
-          tiktokTheme: "hormozi",
-          quality: "high",
-          useBRoll: true,
-          bRollInterval: 3
-        }));
-      }
-    }
-
-    for (const proposal of chosenProposals) {
-      try {
-        await confirmAndGenerateVideo({
-          data: { proposal },
-        });
-      } catch (e) {
-        console.error(`[batch] Failed to start render for ${proposal.title}:`, e);
-      }
-    }
-
-    return {
-      success: true,
-      count: chosenProposals.length,
-      message: `📦 Успешно стартирано пакетно генериране на ${chosenProposals.length} професионални вайръл видеа! Можеш да следиш напредъка им и да ги свалиш наведнъж в раздел Изтегляния.`,
-    };
+    throw new Error("⚠️ НАЛИЧНА Е НОВА ВЕРСИЯ! Моля, презаредете страницата (Refresh/F5), за да видите плана в чата преди генериране.");
   });
 
 export const VIRAL_HADITH_SERIES_PRESETS = [
@@ -638,68 +575,7 @@ export const startBatchViralHadithSeries = createServerFn({ method: "POST" })
   .handler(async ({ data }: { data: { count?: number; selectedIndices?: number[] } }): Promise<{ success: boolean; count: number; message: string }> => {
     let chosenProposals: VideoProposal[] = [];
 
-    if (data.selectedIndices && data.selectedIndices.length > 0) {
-      const chosen = data.selectedIndices
-        .map((idx) => VIRAL_HADITH_SERIES_PRESETS[idx])
-        .filter(Boolean);
-      chosenProposals = chosen.map(item => ({
-        title: `[Сахих Хадис] ${item.title} • Пакетно Вайръл Видео`,
-        type: "hadith",
-        collection: item.collection,
-        number: item.number,
-        summaryBg: item.summaryBg,
-        themeBg: "Кинематографична атмосфера",
-        searchQuery: item.query,
-        tiktokTheme: "hormozi",
-        quality: "high",
-        useBRoll: true,
-        bRollInterval: 3
-      }));
-    } else {
-      try {
-        const aiResponse = await suggestBatchViralProposals({ data: { count: data.count || 3, topic: "САМО Сахих Хадиси (ИЗБЯГВАЙ ПОВТОРЕНИЯ)" } });
-        chosenProposals = aiResponse.proposals || [];
-      } catch (e) {
-        console.error("[batch] AI generation failed, falling back to static presets:", e);
-      }
-      
-      if (chosenProposals.length === 0) {
-        const fallback = [...VIRAL_HADITH_SERIES_PRESETS];
-        for (let i = fallback.length - 1; i > 0; i--) {
-          const j = Math.floor(Math.random() * (i + 1));
-          [fallback[i], fallback[j]] = [fallback[j], fallback[i]];
-        }
-        chosenProposals = fallback.slice(0, data.count || 3).map(item => ({
-          title: `[Сахих Хадис] ${item.title} • Пакетно Вайръл Видео`,
-          type: "hadith",
-          collection: item.collection,
-          number: item.number,
-          summaryBg: item.summaryBg,
-          themeBg: "Кинематографична атмосфера",
-          searchQuery: item.query,
-          tiktokTheme: "hormozi",
-          quality: "high",
-          useBRoll: true,
-          bRollInterval: 3
-        }));
-      }
-    }
-
-    for (const proposal of chosenProposals) {
-      try {
-        await confirmAndGenerateVideo({
-          data: { proposal },
-        });
-      } catch (e) {
-        console.error(`[batch] Failed to start render for hadith ${proposal.title}:`, e);
-      }
-    }
-
-    return {
-      success: true,
-      count: chosenProposals.length,
-      message: `📦 Успешно стартирано пакетно генериране на ${chosenProposals.length} професионални вайръл видеа с хадиси! Можеш да следиш напредъка им и да ги свалиш наведнъж в раздел Изтегляния.`,
-    };
+    throw new Error("⚠️ НАЛИЧНА Е НОВА ВЕРСИЯ! Моля, презаредете страницата (Refresh/F5), за да видите плана в чата преди генериране.");
   });
 
 async function getHistoryFilePath() {
