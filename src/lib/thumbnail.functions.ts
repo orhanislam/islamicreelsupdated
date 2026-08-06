@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import sharp from "sharp";
 import { geminiChat } from "./gemini";
+import { pexelsPhotoQuery } from "./pexels.functions";
 
 export interface ThumbnailRequest {
   title: string;
@@ -70,41 +71,42 @@ export const generateViralThumbnail = createServerFn({ method: "POST" })
 
     const svg = `
 <svg width="1080" height="1920" viewBox="0 0 1080 1920" xmlns="http://www.w3.org/2000/svg">
-  <defs>
-    <linearGradient id="bg" x1="0%" y1="0%" x2="0%" y2="100%">
-      <stop offset="0%" stop-color="#070a12"/>
-      <stop offset="50%" stop-color="#0f172a"/>
-      <stop offset="100%" stop-color="#05070d"/>
-    </linearGradient>
-    <radialGradient id="glow" cx="50%" cy="45%" r="60%">
-      <stop offset="0%" stop-color="${data.accentColor}" stop-opacity="0.18"/>
-      <stop offset="100%" stop-color="#000000" stop-opacity="0"/>
-    </radialGradient>
-  </defs>
-
-  <!-- Luxury Dark Background -->
-  <rect width="1080" height="1920" fill="url(#bg)"/>
-  <rect width="1080" height="1920" fill="url(#glow)"/>
-
-  <!-- Geometric Luxury Border Frame -->
-  <rect x="65" y="110" width="950" height="1700" rx="36" fill="none" stroke="${data.accentColor}" stroke-width="3" stroke-opacity="0.35"/>
-  <rect x="85" y="130" width="910" height="1660" rx="28" fill="none" stroke="#FFFFFF" stroke-width="1" stroke-opacity="0.12"/>
-
-  <!-- Top Category Badge -->
-  <rect x="290" y="320" width="500" height="74" rx="37" fill="${data.accentColor}" fill-opacity="0.15" stroke="${data.accentColor}" stroke-width="2"/>
-  <text x="540" y="367" font-family="Arial, sans-serif" font-weight="800" font-size="28" fill="${data.accentColor}" text-anchor="middle" letter-spacing="4">${esc(data.category.toUpperCase())}</text>
+  <!-- Semi-transparent overlay to make text readable over any image -->
+  <rect width="1080" height="1920" fill="#000000" fill-opacity="0.45"/>
 
   <!-- Main Viral Title -->
   ${titleSvgLines}
-
-  <!-- Bottom Studio Branding -->
-  <line x1="440" y1="1540" x2="640" y2="1540" stroke="${data.accentColor}" stroke-width="4" stroke-linecap="round"/>
-  <text x="540" y="1610" font-family="Arial, sans-serif" font-weight="700" font-size="32" fill="#94A3B8" text-anchor="middle" letter-spacing="6">${esc(data.subtitle.toUpperCase())}</text>
 </svg>`;
 
-    const jpgBuf = await sharp(Buffer.from(svg))
-      .jpeg({ quality: 92, mozjpeg: true })
-      .toBuffer();
+    let jpgBuf: Buffer;
+    
+    try {
+      const apiKey = process.env.PEXELS_API_KEY;
+      if (!apiKey) throw new Error("No Pexels API Key");
+      
+      const photos = await pexelsPhotoQuery(apiKey, finalTitle, 15);
+      if (photos && photos.length > 0) {
+        const randomPhoto = photos[Math.floor(Math.random() * Math.min(5, photos.length))];
+        const res = await fetch(randomPhoto.src.large2x);
+        if (!res.ok) throw new Error("Failed to fetch image");
+        const photoBuffer = Buffer.from(await res.arrayBuffer());
+        
+        jpgBuf = await sharp(photoBuffer)
+          .resize(1080, 1920, { fit: "cover", position: "center" })
+          .composite([{ input: Buffer.from(svg), gravity: "center" }])
+          .jpeg({ quality: 92, mozjpeg: true })
+          .toBuffer();
+      } else {
+        throw new Error("No photos found");
+      }
+    } catch (err) {
+      console.error("Failed to generate pexels thumbnail background, falling back to basic overlay", err);
+      // Fallback: render SVG with a solid background if fetching Pexels fails
+      const fallbackSvg = svg.replace('fill-opacity="0.45"', 'fill-opacity="1.0"');
+      jpgBuf = await sharp(Buffer.from(fallbackSvg))
+        .jpeg({ quality: 92, mozjpeg: true })
+        .toBuffer();
+    }
 
     const base64 = jpgBuf.toString("base64");
     return {

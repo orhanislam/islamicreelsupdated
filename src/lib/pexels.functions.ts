@@ -91,7 +91,7 @@ type PexelsVideo = {
   url?: string;
 };
 
-async function pexelsPhotoQuery(key: string, query: string, perPage = 9) {
+export async function pexelsPhotoQuery(key: string, query: string, perPage = 9) {
   let safeQuery = query.trim();
   if (!safeQuery.toLowerCase().includes("nature") && !safeQuery.toLowerCase().includes("landscape")) {
     safeQuery += " nature landscape";
