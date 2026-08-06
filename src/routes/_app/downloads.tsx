@@ -200,6 +200,18 @@ function DownloadsPage() {
     }
   };
 
+  const getThumbTitle = (title?: string, payloadViral?: string) => {
+    if (payloadViral) return payloadViral;
+    if (!title) return "Ислямска мъдрост";
+    let v = title;
+    if (v.includes("] ")) {
+      v = v.split("] ").slice(1).join("] ").trim();
+    } else if (v.includes("•")) {
+      v = v.split("•")[1].trim();
+    }
+    return v;
+  };
+
   const handleDownloadAllZip = async () => {
     const completedServerJobs = serverJobs.filter((j) => j.status === "completed");
     const allCount = completedServerJobs.length + items.length;
@@ -228,7 +240,8 @@ function DownloadsPage() {
         const captionText = formatViralSocialCaption(job.title || "Ислямска мъдрост");
         folder.file(`${folderName}_tiktok_caption.txt`, captionText);
         try {
-          const thumbRes = await generateViralThumbnail({ data: { title: job.title || "Ислямска мъдрост" } });
+          const thumbTitle = getThumbTitle(job.title, job.payload?.data?.viralTitle);
+          const thumbRes = await generateViralThumbnail({ data: { title: thumbTitle } });
           if (thumbRes && thumbRes.dataUrl && thumbRes.dataUrl.includes("base64,")) {
             const thumbBase64 = thumbRes.dataUrl.split("base64,")[1];
             folder.file(`${folderName}_thumbnail.jpg`, thumbBase64, { base64: true });
@@ -276,7 +289,8 @@ function DownloadsPage() {
       folder.file(`${folderName}_tiktok_caption.txt`, captionText);
 
       try {
-        const thumbRes = await generateViralThumbnail({ data: { title: job.title || "Ислямска мъдрост" } });
+        const thumbTitle = getThumbTitle(job.title, job.payload?.data?.viralTitle);
+        const thumbRes = await generateViralThumbnail({ data: { title: thumbTitle } });
         if (thumbRes && thumbRes.dataUrl && thumbRes.dataUrl.includes("base64,")) {
           const thumbBase64 = thumbRes.dataUrl.split("base64,")[1];
           folder.file(`${folderName}_thumbnail.jpg`, thumbBase64, { base64: true });
@@ -307,7 +321,8 @@ function DownloadsPage() {
       folder.file(`${folderName}_tiktok_caption.txt`, captionText);
 
       try {
-        const thumbRes = await generateViralThumbnail({ data: { title: item.title || "Ислямска мъдрост" } });
+        const thumbTitle = getThumbTitle(item.title);
+        const thumbRes = await generateViralThumbnail({ data: { title: thumbTitle } });
         if (thumbRes && thumbRes.dataUrl && thumbRes.dataUrl.includes("base64,")) {
           const thumbBase64 = thumbRes.dataUrl.split("base64,")[1];
           folder.file(`${folderName}_thumbnail.jpg`, thumbBase64, { base64: true });
@@ -324,11 +339,12 @@ function DownloadsPage() {
     }
   };
 
-  const handleDownloadThumbnail = async (id: string, title: string) => {
+  const handleDownloadThumbnail = async (id: string, title: string, payloadViralTitle?: string) => {
     try {
       setGeneratingThumbId(id);
       toast.message("Генериране на професионална вайръл корица (Thumbnail)...");
-      const res = await generateViralThumbnail({ data: { title } });
+      const thumbTitle = getThumbTitle(title, payloadViralTitle);
+      const res = await generateViralThumbnail({ data: { title: thumbTitle } });
       const safeTitle = (title || "islamic-reel").replace(/[<>:"/\\|?*]+/g, "_").trim();
       const fetchRes = await fetch(res.dataUrl);
       const blob = await fetchRes.blob();
@@ -565,9 +581,9 @@ function DownloadsPage() {
                             <span>TikTok Текст</span>
                           </DropdownMenuItem>
                           <DropdownMenuItem
-                            onClick={() => handleDownloadThumbnail(job.id, job.title)}
+                            className="cursor-pointer font-medium"
+                            onClick={() => handleDownloadThumbnail(job.id, job.title, job.payload?.data?.viralTitle)}
                             disabled={generatingThumbId === job.id}
-                            className="cursor-pointer"
                           >
                             <ImageIcon className="size-4 mr-2 text-amber-400" />
                             <span>Cover Image (Корица)</span>

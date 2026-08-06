@@ -502,6 +502,13 @@ export const confirmAndGenerateVideo = createServerFn({ method: "POST" })
 
     const subtitleStyle = proposal.subtitlePosition || "middle";
 
+    let viralTitle = proposal.title;
+    if (viralTitle.includes("] ")) {
+      viralTitle = viralTitle.split("] ").slice(1).join("] ").trim();
+    } else if (viralTitle.includes("•")) {
+      viralTitle = viralTitle.split("•")[1].trim();
+    }
+
     const { jobId } = await startServerRenderJob({
       data: {
         title: reference,
@@ -511,6 +518,7 @@ export const confirmAndGenerateVideo = createServerFn({ method: "POST" })
           arabic,
           bulgarian,
           reference,
+          viralTitle,
           style: subtitleStyle,
           tiktokTheme: proposal.tiktokTheme || "hormozi",
           audioUrl: audioUrl || undefined,
