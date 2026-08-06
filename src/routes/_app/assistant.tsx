@@ -351,19 +351,19 @@ function AssistantPage() {
     try {
       playStudioClick("start");
       setBatchLoading(true);
-      toast.message(`Стартиране на пакетно генериране на ${countToRun} вайръл видеа...`);
-      const res = await startBatchViralSeries({ data: { count: countToRun } });
+      toast.message(`Генериране на план с ${countToRun} вайръл видеа от Корана...`);
+      const res = await suggestBatchViralProposals({ data: { count: countToRun, topic: "САМО Коран (ИЗБЯГВАЙ ПОВТОРЕНИЯ)" } });
       playStudioClick("success");
-      toast.success(res.message);
       setMessages((prev) => [
         ...prev,
         {
           role: "assistant",
-          text: `📦 **Пакетното генериране е стартирано!**\n\nСистемата генерира ${countToRun} топ вайръл видеа от Корана с професионални субтитри. Можеш да ги следиш и да ги изтеглиш наведнъж в раздел **[Изтегляния](/downloads)**.`,
+          text: res.reply,
+          proposals: res.proposals,
         },
       ]);
     } catch (e: any) {
-      toast.error(e?.message || "Грешка при стартиране на пакетното генериране");
+      toast.error(e?.message || "Грешка при генериране на плана");
     } finally {
       setBatchLoading(false);
     }
@@ -374,19 +374,19 @@ function AssistantPage() {
     try {
       playStudioClick("start");
       setBatchLoading(true);
-      toast.message(`Стартиране на пакетно генериране на ${countToRun} вайръл видеа с хадиси...`);
-      const res = await startBatchViralHadithSeries({ data: { count: countToRun } });
+      toast.message(`Генериране на план с ${countToRun} вайръл видеа с хадиси...`);
+      const res = await suggestBatchViralProposals({ data: { count: countToRun, topic: "САМО Сахих Хадиси (ИЗБЯГВАЙ ПОВТОРЕНИЯ)" } });
       playStudioClick("success");
-      toast.success(res.message);
       setMessages((prev) => [
         ...prev,
         {
           role: "assistant",
-          text: `📦 **Пакетното генериране на Хадиси е стартирано!**\n\nСистемата генерира ${countToRun} топ вайръл видеа с Хадиси с професионални субтитри. Можеш да ги следиш и да ги изтеглиш наведнъж в раздел **[Изтегляния](/downloads)**.`,
+          text: res.reply,
+          proposals: res.proposals,
         },
       ]);
     } catch (e: any) {
-      toast.error(e?.message || "Грешка при стартиране на пакетното генериране");
+      toast.error(e?.message || "Грешка при генериране на плана");
     } finally {
       setBatchLoading(false);
     }

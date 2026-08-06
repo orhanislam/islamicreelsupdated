@@ -329,13 +329,10 @@ function DownloadsPage() {
       setGeneratingThumbId(id);
       toast.message("Генериране на професионална вайръл корица (Thumbnail)...");
       const res = await generateViralThumbnail({ data: { title } });
-      const a = document.createElement("a");
-      a.href = res.dataUrl;
       const safeTitle = (title || "islamic-reel").replace(/[<>:"/\\|?*]+/g, "_").trim();
-      a.download = `${safeTitle}_thumbnail.jpg`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
+      const fetchRes = await fetch(res.dataUrl);
+      const blob = await fetchRes.blob();
+      await saveMediaBlob(blob, `${safeTitle}_thumbnail.jpg`, "image/jpeg");
       toast.success("Вайръл корицата е свалена успешно!");
     } catch (e) {
       toast.error("Не успях да създам корицата");

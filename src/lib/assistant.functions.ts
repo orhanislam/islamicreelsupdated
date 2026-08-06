@@ -158,13 +158,17 @@ export const suggestViralProposal = createServerFn({ method: "POST" })
 
     const THEMES = ["Търпение (Сабр)", "Упование в Аллах", "Прошка и милост", "Скрита мъдрост в трудности", "Мълчание", "Изобилие и благодарност", "Силата на Дуата", "Преходността на Дуня", "Сърдечно покаяние", "Защита от зло"];
     const randomTheme = THEMES[Math.floor(Math.random() * THEMES.length)];
+    const VIRAL_SURAHS = [3, 4, 8, 14, 18, 19, 20, 21, 24, 25, 29, 31, 36, 39, 40, 50, 51, 55, 56, 59, 67, 68, 73, 75, 76, 78, 89, 94, 99, 103];
+    const randomSurah1 = VIRAL_SURAHS[Math.floor(Math.random() * VIRAL_SURAHS.length)];
+    const randomSurah2 = VIRAL_SURAHS[Math.floor(Math.random() * VIRAL_SURAHS.length)];
     
     const prompt = `Ти си топ продуцент на вирусни Ислямски видеа (Reels & TikTok) на български език.
+ИЗКЛЮЧИТЕЛНО ВАЖНО ПРАВИЛО: ТРЯБВА ДА ГЕНЕРИРАШ АБСОЛЮТНО УНИКАЛНО ПРЕДЛОЖЕНИЕ, КОЕТО НИКОГА НЕ Е БИЛО ПРЕДЛАГАНО ПРЕДИ!
 Измисли и предложи ЕДНА изключително силна, НЕБАНАЛНА и психологически поразяваща тема/урок от Корана или Сахих Хадис за видео.${historyContext}
 
 ФОКУСИРАЙ СЕ СТРИКТНО ВЪРХУ ТАЗИ ТЕМА: "${randomTheme}". (Уникален ID: ${Date.now()})
 
-СТРИКТНО ПРАВИЛО: DO NOT RECOMMEND COMMON TEXTS. Не предлагай общи, банални текстове. ИЗРИЧНО ЗАБРАНЕНО Е да даваш Сура Ал-Бакара 2:255 (Аят ал-Курси), Сура Ад-Духа (93) или Сура Юсуф. Избери рядко цитиран текст с дълбоко житейско послание.
+СТРИКТНО ПРАВИЛО: DO NOT RECOMMEND COMMON TEXTS. Не предлагай общи, банални текстове. ИЗРИЧНО ЗАБРАНЕНО Е да даваш Сура Ал-Бакара 2:255 (Аят ал-Курси), Сура Ад-Духа (93) или Сура Юсуф. Избери рядко цитиран текст с дълбоко житейско послание. Генерирай нещо напълно различно от предишни пъти! Например потърси дълбок аят от Сура ${randomSurah1} или Сура ${randomSurah2}, или съвсем друга по твой избор.
 
 SALAFI HALAL ПРИНЦИПИ (СТРИКТНО ЗАДЪЛЖИТЕЛНО):
 ВИНАГИ генерирай "searchQuery", което търси САМО природа, абстрактни фонове, небеса, океани или ислямска архитектура. АБСОЛЮТНО ЗАБРАНЕНО е да има хора (people), човешки лица (faces), мъже, жени (woman, man), животни, музикални инструменти (piano), книги (books) или закрити помещения (indoor). Спазвай стриктни Salafi Halal принципи (no animate beings, no indoor objects).
@@ -239,17 +243,22 @@ export const suggestBatchViralProposals = createServerFn({ method: "POST" })
     const shuffledThemes = [...THEMES].sort(() => Math.random() - 0.5);
     const selectedThemes = shuffledThemes.slice(0, 3).join(", ");
     
+    const VIRAL_SURAHS = [3, 4, 8, 14, 18, 19, 20, 21, 24, 25, 29, 31, 36, 39, 40, 50, 51, 55, 56, 59, 67, 68, 73, 75, 76, 78, 89, 94, 99, 103];
+    const shuffledSurahs = [...VIRAL_SURAHS].sort(() => Math.random() - 0.5);
+    const randomSurahs = shuffledSurahs.slice(0, 5).join(", ");
+    
     const prompt = `Ти си ПРОФЕСИОНАЛЕН ПРОДУЦЕНТ И РЕЖИСЬОР на вирусни Ислямски видеа (Reels & TikTok) на български език.
-Измисли и предложи ПАКЕТ ОТ ТОЧНО ${countNum} изключително силни, НЕБАНАЛНИ и психологически поразяващи теми/уроки за къси видеа в категория: "${topicStr}".${historyContext}
+ИЗКЛЮЧИТЕЛНО ВАЖНО ПРАВИЛО: ТРЯБВА ДА ГЕНЕРИРАШ АБСОЛЮТНО УНИКАЛНИ ПРЕДЛОЖЕНИЯ, КОИТО НИКОГА НЕ СА БИЛИ ПРЕДЛАГАНИ ПРЕДИ!
+Измисли и предложи ПАКЕТ ОТ ТОЧНО ${countNum} изключително силни, НЕБАНАЛНИ и психологически поразяващи теми/уроци за къси видеа в категория: "${topicStr}".${historyContext}
 
 ФОКУСИРАЙ СЕ ДНЕС ВЪРХУ СЛЕДНИТЕ ТЕМИ: ${selectedThemes}. (Уникален ID: ${Date.now()})
 
 ПРОФЕСИОНАЛНИ СТРИКТНИ ПРАВИЛА (PRO WORKFLOW):
 1. Включи разнообразие: ЗАДЪЛЖИТЕЛНО предлагай САМО реални аяти от Корана и теми от Сахих Хадиси. АБСОЛЮТНО СА ЗАБРАНЕНИ измислени цитати.
-2. ИЗРИЧНО ЗАБРАНЕНО Е да включваш най-популярните текстове като Сура Ал-Бакара 2:255, Сура Ад-Духа (93) или Сура Юсуф! Искаме рядко цитирани, дълбоки и неклиширани текстове. Всяко предложение трябва да започва със зашеметяваща кука (viral hook).
+2. ИЗРИЧНО ЗАБРАНЕНО Е да включваш най-популярните текстове като Сура Ал-Бакара 2:255, Сура Ад-Духа (93) или Сура Юсуф! Искаме рядко цитирани, дълбоки и неклиширани текстове.
 3. Задължително включвай кинематографични настройки за всяко видео: "useBRoll": true, "bRollInterval": 3 и "quality": "high".
-ВИНАГИ включвай точния източник в 'title' на български език във формат: [Коран {surah}:{ayah}] Заглавие или [Сахих {collection} #{number}] Заглавие.
-5. ИЗРИЧНО Е ЗАБРАНЕНО ДА КОПИРАШ ПРИМЕРНИТЕ АЯТИ И ХАДИСИ ОТ ДОЛНИЯ JSON (напр. 2:255 или 5645)! ГЕНЕРИРАЙ ИЗЦЯЛО НОВИ И УНИКАЛНИ ПРЕДЛОЖЕНИЯ!
+4. ВИНАГИ включвай точния източник в 'title' на български език във формат: [Коран {surah}:{ayah}] Заглавие или [Сахих {collection} #{number}] Заглавие.
+5. ИЗРИЧНО Е ЗАБРАНЕНО ДА КОПИРАШ ПРИМЕРНИТЕ АЯТИ И ХАДИСИ ОТ ДОЛНИЯ JSON (напр. 2:255 или 5645)! ГЕНЕРИРАЙ ИЗЦЯЛО НОВИ, СЛУЧАЙНИ И УНИКАЛНИ ПРЕДЛОЖЕНИЯ! За да си сигурен, че са нови и същевременно имат "Вайръл" потенциал (много силни емоционално), потърси дълбоки аяти от случайни сури, например някоя измежду следните: Сура ${randomSurahs}, или съвсем други!
 
 Върни JSON със следната структура, като при всяко предложение ЗАДЪЛЖИТЕЛНО попълваш точните числови параметри за съответния type:
 {
@@ -301,8 +310,13 @@ export const suggestBatchViralProposals = createServerFn({ method: "POST" })
         clean = clean.substring(firstBrace, lastBrace + 1);
       }
       parsed = JSON.parse(clean);
-    } catch {
-      const fallbackShuffled = [...VIRAL_SERIES_PRESETS].sort(() => Math.random() - 0.5);
+    } catch (err) {
+      console.error("[suggestBatchViralProposals] Gemini parsing or network error:", err);
+      const fallbackShuffled = [...VIRAL_SERIES_PRESETS];
+      for (let i = fallbackShuffled.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [fallbackShuffled[i], fallbackShuffled[j]] = [fallbackShuffled[j], fallbackShuffled[i]];
+      }
       parsed = {
         reply: `Ето специално подбран пакет от ${countNum} топ вирусни идеи от Корана, Хадисите и TikTok трендовете! Избери кои от тях да одобрим и генерираме:`,
         proposals: fallbackShuffled.slice(0, countNum).map(p => ({
@@ -538,40 +552,71 @@ export const VIRAL_SERIES_PRESETS = [
 export const startBatchViralSeries = createServerFn({ method: "POST" })
   .validator((input: { count?: number; selectedIndices?: number[] } | undefined) => input || {})
   .handler(async ({ data }: { data: { count?: number; selectedIndices?: number[] } }): Promise<{ success: boolean; count: number; message: string }> => {
-    let chosen = VIRAL_SERIES_PRESETS.slice(0, data.count || 3);
+    let chosenProposals: VideoProposal[] = [];
+
     if (data.selectedIndices && data.selectedIndices.length > 0) {
-      chosen = data.selectedIndices
+      const chosen = data.selectedIndices
         .map((idx) => VIRAL_SERIES_PRESETS[idx])
         .filter(Boolean);
+      chosenProposals = chosen.map(item => ({
+        title: `${item.ref} • Пакетно Вайръл Видео`,
+        type: "quran",
+        surah: item.surah,
+        ayah: item.ayah,
+        count: item.ayahEnd - item.ayah + 1,
+        summaryBg: item.summary,
+        themeBg: "Кинематографична атмосфера",
+        searchQuery: item.query,
+        tiktokTheme: "hormozi",
+        quality: "high",
+        useBRoll: true,
+        bRollInterval: 3
+      }));
+    } else {
+      try {
+        const aiResponse = await suggestBatchViralProposals({ data: { count: data.count || 3, topic: "САМО Коран (ИЗБЯГВАЙ ПОВТОРЕНИЯ)" } });
+        chosenProposals = aiResponse.proposals || [];
+      } catch (e) {
+        console.error("[batch] AI generation failed, falling back to static presets:", e);
+      }
+      
+      if (chosenProposals.length === 0) {
+        const fallback = [...VIRAL_SERIES_PRESETS];
+        for (let i = fallback.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [fallback[i], fallback[j]] = [fallback[j], fallback[i]];
+        }
+        chosenProposals = fallback.slice(0, data.count || 3).map(item => ({
+          title: `${item.ref} • Пакетно Вайръл Видео`,
+          type: "quran",
+          surah: item.surah,
+          ayah: item.ayah,
+          count: item.ayahEnd - item.ayah + 1,
+          summaryBg: item.summary,
+          themeBg: "Кинематографична атмосфера",
+          searchQuery: item.query,
+          tiktokTheme: "hormozi",
+          quality: "high",
+          useBRoll: true,
+          bRollInterval: 3
+        }));
+      }
     }
 
-    for (const item of chosen) {
+    for (const proposal of chosenProposals) {
       try {
         await confirmAndGenerateVideo({
-          data: {
-            proposal: {
-              title: `${item.ref} • Пакетно Вайръл Видео`,
-              type: "quran",
-              surah: item.surah,
-              ayah: item.ayah,
-              count: item.ayahEnd - item.ayah + 1,
-              summaryBg: item.summary,
-              themeBg: "Кинематографична атмосфера",
-              searchQuery: item.query,
-              tiktokTheme: "hormozi",
-              quality: "high",
-            },
-          },
+          data: { proposal },
         });
       } catch (e) {
-        console.error(`[batch] Failed to start render for ${item.ref}:`, e);
+        console.error(`[batch] Failed to start render for ${proposal.title}:`, e);
       }
     }
 
     return {
       success: true,
-      count: chosen.length,
-      message: `📦 Успешно стартирано пакетно генериране на ${chosen.length} професионални вайръл видеа! Можеш да следиш напредъка им и да ги свалиш наведнъж в раздел Изтегляния.`,
+      count: chosenProposals.length,
+      message: `📦 Успешно стартирано пакетно генериране на ${chosenProposals.length} професионални вайръл видеа! Можеш да следиш напредъка им и да ги свалиш наведнъж в раздел Изтегляния.`,
     };
   });
 
@@ -591,41 +636,69 @@ export const VIRAL_HADITH_SERIES_PRESETS = [
 export const startBatchViralHadithSeries = createServerFn({ method: "POST" })
   .validator((input: { count?: number; selectedIndices?: number[] } | undefined) => input || {})
   .handler(async ({ data }: { data: { count?: number; selectedIndices?: number[] } }): Promise<{ success: boolean; count: number; message: string }> => {
-    let chosen = VIRAL_HADITH_SERIES_PRESETS.slice(0, data.count || 3);
+    let chosenProposals: VideoProposal[] = [];
+
     if (data.selectedIndices && data.selectedIndices.length > 0) {
-      chosen = data.selectedIndices
+      const chosen = data.selectedIndices
         .map((idx) => VIRAL_HADITH_SERIES_PRESETS[idx])
         .filter(Boolean);
+      chosenProposals = chosen.map(item => ({
+        title: `[Сахих Хадис] ${item.title} • Пакетно Вайръл Видео`,
+        type: "hadith",
+        collection: item.collection,
+        number: item.number,
+        summaryBg: item.summaryBg,
+        themeBg: "Кинематографична атмосфера",
+        searchQuery: item.query,
+        tiktokTheme: "hormozi",
+        quality: "high",
+        useBRoll: true,
+        bRollInterval: 3
+      }));
+    } else {
+      try {
+        const aiResponse = await suggestBatchViralProposals({ data: { count: data.count || 3, topic: "САМО Сахих Хадиси (ИЗБЯГВАЙ ПОВТОРЕНИЯ)" } });
+        chosenProposals = aiResponse.proposals || [];
+      } catch (e) {
+        console.error("[batch] AI generation failed, falling back to static presets:", e);
+      }
+      
+      if (chosenProposals.length === 0) {
+        const fallback = [...VIRAL_HADITH_SERIES_PRESETS];
+        for (let i = fallback.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [fallback[i], fallback[j]] = [fallback[j], fallback[i]];
+        }
+        chosenProposals = fallback.slice(0, data.count || 3).map(item => ({
+          title: `[Сахих Хадис] ${item.title} • Пакетно Вайръл Видео`,
+          type: "hadith",
+          collection: item.collection,
+          number: item.number,
+          summaryBg: item.summaryBg,
+          themeBg: "Кинематографична атмосфера",
+          searchQuery: item.query,
+          tiktokTheme: "hormozi",
+          quality: "high",
+          useBRoll: true,
+          bRollInterval: 3
+        }));
+      }
     }
 
-    for (const item of chosen) {
+    for (const proposal of chosenProposals) {
       try {
         await confirmAndGenerateVideo({
-          data: {
-            proposal: {
-              title: `[Сахих Хадис] ${item.title} • Пакетно Вайръл Видео`,
-              type: "hadith",
-              collection: item.collection,
-              number: item.number,
-              summaryBg: item.summaryBg,
-              themeBg: "Кинематографична атмосфера",
-              searchQuery: item.query,
-              tiktokTheme: "hormozi",
-              quality: "high",
-              useBRoll: true,
-              bRollInterval: 3,
-            },
-          },
+          data: { proposal },
         });
       } catch (e) {
-        console.error(`[batch] Failed to start render for hadith ${item.title}:`, e);
+        console.error(`[batch] Failed to start render for hadith ${proposal.title}:`, e);
       }
     }
 
     return {
       success: true,
-      count: chosen.length,
-      message: `📦 Успешно стартирано пакетно генериране на ${chosen.length} професионални вайръл видеа с хадиси! Можеш да следиш напредъка им и да ги свалиш наведнъж в раздел Изтегляния.`,
+      count: chosenProposals.length,
+      message: `📦 Успешно стартирано пакетно генериране на ${chosenProposals.length} професионални вайръл видеа с хадиси! Можеш да следиш напредъка им и да ги свалиш наведнъж в раздел Изтегляния.`,
     };
   });
 
