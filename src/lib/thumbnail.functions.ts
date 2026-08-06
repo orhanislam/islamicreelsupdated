@@ -1,5 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import sharp from "sharp";
+import { geminiChat } from "./gemini";
 
 export interface ThumbnailRequest {
   title: string;
@@ -18,6 +19,22 @@ export const generateViralThumbnail = createServerFn({ method: "POST" })
     };
   })
   .handler(async ({ data }): Promise<{ base64: string; dataUrl: string }> => {
+    // Enhance boring reference titles into viral titles using AI
+    let finalTitle = data.title;
+    try {
+      const prompt = `Дадено е следното заглавие за ислямско TikTok видео: "${data.title}".
+Ако това вече е закачливо изречение (например "Когато Аллах те обича..." или "Търпението е ключът"), върни го АБСОЛЮТНО СЪЩОТО.
+Ако обаче е просто суха референция (например "Сура Ал-Фатиха 1:1" или "Сахих Бухари"), генерирай много кратко, емоционално и грабващо вайръл заглавие (2-4 думи) на Български език, което отговаря на същността на този текст.
+Върни САМО финалното заглавие, БЕЗ кавички, БЕЗ обяснения, БЕЗ препинателни знаци в края.`;
+      
+      const aiResponse = await geminiChat([{ role: "user", text: prompt }]);
+      if (aiResponse && aiResponse.trim()) {
+        finalTitle = aiResponse.replace(/["']/g, "").trim();
+      }
+    } catch (e) {
+      console.error("Failed to enhance thumbnail title", e);
+    }
+
     // Escape XML entities for SVG
     const esc = (str: string) =>
       str
@@ -28,7 +45,7 @@ export const generateViralThumbnail = createServerFn({ method: "POST" })
         .replace(/'/g, "&apos;");
 
     // Split title into 2-3 lines if long
-    const words = data.title.split(" ");
+    const words = finalTitle.split(" ");
     const lines: string[] = [];
     let current = "";
     for (const w of words) {
