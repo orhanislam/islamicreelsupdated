@@ -92,7 +92,11 @@ type PexelsVideo = {
 };
 
 async function pexelsPhotoQuery(key: string, query: string, perPage = 9) {
-  const url = `https://api.pexels.com/v1/search?query=${encodeURIComponent(query)}&orientation=portrait&size=large&per_page=${perPage}`;
+  let safeQuery = query.trim();
+  if (!safeQuery.toLowerCase().includes("nature") && !safeQuery.toLowerCase().includes("landscape")) {
+    safeQuery += " nature landscape";
+  }
+  const url = `https://api.pexels.com/v1/search?query=${encodeURIComponent(safeQuery)}&orientation=portrait&size=large&per_page=${perPage}`;
   const res = await fetch(url, { headers: { Authorization: key } });
   if (!res.ok) throw new Error(`Pexels грешка ${res.status}`);
   const j = await res.json();
@@ -100,7 +104,11 @@ async function pexelsPhotoQuery(key: string, query: string, perPage = 9) {
 }
 
 async function pexelsVideoQuery(key: string, query: string, perPage = 80) {
-  const url = `https://api.pexels.com/videos/search?query=${encodeURIComponent(query)}&orientation=portrait&size=medium&per_page=${perPage}`;
+  let safeQuery = query.trim();
+  if (!safeQuery.toLowerCase().includes("nature") && !safeQuery.toLowerCase().includes("landscape")) {
+    safeQuery += " nature landscape";
+  }
+  const url = `https://api.pexels.com/videos/search?query=${encodeURIComponent(safeQuery)}&orientation=portrait&size=medium&per_page=${perPage}`;
   const res = await fetch(url, { headers: { Authorization: key } });
   if (!res.ok) throw new Error(`Pexels грешка ${res.status}`);
   const j = await res.json();
