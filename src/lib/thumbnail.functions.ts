@@ -27,7 +27,7 @@ export const generateViralThumbnail = createServerFn({ method: "POST" })
 Ако обаче е просто суха референция (например "Сура Ал-Фатиха 1:1" или "Сахих Бухари"), генерирай много кратко, емоционално и грабващо вайръл заглавие (2-4 думи) на Български език, което отговаря на същността на този текст.
 Върни САМО финалното заглавие, БЕЗ кавички, БЕЗ обяснения, БЕЗ препинателни знаци в края.`;
       
-      const aiResponse = await geminiChat([{ role: "user", text: prompt }]);
+      const aiResponse = await geminiChat("gemini-2.5-flash", [{ role: "user", content: prompt }]);
       if (aiResponse && aiResponse.trim()) {
         finalTitle = aiResponse.replace(/["']/g, "").trim();
       }
