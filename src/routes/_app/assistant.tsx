@@ -354,14 +354,16 @@ function AssistantPage() {
       toast.message(`Генериране на план с ${countToRun} вайръл видеа от Корана...`);
       const res = await suggestBatchViralProposals({ data: { count: countToRun, topic: "САМО Коран (ИЗБЯГВАЙ ПОВТОРЕНИЯ)" } });
       playStudioClick("success");
-      setMessages((prev) => [
-        ...prev,
-        {
-          role: "assistant",
-          text: res.reply,
-          proposals: res.proposals,
-        },
-      ]);
+      const newMsg = {
+        role: "assistant" as const,
+        text: res.reply,
+        proposals: res.proposals,
+      };
+      setMessages((prev) => {
+        const next = [...prev, newMsg];
+        saveAssistantHistory({ data: { messages: next } }).catch(() => {});
+        return next;
+      });
     } catch (e: any) {
       toast.error(e?.message || "Грешка при генериране на плана");
     } finally {
@@ -377,14 +379,16 @@ function AssistantPage() {
       toast.message(`Генериране на план с ${countToRun} вайръл видеа с хадиси...`);
       const res = await suggestBatchViralProposals({ data: { count: countToRun, topic: "САМО Сахих Хадиси (ИЗБЯГВАЙ ПОВТОРЕНИЯ)" } });
       playStudioClick("success");
-      setMessages((prev) => [
-        ...prev,
-        {
-          role: "assistant",
-          text: res.reply,
-          proposals: res.proposals,
-        },
-      ]);
+      const newMsg = {
+        role: "assistant" as const,
+        text: res.reply,
+        proposals: res.proposals,
+      };
+      setMessages((prev) => {
+        const next = [...prev, newMsg];
+        saveAssistantHistory({ data: { messages: next } }).catch(() => {});
+        return next;
+      });
     } catch (e: any) {
       toast.error(e?.message || "Грешка при генериране на плана");
     } finally {
