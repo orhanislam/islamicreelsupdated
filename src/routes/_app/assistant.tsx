@@ -136,12 +136,24 @@ function AssistantPage() {
     toast.message(`📜 Избран нов хадис: ${selected.title}`);
   };
 
+  const getThumbTitle = (title?: string) => {
+    if (!title) return "Ислямска мъдрост";
+    let v = title;
+    if (v.includes("] ")) {
+      v = v.split("] ").slice(1).join("] ").trim();
+    } else if (v.includes("•")) {
+      v = v.split("•")[1].trim();
+    }
+    return v;
+  };
+
   const handleDownloadThumbnail = async (title: string, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
     try {
       setGeneratingThumbTitle(title);
       toast.message("Генериране на професионална вайръл корица (Thumbnail)...");
-      const res = await generateViralThumbnail({ data: { title } });
+      const thumbTitle = getThumbTitle(title);
+      const res = await generateViralThumbnail({ data: { title: thumbTitle } });
       const a = document.createElement("a");
       a.href = res.dataUrl;
       const safeTitle = (title || "islamic-reel").replace(/[<>:"/\\|?*]+/g, "_").trim();
