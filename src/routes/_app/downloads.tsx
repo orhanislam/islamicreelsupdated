@@ -544,13 +544,13 @@ function DownloadsPage() {
                 </div>
 
                 {job.status === "completed" && (
-                  <div className="my-2 rounded-xl overflow-hidden bg-black/40 aspect-[9/16] max-h-72 flex items-center justify-center border border-border/40 relative">
+                  <div className="my-2 rounded-xl overflow-hidden bg-black/60 aspect-[9/16] max-h-96 w-full max-w-[240px] mx-auto flex items-center justify-center border border-border/40 relative">
                     <video 
                       src={`/api/download/${job.id}`} 
                       controls 
                       preload="metadata"
                       playsInline
-                      className="w-full h-full object-cover" 
+                      className="w-full h-full object-contain" 
                     />
                   </div>
                 )}
@@ -707,7 +707,7 @@ function DownloadsPage() {
                   </span>
                 </div>
 
-                <div className="my-2 rounded-xl overflow-hidden bg-black/40 aspect-[9/16] max-h-72 flex items-center justify-center border border-border/40">
+                <div className="my-2 rounded-xl overflow-hidden bg-black/60 aspect-[9/16] max-h-96 w-full max-w-[240px] mx-auto flex items-center justify-center border border-border/40 relative">
                   <VideoPreview blob={item.blob} />
                 </div>
 

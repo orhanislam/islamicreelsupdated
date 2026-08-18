@@ -1453,10 +1453,10 @@ function CreatePage() {
                     controls
                     playsInline
                     preload="metadata"
-                    className="size-full object-cover"
+                    className="size-full object-contain"
                   />
                 ) : renderedUrl ? (
-                  <img key={renderedUrl} src={renderedUrl} alt="Готова снимка" className="size-full object-cover" />
+                  <img key={renderedUrl} src={renderedUrl} alt="Готова снимка" className="size-full object-contain" />
                 ) : (
                   <>
                     {(() => {
