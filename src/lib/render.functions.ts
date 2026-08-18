@@ -366,13 +366,21 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
       // Arabic is intentionally omitted from video output so the Bulgarian text fits nicely without clutter.
 
       if (data.bulgarian) {
-        let words = data.bulgarian.trim().split(/\s+/).filter(Boolean);
+        // Strip SSML tags immediately so they NEVER leak into text arrays or rendering logic
+        data.bulgarian = data.bulgarian.replace(/<[^>]+>/g, "").trim();
+        let words = data.bulgarian.split(/\s+/).filter(Boolean);
         let timings = data.bulgarianWordTimings;
         if (timings && timings.length > 0) {
           const syncRes = verifyAndCorrectSubtitleSync(timings, audioDur);
           timings = syncRes.correctedTimings;
           // Use TTS words as truth when available, to guarantee 1:1 word-timing alignment
           if (timings.length > 0 && timings[0].word && timings[0].word !== "...") {
+            // Filter out SSML/XML tags like <break time="1.0s" /> that some TTS engines return as spoken words
+            timings = timings.filter((t: any) => {
+              if (!t.word) return true;
+              const w = t.word.toLowerCase();
+              return !w.includes("<") && !w.includes(">") && !w.includes("time=") && !w.includes("1.0s");
+            });
             words = timings.map((t: any) => t.word);
           }
           // If word counts still differ, re-distribute timings to match words

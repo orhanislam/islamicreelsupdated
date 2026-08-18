@@ -391,7 +391,13 @@ STRICT RULES:
           { role: "user", content: `Script:\n${data.text}` }
         ], true);
         
-        let parsed = JSON.parse(resp);
+        let cleanResp = resp.replace(/```json\s*|\s*```/g, "").trim();
+        const firstBracket = cleanResp.indexOf("[");
+        const lastBracket = cleanResp.lastIndexOf("]");
+        if (firstBracket !== -1 && lastBracket !== -1 && lastBracket > firstBracket) {
+          cleanResp = cleanResp.substring(firstBracket, lastBracket + 1);
+        }
+        let parsed = JSON.parse(cleanResp);
         if (Array.isArray(parsed) && parsed.length > 0) {
           // If Gemini generates fewer or more, we take what we need
           queries = parsed.slice(0, neededClips * 2); 
@@ -415,7 +421,14 @@ STRICT RULES:
       const built = buildOut(vs);
       if (built.length > 0) {
         // Find the first video that isn't already in clips
-        const bestClip = built.find(b => !clips.includes(b.link));
+        let bestClip = built.find(b => !clips.includes(b.link));
+        
+        // If all 15 clips for this query are already used, fallback to a generic query to guarantee unique clips
+        if (!bestClip) {
+          const genericVs = await pexelsVideoQuery(key, "nature landscape", 30);
+          bestClip = buildOut(genericVs).find(b => !clips.includes(b.link));
+        }
+
         if (bestClip) {
           clips.push(bestClip.link);
         }
