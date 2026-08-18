@@ -1485,13 +1485,14 @@ function CreatePage() {
                       
                       {/* Subtitle text */}
                       <div className="relative z-10 text-center">
-                        <p className="text-[#FF6600] font-bold" style={{ fontSize: "24px", textShadow: "0px 2px 10px rgba(0,0,0,0.8)" }}>
+                        <p className="text-white font-bold" style={{ fontSize: "24px", textShadow: "0px 2px 10px rgba(0,0,0,0.8)" }}>
                           {(() => {
                             const activeTimings = narrationTimings || (content?.wordSegments && bulgarian ? [{ start: 0, end: 10, word: bulgarian.substring(0, 50) + "..." }] : null);
                             if (activeTimings && activeTimings.length > 0) {
                               const currentWord = activeTimings.find(t => previewTime >= t.start && previewTime <= t.end);
                               if (currentWord && currentWord.word) {
-                                return <span style={{ color: "#FFFFFF" }}>{currentWord.word}</span>;
+                                // In Live Preview we just show the active word as Light Orange
+                                return <span style={{ color: "#FFB700" }}>{currentWord.word}</span>;
                               }
                               // Fallback phrase if not exactly on a word
                               return bulgarian ? bulgarian.substring(0, 40) + "..." : "";

@@ -662,7 +662,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                   if (p.isTitle) {
                     return `{\\c&H00FFFFFF&}${w}`; // Title is pure white
                   } else {
-                    return isActive ? `{\\c&H00FFFFFF&}${w}` : `{\\c&H0066FF&}${w}`; // Body is orange, active word white
+                    return isActive ? `{\\c&H0000B7FF&}${w}` : `{\\c&H00FFFFFF&}${w}`; // Body active light orange, inactive white
                   }
                 })
                 .join(" ");
