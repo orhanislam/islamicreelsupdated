@@ -144,29 +144,71 @@ function CreatePage() {
       localStorage.removeItem("edit_proposal");
       try {
         const proposal = JSON.parse(saved);
+        console.log("Loaded proposal from storage:", proposal);
         if (proposal.tiktokTheme) setTiktokTheme(proposal.tiktokTheme);
         if (proposal.quality) setVideoQuality(proposal.quality);
         if (proposal.subtitlePosition) setSubtitlePosition(proposal.subtitlePosition);
         if (proposal.searchQuery) setPexelsQuery(proposal.searchQuery);
         
-        if (proposal.type === "quran" && proposal.surah && proposal.ayah) {
+        let pType = proposal.type || "general";
+        let surah = Number(proposal.surah);
+        let ayah = Number(proposal.ayah);
+        let count = Number(proposal.count) || 1;
+        let collection = proposal.collection;
+        let number = Number(proposal.number);
+
+        // Fallback for missing surah/ayah using the title regex
+        if (proposal.title) {
+          const title = proposal.title;
+          const colonMatch = title.match(/\b(\d{1,3})\s*[:.]\s*(\d{1,3})(?:\s*-\s*(\d{1,3}))?\b/);
+          if (colonMatch && (pType === "quran" || pType === "general")) {
+            pType = "quran";
+            surah = parseInt(colonMatch[1], 10);
+            ayah = parseInt(colonMatch[2], 10);
+            if (colonMatch[3]) {
+              const end = parseInt(colonMatch[3], 10);
+              if (end >= ayah && end - ayah < 7) count = end - ayah + 1;
+            }
+          } else if (title.includes("Сахих ал-Бухари") || title.toLowerCase().includes("bukhari")) {
+            pType = "hadith";
+            collection = "bukhari";
+            const numMatch = title.match(/#(\d+)/);
+            if (numMatch) number = parseInt(numMatch[1], 10);
+          } else if (title.includes("Сахих Муслим") || title.toLowerCase().includes("muslim")) {
+            pType = "hadith";
+            collection = "muslim";
+            const numMatch = title.match(/#(\d+)/);
+            if (numMatch) number = parseInt(numMatch[1], 10);
+          } else if (title.includes("Навауи") || title.toLowerCase().includes("nawawi")) {
+            pType = "hadith";
+            collection = "nawawi40";
+            const numMatch = title.match(/№\s*(\d+)|#\s*(\d+)/);
+            if (numMatch) number = parseInt(numMatch[1] || numMatch[2], 10);
+          }
+        }
+
+        if (pType === "quran" && surah && ayah) {
           setTab("ayah");
-          setSurah(proposal.surah);
-          setAyah(proposal.ayah);
-          const end = proposal.count && proposal.count > 1 ? proposal.ayah + proposal.count - 1 : undefined;
+          setSurah(surah);
+          setAyah(ayah);
+          const end = count > 1 ? ayah + count - 1 : undefined;
           if (end) setAyahEnd(end);
           setTimeout(() => {
-             loadAyah(proposal.surah, proposal.ayah, end);
+             loadAyah(surah, ayah, end);
           }, 100);
-        } else if (proposal.type === "hadith" && proposal.collection && proposal.number) {
+        } else if (pType === "hadith" && collection && number) {
           setTab("hadith");
-          setHadithSource(proposal.collection);
-          setSunnahNum(proposal.number);
+          setHadithSource(collection as SunnahCollection);
+          setSunnahNum(number);
           setTimeout(() => {
-             loadSunnah(proposal.collection, proposal.number, true);
+             loadSunnah(collection as SunnahCollection, number, true);
           }, 100);
+        } else {
+          toast.error(`Непознат формат на предложението: липсват Сура/Аят или Хадис номер.`);
         }
-      } catch (e) {}
+      } catch (e) {
+        console.error("Error parsing proposal", e);
+      }
     }
   }, []);
 
