@@ -235,7 +235,8 @@ export const synthesizeHadithNarration = createServerFn({ method: "POST" })
         const fs = await import("fs/promises");
 
         const tmpPath = path.join(os.tmpdir(), `tts-${Date.now()}-${Math.random().toString(36).slice(2)}.mp3`);
-        await tts.ttsPromise(cleaned, tmpPath);
+        const cleanForEdge = cleaned.replace(/<[^>]+>/g, "... ");
+        await tts.ttsPromise(cleanForEdge, tmpPath);
         audioBuffer = await fs.readFile(tmpPath);
         await fs.unlink(tmpPath).catch(() => {});
       } catch (e: any) {
@@ -250,9 +251,10 @@ export const synthesizeHadithNarration = createServerFn({ method: "POST" })
 
           const tmpPyPath = path.join(os.tmpdir(), `py-tts-${Date.now()}.mp3`);
           const tmpVttPath = path.join(os.tmpdir(), `py-tts-${Date.now()}.vtt`);
+          const cleanForEdge = cleaned.replace(/<[^>]+>/g, "... ");
           await execFileAsync("edge-tts", [
             "--voice", "bg-BG-BorislavNeural",
-            "--text", cleaned,
+            "--text", cleanForEdge,
             "--write-media", tmpPyPath,
             "--write-subtitles", tmpVttPath
           ]);

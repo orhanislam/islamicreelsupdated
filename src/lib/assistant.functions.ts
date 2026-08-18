@@ -505,23 +505,21 @@ export const confirmAndGenerateVideo = createServerFn({ method: "POST" })
       console.warn("[assistant] Pexels search failed, using fallback bg:", err);
     }
 
-    // Fetch multi-scene B-Roll if requested
+    // Fetch multi-scene B-Roll always for Assistant videos
     let bRollUrls: string[] | undefined;
-    if (proposal.useBRoll) {
-      try {
-        const { fetchMultiSceneBRoll } = await import("@/lib/pexels.functions");
-        const bRollResult = await fetchMultiSceneBRoll({
-          data: { 
-            query: proposal.searchQuery || "islamic nature cinematic",
-            text: bulgarian
-          },
-        });
-        if (bRollResult.clips && bRollResult.clips.length > 1) {
-          bRollUrls = bRollResult.clips;
-        }
-      } catch (e) {
-        console.warn("[assistant] Could not fetch multi-scene B-Roll:", e);
+    try {
+      const { fetchMultiSceneBRoll } = await import("@/lib/pexels.functions");
+      const bRollResult = await fetchMultiSceneBRoll({
+        data: { 
+          query: proposal.searchQuery || "islamic nature cinematic",
+          text: bulgarian
+        },
+      });
+      if (bRollResult.clips && bRollResult.clips.length > 1) {
+        bRollUrls = bRollResult.clips;
       }
+    } catch (e) {
+      console.warn("[assistant] Could not fetch multi-scene B-Roll:", e);
     }
 
     const subtitleStyle = proposal.subtitlePosition || "middle";
