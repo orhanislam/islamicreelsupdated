@@ -247,7 +247,8 @@ function CreatePage() {
       setContent(c);
       setTranslating(true);
       const t = await runTranslate({ data: { english: d.english, sourceRef: c.source_ref, ayahBounds: d.ayahBounds } });
-      const finalBulgarian = prependTheme ? `Тема: ${prependTheme}\n\n${t.bulgarian}` : t.bulgarian;
+      const stripped = t.bulgarian.replace(/(^|\n)\s*(?:\(\d+\)|\[\d+\]|\d+\.)\s*/g, "$1").trim();
+      const finalBulgarian = prependTheme ? `Тема: ${prependTheme}\n\n${stripped}` : stripped;
       setBulgarian(finalBulgarian);
       if (t.ayahBounds) {
         c.ayahBounds = t.ayahBounds;
@@ -273,7 +274,8 @@ function CreatePage() {
       setContent(c);
       setTranslating(true);
       const t = await runTranslate({ data: { arabic: h.arabic, english: h.english, sourceRef: h.reference } });
-      setBulgarian(t.bulgarian);
+      const stripped = t.bulgarian.replace(/(^|\n)\s*(?:\(\d+\)|\[\d+\]|\d+\.)\s*/g, "$1").trim();
+      setBulgarian(stripped);
       toast.success(t.cached ? "От кеша" : "Преведено");
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : "Грешка");
@@ -297,7 +299,8 @@ function CreatePage() {
       setContent(c);
       setTranslating(true);
       const t = await runTranslate({ data: { arabic: h.arabic, english: h.english, sourceRef: h.reference } });
-      const finalBulgarian = prependTheme ? `Тема: ${prependTheme}\n\n${t.bulgarian}` : t.bulgarian;
+      const stripped = t.bulgarian.replace(/(^|\n)\s*(?:\(\d+\)|\[\d+\]|\d+\.)\s*/g, "$1").trim();
+      const finalBulgarian = prependTheme ? `Тема: ${prependTheme}\n\n${stripped}` : stripped;
       setBulgarian(finalBulgarian);
       toast.success(`${h.reference} · ${h.grade ?? "Sahih"}`);
       return true;
@@ -320,7 +323,8 @@ function CreatePage() {
       setContent(c);
       setTranslating(true);
       const t = await runTranslate({ data: { arabic: h.arabic, english: h.english, sourceRef: h.reference } });
-      setBulgarian(t.bulgarian);
+      const stripped = t.bulgarian.replace(/(^|\n)\s*(?:\(\d+\)|\[\d+\]|\d+\.)\s*/g, "$1").trim();
+      setBulgarian(stripped);
       toast.success(`${h.reference} · ${h.grade ?? "Sahih"}`);
       return true;
     } catch (e: unknown) {
@@ -1481,7 +1485,7 @@ function CreatePage() {
                       
                       {/* Subtitle text */}
                       <div className="relative z-10 text-center">
-                        <p className="text-white font-bold" style={{ fontSize: "24px", textShadow: "0px 2px 10px rgba(0,0,0,0.8)" }}>
+                        <p className="text-[#FF6600] font-bold" style={{ fontSize: "24px", textShadow: "0px 2px 10px rgba(0,0,0,0.8)" }}>
                           {(() => {
                             const activeTimings = narrationTimings || (content?.wordSegments && bulgarian ? [{ start: 0, end: 10, word: bulgarian.substring(0, 50) + "..." }] : null);
                             if (activeTimings && activeTimings.length > 0) {
