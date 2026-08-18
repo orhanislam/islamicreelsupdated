@@ -237,8 +237,9 @@ export async function renderPhoto(opts: RenderOptions): Promise<Blob> {
   // Bulgarian block: fits in the remaining vertical area between safe top/bottom.
   const verticalForBg =
     H - SAFE.top - SAFE.bottom - (arabicBlock ? arabicBlock.lines.length * arabicBlock.lineHeight + 60 : 0);
+  const cleanBulgarian = opts.bulgarian.replace(/<[^>]+>/g, "").trim();
   const bg = autoFit(
-    ctx, opts.bulgarian, "'Cormorant Garamond', Georgia, serif", 700,
+    ctx, cleanBulgarian, "'Cormorant Garamond', Georgia, serif", 700,
     maxW, Math.max(420, verticalForBg),
     { min: 42, max: 84 },
     1.32,

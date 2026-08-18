@@ -568,14 +568,14 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             }
           }
         } else {
-          // Group words into short viral TikTok-style punchy phrases (2 to 4 words max) OR single word pop
           const isSingleWordMode = data.subtitleSlicingMode === "single";
           const MAX_WORDS = isSingleWordMode ? 1 : 4;
           const MIN_WORDS = isSingleWordMode ? 1 : 2;
-          
-          const textParts = (data.bulgarian || "").trim().split(/\n\n+/);
+
+          const cleanBulgarian = (data.bulgarian || "").replace(/<[^>]+>/g, "").trim();
+          const textParts = cleanBulgarian.split(/\n\n+/);
           const hasTitle = textParts.length > 1;
-          const titleWordCount = hasTitle ? textParts[0].trim().split(/\s+/).filter(Boolean).length : 0;
+          const titleWordCount = hasTitle ? textParts[0].replace(/[^\p{L}\p{N}\s]/gu, " ").trim().split(/\s+/).filter(Boolean).length : 0;
           
           type Phrase = { words: string[]; startIdx: number; endIdx: number; isTitle: boolean };
           const phrases: Phrase[] = [];
@@ -658,8 +658,10 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
               // Apply active scale only to the active word
               const scaledTextLine = p.words
                 .map((w, i) => {
+                  const globalIdx = p.startIdx + i;
                   const isActive = i === wIdx;
-                  if (p.isTitle) {
+                  const isWordInTitle = globalIdx < titleWordCount;
+                  if (isWordInTitle) {
                     return `{\\c&H00FFFFFF&}${w}`; // Title is pure white
                   } else {
                     return isActive ? `{\\c&H00FFFFFF&}${w}` : `{\\c&H0000B7FF&}${w}`; // Body inactive gold, active white

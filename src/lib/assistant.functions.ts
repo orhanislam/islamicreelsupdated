@@ -364,6 +364,13 @@ export const confirmAndGenerateVideo = createServerFn({ method: "POST" })
     let bulgarianWordTimings: any[] | undefined = undefined;
     let arabicWordCount: number | undefined = undefined;
 
+    let viralTitle = proposal.title || "";
+    if (viralTitle.includes("] ")) {
+      viralTitle = viralTitle.split("] ").slice(1).join("] ").trim();
+    } else if (viralTitle.includes("•")) {
+      viralTitle = viralTitle.split("•")[1].trim();
+    }
+
     if (proposal.type === "hadith" || (!proposal.surah && !proposal.ayah && proposal.collection && proposal.number)) {
       const coll = (proposal.collection || "nawawi40") as "bukhari" | "muslim" | "tirmidhi" | "nawawi40";
       const num = Number(proposal.number) || 1;
@@ -375,6 +382,9 @@ export const confirmAndGenerateVideo = createServerFn({ method: "POST" })
       bulgarian = t.bulgarian;
 
       try {
+        if (viralTitle) {
+          bulgarian = `Тема: ${viralTitle} <break time="1.0s" />\n\n${bulgarian}`;
+        }
         const narr = await synthesizeHadithNarration({ data: { text: bulgarian } });
         audioUrl = `data:${narr.mimeType || "audio/mp3"};base64,${narr.base64}`;
         bulgarianWordTimings = narr.wordTimings;
@@ -388,6 +398,9 @@ export const confirmAndGenerateVideo = createServerFn({ method: "POST" })
       english = "";
 
       try {
+        if (viralTitle && !bulgarian.includes(viralTitle)) {
+           bulgarian = `Тема: ${viralTitle} <break time="1.0s" />\n\n${bulgarian}`;
+        }
         const narr = await synthesizeHadithNarration({ data: { text: bulgarian } });
         audioUrl = `data:${narr.mimeType || "audio/mp3"};base64,${narr.base64}`;
         bulgarianWordTimings = narr.wordTimings;
@@ -454,7 +467,10 @@ export const confirmAndGenerateVideo = createServerFn({ method: "POST" })
             ayahBounds: q.ayahBounds,
           },
         });
-        bulgarian = t.bulgarian;
+        bulgarian = t.bulgarian.replace(/(^|\n)\s*(?:\(\d+\)|\[\d+\]|\d+\.)\s*/g, "$1").trim();
+        if (viralTitle) {
+          bulgarian = `Тема: ${viralTitle} <break time="1.0s" />\n\n${bulgarian}`;
+        }
 
         if (proposal.narration === "arabic_reciter" && t.ayahBounds && t.ayahBounds.length > 0) {
           try {
@@ -497,7 +513,7 @@ export const confirmAndGenerateVideo = createServerFn({ method: "POST" })
         const bRollResult = await fetchMultiSceneBRoll({
           data: { 
             query: proposal.searchQuery || "islamic nature cinematic",
-            text: proposal.script // Provide the voiceover script so Gemini can generate dynamic scene queries
+            text: bulgarian
           },
         });
         if (bRollResult.clips && bRollResult.clips.length > 1) {
