@@ -173,7 +173,7 @@ export const synthesizeHadithNarration = createServerFn({ method: "POST" })
       .replace(/\bСура\b/g, "Сура")
       .replace(/\bАят\b/g, "Аят")
       .replace(/[\-—_…]+/g, " ")
-      .replace(/\s+/g, " ")
+      .replace(/[ \t]+/g, " ")
       .trim();
 
     let audioBuffer: any = null;

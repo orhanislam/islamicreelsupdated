@@ -1497,6 +1497,10 @@ function CreatePage() {
                                 const wordColor = isTitle ? "#FFFFFF" : "#FFB700";
                                 return <span style={{ color: wordColor }}>{currentWord.word}</span>;
                               }
+                              // If audio has started but we are in a gap, show nothing
+                              if (narrationTimings && previewTime > 0) {
+                                return "";
+                              }
                               // Fallback phrase if not exactly on a word
                               return bulgarian ? bulgarian.substring(0, 40) + "..." : "";
                             }
