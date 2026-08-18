@@ -1390,8 +1390,9 @@ function CreatePage() {
             <div ref={previewRef} className="grid gap-4 md:grid-cols-[360px_1fr] items-start scroll-mt-24">
               <div 
                 id="video-preview-container"
-                className="relative aspect-[9/16] overflow-hidden rounded-lg border bg-muted group"
+                className="relative bg-black rounded-lg border group [&:fullscreen]:flex [&:fullscreen]:items-center [&:fullscreen]:justify-center [&:fullscreen]:border-none"
               >
+                <div className="relative w-full aspect-[9/16] [&:fullscreen_&]:h-full [&:fullscreen_&]:w-auto overflow-hidden">
                 {/* Fullscreen Button */}
                 <button
                   type="button"
@@ -1511,6 +1512,7 @@ function CreatePage() {
                     )}
                   </>
                 )}
+                </div>
               </div>
               <div className="font-ui text-sm space-y-2">
                 <p className="text-xs uppercase tracking-wider text-muted-foreground">
