@@ -1491,7 +1491,7 @@ function CreatePage() {
                             if (activeTimings && activeTimings.length > 0) {
                               const currentWord = activeTimings.find(t => previewTime >= t.start && previewTime <= t.end);
                               if (currentWord && currentWord.word) {
-                                const titleWordCount = bulgarian ? bulgarian.split("\\n\\n")[0].split(/\\s+/).filter(Boolean).length : 0;
+                                const titleWordCount = bulgarian ? bulgarian.split("\n\n")[0].split(/\s+/).filter(Boolean).length : 0;
                                 const currentWordIndex = activeTimings.indexOf(currentWord);
                                 const isTitle = currentWordIndex !== -1 && currentWordIndex < titleWordCount;
                                 const wordColor = isTitle ? "#FFFFFF" : "#FFB700";
