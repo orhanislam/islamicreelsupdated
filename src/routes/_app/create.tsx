@@ -1387,8 +1387,27 @@ function CreatePage() {
             </div>
           </div>
           {(renderedUrl || bgVideoUrl || bgUrl) && (
-            <div ref={previewRef} className="grid gap-4 md:grid-cols-[300px_1fr] items-start scroll-mt-24">
-              <div className="relative aspect-[9/16] overflow-hidden rounded-lg border bg-muted group">
+            <div ref={previewRef} className="grid gap-4 md:grid-cols-[360px_1fr] items-start scroll-mt-24">
+              <div 
+                id="video-preview-container"
+                className="relative aspect-[9/16] overflow-hidden rounded-lg border bg-muted group"
+              >
+                {/* Fullscreen Button */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    const el = document.getElementById("video-preview-container");
+                    if (el) {
+                      if (document.fullscreenElement) document.exitFullscreen();
+                      else el.requestFullscreen();
+                    }
+                  }}
+                  className="absolute top-2 right-2 z-50 p-2 bg-black/50 hover:bg-black/80 rounded-full text-white opacity-0 group-hover:opacity-100 transition-opacity backdrop-blur-sm"
+                  title="Цял екран"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
+                </button>
+                
                 {renderedUrl && renderedKind === "video" ? (
                   <video
                     key={renderedUrl}
@@ -1460,7 +1479,13 @@ function CreatePage() {
                             if (activeTimings && activeTimings.length > 0) {
                               const currentWord = activeTimings.find(t => previewTime >= t.start && previewTime <= t.end);
                               if (currentWord && currentWord.word) {
-                                return <span className="text-amber-400">{currentWord.word}</span>;
+                                let textColor = "#FFD700"; // default hormozi gold
+                                if (tiktokTheme === "emerald") textColor = "#32CD32";
+                                else if (tiktokTheme === "neon") textColor = "#00FFFF";
+                                else if (tiktokTheme === "classic") textColor = "#FFFFFF";
+                                else if (tiktokTheme === "fire") textColor = "#FF6600";
+                                
+                                return <span style={{ color: textColor }}>{currentWord.word}</span>;
                               }
                               // Fallback phrase if not exactly on a word
                               return bulgarian ? bulgarian.substring(0, 40) + "..." : "";
