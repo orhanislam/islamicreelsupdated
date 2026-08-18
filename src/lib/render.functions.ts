@@ -659,7 +659,11 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
               const scaledTextLine = p.words
                 .map((w, i) => {
                   const isActive = i === wIdx;
-                  return isActive ? `{${activeScale}\\c${highlightColor}}${w}` : `{${inactiveScale}\\c&H00FFFFFF&}${w}`;
+                  if (p.isTitle) {
+                    return `{\\c&H00FFFFFF&}${w}`; // Title is pure white
+                  } else {
+                    return isActive ? `{\\c&H00FFFFFF&}${w}` : `{\\c&H0066FF&}${w}`; // Body is orange, active word white
+                  }
                 })
                 .join(" ");
 

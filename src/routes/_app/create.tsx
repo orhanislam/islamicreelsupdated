@@ -1487,13 +1487,7 @@ function CreatePage() {
                             if (activeTimings && activeTimings.length > 0) {
                               const currentWord = activeTimings.find(t => previewTime >= t.start && previewTime <= t.end);
                               if (currentWord && currentWord.word) {
-                                let textColor = "#FFD700"; // default hormozi gold
-                                if (tiktokTheme === "emerald") textColor = "#32CD32";
-                                else if (tiktokTheme === "neon") textColor = "#00FFFF";
-                                else if (tiktokTheme === "classic") textColor = "#FFFFFF";
-                                else if (tiktokTheme === "fire") textColor = "#FF6600";
-                                
-                                return <span style={{ color: textColor }}>{currentWord.word}</span>;
+                                return <span style={{ color: "#FFFFFF" }}>{currentWord.word}</span>;
                               }
                               // Fallback phrase if not exactly on a word
                               return bulgarian ? bulgarian.substring(0, 40) + "..." : "";
