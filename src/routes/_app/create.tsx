@@ -160,8 +160,10 @@ function CreatePage() {
         let number = Number(proposal.number);
 
         // Fallback for missing surah/ayah using the title regex
+        let cleanTitle = "";
         if (proposal.title) {
           const title = proposal.title;
+          cleanTitle = title.replace(/\[.*?\]\s*/, "").trim();
           const colonMatch = title.match(/\b(\d{1,3})\s*[:.]\s*(\d{1,3})(?:\s*-\s*(\d{1,3}))?\b/);
           if (colonMatch && (pType === "quran" || pType === "general")) {
             pType = "quran";
@@ -196,14 +198,14 @@ function CreatePage() {
           const end = count > 1 ? ayah + count - 1 : undefined;
           if (end) setAyahEnd(end);
           setTimeout(() => {
-             loadAyah(surah, ayah, end);
+             loadAyah(surah, ayah, end, cleanTitle);
           }, 100);
         } else if (pType === "hadith" && collection && number) {
           setTab("hadith");
           setHadithSource(collection as SunnahCollection);
           setSunnahNum(number);
           setTimeout(() => {
-             loadSunnah(collection as SunnahCollection, number, true);
+             loadSunnah(collection as SunnahCollection, number, true, cleanTitle);
           }, 100);
         } else {
           toast.error(`Непознат формат на предложението: липсват Сура/Аят или Хадис номер.`);
@@ -229,7 +231,7 @@ function CreatePage() {
     setPexelsPhotos([]); setPexelsVideos([]); setPexelsTheme(""); setPexelsTried([]); setPexelsAvoid([]);
   };
 
-  const loadAyah = async (s: number, a: number, aEnd?: number) => {
+  const loadAyah = async (s: number, a: number, aEnd?: number, prependTheme?: string) => {
     setLoading(true); reset();
     try {
       const d: AyahData = await runFetchAyah({ data: { surah: s, ayah: a, ayahEnd: aEnd } });
@@ -245,7 +247,8 @@ function CreatePage() {
       setContent(c);
       setTranslating(true);
       const t = await runTranslate({ data: { english: d.english, sourceRef: c.source_ref, ayahBounds: d.ayahBounds } });
-      setBulgarian(t.bulgarian);
+      const finalBulgarian = prependTheme ? `${prependTheme}\n\n${t.bulgarian}` : t.bulgarian;
+      setBulgarian(finalBulgarian);
       if (t.ayahBounds) {
         c.ayahBounds = t.ayahBounds;
         setContent({ ...c, ayahBounds: t.ayahBounds });
@@ -282,7 +285,7 @@ function CreatePage() {
     try { setHadithList(await runListHadiths()); } catch { /* ignore */ }
   };
 
-  const loadSunnah = async (collection: SunnahCollection, number: number, requireSahih = true) => {
+  const loadSunnah = async (collection: SunnahCollection, number: number, requireSahih = true, prependTheme?: string) => {
     setLoading(true); reset();
     try {
       const h = await runFetchSunnah({ data: { collection, number, requireSahih } });
@@ -294,7 +297,8 @@ function CreatePage() {
       setContent(c);
       setTranslating(true);
       const t = await runTranslate({ data: { arabic: h.arabic, english: h.english, sourceRef: h.reference } });
-      setBulgarian(t.bulgarian);
+      const finalBulgarian = prependTheme ? `${prependTheme}\n\n${t.bulgarian}` : t.bulgarian;
+      setBulgarian(finalBulgarian);
       toast.success(`${h.reference} · ${h.grade ?? "Sahih"}`);
       return true;
     } catch (e: unknown) {
