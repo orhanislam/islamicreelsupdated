@@ -365,24 +365,53 @@ export const searchPexelsVideos = createServerFn({ method: "POST" })
   });
 
 export const fetchMultiSceneBRoll = createServerFn({ method: "POST" })
-  .validator((input: { query?: string }) => input)
+  .validator((input: { query?: string; text?: string }) => input)
   .handler(async ({ data }): Promise<{ clips: string[]; theme: string }> => {
     const key = process.env.PEXELS_API_KEY || "";
-    const queries = data?.query ? [data.query] : ["mountain sunset", "night sky stars", "nature river calm"];
-    const clips: string[] = [];
+    let queries = data?.query ? [data.query] : ["mountain sunset", "night sky stars", "nature river calm"];
+    
+    if (data.text) {
+      try {
+        const sysPrompt = `You are a cinematic B-Roll director. 
+The user will provide a voiceover script. 
+Generate exactly 3 to 5 distinct English visual search queries for background stock footage, matching the progression of the text. 
+STRICT RULES:
+1. ONLY return a JSON array of strings, e.g. ["desert sunrise", "ocean waves calm", "mountain clouds peak"]. 
+2. NO humans, NO faces, NO hands, NO silhouettes, NO animals. 
+3. ALL queries MUST include "nature" or "landscape".`;
 
+        const resp = await geminiChat("gemini-2.5-flash", [
+          { role: "system", content: sysPrompt },
+          { role: "user", content: `Script:\n${data.text}` }
+        ], true);
+        
+        let parsed = JSON.parse(resp);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          queries = parsed.slice(0, 5);
+        }
+      } catch (err) {
+        console.warn("[pexels] Failed to generate dynamic B-Roll queries, falling back:", err);
+      }
+    }
+    
+    const clips: string[] = [];
+    
+    // For multi-scene B-Roll, we want distinct clips for each query
     for (const q of queries) {
-      const vs = await pexelsVideoQuery(key, q);
+      if (clips.length >= 6) break;
+      const vs = await pexelsVideoQuery(key, q, 15); // fetch a few
       const built = buildOut(vs);
-      for (const b of built) {
-        if (!clips.includes(b.link) && clips.length < 3) {
-          clips.push(b.link);
+      if (built.length > 0) {
+        // Find the first video that isn't already in clips
+        const bestClip = built.find(b => !clips.includes(b.link));
+        if (bestClip) {
+          clips.push(bestClip.link);
         }
       }
     }
 
     return {
-      clips: clips.slice(0, 3),
+      clips: clips.slice(0, 6),
       theme: data?.query || "Кинематографични B-Roll сцени",
     };
   });

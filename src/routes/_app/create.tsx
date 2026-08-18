@@ -398,7 +398,7 @@ function CreatePage() {
     try {
       setMultiSceneLoading(true);
       toast.message("Избирам 3 кинематографични B-Roll сцени за динамичен монтаж...");
-      const r = await runFetchMultiScene({ data: { query: pexelsQuery || content?.source_ref || "islamic nature" } });
+      const r = await runFetchMultiScene({ data: { query: pexelsQuery || content?.source_ref || "islamic nature", text: bulgarian } });
       if (r.clips && r.clips.length > 1) {
         setMultiSceneUrls(r.clips);
         setBgVideoUrl(r.clips[0]);
@@ -639,7 +639,7 @@ function CreatePage() {
       let activeMultiUrls = multiSceneUrls;
       try {
         const query = pexelsQuery || content.source_ref || "islamic nature";
-        const multiRes = await runFetchMultiScene({ data: { query } });
+        const multiRes = await runFetchMultiScene({ data: { query, text: currentBulgarian } });
         if (multiRes.clips && multiRes.clips.length > 0) {
           activeMultiUrls = multiRes.clips;
           activeBgVideoUrl = multiRes.clips[0];

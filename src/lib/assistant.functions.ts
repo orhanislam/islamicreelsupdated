@@ -495,7 +495,10 @@ export const confirmAndGenerateVideo = createServerFn({ method: "POST" })
       try {
         const { fetchMultiSceneBRoll } = await import("@/lib/pexels.functions");
         const bRollResult = await fetchMultiSceneBRoll({
-          data: { query: proposal.searchQuery || "islamic nature cinematic" },
+          data: { 
+            query: proposal.searchQuery || "islamic nature cinematic",
+            text: proposal.script // Provide the voiceover script so Gemini can generate dynamic scene queries
+          },
         });
         if (bRollResult.clips && bRollResult.clips.length > 1) {
           bRollUrls = bRollResult.clips;

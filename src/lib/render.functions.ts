@@ -232,7 +232,7 @@ export async function executeRenderTask(opts: any): Promise<any> {
             }
           }
           if (bRollFiles.length > 1) {
-            const clipDur = Math.max(3.5, audioDur / bRollFiles.length);
+            const clipDur = 3.0; // The user requested B-roll to change exactly every 3 seconds
             const concatListPath = path.join(tmpDir, `concat_${Date.now()}.txt`);
             sessionTempFiles.add(concatListPath);
             const normalizedPaths: string[] = [];
