@@ -247,7 +247,7 @@ function CreatePage() {
       setContent(c);
       setTranslating(true);
       const t = await runTranslate({ data: { english: d.english, sourceRef: c.source_ref, ayahBounds: d.ayahBounds } });
-      const finalBulgarian = prependTheme ? `${prependTheme}\n\n${t.bulgarian}` : t.bulgarian;
+      const finalBulgarian = prependTheme ? `Тема: ${prependTheme}\n\n${t.bulgarian}` : t.bulgarian;
       setBulgarian(finalBulgarian);
       if (t.ayahBounds) {
         c.ayahBounds = t.ayahBounds;
@@ -297,7 +297,7 @@ function CreatePage() {
       setContent(c);
       setTranslating(true);
       const t = await runTranslate({ data: { arabic: h.arabic, english: h.english, sourceRef: h.reference } });
-      const finalBulgarian = prependTheme ? `${prependTheme}\n\n${t.bulgarian}` : t.bulgarian;
+      const finalBulgarian = prependTheme ? `Тема: ${prependTheme}\n\n${t.bulgarian}` : t.bulgarian;
       setBulgarian(finalBulgarian);
       toast.success(`${h.reference} · ${h.grade ?? "Sahih"}`);
       return true;
