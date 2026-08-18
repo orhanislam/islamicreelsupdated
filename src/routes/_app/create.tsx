@@ -137,6 +137,8 @@ function CreatePage() {
 
   const fileRef = useRef<HTMLInputElement>(null);
   const previewRef = useRef<HTMLDivElement>(null);
+  const audioPreviewRef = useRef<HTMLAudioElement>(null);
+  const [previewTime, setPreviewTime] = useState(0);
 
   useEffect(() => {
     const saved = localStorage.getItem("edit_proposal");
@@ -1382,7 +1384,7 @@ function CreatePage() {
           </div>
           {(renderedUrl || bgVideoUrl || bgUrl) && (
             <div ref={previewRef} className="grid gap-4 md:grid-cols-[300px_1fr] items-start scroll-mt-24">
-              <div className="aspect-[9/16] overflow-hidden rounded-lg border bg-muted">
+              <div className="relative aspect-[9/16] overflow-hidden rounded-lg border bg-muted group">
                 {renderedUrl && renderedKind === "video" ? (
                   <video
                     key={renderedUrl}
@@ -1394,20 +1396,62 @@ function CreatePage() {
                   />
                 ) : renderedUrl ? (
                   <img key={renderedUrl} src={renderedUrl} alt="Готова снимка" className="size-full object-cover" />
-                ) : bgVideoUrl ? (
-                  <video
-                    key={bgVideoUrl}
-                    src={bgVideoUrl}
-                    controls
-                    playsInline
-                    loop
-                    autoPlay
-                    muted
-                    className="size-full object-cover"
-                  />
-                ) : bgUrl ? (
-                  <img src={bgUrl} alt="Избран фон" className="size-full object-cover" />
-                ) : null}
+                ) : (
+                  <>
+                    {bgVideoUrl ? (
+                      <video
+                        key={bgVideoUrl}
+                        src={bgVideoUrl}
+                        controls={false}
+                        playsInline
+                        loop
+                        autoPlay
+                        muted
+                        className="size-full object-cover"
+                      />
+                    ) : bgUrl ? (
+                      <img src={bgUrl} alt="Избран фон" className="size-full object-cover" />
+                    ) : null}
+                    
+                    {/* Live Preview Overlay */}
+                    <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none p-4">
+                      {/* Dark overlay for readability */}
+                      <div className="absolute inset-0 bg-black/20" />
+                      
+                      {/* Subtitle text */}
+                      <div className="relative z-10 text-center">
+                        <p className="text-white font-bold" style={{ fontSize: "24px", textShadow: "0px 2px 10px rgba(0,0,0,0.8)" }}>
+                          {(() => {
+                            const activeTimings = narrationTimings || (content?.wordSegments && bulgarian ? [{ start: 0, end: 10, word: bulgarian.substring(0, 50) + "..." }] : null);
+                            if (activeTimings && activeTimings.length > 0) {
+                              const currentWord = activeTimings.find(t => previewTime >= t.start && previewTime <= t.end);
+                              if (currentWord && currentWord.word) {
+                                return <span className="text-amber-400">{currentWord.word}</span>;
+                              }
+                              // Fallback phrase if not exactly on a word
+                              return bulgarian ? bulgarian.substring(0, 40) + "..." : "";
+                            }
+                            return bulgarian ? bulgarian.substring(0, 40) + "..." : "";
+                          })()}
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Audio Player that drives the preview */}
+                    {(customAudioUrl || narrationUrl || content?.audioUrl) && (
+                      <div className="absolute bottom-4 left-4 right-4 z-20 pointer-events-auto bg-black/50 backdrop-blur-md rounded-xl p-2 flex items-center justify-center border border-white/10">
+                        <audio
+                          ref={audioPreviewRef}
+                          src={customAudioUrl || narrationUrl || content?.audioUrl || undefined}
+                          controls
+                          controlsList="nodownload noplaybackrate"
+                          onTimeUpdate={(e) => setPreviewTime(e.currentTarget.currentTime)}
+                          className="w-full h-8 [&::-webkit-media-controls-panel]:bg-transparent [&::-webkit-media-controls-panel]:text-white"
+                        />
+                      </div>
+                    )}
+                  </>
+                )}
               </div>
               <div className="font-ui text-sm space-y-2">
                 <p className="text-xs uppercase tracking-wider text-muted-foreground">
