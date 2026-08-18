@@ -1491,8 +1491,11 @@ function CreatePage() {
                             if (activeTimings && activeTimings.length > 0) {
                               const currentWord = activeTimings.find(t => previewTime >= t.start && previewTime <= t.end);
                               if (currentWord && currentWord.word) {
-                                // In Live Preview we just show the active word as Light Orange
-                                return <span style={{ color: "#FFB700" }}>{currentWord.word}</span>;
+                                const titleWordCount = bulgarian ? bulgarian.split("\\n\\n")[0].split(/\\s+/).filter(Boolean).length : 0;
+                                const currentWordIndex = activeTimings.indexOf(currentWord);
+                                const isTitle = currentWordIndex !== -1 && currentWordIndex < titleWordCount;
+                                const wordColor = isTitle ? "#FFFFFF" : "#FFB700";
+                                return <span style={{ color: wordColor }}>{currentWord.word}</span>;
                               }
                               // Fallback phrase if not exactly on a word
                               return bulgarian ? bulgarian.substring(0, 40) + "..." : "";
