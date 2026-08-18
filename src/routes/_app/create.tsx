@@ -139,6 +139,7 @@ function CreatePage() {
   const previewRef = useRef<HTMLDivElement>(null);
   const audioPreviewRef = useRef<HTMLAudioElement>(null);
   const [previewTime, setPreviewTime] = useState(0);
+  const [pendingAutoGenerate, setPendingAutoGenerate] = useState(false);
 
   useEffect(() => {
     const saved = localStorage.getItem("edit_proposal");
@@ -151,6 +152,7 @@ function CreatePage() {
         if (proposal.quality) setVideoQuality(proposal.quality);
         if (proposal.subtitlePosition) setSubtitlePosition(proposal.subtitlePosition);
         if (proposal.searchQuery) setPexelsQuery(proposal.searchQuery);
+        if (proposal.autoGenerate) setPendingAutoGenerate(true);
         
         let pType = proposal.type || "general";
         let surah = Number(proposal.surah);
@@ -481,7 +483,7 @@ function CreatePage() {
   const handleFetchMultiScene = async () => {
     try {
       setMultiSceneLoading(true);
-      toast.message("Избирам 3 кинематографични B-Roll сцени за динамичен монтаж...");
+      toast.message("Избирам кинематографични B-Roll сцени за динамичен монтаж...");
       const r = await runFetchMultiScene({ data: { query: pexelsQuery || content?.source_ref || "islamic nature", text: bulgarian } });
       if (r.clips && r.clips.length > 1) {
         setMultiSceneUrls(r.clips);
@@ -498,6 +500,30 @@ function CreatePage() {
       setMultiSceneLoading(false);
     }
   };
+
+  const handleNarrate = async () => {
+    if (!content) return;
+    setNarrating(true);
+    clearRendered();
+    try {
+      toast.message("Генерирам български глас…");
+      const r = await runNarrate({ data: { text: bulgarian, reference: content.source_ref } });
+      setNarrationUrl(`data:${r.mimeType};base64,${r.base64}`);
+      setNarrationTimings(r.wordTimings ?? null);
+      if (!useBgNarration) setUseBgNarration(true);
+      toast.success("Гласът е готов — пусни плейъра по-долу.");
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : "Не успях да генерирам глас");
+    } finally { setNarrating(false); }
+  };
+
+  useEffect(() => {
+    if (pendingAutoGenerate && content && bulgarian && !translating) {
+      setPendingAutoGenerate(false);
+      handleNarrate();
+      handleFetchMultiScene();
+    }
+  }, [pendingAutoGenerate, content, bulgarian, translating]);
 
   useEffect(() => {
     if (content?.english) {

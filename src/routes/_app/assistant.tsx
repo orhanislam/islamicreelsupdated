@@ -946,7 +946,7 @@ function AssistantPage() {
                         variant="secondary"
                         size="sm"
                         onClick={() => {
-                          localStorage.setItem("edit_proposal", JSON.stringify(m.proposal!));
+                          localStorage.setItem("edit_proposal", JSON.stringify({ ...m.proposal!, autoGenerate: true }));
                           navigate({ to: "/create" });
                         }}
                         disabled={confirmingIdx !== null}
@@ -1066,7 +1066,7 @@ function AssistantPage() {
                                   type="button"
                                   onClick={(e) => {
                                     e.stopPropagation();
-                                    localStorage.setItem("edit_proposal", JSON.stringify(prop));
+                                    localStorage.setItem("edit_proposal", JSON.stringify({ ...prop, autoGenerate: true }));
                                     navigate({ to: "/create" });
                                   }}
                                   className="inline-flex items-center gap-1 rounded-md bg-blue-500/10 px-2 py-1 text-[11px] font-medium text-blue-400 hover:bg-blue-500/20 border border-blue-500/30 transition cursor-pointer"
