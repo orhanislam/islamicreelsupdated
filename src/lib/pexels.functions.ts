@@ -368,13 +368,19 @@ export const fetchMultiSceneBRoll = createServerFn({ method: "POST" })
   .validator((input: { query?: string; text?: string }) => input)
   .handler(async ({ data }): Promise<{ clips: string[]; theme: string }> => {
     const key = process.env.PEXELS_API_KEY || "";
+    
+    // Estimate audio duration: roughly 2.5 words per second.
+    const textWords = data.text ? data.text.split(/\s+/).length : 0;
+    const estDuration = textWords > 0 ? Math.max(15, textWords / 2.5) : 30;
+    const neededClips = Math.max(3, Math.ceil(estDuration / 3));
+
     let queries = data?.query ? [data.query] : ["mountain sunset", "night sky stars", "nature river calm"];
     
     if (data.text) {
       try {
         const sysPrompt = `You are a cinematic B-Roll director. 
 The user will provide a voiceover script. 
-Generate exactly 3 to 5 distinct English visual search queries for background stock footage, matching the progression of the text. 
+Generate exactly ${neededClips} distinct English visual search queries for background stock footage, matching the progression of the text. 
 STRICT RULES:
 1. ONLY return a JSON array of strings, e.g. ["desert sunrise", "ocean waves calm", "mountain clouds peak"]. 
 2. NO humans, NO faces, NO hands, NO silhouettes, NO animals. 
@@ -387,18 +393,24 @@ STRICT RULES:
         
         let parsed = JSON.parse(resp);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          queries = parsed.slice(0, 5);
+          // If Gemini generates fewer or more, we take what we need
+          queries = parsed.slice(0, neededClips * 2); 
         }
       } catch (err) {
         console.warn("[pexels] Failed to generate dynamic B-Roll queries, falling back:", err);
       }
     }
     
+    // If we don't have enough queries, duplicate them to ensure we fetch enough unique clips
+    while (queries.length < neededClips) {
+      queries = [...queries, ...queries];
+    }
+    queries = queries.slice(0, neededClips);
+
     const clips: string[] = [];
     
-    // For multi-scene B-Roll, we want distinct clips for each query
     for (const q of queries) {
-      if (clips.length >= 6) break;
+      if (clips.length >= neededClips) break;
       const vs = await pexelsVideoQuery(key, q, 15); // fetch a few
       const built = buildOut(vs);
       if (built.length > 0) {
@@ -411,7 +423,7 @@ STRICT RULES:
     }
 
     return {
-      clips: clips.slice(0, 6),
+      clips: clips.slice(0, neededClips),
       theme: data?.query || "Кинематографични B-Roll сцени",
     };
   });
