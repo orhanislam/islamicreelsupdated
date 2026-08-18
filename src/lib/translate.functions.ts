@@ -79,11 +79,9 @@ export const translateToBulgarian = createServerFn({ method: "POST" })
               if (ayahNum && text) {
                 const targetB = uncached.find((b) => Number(b.ayah) === ayahNum);
                 if (targetB) {
-                  const cleanText = sanitize(text);
-                  const formattedText = cleanText.startsWith(`(${targetB.ayah})`)
-                    ? cleanText
-                    : `(${targetB.ayah}) ${cleanText}`;
-                  globalCache.set(`ayah_${targetB.ayah}_${(targetB.english || "").trim()}`, formattedText);
+                  let cleanText = sanitize(text);
+                  cleanText = cleanText.replace(new RegExp(`^(?:\\(${targetB.ayah}\\)|\\[${targetB.ayah}\\]|${targetB.ayah}\\.?)\\s*`), "").trim();
+                  globalCache.set(`ayah_${targetB.ayah}_${(targetB.english || "").trim()}`, cleanText);
                 }
               }
             }

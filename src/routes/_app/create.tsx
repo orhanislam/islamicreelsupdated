@@ -1402,25 +1402,55 @@ function CreatePage() {
                   <img key={renderedUrl} src={renderedUrl} alt="Готова снимка" className="size-full object-cover" />
                 ) : (
                   <>
-                    {bgVideoUrl || (multiSceneUrls && multiSceneUrls.length > 0) ? (
-                      <video
-                        key={multiSceneUrls && multiSceneUrls.length > 1 ? multiSceneUrls[Math.floor(previewTime / 3) % multiSceneUrls.length] : bgVideoUrl}
-                        src={multiSceneUrls && multiSceneUrls.length > 1 ? multiSceneUrls[Math.floor(previewTime / 3) % multiSceneUrls.length] : bgVideoUrl || undefined}
-                        controls={false}
-                        playsInline
-                        loop
-                        autoPlay
-                        muted
-                        className="size-full object-cover transition-opacity duration-300"
-                      />
-                    ) : bgUrl ? (
-                      <img src={bgUrl} alt="Избран фон" className="size-full object-cover" />
-                    ) : null}
+                    {(() => {
+                      if (multiSceneUrls && multiSceneUrls.length > 1) {
+                        const activeIdx = Math.floor(previewTime / 3) % multiSceneUrls.length;
+                        return multiSceneUrls.map((url, idx) => (
+                          <video
+                            key={url}
+                            src={url}
+                            controls={false}
+                            playsInline
+                            loop
+                            autoPlay
+                            muted
+                            className={`absolute inset-0 size-full object-cover transition-opacity duration-500 ${activeIdx === idx ? "opacity-100 z-10" : "opacity-0 z-0"}`}
+                          />
+                        ));
+                      } else if (bgVideoUrl) {
+                        return (
+                          <video
+                            key={bgVideoUrl}
+                            src={bgVideoUrl}
+                            controls={false}
+                            playsInline
+                            loop
+                            autoPlay
+                            muted
+                            className="absolute inset-0 size-full object-cover z-10"
+                          />
+                        );
+                      } else if (bgUrl) {
+                        return (
+                          <img src={bgUrl} alt="Избран фон" className="absolute inset-0 size-full object-cover z-10" />
+                        );
+                      }
+                      return null;
+                    })()}
                     
                     {/* Live Preview Overlay */}
-                    <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none p-4">
+                    <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none p-4 z-20">
                       {/* Dark overlay for readability */}
                       <div className="absolute inset-0 bg-black/20" />
+                      
+                      {/* Reference Text Overlay (Surah/Ayah) */}
+                      {content?.source_ref && (
+                        <div className="absolute top-[15%] w-full text-center px-4">
+                          <p className="text-[#005DC9F4] font-bold" style={{ fontSize: "16px", textShadow: "0px 2px 4px rgba(0,0,0,1)", WebkitTextStroke: "1px black" }}>
+                            {content.source_ref}
+                          </p>
+                        </div>
+                      )}
                       
                       {/* Subtitle text */}
                       <div className="relative z-10 text-center">
