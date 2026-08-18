@@ -96,9 +96,7 @@ export const translateToBulgarian = createServerFn({ method: "POST" })
               const match = rawResp.match(lineRegex);
               if (match && match[1]) {
                 const cleanText = sanitize(match[1]).trim();
-                const formattedText = cleanText.startsWith(`(${targetB.ayah})`)
-                  ? cleanText
-                  : `(${targetB.ayah}) ${cleanText}`;
+                const formattedText = cleanText.replace(/^\(\d+\)\s*/, "").replace(/^\[\d+\]\s*/, "");
                 globalCache.set(cacheKey, formattedText);
               }
             }
@@ -109,9 +107,7 @@ export const translateToBulgarian = createServerFn({ method: "POST" })
             const cacheKey = `ayah_${singleB.ayah}_${(singleB.english || "").trim()}`;
             if (!globalCache.get(cacheKey) || !globalCache.get(cacheKey)!.trim()) {
               const cleanText = sanitize(rawResp).trim();
-              const formattedText = cleanText.startsWith(`(${singleB.ayah})`)
-                ? cleanText
-                : `(${singleB.ayah}) ${cleanText}`;
+              const formattedText = cleanText.replace(/^\(\d+\)\s*/, "").replace(/^\[\d+\]\s*/, "");
               globalCache.set(cacheKey, formattedText);
             }
           }
@@ -134,9 +130,7 @@ export const translateToBulgarian = createServerFn({ method: "POST" })
               const match = raw2.match(lineRegex);
               if (match && match[1]) {
                 const cleanText = sanitize(match[1]).trim();
-                const formattedText = cleanText.startsWith(`(${b.ayah})`)
-                  ? cleanText
-                  : `(${b.ayah}) ${cleanText}`;
+                const formattedText = cleanText.replace(/^\(\d+\)\s*/, "").replace(/^\[\d+\]\s*/, "");
                 globalCache.set(cacheKey, formattedText);
               }
             }
@@ -145,9 +139,7 @@ export const translateToBulgarian = createServerFn({ method: "POST" })
               const cacheKey = `ayah_${singleB.ayah}_${(singleB.english || "").trim()}`;
               if (!getCached(singleB)) {
                 const cleanText = sanitize(raw2).trim();
-                const formattedText = cleanText.startsWith(`(${singleB.ayah})`)
-                  ? cleanText
-                  : `(${singleB.ayah}) ${cleanText}`;
+                const formattedText = cleanText.replace(/^\(\d+\)\s*/, "").replace(/^\[\d+\]\s*/, "");
                 globalCache.set(cacheKey, formattedText);
               }
             }

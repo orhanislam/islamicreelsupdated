@@ -1398,16 +1398,16 @@ function CreatePage() {
                   <img key={renderedUrl} src={renderedUrl} alt="Готова снимка" className="size-full object-cover" />
                 ) : (
                   <>
-                    {bgVideoUrl ? (
+                    {bgVideoUrl || (multiSceneUrls && multiSceneUrls.length > 0) ? (
                       <video
-                        key={bgVideoUrl}
-                        src={bgVideoUrl}
+                        key={multiSceneUrls && multiSceneUrls.length > 1 ? multiSceneUrls[Math.floor(previewTime / 3) % multiSceneUrls.length] : bgVideoUrl}
+                        src={multiSceneUrls && multiSceneUrls.length > 1 ? multiSceneUrls[Math.floor(previewTime / 3) % multiSceneUrls.length] : bgVideoUrl || undefined}
                         controls={false}
                         playsInline
                         loop
                         autoPlay
                         muted
-                        className="size-full object-cover"
+                        className="size-full object-cover transition-opacity duration-300"
                       />
                     ) : bgUrl ? (
                       <img src={bgUrl} alt="Избран фон" className="size-full object-cover" />
