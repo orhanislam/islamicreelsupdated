@@ -1473,7 +1473,7 @@ function CreatePage() {
                       {/* Reference Text Overlay (Surah/Ayah) */}
                       {content?.source_ref && (
                         <div className="absolute top-[15%] w-full text-center px-4">
-                          <p className="text-white font-bold" style={{ fontSize: "16px", textShadow: "0px 2px 4px rgba(0,0,0,1)", WebkitTextStroke: "1px black" }}>
+                          <p className="text-white font-bold" style={{ fontSize: "16px", textShadow: "1px 1px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 0px 4px 6px rgba(0,0,0,0.8)" }}>
                             {content.source_ref}
                           </p>
                         </div>
