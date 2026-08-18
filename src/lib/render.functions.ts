@@ -337,7 +337,7 @@ export async function executeRenderTask(opts: any): Promise<any> {
       } else if (tiktokTheme === "neon") {
         highlightColor = "&HFFFF00&"; // Neon Cyan/Gold
       } else if (tiktokTheme === "classic") {
-        highlightColor = "&H00D7FF&";
+        highlightColor = "&H00FFFFFF&"; // Pure White
       } else if (tiktokTheme === "fire") {
         highlightColor = "&H0066FF&"; // Flaming Orange Gold
       } else if (tiktokTheme === "box") {
@@ -353,7 +353,7 @@ PlayResY: 1920
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
 Style: Arabic,Scheherazade New,100,&H00FFFFFF,&H000000FF,&H00000000,&H80000000,-1,0,0,0,100,100,0,0,1,3,0,8,50,50,300,1
 Style: Bulgarian,Outfit,120,&H00FFFFFF,&H0000D7FF,${outlineColor},${backColor},-1,0,0,0,100,100,0,0,${borderStyle},${outlineWidth},${shadowSize},${bulgarianAlign},100,100,${bulgarianMarginV},1
-Style: Reference,Outfit,70,&H005DC9F4,&H000000FF,&H00000000,&H80000000,-1,0,0,0,100,100,0,0,3,6,0,8,50,50,150,1
+Style: Reference,Outfit,70,&H00FFFFFF,&H000000FF,&H00000000,&H80000000,-1,0,0,0,100,100,0,0,3,6,0,8,50,50,150,1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
@@ -659,11 +659,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
               const scaledTextLine = p.words
                 .map((w, i) => {
                   const isActive = i === wIdx;
-                  if (p.isTitle) {
-                    return isActive ? `{\\c&H00FFFFFF&}${w}` : `{\\c${highlightColor}}${w}`;
-                  } else {
-                    return isActive ? `{${activeScale}\\c${highlightColor}}${w}` : `{${inactiveScale}\\c&H00FFFFFF&}${w}`;
-                  }
+                  return isActive ? `{${activeScale}\\c${highlightColor}}${w}` : `{${inactiveScale}\\c&H00FFFFFF&}${w}`;
                 })
                 .join(" ");
 
