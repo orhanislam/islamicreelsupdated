@@ -138,6 +138,38 @@ function CreatePage() {
   const fileRef = useRef<HTMLInputElement>(null);
   const previewRef = useRef<HTMLDivElement>(null);
 
+  useEffect(() => {
+    const saved = localStorage.getItem("edit_proposal");
+    if (saved) {
+      localStorage.removeItem("edit_proposal");
+      try {
+        const proposal = JSON.parse(saved);
+        if (proposal.tiktokTheme) setTiktokTheme(proposal.tiktokTheme);
+        if (proposal.quality) setVideoQuality(proposal.quality);
+        if (proposal.subtitlePosition) setSubtitlePosition(proposal.subtitlePosition);
+        if (proposal.searchQuery) setPexelsQuery(proposal.searchQuery);
+        
+        if (proposal.type === "quran" && proposal.surah && proposal.ayah) {
+          setTab("ayah");
+          setSurah(proposal.surah);
+          setAyah(proposal.ayah);
+          const end = proposal.count && proposal.count > 1 ? proposal.ayah + proposal.count - 1 : undefined;
+          if (end) setAyahEnd(end);
+          setTimeout(() => {
+             loadAyah(proposal.surah, proposal.ayah, end);
+          }, 100);
+        } else if (proposal.type === "hadith" && proposal.collection && proposal.number) {
+          setTab("hadith");
+          setHadithSource(proposal.collection);
+          setSunnahNum(proposal.number);
+          setTimeout(() => {
+             loadSunnah(proposal.collection, proposal.number, true);
+          }, 100);
+        }
+      } catch (e) {}
+    }
+  }, []);
+
   const clearRendered = () => {
     setRenderedUrl((current) => {
       if (current) URL.revokeObjectURL(current);

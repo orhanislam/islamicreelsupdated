@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { Bot, Send, Loader2, Sparkles, Download, CheckCircle2, Video, Pencil, Brain, Trash2, Plus, Copy, Image as ImageIcon, BookOpen, ScrollText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -58,6 +58,7 @@ export const VIRAL_HADITH_PRESETS = [
 ];
 
 function AssistantPage() {
+  const navigate = useNavigate();
   const [prompt, setPrompt] = useState("");
   const [loading, setLoading] = useState(false);
   const [batchLoading, setBatchLoading] = useState(false);
@@ -942,6 +943,21 @@ function AssistantPage() {
                       </Button>
 
                       <Button
+                        variant="secondary"
+                        size="sm"
+                        onClick={() => {
+                          localStorage.setItem("edit_proposal", JSON.stringify(m.proposal!));
+                          navigate({ to: "/create" });
+                        }}
+                        disabled={confirmingIdx !== null}
+                        className="rounded-lg text-xs font-semibold cursor-pointer"
+                        title="Прегледай точния текст, аудио и видео преди рендиране"
+                      >
+                        <Pencil className="size-3.5 mr-1.5" />
+                        Прегледай и Редактирай
+                      </Button>
+
+                      <Button
                         variant="outline"
                         size="sm"
                         onClick={() => setPrompt("Искам да променим следното в предложението: ")}
@@ -1045,6 +1061,18 @@ function AssistantPage() {
                                 >
                                   {generatingThumbTitle === prop.title ? <Loader2 className="size-3 animate-spin" /> : <ImageIcon className="size-3" />}
                                   Корица
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    localStorage.setItem("edit_proposal", JSON.stringify(prop));
+                                    navigate({ to: "/create" });
+                                  }}
+                                  className="inline-flex items-center gap-1 rounded-md bg-blue-500/10 px-2 py-1 text-[11px] font-medium text-blue-400 hover:bg-blue-500/20 border border-blue-500/30 transition cursor-pointer"
+                                  title="Прегледай точния текст, аудио и видео преди рендиране"
+                                >
+                                  <Pencil className="size-3" /> Редактирай
                                 </button>
                               </div>
                             </div>
