@@ -572,13 +572,19 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
           const isSingleWordMode = data.subtitleSlicingMode === "single";
           const MAX_WORDS = isSingleWordMode ? 1 : 4;
           const MIN_WORDS = isSingleWordMode ? 1 : 2;
-          type Phrase = { words: string[]; startIdx: number; endIdx: number };
+          
+          const textParts = (data.bulgarian || "").trim().split(/\n\n+/);
+          const hasTitle = textParts.length > 1;
+          const titleWordCount = hasTitle ? textParts[0].trim().split(/\s+/).filter(Boolean).length : 0;
+          
+          type Phrase = { words: string[]; startIdx: number; endIdx: number; isTitle: boolean };
           const phrases: Phrase[] = [];
           let cur: string[] = [];
           let curStart = 0;
           const flush = () => {
             if (!cur.length) return;
-            phrases.push({ words: cur, startIdx: curStart, endIdx: curStart + cur.length });
+            const isTitle = curStart < titleWordCount;
+            phrases.push({ words: cur, startIdx: curStart, endIdx: curStart + cur.length, isTitle });
             curStart += cur.length;
             cur = [];
           };
@@ -594,7 +600,9 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             }
             cur.push(w);
             const endsPunct = /[.!?…]$/.test(w) || (/[,;:—]$/.test(w) && cur.length >= MIN_WORDS);
-            if ((endsPunct && cur.length >= MIN_WORDS) || cur.length >= MAX_WORDS) {
+            const isLastTitleWord = hasTitle && (curStart + cur.length === titleWordCount);
+            
+            if ((endsPunct && cur.length >= MIN_WORDS) || cur.length >= MAX_WORDS || isLastTitleWord) {
               flush();
             }
           }
@@ -644,16 +652,17 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
               
               // Added \blur6 for a beautiful blurred shadow effect
               const posTag = subPos === "center" ? `\\an5\\pos(540,960)` : `\\an${bulgarianAlign}\\pos(540,${bulgarianMarginV})`;
-              const phraseStyleTag = `{${posTag}\\blur6${useAnim}}`;
+              const titleTag = p.isTitle ? "\\fs130" : "";
+              const phraseStyleTag = `{${posTag}\\blur6${useAnim}${titleTag}}`;
               
               // Apply active scale only to the active word
               const scaledTextLine = p.words
                 .map((w, i) => {
                   const isActive = i === wIdx;
-                  if (isActive) {
-                    return `{${activeScale}\\c${highlightColor}}${w}`;
+                  if (p.isTitle) {
+                    return isActive ? `{\\c&H00FFFFFF&}${w}` : `{\\c${highlightColor}}${w}`;
                   } else {
-                    return `{${inactiveScale}\\c&H00FFFFFF&}${w}`;
+                    return isActive ? `{${activeScale}\\c${highlightColor}}${w}` : `{${inactiveScale}\\c&H00FFFFFF&}${w}`;
                   }
                 })
                 .join(" ");
