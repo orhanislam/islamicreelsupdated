@@ -1465,26 +1465,28 @@ function CreatePage() {
                         return multiSceneUrls.map((url, idx) => (
                           <video
                             key={url}
+                            id={`bg-preview-video-${idx}`}
+                            className={`bg-preview-video absolute inset-0 size-full object-cover transition-opacity duration-500 ${activeIdx === idx ? "opacity-100 z-10" : "opacity-0 z-0"}`}
                             src={url}
                             controls={false}
                             playsInline
                             loop
                             autoPlay
                             muted
-                            className={`absolute inset-0 size-full object-cover transition-opacity duration-500 ${activeIdx === idx ? "opacity-100 z-10" : "opacity-0 z-0"}`}
                           />
                         ));
                       } else if (bgVideoUrl) {
                         return (
                           <video
                             key={bgVideoUrl}
+                            id="bg-preview-video"
+                            className="bg-preview-video absolute inset-0 size-full object-cover z-10"
                             src={bgVideoUrl}
                             controls={false}
                             playsInline
                             loop
                             autoPlay
                             muted
-                            className="absolute inset-0 size-full object-cover z-10"
                           />
                         );
                       } else if (bgUrl) {
@@ -1545,6 +1547,12 @@ function CreatePage() {
                           controls
                           controlsList="nodownload noplaybackrate"
                           onTimeUpdate={(e) => setPreviewTime(e.currentTarget.currentTime)}
+                          onPlay={() => {
+                            document.querySelectorAll<HTMLVideoElement>(".bg-preview-video").forEach(v => v.play().catch(() => {}));
+                          }}
+                          onPause={() => {
+                            document.querySelectorAll<HTMLVideoElement>(".bg-preview-video").forEach(v => v.pause());
+                          }}
                           className="w-full h-8 [&::-webkit-media-controls-panel]:bg-transparent [&::-webkit-media-controls-panel]:text-white"
                         />
                       </div>

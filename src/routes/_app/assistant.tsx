@@ -937,7 +937,7 @@ function AssistantPage() {
                         ) : (
                           <>
                             <CheckCircle2 className="size-3.5 mr-1.5" />
-                            ✨ Одобри и генерирай видеото
+                            ✨ Генерирай в Изтегляния (за преглед/сваляне)
                           </>
                         )}
                       </Button>
@@ -1096,7 +1096,7 @@ function AssistantPage() {
                         ) : (
                           <>
                             <CheckCircle2 className="size-4 mr-2" />
-                            🎬 Одобри и Генерирай Избраните ({(m.selectedProposalIndices || m.proposals.map((_, i) => i)).length} от {m.proposals.length}) Видеа наведнъж
+                            🎬 Генерирай избраните ({(m.selectedProposalIndices || m.proposals.map((_, i) => i)).length}) видеа в Изтегляния (за преглед/сваляне)
                           </>
                         )}
                       </Button>

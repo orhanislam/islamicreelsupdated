@@ -158,11 +158,13 @@ function DownloadsPage() {
       const filename = (job.title || "islamic-reel").replace(/[^a-z0-9._-]+/gi, "_") + ".mp4";
       const downloadUrl = `/api/download/${job.id}?filename=${encodeURIComponent(filename)}`;
 
-      // Universal robust native download via streaming endpoint (zero memory crash risk)
-      // window.location.assign triggers the native download manager seamlessly and bypasses async popup blockers on Android,
-      // and on iOS it instantly prompts the native Download dialog because we forced Content-Disposition: attachment on the server.
-      window.location.assign(downloadUrl);
-      toast.success("Изтеглянето стартира веднага!");
+      toast.message("Подготовка за изтегляне (взимане на видеото)...");
+      const res = await fetch(downloadUrl);
+      if (!res.ok) throw new Error("Файлът не е намерен");
+      const blob = await res.blob();
+      await saveMediaBlob(blob, filename, "video/mp4");
+      copyToClipboardFallback(formatViralSocialCaption(job.title || "Ислямска мъдрост"));
+      toast.success("Изтеглянето стартира веднага! (Текстът за TikTok е копиран)");
     } catch (e) {
       toast.error("Възникна грешка при изтеглянето. Възможно е файлът да е изчистен.");
     } finally {
@@ -541,17 +543,29 @@ function DownloadsPage() {
                   )}
                 </div>
 
-                <div className="mt-auto flex items-center gap-2">
+                {job.status === "completed" && (
+                  <div className="my-2 rounded-xl overflow-hidden bg-black/40 aspect-[9/16] max-h-72 flex items-center justify-center border border-border/40 relative">
+                    <video 
+                      src={`/api/download/${job.id}`} 
+                      controls 
+                      preload="metadata"
+                      playsInline
+                      className="w-full h-full object-cover" 
+                    />
+                  </div>
+                )}
+
+                <div className="mt-auto flex items-center gap-2 pt-2">
                   {job.status === "completed" ? (
                     <>
-                      <a
-                        href={`/api/download/${job.id}?filename=${encodeURIComponent((job.title || "islamic-reel").replace(/[^a-z0-9._-]+/gi, "_") + ".mp4")}`}
-                        download={`${(job.title || "islamic-reel").replace(/[^a-z0-9._-]+/gi, "_")}.mp4`}
+                      <button
+                        onClick={() => handleDownloadServerJob(job)}
+                        disabled={downloadingServerId === job.id}
                         className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-xl bg-primary px-3.5 py-2.5 text-sm font-medium text-primary-foreground shadow hover:bg-primary/90 transition cursor-pointer"
                       >
-                        <Download className="size-4" />
-                        Задръж да свалиш
-                      </a>
+                        {downloadingServerId === job.id ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}
+                        {downloadingServerId === job.id ? "Зареждане..." : "Свали MP4"}
+                      </button>
                       <button
                         onClick={() => handleRetryServerJob(job.id)}
                         title="Рендирай отново"
