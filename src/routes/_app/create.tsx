@@ -1392,7 +1392,14 @@ function CreatePage() {
                 id="video-preview-container"
                 className="relative bg-black rounded-lg border group [&:fullscreen]:flex [&:fullscreen]:items-center [&:fullscreen]:justify-center [&:fullscreen]:border-none"
               >
-                <div className="relative w-full aspect-[9/16] [&:fullscreen_&]:h-full [&:fullscreen_&]:w-auto overflow-hidden">
+                <style>{`
+                  #video-preview-container:fullscreen .preview-inner {
+                    height: 100vh !important;
+                    width: calc(100vh * 9 / 16) !important;
+                    max-width: 100vw !important;
+                  }
+                `}</style>
+                <div className="preview-inner relative w-full aspect-[9/16] overflow-hidden">
                 {/* Fullscreen Button */}
                 <button
                   type="button"
