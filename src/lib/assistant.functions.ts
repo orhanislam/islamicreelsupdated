@@ -526,12 +526,7 @@ export const confirmAndGenerateVideo = createServerFn({ method: "POST" })
 
     const subtitleStyle = proposal.subtitlePosition || "middle";
 
-    let viralTitle = proposal.title;
-    if (viralTitle.includes("] ")) {
-      viralTitle = viralTitle.split("] ").slice(1).join("] ").trim();
-    } else if (viralTitle.includes("•")) {
-      viralTitle = viralTitle.split("•")[1].trim();
-    }
+
 
     const { jobId } = await startServerRenderJob({
       data: {
