@@ -538,14 +538,17 @@ export const confirmAndGenerateVideo = createServerFn({ method: "POST" })
           viralTitle,
           style: subtitleStyle,
           tiktokTheme: proposal.tiktokTheme || "hormozi",
+          subtitlePosition: subtitleStyle,
+          subtitleSlicingMode: "phrase",
+          pacingMode: "punchy",
           audioUrl: audioUrl || undefined,
           requireAudio: Boolean(audioUrl),
           fallbackDuration: 10,
-          wordSegments,
-          ayahBounds,
-          arabicWordCount,
+          wordSegments: undefined, // undefined to force punchy mode
+          ayahBounds: undefined, // undefined to force punchy mode
+          arabicWordCount: undefined,
           bulgarianWordTimings,
-          quality: proposal.quality || "high",
+          quality: proposal.quality || "1080p", // create.tsx uses 1080p instead of high
           bRollUrls,
         },
       },

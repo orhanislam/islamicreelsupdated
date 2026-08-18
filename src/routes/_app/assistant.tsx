@@ -721,7 +721,7 @@ function AssistantPage() {
               Избери колко топ вайръл видеа да се генерират автоматично наведнъж (с Hormozi субтитри и кино B-Roll):
             </p>
             <div className="flex flex-wrap items-center gap-2 mt-2.5">
-              {[3, 5, 8, 10].map((num) => (
+              {[1, 3, 5, 8, 10].map((num) => (
                 <button
                   key={num}
                   type="button"
@@ -764,7 +764,7 @@ function AssistantPage() {
               AI изготвя план с разнородни теми за одобрение. Избери колко идеи искаш да ти предложи в чата:
             </p>
             <div className="flex flex-wrap items-center gap-2 mt-2.5">
-              {[3, 5, 8, 10].map((num) => (
+              {[1, 3, 5, 8, 10].map((num) => (
                 <button
                   key={num}
                   type="button"
