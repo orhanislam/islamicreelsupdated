@@ -383,7 +383,7 @@ export const confirmAndGenerateVideo = createServerFn({ method: "POST" })
 
       try {
         if (viralTitle) {
-          bulgarian = `Тема: ${viralTitle} <break time="1.0s" />\n\n${bulgarian}`;
+          bulgarian = `${viralTitle} <break time="1.0s" />\n\n${bulgarian}`;
         }
         const narr = await synthesizeHadithNarration({ data: { text: bulgarian } });
         audioUrl = `data:${narr.mimeType || "audio/mp3"};base64,${narr.base64}`;
@@ -399,7 +399,7 @@ export const confirmAndGenerateVideo = createServerFn({ method: "POST" })
 
       try {
         if (viralTitle && !bulgarian.includes(viralTitle)) {
-           bulgarian = `Тема: ${viralTitle} <break time="1.0s" />\n\n${bulgarian}`;
+           bulgarian = `${viralTitle} <break time="1.0s" />\n\n${bulgarian}`;
         }
         const narr = await synthesizeHadithNarration({ data: { text: bulgarian } });
         audioUrl = `data:${narr.mimeType || "audio/mp3"};base64,${narr.base64}`;
@@ -469,7 +469,7 @@ export const confirmAndGenerateVideo = createServerFn({ method: "POST" })
         });
         bulgarian = t.bulgarian.replace(/(^|\n)\s*(?:\(\d+\)|\[\d+\]|\d+\.)\s*/g, "$1").trim();
         if (viralTitle) {
-          bulgarian = `Тема: ${viralTitle} <break time="1.0s" />\n\n${bulgarian}`;
+          bulgarian = `${viralTitle} <break time="1.0s" />\n\n${bulgarian}`;
         }
 
         if (proposal.narration === "arabic_reciter" && t.ayahBounds && t.ayahBounds.length > 0) {
