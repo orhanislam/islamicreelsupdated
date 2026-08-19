@@ -641,32 +641,7 @@ function AssistantPage() {
 
       {/* Banner Cards Container with responsive spacing */}
       <div className="space-y-3 sm:space-y-4 mb-3 sm:mb-4">
-        {/* Viral AI Suggestion Card */}
-        <div className="rounded-2xl border border-red-500/30 bg-gradient-to-r from-red-500/10 via-orange-500/5 to-transparent p-3.5 sm:p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4">
-          <div>
-            <div className="flex items-center gap-2 text-red-400 font-bold text-sm">
-              <Sparkles className="size-4" /> ВАЙРЪЛ AI ГЕНЕРАТОР
-            </div>
-            <p className="text-xs text-muted-foreground mt-1">
-              AI избира уникална, дълбока и рядко цитирана тема от Корана или Хадисите. Без банални текстове — само вирусни!
-            </p>
-          </div>
-          <button
-            onClick={handleViralSuggest}
-            disabled={viralLoading || loading}
-            className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-red-500 to-orange-500 px-5 py-2.5 text-xs font-bold text-white shadow-lg hover:from-red-400 hover:to-orange-400 transition shrink-0 cursor-pointer"
-          >
-            {viralLoading ? (
-              <>
-                <Loader2 className="size-4 animate-spin" /> Търсене...
-              </>
-            ) : (
-              <>
-                🔥 Вайръл Тема
-              </>
-            )}
-          </button>
-        </div>
+
 
         {/* Batch Viral Hadith Generator Card */}
         <div className="rounded-2xl border border-blue-500/30 bg-gradient-to-r from-blue-500/10 via-cyan-500/5 to-transparent p-3.5 sm:p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4">
