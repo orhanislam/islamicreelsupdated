@@ -250,7 +250,7 @@ function CreatePage() {
       setTranslating(true);
       const t = await runTranslate({ data: { english: d.english, sourceRef: c.source_ref, ayahBounds: d.ayahBounds } });
       const stripped = t.bulgarian.replace(/(^|\n)\s*(?:\(\d+\)|\[\d+\]|\d+\.)\s*/g, "$1").trim();
-      const finalBulgarian = prependTheme ? `Тема: ${prependTheme}\n\n${stripped}` : stripped;
+      const finalBulgarian = prependTheme ? `${prependTheme} <break time="1.0s" />\n\n${stripped}` : stripped;
       setBulgarian(finalBulgarian);
       if (t.ayahBounds) {
         c.ayahBounds = t.ayahBounds;
@@ -302,7 +302,7 @@ function CreatePage() {
       setTranslating(true);
       const t = await runTranslate({ data: { arabic: h.arabic, english: h.english, sourceRef: h.reference } });
       const stripped = t.bulgarian.replace(/(^|\n)\s*(?:\(\d+\)|\[\d+\]|\d+\.)\s*/g, "$1").trim();
-      const finalBulgarian = prependTheme ? `Тема: ${prependTheme}\n\n${stripped}` : stripped;
+      const finalBulgarian = prependTheme ? `${prependTheme} <break time="1.0s" />\n\n${stripped}` : stripped;
       setBulgarian(finalBulgarian);
       toast.success(`${h.reference} · ${h.grade ?? "Sahih"}`);
       return true;

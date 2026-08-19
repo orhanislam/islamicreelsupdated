@@ -472,17 +472,12 @@ export const confirmAndGenerateVideo = createServerFn({ method: "POST" })
           bulgarian = `${viralTitle} <break time="1.0s" />\n\n${bulgarian}`;
         }
 
-        if (proposal.narration === "arabic_reciter" && t.ayahBounds && t.ayahBounds.length > 0) {
-          try {
-            const { alignCrossLingualSubtitles } = await import("@/lib/gemini");
-            const aligned = await alignCrossLingualSubtitles(t.ayahBounds);
-            if (aligned && aligned.length > 0) {
-              bulgarianWordTimings = aligned;
-              console.log("[assistant] Perfect cross-lingual sync complete!");
-            }
-          } catch (syncErr) {
-            console.warn("[assistant] Failed to run AI sync, fallback to math ratio:", syncErr);
-          }
+        try {
+          const narr = await synthesizeHadithNarration({ data: { text: bulgarian } });
+          audioUrl = `data:${narr.mimeType || "audio/mp3"};base64,${narr.base64}`;
+          bulgarianWordTimings = narr.wordTimings;
+        } catch (e) {
+          console.warn("Could not narrate Quran:", e);
         }
       } catch (err) {
         console.error(`[assistant] Error fetching Quran data or translating for ${surah}:${ayah}:`, err);
