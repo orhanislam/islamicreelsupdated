@@ -678,7 +678,7 @@ function AssistantPage() {
               Избери колко автентични (Sahih) хадиса да се генерират автоматично наведнъж (с кинематографичен фон):
             </p>
             <div className="flex flex-wrap items-center gap-2 mt-2.5">
-              {[3, 5, 8, 10].map((num) => (
+              {[1, 3, 5, 8, 10].map((num) => (
                 <button
                   key={num}
                   type="button"
