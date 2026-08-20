@@ -20,7 +20,7 @@ export const generateViralThumbnail = createServerFn({ method: "POST" })
     };
   })
   .handler(async ({ data }): Promise<{ base64: string; dataUrl: string }> => {
-    let finalTitle = data.title;
+    let finalTitle = data.title.toUpperCase();
     // Escape XML entities for SVG
     const esc = (str: string) =>
       str
@@ -48,7 +48,7 @@ export const generateViralThumbnail = createServerFn({ method: "POST" })
     const titleSvgLines = displayLines
       .map((line, i) => {
         const y = 880 + (i - (displayLines.length - 1) / 2) * 110;
-        const isGold = i === 0 || line.includes("Аллах") || line.includes("Коран") || line.includes("Рай");
+        const isGold = i === 0 || line.includes("АЛЛАХ") || line.includes("КОРАН") || line.includes("РАЙ");
         const color = isGold ? data.accentColor : "#FFFFFF";
         return `<text x="540" y="${y}" font-family="Arial, sans-serif" font-weight="900" font-size="76" fill="${color}" text-anchor="middle" letter-spacing="-1">${esc(line)}</text>`;
       })
