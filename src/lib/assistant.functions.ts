@@ -523,7 +523,7 @@ export const confirmAndGenerateVideo = createServerFn({ method: "POST" })
 
     const { jobId } = await startServerRenderJob({
       data: {
-        title: reference,
+        title: viralTitle || reference,
         data: {
           backgroundUrl: bestVid,
           backgroundVideoUrl: bestVid,

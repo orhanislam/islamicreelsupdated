@@ -181,7 +181,8 @@ function AssistantPage() {
 
   const handleCopyTikTokCaption = (title: string, summary?: string, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
-    const text = formatViralSocialCaption(title, summary);
+    const cleanTitle = getThumbTitle(title);
+    const text = formatViralSocialCaption(cleanTitle, summary);
     copyToClipboardFallback(text);
   };
 

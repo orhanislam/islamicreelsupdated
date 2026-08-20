@@ -5,7 +5,15 @@
 
 export function formatViralSocialCaption(title: string, summary?: string): string {
   // Clean up title and format nicely
-  const cleanTitle = title
+  let cleanTitle = title || "Ислямска мъдрост";
+  
+  if (cleanTitle.includes("] ")) {
+    cleanTitle = cleanTitle.split("] ").slice(1).join("] ");
+  } else if (cleanTitle.includes("•")) {
+    cleanTitle = cleanTitle.split("•")[1];
+  }
+  
+  cleanTitle = cleanTitle
     .replace(/^["'«]+|["'»]+$/g, "")
     .trim();
 
