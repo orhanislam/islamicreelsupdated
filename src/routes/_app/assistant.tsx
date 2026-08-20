@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { Bot, Send, Loader2, Sparkles, Download, CheckCircle2, Video, Pencil, Brain, Trash2, Plus, Copy, Image as ImageIcon, BookOpen, ScrollText } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -70,6 +70,15 @@ function AssistantPage() {
   const [memory, setMemory] = useState<AiMemory | null>(null);
   const [newInstruction, setNewInstruction] = useState("");
   const [messages, setMessages] = useState<ChatMsg[]>(DEFAULT_MESSAGES);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  };
+
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages, loading]);
   const [generatingThumbTitle, setGeneratingThumbTitle] = useState<string | null>(null);
   const [activeTasks, setActiveTasks] = useState<any[]>([]);
 
@@ -1121,6 +1130,7 @@ function AssistantPage() {
               </div>
             </div>
           )}
+          <div ref={messagesEndRef} />
         </div>
 
         <form
