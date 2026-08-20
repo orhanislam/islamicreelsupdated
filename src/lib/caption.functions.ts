@@ -9,8 +9,8 @@ export function formatViralSocialCaption(title: string, summary?: string): strin
     .replace(/^["'«]+|["'»]+$/g, "")
     .trim();
 
-  // Make header uppercase or bold-styled with clean spacing
-  const header = `🕋 ${cleanTitle.toUpperCase()}`;
+  // Make header clean without emoji
+  const header = `Тема: ${cleanTitle}`;
 
   // Format description block if present
   let descriptionBlock = "";
