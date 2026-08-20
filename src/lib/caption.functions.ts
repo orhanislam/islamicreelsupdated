@@ -9,8 +9,8 @@ export function formatViralSocialCaption(title: string, summary?: string): strin
     .replace(/^["'«]+|["'»]+$/g, "")
     .trim();
 
-  // Make header clean without emoji
-  const header = `Тема: ${cleanTitle}`;
+  // Make header clean without emoji and without any prefix
+  const header = `${cleanTitle}`;
 
   // Format description block if present
   let descriptionBlock = "";
