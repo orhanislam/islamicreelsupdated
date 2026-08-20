@@ -181,7 +181,7 @@ export const synthesizeHadithNarration = createServerFn({ method: "POST" })
     const BufferMod = (await import("node:buffer")).Buffer;
 
     const elevenKey = process.env.ELEVENLABS_API_KEY || process.env.VITE_ELEVENLABS_API_KEY;
-    const elevenVoice = process.env.ELEVENLABS_VOICE_ID || process.env.VITE_ELEVENLABS_VOICE_ID || "JBFqnCBsd6RMkjVDRZzb"; // Default: George / Multilingual v2
+    const elevenVoice = process.env.ELEVENLABS_VOICE_ID || process.env.VITE_ELEVENLABS_VOICE_ID || "pNInz6obpgDQGcFmaJgB"; // Default: Adam (Deep, realistic male) / Multilingual v2
 
     if (elevenKey) {
       try {
