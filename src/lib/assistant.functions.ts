@@ -11,7 +11,7 @@ import { createTask, updateTask, listTasks, clearAllTasks } from "@/lib/tasks-en
 
 export type VideoProposal = {
   title: string;
-  type: "hadith" | "quran" | "tiktok" | "general";
+  type: "hadith" | "quran" | "tiktok" | "general" | "carousel";
   collection?: string;
   number?: number;
   surah?: number;
@@ -26,6 +26,7 @@ export type VideoProposal = {
   useBRoll?: boolean;            // enable multi-scene B-Roll
   subtitlePosition?: "bottom" | "middle" | "lower-third";
   quality?: "high" | "720p";
+  carouselSlides?: { topTitle: string; mainText: string; bottomText: string; footerText: string; imagePrompt: string }[];
 };
 
 export const chatWithAssistant = createServerFn({ method: "POST" })

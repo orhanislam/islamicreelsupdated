@@ -1,3 +1,4 @@
+import { CarouselRendererButton } from "@/components/CarouselRendererButton";
 import React, { useState, useEffect, useRef } from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { Bot, Send, Loader2, Sparkles, Download, CheckCircle2, Video, Pencil, Brain, Trash2, Plus, Copy, Image as ImageIcon, BookOpen, ScrollText } from "lucide-react";
@@ -859,6 +860,24 @@ function AssistantPage() {
                         <span className="font-semibold text-muted-foreground">Заглавие: </span>
                         <span className="font-medium text-foreground">{m.proposal.title}</span>
                       </div>
+
+                      {m.proposal.type === 'carousel' && m.proposal.carouselSlides && (
+                        <div className="mt-4 flex flex-col gap-3">
+                          <div className="text-sm font-medium text-amber-400 mb-1">📸 КАРУСЕЛ (4 СЛАЙДА)</div>
+                          <div className="grid grid-cols-2 gap-3">
+                            {m.proposal.carouselSlides.map((slide, i) => (
+                              <div key={i} className="rounded-lg border border-border/40 bg-black/40 p-3 text-xs">
+                                <div className="font-bold text-amber-300 mb-1">Слайд {i+1}</div>
+                                <div className="text-white/90 mb-1">{slide.topTitle}</div>
+                                <div className="text-white/60 truncate">{slide.mainText}</div>
+                                <div className="mt-2 text-[10px] text-teal-400/70 italic">AI Prompt: {slide.imagePrompt}</div>
+                              </div>
+                            ))}
+                          </div>
+                          <CarouselRendererButton slides={m.proposal.carouselSlides} title={m.proposal.title} />
+                        </div>
+                      )}
+
                       {m.proposal.summaryBg && (
                         <div>
                           <span className="font-semibold text-muted-foreground">Съдържание: </span>
