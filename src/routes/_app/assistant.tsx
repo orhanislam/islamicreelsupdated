@@ -953,9 +953,11 @@ function AssistantPage() {
                         </div>
                       )}
 
-                      {m.proposal.summaryBg && (
-                        <div>
-                          <span className="font-semibold text-muted-foreground">Съдържание: </span>
+                      {m.proposal.type !== "carousel" && (
+                        <>
+                          {m.proposal.summaryBg && (
+                            <div>
+                              <span className="font-semibold text-muted-foreground">Съдържание: </span>
                           <span className="text-foreground">{m.proposal.summaryBg}</span>
                         </div>
                       )}
@@ -999,9 +1001,12 @@ function AssistantPage() {
                           <span className="text-foreground">{m.proposal.quality}</span>
                         </div>
                       )}
+                        </>
+                      )}
                     </div>
 
-                    <div className="flex flex-wrap items-center gap-2 pt-2">
+                    {m.proposal.type !== "carousel" && (
+                      <div className="flex flex-wrap items-center gap-2 pt-2">
                       <Button
                         size="sm"
                         onClick={() => handleConfirmProposal(m.proposal!, idx)}
@@ -1069,6 +1074,7 @@ function AssistantPage() {
                         Корица
                       </Button>
                     </div>
+                    )}
                   </div>
                 )}
 
