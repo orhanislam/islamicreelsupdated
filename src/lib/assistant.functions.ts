@@ -155,12 +155,40 @@ CAPCUT-ПОДОБНИ ИНСТРУКЦИИ ЗА РЕДАКТИРАНЕ:
       await recordProposalUsages({ data: { proposals: proposalsToRecord } }).catch(() => {});
     }
 
-    return {
+    const replyObj = {
       reply: parsed.reply || "С какво мога да ти помогна днес?",
       proposal: (parsed.proposal as VideoProposal) || null,
       proposals: Array.isArray(parsed.proposals) && parsed.proposals.length > 0 ? (parsed.proposals as VideoProposal[]) : null,
       memory,
     };
+
+    // Auto-save to history to prevent loss if client closes browser
+    try {
+      const fs = (await import("fs")).promises;
+      const file = await getHistoryFilePath();
+      let currentHistory: any[] = [];
+      try {
+        const content = await fs.readFile(file, "utf-8");
+        if (content) currentHistory = JSON.parse(content);
+      } catch {}
+      
+      const lastMsg = currentHistory[currentHistory.length - 1];
+      if (!lastMsg || lastMsg.role !== "user" || lastMsg.text !== data.prompt) {
+         currentHistory.push({ role: "user", text: data.prompt });
+      }
+      
+      currentHistory.push({
+        role: "assistant",
+        text: replyObj.reply,
+        proposal: replyObj.proposal,
+        proposals: replyObj.proposals
+      });
+      await fs.writeFile(file, JSON.stringify(currentHistory, null, 2), "utf-8");
+    } catch (e) {
+      console.warn("Auto-save history failed", e);
+    }
+
+    return replyObj;
   });
 
 export const suggestViralProposal = createServerFn({ method: "POST" })
