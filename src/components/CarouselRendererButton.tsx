@@ -59,8 +59,27 @@ export function CarouselRendererButton({ slides, title }: { slides: Slide[]; tit
 
   const handleCopyTitle = () => {
     if (title) {
-      navigator.clipboard.writeText(title);
-      toast.success("Заглавието е копирано!");
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(title).catch(err => console.error(err));
+        toast.success("Заглавието е копирано!");
+      } else {
+        const textArea = document.createElement("textarea");
+        textArea.value = title;
+        textArea.style.position = "fixed";
+        textArea.style.left = "-999999px";
+        textArea.style.top = "-999999px";
+        document.body.appendChild(textArea);
+        textArea.focus();
+        textArea.select();
+        try {
+          document.execCommand('copy');
+          toast.success("Заглавието е копирано!");
+        } catch (err) {
+          console.error('Fallback copy failed', err);
+          toast.error("Копирането не бе успешно.");
+        }
+        document.body.removeChild(textArea);
+      }
     }
   };
 
