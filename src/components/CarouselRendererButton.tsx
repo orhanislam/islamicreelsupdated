@@ -6,6 +6,7 @@ import { generateBackground } from "@/lib/backgrounds.functions";
 import { renderCarouselSlide } from "@/lib/render-carousel";
 import { toast } from "sonner";
 import { saveMediaBlob } from "@/lib/download-media";
+import JSZip from "jszip";
 
 type Slide = { topTitle: string; mainText: string; bottomText: string; footerText: string; imagePrompt: string };
 
@@ -18,8 +19,7 @@ export function CarouselRendererButton({ slides, title }: { slides: Slide[]; tit
     if (!slides || slides.length === 0) return;
     setLoading(true);
     try {
-      const blobs: Blob[] = [];
-      const files: File[] = [];
+      const zip = new JSZip();
 
       for (let i = 0; i < slides.length; i++) {
         const slide = slides[i];
@@ -39,35 +39,16 @@ export function CarouselRendererButton({ slides, title }: { slides: Slide[]; tit
           footerText: slide.footerText || ""
         });
         
-        blobs.push(blob);
-        files.push(new File([blob], `${title}_Slide_${i + 1}.png`, { type: blob.type || "image/png" }));
+        zip.file(`Slide_${i + 1}.png`, blob);
       }
 
-      setProgress("Запазване на слайдовете...");
+      setProgress("Пакетиране на архива...");
+      const zipBlob = await zip.generateAsync({ type: "blob" });
       
-      const nav = navigator as any;
-      if (nav.canShare && nav.canShare({ files })) {
-        try {
-          await nav.share({
-            title: title || "TikTok Carousel",
-            files: files
-          });
-          toast.success("Слайдовете бяха споделени/запазени успешно!");
-          setLoading(false);
-          setProgress("");
-          return;
-        } catch (shareErr) {
-          console.warn("Share failed or cancelled", shareErr);
-        }
-      }
-
-      // Fallback: download sequentially
-      for (let i = 0; i < blobs.length; i++) {
-        saveMediaBlob(blobs[i], `${title}_Slide_${i + 1}.png`);
-        await new Promise(r => setTimeout(r, 600)); // slight delay to bypass popup blockers
-      }
+      setProgress("Изтегляне...");
+      await saveMediaBlob(zipBlob, `${title}_Carousel.zip`, "application/zip");
       
-      toast.success("Слайдовете се изтеглят!");
+      toast.success("Каруселът беше изтеглен като ZIP архив!");
     } catch (err: any) {
       console.error(err);
       toast.error("Грешка при генерирането: " + err.message);
