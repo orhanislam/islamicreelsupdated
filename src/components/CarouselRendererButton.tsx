@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Loader2, Image as ImageIcon } from "lucide-react";
+import { Loader2, Image as ImageIcon, Copy } from "lucide-react";
 import { useServerFn } from "@tanstack/react-start";
 import { generateBackground } from "@/lib/backgrounds.functions";
 import { renderCarouselSlide } from "@/lib/render-carousel";
@@ -21,15 +21,11 @@ export function CarouselRendererButton({ slides, title }: { slides: Slide[]; tit
     try {
       const zip = new JSZip();
 
-      for (let i = 0; i < slides.length; i++) {
-        const slide = slides[i];
-        setProgress(`Генериране на фон ${i + 1}/${slides.length}...`);
-        
+            setProgress("Генериране на всички снимки едновременно...");
+      const renderedSlides = await Promise.all(slides.map(async (slide, i) => {
         const currentPrompt = slide?.imagePrompt || "cinematic dark background islamic theme";
         const bgRes = await runGenerate({ data: { prompt: currentPrompt } });
         const bgUrl = `data:${bgRes.mimeType};base64,${bgRes.base64}`;
-        
-        setProgress(`Рендериране на слайд ${i + 1}...`);
         
         const blob = await renderCarouselSlide({
           backgroundUrl: bgUrl,
@@ -38,9 +34,12 @@ export function CarouselRendererButton({ slides, title }: { slides: Slide[]; tit
           bottomText: slide.bottomText || "",
           footerText: slide.footerText || ""
         });
-        
-        zip.file(`Slide_${i + 1}.png`, blob);
-      }
+        return { blob, name: `Slide_${i + 1}.png` };
+      }));
+      
+      renderedSlides.forEach(({ blob, name }) => {
+        zip.file(name, blob);
+      });
 
       setProgress("Пакетиране на архива...");
       const zipBlob = await zip.generateAsync({ type: "blob" });
@@ -58,8 +57,22 @@ export function CarouselRendererButton({ slides, title }: { slides: Slide[]; tit
     }
   };
 
+  const handleCopyTitle = () => {
+    if (title) {
+      navigator.clipboard.writeText(title);
+      toast.success("Заглавието е копирано!");
+    }
+  };
+
   return (
-    <div className="mt-3">
+    <div className="mt-3 flex flex-col gap-2">
+      <Button 
+        variant="outline" 
+        onClick={handleCopyTitle} 
+        className="w-full gap-2 border-emerald-500/30 hover:bg-emerald-500/10 text-emerald-400"
+      >
+        <Copy className="size-4" /> Копирай Заглавието (за TikTok)
+      </Button>
       <Button 
         onClick={handleGenerate} 
         disabled={loading}

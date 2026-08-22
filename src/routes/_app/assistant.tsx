@@ -791,7 +791,7 @@ function AssistantPage() {
           </div>
           <button
             onClick={() => {
-              const carouselPrompt = "Генерирай ми TikTok карусел с 4 слайда. Нека бъде на интересна Ислямска тема (например уроки, дуа, джин или нещо подобно). Използвай типа 'carousel'.";
+              const carouselPrompt = "Генерирай ми TikTok карусел. Избери тема, от която хората имат нужда в ежедневието си и решава техните проблеми (напр. трудности, стрес, сабър, успех и др.). Използвай типа 'carousel'.";
               // Simulate setting prompt and pressing send
               setPrompt(carouselPrompt);
               // Wait for React state to update slightly, then trigger submit via form or manual call

@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="bg">
+<head>
+    <meta charset="UTF-8">
+    <title>Генератор на TikTok Слайдове</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@500;700;800&family=Playfair+Display:wght@700&display=swap');
+        body { font-family: sans-serif; background: #111; color: white; text-align: center; margin: 0; padding: 20px; }
+        .canvas-container { display: flex; flex-wrap: wrap; gap: 20px; justify-content: center; margin-top: 20px; }
+        canvas { border: 1px solid #333; border-radius: 10px; width: 270px; height: 480px; }
+        button { background: #f4c95d; border: none; padding: 15px 30px; font-size: 18px; font-weight: bold; border-radius: 8px; cursor: pointer; margin-bottom: 20px; box-shadow: 0 4px 15px rgba(244, 201, 93, 0.3); transition: 0.2s; }
+        button:hover { background: #e3b74c; transform: scale(1.05); }
+    </style>
+</head>
+<body>
+
+    <h1>TikTok Slides: Суеверие или Традиция</h1>
+    <button onclick="downloadAll()">Изтегли всички 4 слайда</button>
+
+    <div class="canvas-container">
+        <canvas id="c1" width="1080" height="1920"></canvas>
+        <canvas id="c2" width="1080" height="1920"></canvas>
+        <canvas id="c3" width="1080" height="1920"></canvas>
+        <canvas id="c4" width="1080" height="1920"></canvas>
+    </div>
+
+    <script>
+        const W = 1080, H = 1920;
+        
+        const slides = [
+            {
+                id: 'c1', bg: 'bg1.jpg',
+                topTitle: "СУЕВЕРИЕ\nИЛИ\nТРАДИЦИЯ?",
+                mainText: "Изливането на вода\nзад гърба на някой,\nкойто заминава, за да\nму „върви по вода“...",
+                bottomText: "Какво е ислямското\nрешение за това\nдействие?",
+                swipe: "← Плъзнете наляво"
+            },
+            {
+                id: 'c2', bg: 'bg2.jpg',
+                topTitle: "ВЯРАТА\nВЪВ ВОДАТА",
+                mainText: "Когато това действие се\nизвършва с вяра, че\nсамата вода има силата\nда донесе късмет, успех\nили да премахне препятствия...",
+                bottomText: "...това се превръща\nв духовен проблем",
+                swipe: "← Плъзнете наляво"
+            },
+            {
+                id: 'c3', bg: 'bg3.jpg',
+                topTitle: "ЗАБРАНЕНО Е",
+                mainText: "Вярата, че предмети, стихии\nили действия, различни от Аллах,\nносят късмет, се счита за форма\nна Ширк\n(съдружаване с Аллах).",
+                bottomText: "„...който окачи на себе си амулет\n[за късмет], вече е извършил ширк.“\n— [Сахих Ал-Джами] 6077",
+                swipe: "← Плъзнете наляво"
+            },
+            {
+                id: 'c4', bg: 'bg4.jpg',
+                topTitle: "СУННАТА ЗА ЗАЩИТА",
+                mainText: "„...търся убежище в\nсъвършените слова на Аллах\nот всеки шейтан и\nотровно влечуго, и от всяко\nзловредно око (уроки).“",
+                bottomText: "— [Сахих Ал-Бухари] 3371",
+                swipe: "*Последвайте ни за още\nислямски напомняния*"
+            }
+        ];
+
+        function drawTextLine(ctx, text, x, y, font, fillStyle) {
+            ctx.font = font;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            
+            // Strong drop shadow for legibility
+            ctx.shadowColor = "rgba(0,0,0,0.8)";
+            ctx.shadowBlur = 20;
+            ctx.shadowOffsetY = 4;
+            
+            // Outline
+            ctx.lineJoin = 'round';
+            ctx.lineWidth = 4;
+            ctx.strokeStyle = 'rgba(0,0,0,0.6)';
+            ctx.strokeText(text, x, y);
+            
+            // Fill
+            ctx.fillStyle = fillStyle;
+            ctx.fillText(text, x, y);
+
+            // Reset shadow
+            ctx.shadowBlur = 0;
+            ctx.shadowOffsetY = 0;
+        }
+
+        function renderSlide(slide) {
+            const canvas = document.getElementById(slide.id);
+            const ctx = canvas.getContext('2d');
+            
+            const img = new Image();
+            img.onload = () => {
+                ctx.drawImage(img, 0, 0, W, H);
+                
+                // Dark gradient overlay for text readability
+                const grad = ctx.createLinearGradient(0, 0, 0, H);
+                grad.addColorStop(0, 'rgba(0,0,0,0.5)');
+                grad.addColorStop(0.5, 'rgba(0,0,0,0.2)');
+                grad.addColorStop(1, 'rgba(0,0,0,0.8)');
+                ctx.fillStyle = grad;
+                ctx.fillRect(0, 0, W, H);
+
+                // TOP TITLE
+                const titleLines = slide.topTitle.split('\n');
+                titleLines.forEach((line, i) => {
+                    const y = 280 + (i * 90);
+                    drawTextLine(ctx, line, W/2, y, "800 85px 'Montserrat', sans-serif", "#f3d179");
+                });
+
+                // MAIN TEXT
+                const mainLines = slide.mainText.split('\n');
+                const mainStartY = 1000 - ((mainLines.length * 75) / 2);
+                mainLines.forEach((line, i) => {
+                    const y = mainStartY + (i * 75);
+                    drawTextLine(ctx, line, W/2, y, "700 60px 'Montserrat', sans-serif", "#ffedb3");
+                });
+
+                // BOTTOM TEXT
+                const bottomLines = slide.bottomText.split('\n');
+                const bottomStartY = 1550 - ((bottomLines.length * 60) / 2);
+                bottomLines.forEach((line, i) => {
+                    const y = bottomStartY + (i * 60);
+                    drawTextLine(ctx, line, W/2, y, "700 50px 'Montserrat', sans-serif", "#f3d179");
+                });
+
+                // SWIPE / FOOTER TEXT
+                const swipeLines = slide.swipe.split('\n');
+                swipeLines.forEach((line, i) => {
+                    const y = 1780 + (i * 45);
+                    drawTextLine(ctx, line, W/2, y, "500 40px 'Montserrat', sans-serif", "#d1b366");
+                });
+            };
+            img.src = slide.bg;
+        }
+
+        window.onload = () => {
+            // Wait for fonts
+            document.fonts.ready.then(() => {
+                slides.forEach(renderSlide);
+            });
+        };
+
+        function downloadAll() {
+            slides.forEach((slide, i) => {
+                const canvas = document.getElementById(slide.id);
+                const link = document.createElement('a');
+                link.download = `Slide_${i + 1}.png`;
+                link.href = canvas.toDataURL('image/png');
+                link.click();
+            });
+        }
+    </script>
+</body>
+</html>

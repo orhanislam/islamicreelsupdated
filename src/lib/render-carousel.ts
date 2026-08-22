@@ -111,7 +111,7 @@ export async function renderCarouselSlide(opts: CarouselSlideOptions): Promise<B
   // TOP TITLE
   ctx.font = fontTop;
   const titleLines = [];
-  for (const raw of opts.topTitle.split("\n")) {
+  for (const raw of opts.topTitle.trim().split("\n")) {
     titleLines.push(...wrap(ctx, raw, maxW));
   }
   titleLines.forEach((line, i) => {
@@ -122,7 +122,7 @@ export async function renderCarouselSlide(opts: CarouselSlideOptions): Promise<B
   // MAIN TEXT
   ctx.font = fontMain;
   const mainLines = [];
-  for (const raw of opts.mainText.split("\n")) {
+  for (const raw of opts.mainText.trim().split("\n")) {
     mainLines.push(...wrap(ctx, raw, maxW));
   }
   const mainStartY = 1000 - ((mainLines.length * 80) / 2);
@@ -134,7 +134,7 @@ export async function renderCarouselSlide(opts: CarouselSlideOptions): Promise<B
   // BOTTOM TEXT
   ctx.font = fontBottom;
   const bottomLines = [];
-  for (const raw of opts.bottomText.split("\n")) {
+  for (const raw of opts.bottomText.trim().split("\n")) {
     bottomLines.push(...wrap(ctx, raw, maxW));
   }
   const bottomStartY = 1550 - ((bottomLines.length * 60) / 2);
@@ -146,7 +146,7 @@ export async function renderCarouselSlide(opts: CarouselSlideOptions): Promise<B
   // FOOTER TEXT
   ctx.font = fontFooter;
   const footerLines = [];
-  for (const raw of opts.footerText.split("\n")) {
+  for (const raw of opts.footerText.trim().split("\n")) {
     footerLines.push(...wrap(ctx, raw, maxW));
   }
   footerLines.forEach((line, i) => {
