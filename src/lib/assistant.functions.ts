@@ -29,6 +29,68 @@ export type VideoProposal = {
   carouselSlides?: { topTitle: string; mainText: string; bottomText: string; footerText: string; imagePrompt: string }[];
 };
 
+async function injectAuthenticCarouselText(proposals: VideoProposal[]) {
+  if (!proposals) return;
+  for (const prop of proposals) {
+    if (!prop || prop.type !== 'carousel' || !prop.carouselSlides || prop.carouselSlides.length < 2) continue;
+    
+    let bulgarian = '';
+    let reference = '';
+    
+    try {
+      if (prop.surah && prop.ayah) {
+        const a = await fetchAyah({ data: { surah: Number(prop.surah), ayah: Number(prop.ayah) }});
+        bulgarian = a.bulgarian;
+        reference = a.reference;
+      } else if (prop.collection && prop.number) {
+        const h = await fetchSunnahHadith({ data: { collection: prop.collection as any, number: Number(prop.number) }});
+        const t = await translateToBulgarian({ data: { english: h.english, sourceRef: h.reference }});
+        bulgarian = t.bulgarian;
+        reference = h.reference;
+      }
+    } catch (e) {
+      console.warn('Failed to fetch authentic text for carousel:', e);
+    }
+    
+    if (bulgarian) {
+      // Create new slides keeping the hook and CTA
+      const hookSlide = prop.carouselSlides[0];
+      const ctaSlide = prop.carouselSlides[prop.carouselSlides.length - 1];
+      const defaultPrompt = prop.carouselSlides[1]?.imagePrompt || 'cinematic, dark, mysterious';
+      
+      const newSlides = [hookSlide];
+      const sentences = bulgarian.match(/[^.!?]+[.!?]+/g) || [bulgarian];
+      let currentText = '';
+      
+      for (const sent of sentences) {
+        const cleanSent = sent.trim();
+        if (!cleanSent) continue;
+        if (currentText.length + cleanSent.length > 250) {
+          if (currentText) {
+            newSlides.push({ topTitle: '[' + reference + ']', mainText: currentText.trim(), bottomText: '', footerText: 'Плъзни настрани', imagePrompt: defaultPrompt });
+          }
+          currentText = cleanSent;
+        } else {
+          currentText += (currentText ? ' ' : '') + cleanSent;
+        }
+      }
+      if (currentText.trim()) {
+        newSlides.push({ topTitle: '[' + reference + ']', mainText: currentText.trim(), bottomText: '', footerText: 'Плъзни настрани', imagePrompt: defaultPrompt });
+      }
+      
+      if (ctaSlide) {
+        const rx = /[\p{Extended_Pictographic}\p{Emoji_Presentation}\u2728\u2B50\u2600-\u26FF\u2700-\u27BF]/gu;
+        if (ctaSlide.footerText) ctaSlide.footerText = ctaSlide.footerText.replace(rx, '').trim();
+        if (ctaSlide.bottomText) ctaSlide.bottomText = ctaSlide.bottomText.replace(rx, '').trim();
+        if (ctaSlide.mainText) ctaSlide.mainText = ctaSlide.mainText.replace(rx, '').trim();
+        if (ctaSlide.topTitle) ctaSlide.topTitle = ctaSlide.topTitle.replace(rx, '').trim();
+      }
+      newSlides.push(ctaSlide);
+      prop.carouselSlides = newSlides;
+    }
+  }
+}
+
 export const chatWithAssistant = createServerFn({ method: "POST" })
   .validator((input: { prompt: string; history: { role: string; content: string }[] }) => input)
   .handler(async ({ data }) => {
@@ -154,6 +216,7 @@ CAPCUT-ПОДОБНИ ИНСТРУКЦИИ ЗА РЕДАКТИРАНЕ:
     const proposalsToRecord = [];
     if (parsed.proposal) proposalsToRecord.push(parsed.proposal);
     if (Array.isArray(parsed.proposals)) proposalsToRecord.push(...parsed.proposals);
+    await injectAuthenticCarouselText(proposalsToRecord);
     if (proposalsToRecord.length > 0) {
       await recordProposalUsages({ data: { proposals: proposalsToRecord } }).catch(() => {});
     }
@@ -387,6 +450,7 @@ export const suggestBatchViralProposals = createServerFn({ method: "POST" })
     }
 
     if (Array.isArray(parsed.proposals) && parsed.proposals.length > 0) {
+      await injectAuthenticCarouselText(parsed.proposals);
       await recordProposalUsages({ data: { proposals: parsed.proposals } }).catch(() => {});
     }
 
