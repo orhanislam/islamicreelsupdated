@@ -23,7 +23,7 @@ export function CarouselRendererButton({ slides, title }: { slides: Slide[]; tit
         setProgress(`Генериране на снимка ${i + 1}/${slides.length}...`);
         
         // 1. Gen BG
-        const bgRes = await runGenerate({ prompt: slide.imagePrompt });
+        const bgRes = await runGenerate({ data: { prompt: slide.imagePrompt } });
         const bgUrl = `data:${bgRes.mimeType};base64,${bgRes.base64}`;
         
         setProgress(`Рендиране на слайд ${i + 1}...`);
