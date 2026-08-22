@@ -865,24 +865,27 @@ export const startBackgroundBatchGeneration = createServerFn({ method: "POST" })
     return { success: true, count: proposals.length, taskId: task.id };
   });
 
-import cron from 'node-cron';
-const globalForCron = globalThis as unknown as { __cronStarted: boolean };
-if (!globalForCron.__cronStarted) {
-  globalForCron.__cronStarted = true;
-  cron.schedule('0 9 * * *', async () => {
-    try {
-      console.log('Running daily automatic viral TikTok trend analysis...');
-      const { geminiChat } = await import('./gemini');
-      const prompt = 'Ти си AI TikTok продуцент. Направи бързо търсене в интернет и ми кажи: какви ислямски теми за таухид, мотивация или трудности задържат най-много вниманието на зрителите в TikTok в момента? Анализирай какво се търси и какво се гледа най-много. Избери САМО една тема, която е най-вирална. Върни само името на темата в 3 до 5 думи, без обяснения.';
-      const res = await geminiChat([{ role: 'user', text: prompt }], true);
-      const chosenTopic = res.reply ? res.reply.trim() : 'Таухид и успех в живота';
-      
-      console.log('Daily auto-topic chosen:', chosenTopic);
-      await startBackgroundPlanGeneration({ data: { count: 3, topic: chosenTopic, targetType: 'carousel' } });
-    } catch (e) {
-      console.error('Daily cron error:', e);
-    }
-  });
+if (typeof process !== "undefined" && typeof window === "undefined") {
+  const globalForCron = globalThis as unknown as { __cronStarted: boolean };
+  if (!globalForCron.__cronStarted) {
+    globalForCron.__cronStarted = true;
+    import("node-cron").then((cron) => {
+      cron.default.schedule('0 9 * * *', async () => {
+        try {
+          console.log('Running daily automatic viral TikTok trend analysis...');
+          const { geminiChat } = await import('./gemini');
+          const prompt = 'Ти си AI TikTok продуцент. Направи бързо търсене в интернет и ми кажи: какви ислямски теми за таухид, мотивация или трудности задържат най-много вниманието на зрителите в TikTok в момента? Анализирай какво се търси и какво се гледа най-много. Избери САМО една тема, която е най-вирална. Върни само името на темата в 3 до 5 думи, без обяснения.';
+          const res = await geminiChat([{ role: 'user', text: prompt }], true);
+          const chosenTopic = res.reply ? res.reply.trim() : 'Таухид и успех в живота';
+          
+          console.log('Daily auto-topic chosen:', chosenTopic);
+          await startBackgroundPlanGeneration({ data: { count: 3, topic: chosenTopic, targetType: 'carousel' } });
+        } catch (e) {
+          console.error('Daily cron error:', e);
+        }
+      });
+    }).catch(e => console.error("Failed to load node-cron", e));
+  }
 }
 
 
