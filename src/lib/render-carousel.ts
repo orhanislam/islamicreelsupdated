@@ -106,52 +106,75 @@ export async function renderCarouselSlide(opts: CarouselSlideOptions): Promise<B
   const fontBottom = "700 50px 'Montserrat', sans-serif";
   const fontFooter = "500 40px 'Montserrat', sans-serif";
 
-  const maxW = W - 100;
+  const maxW = 820;
 
-  // TOP TITLE
+  // 1. Gather all lines
   ctx.font = fontTop;
-  const titleLines = [];
+  const titleLines: string[] = [];
   for (const raw of opts.topTitle.trim().split("\n")) {
-    titleLines.push(...wrap(ctx, raw, maxW));
+    if (raw) titleLines.push(...wrap(ctx, raw, maxW));
   }
-  titleLines.forEach((line, i) => {
-    const y = 420 + (i * 90);
-    drawTextLine(ctx, line, W/2, y, fontTop, "#f3d179");
-  });
 
-  // MAIN TEXT
   ctx.font = fontMain;
-  const mainLines = [];
+  const mainLines: string[] = [];
   for (const raw of opts.mainText.trim().split("\n")) {
-    mainLines.push(...wrap(ctx, raw, maxW));
+    if (raw) mainLines.push(...wrap(ctx, raw, maxW));
   }
-  const mainStartY = 1000 - ((mainLines.length * 80) / 2);
-  mainLines.forEach((line, i) => {
-    const y = mainStartY + (i * 80);
-    drawTextLine(ctx, line, W/2, y, fontMain, "#ffedb3");
-  });
 
-  // BOTTOM TEXT
   ctx.font = fontBottom;
-  const bottomLines = [];
+  const bottomLines: string[] = [];
   for (const raw of opts.bottomText.trim().split("\n")) {
-    bottomLines.push(...wrap(ctx, raw, maxW));
+    if (raw) bottomLines.push(...wrap(ctx, raw, maxW));
   }
-  const bottomStartY = 1380 - ((bottomLines.length * 60) / 2);
-  bottomLines.forEach((line, i) => {
-    const y = bottomStartY + (i * 60);
-    drawTextLine(ctx, line, W/2, y, fontBottom, "#f3d179");
+
+  // 2. Calculate heights and gaps
+  const lhTitle = 95;
+  const lhMain = 85;
+  const lhBottom = 65;
+  const gapTitleMain = 80;
+  const gapMainBottom = 60;
+
+  const titleH = titleLines.length * lhTitle;
+  const mainH = mainLines.length * lhMain;
+  const bottomH = bottomLines.length * lhBottom;
+
+  let totalH = titleH + mainH + bottomH;
+  if (titleH > 0 && mainH > 0) totalH += gapTitleMain;
+  if (mainH > 0 && bottomH > 0) totalH += gapMainBottom;
+
+  // Shift center to the left to avoid TikTok right-side buttons (likes, shares)
+  const centerX = (W / 2) - 40;
+  
+  // Start drawing from dynamically centered Y
+  let currentY = (H - totalH) / 2 - 50;
+
+  // 3. Draw
+  titleLines.forEach(line => {
+    drawTextLine(ctx, line, centerX, currentY + (lhTitle / 2), fontTop, "#f3d179");
+    currentY += lhTitle;
+  });
+  if (titleH > 0 && mainH > 0) currentY += gapTitleMain;
+
+  mainLines.forEach(line => {
+    drawTextLine(ctx, line, centerX, currentY + (lhMain / 2), fontMain, "#ffedb3");
+    currentY += lhMain;
+  });
+  if (mainH > 0 && bottomH > 0) currentY += gapMainBottom;
+
+  bottomLines.forEach(line => {
+    drawTextLine(ctx, line, centerX, currentY + (lhBottom / 2), fontBottom, "#f3d179");
+    currentY += lhBottom;
   });
 
   // FOOTER TEXT
   ctx.font = fontFooter;
   const footerLines = [];
   for (const raw of opts.footerText.trim().split("\n")) {
-    footerLines.push(...wrap(ctx, raw, maxW));
+    if (raw) footerLines.push(...wrap(ctx, raw, maxW));
   }
   footerLines.forEach((line, i) => {
-    const y = 1520 + (i * 45);
-    drawTextLine(ctx, line, W/2, y, fontFooter, "#d1b366");
+    const y = 1750 + (i * 50);
+    drawTextLine(ctx, line, centerX, y, fontFooter, "#888888");
   });
 
   return await new Promise<Blob>((resolve, reject) =>
