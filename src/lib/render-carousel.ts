@@ -180,7 +180,7 @@ export async function renderCarouselSlide(opts: CarouselSlideOptions): Promise<B
   }
   footerLines.forEach((line, i) => {
     const y = 1750 + (i * 50);
-    drawTextLine(ctx, line, centerX, y, fontFooter, "#888888");
+    drawTextLine(ctx, line, centerX, y, fontFooter, "#dddddd");
   });
 
   return await new Promise<Blob>((resolve, reject) =>
