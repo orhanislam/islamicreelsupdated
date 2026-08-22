@@ -30,6 +30,7 @@ export async function geminiChat(
   model: string,
   messages: ChatMessage[],
   jsonMode = false,
+  enableSearch = false,
 ): Promise<string> {
   const apiKeys = getApiKeys();
   if (!apiKeys.length) throw new Error("GEMINI_API_KEY не е конфигуриран в .env");
@@ -56,13 +57,16 @@ export async function geminiChat(
   }
 
   const fetchWithModel = async (modelName: string, apiKey: string) => {
-    const body: Record<string, unknown> = { contents };
-    if (systemInstruction) body.system_instruction = systemInstruction;
+    const body: any = { contents };
     if (jsonMode) {
       body.generationConfig = { responseMimeType: "application/json", temperature: 1.2 };
     } else {
       body.generationConfig = { temperature: 1.2 };
     }
+    if (enableSearch) {
+      body.tools = [{ googleSearch: {} }];
+    }
+    if (systemInstruction) body.system_instruction = systemInstruction;
 
     return fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`, {
       method: "POST",
