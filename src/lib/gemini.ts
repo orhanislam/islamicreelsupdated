@@ -58,7 +58,7 @@ export async function geminiChat(
 
   const fetchWithModel = async (modelName: string, apiKey: string) => {
     const body: any = { contents };
-    if (jsonMode) {
+    if (jsonMode && !enableSearch) {
       body.generationConfig = { responseMimeType: "application/json", temperature: 1.2 };
     } else {
       body.generationConfig = { temperature: 1.2 };
