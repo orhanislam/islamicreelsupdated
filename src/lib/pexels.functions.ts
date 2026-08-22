@@ -372,7 +372,7 @@ export const fetchMultiSceneBRoll = createServerFn({ method: "POST" })
     // Estimate audio duration: roughly 2.5 words per second.
     const textWords = data.text ? data.text.split(/\s+/).length : 0;
     const estDuration = textWords > 0 ? Math.max(15, textWords / 2.5) : 30;
-    const neededClips = Math.max(3, Math.ceil(estDuration / 3));
+    const neededClips = Math.max(3, Math.ceil(estDuration / 5));
 
     let queries = data?.query ? [data.query] : ["mountain sunset", "night sky stars", "nature river calm"];
     

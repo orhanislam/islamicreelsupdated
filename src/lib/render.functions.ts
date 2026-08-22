@@ -198,7 +198,7 @@ export async function executeRenderTask(opts: any): Promise<any> {
           sessionTempFiles.add(finalBgPath);
         } catch (fetchErr) {
           console.warn("[server-render] Primary background fetch failed, using reliable fallback video:", fetchErr);
-          const fallbackUrl = "https://videos.pexels.com/video-files/855029/855029-hd_1080_1920_30fps.mp4";
+          const fallbackUrl = "https://videos.pexels.com/video-files/30054113/12891205_1080_1920_30fps.mp4";
           const fbRes = await fetch(fallbackUrl, {
             headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" }
           });

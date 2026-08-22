@@ -55,7 +55,7 @@ ${memoryContext}${historyContext}
 ПРОФЕСИОНАЛНИ ПРАВИЛА ЗА ВАЙРЪЛ РЕЖИСУРА (PRO WORKFLOW):
 1. СТРИКТНО ПРАВИЛО ЗА ТЕМИТЕ: Търси ДЪЛБОКИ, ВЪЗДЕЙСТВАЩИ, ПО-РЯДКО ЦИТИРАНИ уроци. НЕ ПОВТАРЯЙ теми, които вече са в history.
 Всяка тема трябва да има СИЛНА КУКА (Viral Hook) в първите 3 секунди (напр. "Знакът, че Аллах е чул молитвата ти...").
-За всяка тема ВИНАГИ задавай "useBRoll": true, "bRollInterval": 3.
+За всяка тема ВИНАГИ задавай "useBRoll": true, "bRollInterval": 5.
 
 SALAFI HALAL ПРИНЦИПИ (СТРИКТНО ЗАДЪЛЖИТЕЛНО):
 ВИНАГИ генерирай "searchQuery", което търси САМО природа (nature, ocean, forest), абстрактни фонове (abstract, particles, dark background), космос (space, stars) или архитектура (mosque, kaaba). 
@@ -64,7 +64,7 @@ SALAFI HALAL ПРИНЦИПИ (СТРИКТНО ЗАДЪЛЖИТЕЛНО):
 
 CAPCUT-ПОДОБНИ ИНСТРУКЦИИ ЗА РЕДАКТИРАНЕ:
 Ти разбираш и прилагаш всякакви инструкции за редактиране на видеото, подобно на CapCut/Premiere/DaVinci:
-- "добави B-Roll на всеки 3 секунди" → useBRoll: true, bRollInterval: 3
+- "добави B-Roll на всеки 3 секунди" → useBRoll: true, bRollInterval: 5
 - "сменящи се кадри" → useBRoll: true
 - "субтитрите отдолу" → subtitlePosition: "bottom"
 - "субтитрите в средата" → subtitlePosition: "middle"
@@ -91,7 +91,7 @@ CAPCUT-ПОДОБНИ ИНСТРУКЦИИ ЗА РЕДАКТИРАНЕ:
     "searchQuery": "ключови думи за фон на английски (напр. sunrise fog nature cinematic)",
     "tiktokTheme": "hormozi" | "emerald" | "neon" | "classic" (по подразбиране "hormozi"),
     "useBRoll": true,
-    "bRollInterval": 3,
+    "bRollInterval": 5,
     "subtitlePosition": "bottom" | "middle" | "lower-third",
     "quality": "high"
   }
@@ -260,7 +260,7 @@ export const suggestBatchViralProposals = createServerFn({ method: "POST" })
 1. СТРИКТНО СЛЕДВАЙ КАТЕГОРИЯТА: "${topicStr}". Ако категорията изисква САМО Хадиси, тогава генерирай ИЗКЛЮЧИТЕЛНО САМО ХАДИСИ (никакъв Коран). Ако изисква САМО Коран, генерирай САМО КОРАН. АБСОЛЮТНО СА ЗАБРАНЕНИ измислени цитати.
 2. ИЗРИЧНО ЗАБРАНЕНО Е да включваш най-популярните текстове като Сура Ал-Бакара 2:255, Сура Ад-Духа (93) или Сура Юсуф! Искаме рядко цитирани, дълбоки и неклиширани текстове.
 3. ОГРАНИЧЕНИЕ ЗА ВРЕМЕТРАЕНЕ (< 60 секунди): За да се събере във вайръл формат (TikTok/Reels), текстът на български НЕ ТРЯБВА да надвишава 70-80 думи. Ако текстът е дълъг, вземи само част от него! Видеото задължително трябва да е под 1 минута.
-4. Задължително включвай кинематографични настройки: "useBRoll": true, "bRollInterval": 3 и "quality": "high".
+4. Задължително включвай кинематографични настройки: "useBRoll": true, "bRollInterval": 5 и "quality": "high".
 5. ВИНАГИ включвай точния източник в 'title' на български език във формат: [Коран {surah}:{ayah}] Заглавие или [Сахих {collection} #{number}] Заглавие.
 6. ИЗРИЧНО Е ЗАБРАНЕНО ДА КОПИРАШ ПРИМЕРНИТЕ АЯТИ И ХАДИСИ ОТ ДОЛНИЯ JSON! ГЕНЕРИРАЙ ИЗЦЯЛО НОВИ, СЛУЧАЙНИ И УНИКАЛНИ ПРЕДЛОЖЕНИЯ!
 7. ПРАВИЛО ЗА БЕКГРАУНД ВИДЕО (searchQuery): ЗАБРАНЕНО Е ДА ИМА ХОРА (мъже или жени) във видеата! Твоят searchQuery трябва ВИНАГИ да бъде само за природа, пейзажи и абстрактни неща (напр. "nature landscape mountain sunset peaceful no people"). Никога не включвай думи като "person", "woman", "man", "people".
@@ -280,7 +280,7 @@ export const suggestBatchViralProposals = createServerFn({ method: "POST" })
       "searchQuery": "stars universe galaxy cinematic",
       "tiktokTheme": "hormozi",
       "useBRoll": true,
-      "bRollInterval": 3,
+      "bRollInterval": 5,
       "quality": "high"
     },
     {
@@ -293,7 +293,7 @@ export const suggestBatchViralProposals = createServerFn({ method: "POST" })
       "searchQuery": "storm sunlight dramatic cinematic nature",
       "tiktokTheme": "hormozi",
       "useBRoll": true,
-      "bRollInterval": 3,
+      "bRollInterval": 5,
       "quality": "high"
     }
   ]
@@ -335,7 +335,7 @@ export const suggestBatchViralProposals = createServerFn({ method: "POST" })
           searchQuery: p.query,
           tiktokTheme: "hormozi",
           useBRoll: true,
-          bRollInterval: 3,
+          bRollInterval: 5,
           quality: "high"
         }))
       };
@@ -485,7 +485,7 @@ export const confirmAndGenerateVideo = createServerFn({ method: "POST" })
       }
     }
 
-    let bestVid = "https://videos.pexels.com/video-files/855029/855029-hd_1080_1920_30fps.mp4";
+    let bestVid = "https://videos.pexels.com/video-files/30054113/12891205_1080_1920_30fps.mp4";
     try {
       const vidSearch = await searchPexelsVideos({
         data: {
