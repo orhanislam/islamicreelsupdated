@@ -115,7 +115,7 @@ export async function renderCarouselSlide(opts: CarouselSlideOptions): Promise<B
     titleLines.push(...wrap(ctx, raw, maxW));
   }
   titleLines.forEach((line, i) => {
-    const y = 280 + (i * 90);
+    const y = 420 + (i * 90);
     drawTextLine(ctx, line, W/2, y, fontTop, "#f3d179");
   });
 
@@ -137,7 +137,7 @@ export async function renderCarouselSlide(opts: CarouselSlideOptions): Promise<B
   for (const raw of opts.bottomText.trim().split("\n")) {
     bottomLines.push(...wrap(ctx, raw, maxW));
   }
-  const bottomStartY = 1550 - ((bottomLines.length * 60) / 2);
+  const bottomStartY = 1380 - ((bottomLines.length * 60) / 2);
   bottomLines.forEach((line, i) => {
     const y = bottomStartY + (i * 60);
     drawTextLine(ctx, line, W/2, y, fontBottom, "#f3d179");
@@ -150,7 +150,7 @@ export async function renderCarouselSlide(opts: CarouselSlideOptions): Promise<B
     footerLines.push(...wrap(ctx, raw, maxW));
   }
   footerLines.forEach((line, i) => {
-    const y = 1780 + (i * 45);
+    const y = 1520 + (i * 45);
     drawTextLine(ctx, line, W/2, y, fontFooter, "#d1b366");
   });
 
