@@ -275,10 +275,11 @@ SALAFI HALAL ПРИНЦИПИ (СТРИКТНО ЗАДЪЛЖИТЕЛНО):
   });
 
 export const suggestBatchViralProposals = createServerFn({ method: "POST" })
-  .validator((input: { count?: number; topic?: string } | undefined) => input || {})
-  .handler(async ({ data }: { data: { count?: number; topic?: string } }) => {
+  .validator((input: { count?: number; topic?: string; targetType?: "carousel" | "video" | "mixed" } | undefined) => input || {})
+  .handler(async ({ data }: { data: { count?: number; topic?: string; targetType?: "carousel" | "video" | "mixed" } }) => {
     const countNum = data.count || 5;
     const topicStr = data.topic || "САМО Коран и Сахих Хадиси (БЕЗ TikTok психология и измислени цитати)";
+    const targetType = data.targetType || "mixed";
     
     const memory = await getAiMemory();
     const historyList = (memory.usageHistory || []).map(x => `- ${x.identifier}`).join("\n");
@@ -300,7 +301,7 @@ export const suggestBatchViralProposals = createServerFn({ method: "POST" })
 
 ПРОФЕСИОНАЛНИ СТРИКТНИ ПРАВИЛА (PRO WORKFLOW):
 1. СТРИКТНО СЛЕДВАЙ КАТЕГОРИЯТА: "${topicStr}". Ако категорията изисква САМО Хадиси, тогава генерирай ИЗКЛЮЧИТЕЛНО САМО ХАДИСИ (никакъв Коран). Ако изисква САМО Коран, генерирай САМО КОРАН. АБСОЛЮТНО СА ЗАБРАНЕНИ измислени цитати.
-2. ИЗРИЧНО ЗАБРАНЕНО Е да включваш най-популярните текстове като Сура Ал-Бакара 2:255, Сура Ад-Духа (93) или Сура Юсуф! Искаме рядко цитирани, дълбоки и неклиширани текстове.
+2. ИЗРИЧНО ЗАБРАНЕНО Е да включваш най-популярните текстове като Сура Ал-Бакара 2:255, Сура Ад-Духа (93) или Сура Юсуф! Искаме рядко цитирани, дълбоки и неклиширани текстове.\` + (targetType === "carousel" ? "\nИЗКЛЮЧИТЕЛНО ВАЖНО: ЗАДЪЛЖИТЕЛНО генерирай ВСИЧКИ предложения като тип КАРУСЕЛ (type: 'carousel') с полетата за слайдове (carouselSlides)!" : "") + \`
 3. ОГРАНИЧЕНИЕ ЗА ВРЕМЕТРАЕНЕ (< 60 секунди): За да се събере във вайръл формат (TikTok/Reels), текстът на български НЕ ТРЯБВА да надвишава 70-80 думи. Ако текстът е дълъг, вземи само част от него! Видеото задължително трябва да е под 1 минута.
 4. Задължително включвай кинематографични настройки: "useBRoll": true, "bRollInterval": 5 и "quality": "high".
 5. ВИНАГИ включвай точния източник в 'title' на български език във формат: [Коран {surah}:{ayah}] Заглавие или [Сахих {collection} #{number}] Заглавие.
@@ -805,7 +806,7 @@ export const checkActiveBackgroundTasks = createServerFn({ method: "POST" })
   });
 
 export const startBackgroundPlanGeneration = createServerFn({ method: "POST" })
-  .validator((input: { count?: number; topic?: string; userMsgText: string }) => input)
+  .validator((input: { count?: number; topic?: string; userMsgText?: string; targetType?: "carousel" | "video" | "mixed" }) => input)
   .handler(async ({ data }) => {
     const fs = (await import("fs")).promises;
     const file = await getHistoryFilePath();
@@ -818,7 +819,7 @@ export const startBackgroundPlanGeneration = createServerFn({ method: "POST" })
       "plan_generation",
       `План с ${data.count || 5} идеи`,
       "Изготвяне на вайръл план...",
-      { count: data.count, topic: data.topic, userMsgText: data.userMsgText }
+      { count: data.count, topic: data.topic, userMsgText: data.userMsgText, targetType: data.targetType }
     );
 
     const userMsg = { role: "user", text: data.userMsgText };
@@ -877,7 +878,7 @@ if (!globalForCron.__cronStarted) {
       const chosenTopic = res.reply ? res.reply.trim() : 'Таухид и успех в живота';
       
       console.log('Daily auto-topic chosen:', chosenTopic);
-      await startBackgroundPlanGeneration({ data: { count: 3, topic: chosenTopic } });
+      await startBackgroundPlanGeneration({ data: { count: 3, topic: chosenTopic, targetType: 'carousel' } });
     } catch (e) {
       console.error('Daily cron error:', e);
     }
