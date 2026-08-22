@@ -815,9 +815,6 @@ function AssistantPage() {
           </button>
         </div>
 
-        </button>
-        </div>
-
         {/* Batch Plan Suggestion Quick Toolbar */}
         <div className="rounded-2xl border border-teal-500/30 bg-gradient-to-r from-teal-500/10 via-emerald-500/5 to-transparent p-3.5 sm:p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4">
           <div>
