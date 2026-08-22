@@ -198,7 +198,7 @@ export const suggestViralProposal = createServerFn({ method: "POST" })
     const historyList = (memory.usageHistory || []).map(x => `- ${x.identifier}`).join("\n");
     const historyContext = historyList ? `\n\nСКОРОШНО ИЗПОЛЗВАНИ ТЕМИ (СТРИКТНО ЗАБРАНЕНО Е ДА ГИ ПРЕДЛАГАШ ОТНОВО):\n${historyList}` : "";
 
-    const THEMES = ["Търпение (Сабр)", "Упование в Аллах", "Прошка и милост", "Скрита мъдрост в трудности", "Мълчание", "Изобилие и благодарност", "Силата на Дуата", "Преходността на Дуня", "Сърдечно покаяние", "Защита от зло"];
+    const THEMES = ["Таухид (Единобожие) и силата му", "Търпение (Сабр)", "Упование в Аллах", "Прошка и милост", "Скрита мъдрост в трудности", "Мълчание", "Изобилие и благодарност", "Силата на Дуата", "Преходността на Дуня", "Сърдечно покаяние", "Защита от зло", "Как да задържим вниманието си върху Ахирета"];
     const randomTheme = THEMES[Math.floor(Math.random() * THEMES.length)];
     const VIRAL_SURAHS = [3, 4, 8, 14, 18, 19, 20, 21, 24, 25, 29, 31, 36, 39, 40, 50, 51, 55, 56, 59, 67, 68, 73, 75, 76, 78, 89, 94, 99, 103];
     const randomSurah1 = VIRAL_SURAHS[Math.floor(Math.random() * VIRAL_SURAHS.length)];
@@ -284,7 +284,7 @@ export const suggestBatchViralProposals = createServerFn({ method: "POST" })
     const historyList = (memory.usageHistory || []).map(x => `- ${x.identifier}`).join("\n");
     const historyContext = historyList ? `\n\nСКОРОШНО ИЗПОЛЗВАНИ ТЕМИ (СТРИКТНО ЗАБРАНЕНО Е ДА ГИ ПРЕДЛАГАШ ОТНОВО):\n${historyList}` : "";
 
-    const THEMES = ["Търпение (Сабр)", "Упование в Аллах", "Прошка и милост", "Скрита мъдрост в трудности", "Мълчание", "Изобилие и благодарност", "Силата на Дуата", "Преходността на Дуня", "Сърдечно покаяние", "Защита от зло", "Справедливост", "Доброта към родители"];
+    const THEMES = ["Таухид (Единобожие) и силата му", "Как да задържим вниманието си върху Ахирета", "Търпение (Сабр)", "Упование в Аллах", "Прошка и милост", "Скрита мъдрост в трудности", "Мълчание", "Изобилие и благодарност", "Силата на Дуата", "Преходността на Дуня", "Сърдечно покаяние", "Защита от зло", "Справедливост", "Доброта към родители"];
     const shuffledThemes = [...THEMES].sort(() => Math.random() - 0.5);
     const selectedThemes = shuffledThemes.slice(0, 3).join(", ");
     
@@ -863,5 +863,25 @@ export const startBackgroundBatchGeneration = createServerFn({ method: "POST" })
 
     return { success: true, count: proposals.length, taskId: task.id };
   });
+
+import cron from 'node-cron';
+const globalForCron = globalThis as unknown as { __cronStarted: boolean };
+if (!globalForCron.__cronStarted) {
+  globalForCron.__cronStarted = true;
+  cron.schedule('0 9 * * *', async () => {
+    try {
+      console.log('Running daily automatic viral TikTok trend analysis...');
+      const { geminiChat } = await import('./gemini');
+      const prompt = 'Ти си AI TikTok продуцент. Направи бързо търсене в интернет и ми кажи: какви ислямски теми за таухид, мотивация или трудности задържат най-много вниманието на зрителите в TikTok в момента? Анализирай какво се търси и какво се гледа най-много. Избери САМО една тема, която е най-вирална. Върни само името на темата в 3 до 5 думи, без обяснения.';
+      const res = await geminiChat([{ role: 'user', text: prompt }], true);
+      const chosenTopic = res.reply ? res.reply.trim() : 'Таухид и успех в живота';
+      
+      console.log('Daily auto-topic chosen:', chosenTopic);
+      await startBackgroundPlanGeneration({ data: { count: 3, topic: chosenTopic } });
+    } catch (e) {
+      console.error('Daily cron error:', e);
+    }
+  });
+}
 
 
