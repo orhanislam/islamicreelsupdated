@@ -776,7 +776,8 @@ function AssistantPage() {
                 <Video className="size-4" /> 🚀 Генерирай Серия от {batchCount} Видеа
               </>
             )}
-          
+          </button>
+        </div>
 
         {/* Carousel Quick Action Toolbar */}
         <div className="rounded-2xl border border-blue-500/30 bg-gradient-to-r from-blue-500/10 via-cyan-500/5 to-transparent p-3.5 sm:p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4 mt-6">

@@ -87,7 +87,7 @@ CAPCUT-ПОДОБНИ ИНСТРУКЦИИ ЗА РЕДАКТИРАНЕ:
   "newLearnedFact": "Ако в това съобщение потребителят ти е казал нещо важно за себе си или ново предпочитание, запиши го тук (иначе остави null)",
   "proposal": {
     "title": "Точно заглавие на български (напр. [Коран] Аят ал-Курси или [TikTok] 3 неща, които отнемат спокойствието)",
-    "type": "hadith" | "quran" | "tiktok" | "general",
+    "type": "hadith" | "quran" | "tiktok" | "general" | "carousel",
     "collection": "nawawi40" | "bukhari" | "muslim" | "tirmidhi" (ако type е hadith),
     "number": число номер на хадиса (ако type е hadith),
     "surah": точно число на сурата от 1 до 114 (ЗАДЪЛЖИТЕЛНО ако type е quran, напр. 2 за Ал-Бакара),
