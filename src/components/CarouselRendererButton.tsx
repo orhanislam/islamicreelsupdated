@@ -23,7 +23,10 @@ export function CarouselRendererButton({ slides, title }: { slides: Slide[]; tit
         setProgress(`Генериране на снимка ${i + 1}/${slides.length}...`);
         
         // 1. Gen BG
-        const bgRes = await runGenerate({ data: { prompt: slide.imagePrompt } });
+        
+        const currentPrompt = slide?.imagePrompt || "cinematic dark background islamic theme";
+        const bgRes = await runGenerate({ data: { prompt: currentPrompt } });
+
         const bgUrl = `data:${bgRes.mimeType};base64,${bgRes.base64}`;
         
         setProgress(`Рендиране на слайд ${i + 1}...`);

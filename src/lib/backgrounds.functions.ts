@@ -42,9 +42,10 @@ export const suggestBackgrounds = createServerFn({ method: "POST" })
   });
 
 export const generateBackground = createServerFn({ method: "POST" })
-  .inputValidator((input: { prompt: string }) => input)
+  .inputValidator((input: { prompt?: string }) => input)
   .handler(async ({ data }) => {
     // Generate image via Gemini Imagen and return base64 straight to client.
-    const { base64, mimeType } = await geminiGenerateImage(data.prompt);
+    const safePrompt = (data && data.prompt) ? data.prompt : "beautiful cinematic islamic background";
+    const { base64, mimeType } = await geminiGenerateImage(safePrompt);
     return { base64, mimeType };
   });
