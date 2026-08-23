@@ -172,16 +172,7 @@ export async function renderCarouselSlide(opts: CarouselSlideOptions): Promise<B
     currentY += lhBottom;
   });
 
-  // FOOTER TEXT
-  ctx.font = fontFooter;
-  const footerLines = [];
-  for (const raw of opts.footerText.trim().split("\n")) {
-    if (raw) footerLines.push(...wrap(ctx, raw, maxW));
-  }
-  footerLines.forEach((line, i) => {
-    const y = 1750 + (i * 50);
-    drawTextLine(ctx, line, centerX, y, fontFooter, "#dddddd");
-  });
+  /* Footer text removed per user request */
 
   return await new Promise<Blob>((resolve, reject) =>
     canvas.toBlob((b) => (b ? resolve(b) : reject(new Error("toBlob failed"))), "image/png")
