@@ -796,9 +796,7 @@ function AssistantPage() {
                 if (typeof playStudioClick === 'function') playStudioClick("start");
                 setLoading(true);
                 const carouselPrompt = "Генерирай ми TikTok карусел на силна ислямска тема. ВАЖНО: 1) Провери предишните съобщения и избери НАПЪЛНО НОВА ТЕМА, която НЕ Е била генерирана досега в този чат! 2) ЗАДЪЛЖИТЕЛНО се увери, че всичко (текст, хадиси, цитати) е строго в съответствие със Салафитското учение (Ахлу Сунна уал Джама'а, според разбирането на Салафите) без никакви нововъведения (бид'а) и слаби хадиси. ТИ СИ ПРОФЕСИОНАЛЕН И СТРИКТЕН ПРЕВОДАЧ НА КОРАН И СУННА. ПРЕВЕЖДАЙ АЯТИТЕ И ХАДИСИТЕ БУКВАЛНО, ТОЧНО И ПРОФЕСИОНАЛНО ОТ АРАБСКИ НА БЪЛГАРСКИ ЕЗИК, ЗАПАЗВАЙКИ ОРИГИНАЛНИЯ ИМ БОЖЕСТВЕН СМИСЪЛ БЕЗ ДА ДОБАВЯШ СОБСТВЕНИ ИНТЕРПРЕТАЦИИ. ЗАДЪЛЖИТЕЛНО ги взимай САМО от Quran.com и Sunnah.com!    Избери тема свързана с Таухид (Единобожието), величието на Аллах, историите на пророците, чудесата в Корана или смисъла на живота. Избягвай депресиращи теми и стрес. Използвай типа 'carousel'.";
-                const displayMsg = { role: "user", text: "Моля, генерирай ми нов карусел." };
-                const newMsgs = [...messages, displayMsg];
-                setMessages(newMsgs);
+                /* Removed user message append */
                 
                 const history = messages.slice(1).map((m) => ({
                   role: m.role === "user" ? "user" : "assistant",
@@ -818,7 +816,7 @@ function AssistantPage() {
                   text: res.reply,
                   proposal: res.proposal,
                 };
-                setMessages([...newMsgs, newMsg]);
+                setMessages(prev => [...prev, newMsg]);
               } catch (err: any) {
                 if (typeof playStudioClick === 'function') playStudioClick("error");
                 toast.error(err.message || "Грешка.");
