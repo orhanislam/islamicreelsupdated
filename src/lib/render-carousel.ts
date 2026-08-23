@@ -41,7 +41,7 @@ function loadImage(src: string): Promise<HTMLImageElement> {
 
 function stripEmojis(text: string) {
   if (!text) return text;
-  return text.replace(/[\p{Extended_Pictographic}\p{Emoji_Presentation}\u2728\u2B50\u2600-\u26FF\u2700-\u27BF]/gu, '');
+  return text.replace(/[\p{Extended_Pictographic}\p{Emoji_Presentation}\u2728\u2B50\u2600-\u26FF\u2700-\u27BF]/gu, '').replace(/\s+/g, ' ').trim();
 }
 
 function drawTextLine(ctx: CanvasRenderingContext2D, text: string, x: number, y: number, font: string, fillStyle: string) {

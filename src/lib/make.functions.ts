@@ -8,7 +8,6 @@ export const triggerMakeWebhook = createServerFn({ method: "POST" })
     const { title, slides, webhookUrl } = data as { title: string, slides: string[], webhookUrl: string };
     
     // Determine where to save based on process.cwd() / .output/public
-    // In dev it's public/, in prod it's .output/public
     const isProd = fs.existsSync(path.join(process.cwd(), ".output", "public"));
     const outDir = path.join(process.cwd(), isProd ? ".output/public" : "public", "temp_uploads");
     
@@ -20,8 +19,26 @@ export const triggerMakeWebhook = createServerFn({ method: "POST" })
     for (let i = 0; i < slides.length; i++) {
       const base64Data = slides[i].replace(/^data:image\/\w+;base64,/, "");
       const filename = `${Date.now()}_${i}.png`;
-      fs.writeFileSync(path.join(outDir, filename), Buffer.from(base64Data, "base64"));
-      urls.push(`http://93.189.88.228/temp_uploads/${filename}`);
+      const buffer = Buffer.from(base64Data, "base64");
+      
+      fs.writeFileSync(path.join(outDir, filename), buffer);
+      
+      try {
+        const form = new FormData();
+        form.append('reqtype', 'fileupload');
+        const blob = new Blob([buffer], { type: 'image/png' });
+        form.append('fileToUpload', blob, filename);
+        
+        const res = await fetch('https://catbox.moe/user/api.php', { method: 'POST', body: form });
+        const text = await res.text();
+        if (text.startsWith('http')) {
+          urls.push(text);
+        } else {
+          urls.push(`http://93.189.88.228/temp_uploads/${filename}`);
+        }
+      } catch (err) {
+        urls.push(`http://93.189.88.228/temp_uploads/${filename}`);
+      }
     }
 
     try {
@@ -32,6 +49,6 @@ export const triggerMakeWebhook = createServerFn({ method: "POST" })
       });
       return { success: res.ok, status: res.status };
     } catch (e: any) {
-      throw new Error("Грешка при връзка с Make.com: " + e.message);
+      throw new Error("Грешка при връзката с Make.com: " + e.message);
     }
   });

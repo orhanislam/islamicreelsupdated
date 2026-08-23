@@ -790,15 +790,41 @@ function AssistantPage() {
             </p>
           </div>
           <button
-            onClick={() => {
-              const carouselPrompt = "Генерирай ми TikTok карусел. Избери тема, от която хората имат нужда в ежедневието си и решава техните проблеми (напр. трудности, стрес, сабър, успех и др.). Използвай типа 'carousel'.";
-              // Simulate setting prompt and pressing send
-              setPrompt(carouselPrompt);
-              // Wait for React state to update slightly, then trigger submit via form or manual call
-              setTimeout(() => {
-                const form = document.getElementById("chat-form");
-                if (form) form.dispatchEvent(new Event('submit', { cancelable: true, bubbles: true }));
-              }, 100);
+            onClick={async () => {
+              if (loading) return;
+              try {
+                if (typeof playStudioClick === 'function') playStudioClick("start");
+                setLoading(true);
+                const carouselPrompt = "Генерирай ми TikTok карусел на силна ислямска тема. Избери тема свързана с Таухид (Единобожието), величието на Аллах, историите на пророците, чудесата в Корана или смисъла на живота. Избягвай депресиращи теми и стрес. Използвай типа 'carousel'.";
+                const displayMsg = { role: "user", text: "Моля, генерирай ми нов карусел." };
+                const newMsgs = [...messages, displayMsg];
+                setMessages(newMsgs);
+                
+                const history = messages.slice(1).map((m) => ({
+                  role: m.role === "user" ? "user" : "assistant",
+                  content: m.text,
+                }));
+
+                const res = await chatWithAssistant({
+                  data: {
+                    prompt: carouselPrompt,
+                    history,
+                  },
+                });
+                if (typeof playStudioClick === 'function') playStudioClick("success");
+                
+                const newMsg = {
+                  role: "assistant",
+                  text: res.reply,
+                  proposal: res.proposal,
+                };
+                setMessages([...newMsgs, newMsg]);
+              } catch (err: any) {
+                if (typeof playStudioClick === 'function') playStudioClick("error");
+                toast.error(err.message || "Грешка.");
+              } finally {
+                setLoading(false);
+              }
             }}
             disabled={loading}
             className="inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-blue-500 to-blue-600 px-5 py-3 text-xs font-bold text-white shadow-lg hover:from-blue-400 hover:to-blue-500 transition shrink-0 cursor-pointer self-stretch sm:self-auto"
