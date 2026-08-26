@@ -178,12 +178,14 @@ function AssistantPage() {
 
       toast.message(`🕋 Избрана Таухид тема: ${nextTopic.titleBg}`);
 
-      const carouselPrompt = `Генерирай ми TikTok карусел от ТОЧНО 4 слайда на тема: "${nextTopic.pillarBg} - ${nextTopic.titleBg}".
+      const carouselPrompt = `Генерирай ми TikTok карусел от ТОЧНО 4 слайда по рамката за вирусни карусели (Viral Carousel Framework) на тема: "${nextTopic.pillarBg} - ${nextTopic.titleBg}".
 ВАЖНО:
-1) Куката (Слайд 1) трябва да бъде свързана с: "${nextTopic.hookAngleBg}". СТРИКТНО ЗАБРАНЕНО Е да използваш банални клишета като 'Защо си тук?', 'Какъв е смисълът на живота?' или 'Защо си създаден?'.
-2) В Слайд 3 ЗАДЪЛЖИТЕЛНО цитирай автентичния далил: ${nextTopic.dalilReference} („${nextTopic.dalilTextBg}“).
-3) Всичко да е строго по Салафитското учение (Ахлу Сунна уал Джама'а) без бид'а и слаби хадиси.
-4) imagePrompt: фотореалистични вертикални природни кадри 8k (dark cinematic -> golden divine light), БЕЗ ХОРА, БЕЗ ЛИЦА И БЕЗ ЖИВОТНИ.
+1) Слайд 1 (Куката): Използвай curiosity gap, въпрос или контраинтуитивно твърдение, свързано с: "${nextTopic.hookAngleBg}". СТРИКТНО ЗАБРАНЕНО Е да използваш общи заглавия и клишета като 'Защо си тук?', 'Какъв е смисълът на живота?' или 'Защо си създаден?'.
+2) Слайдове 2 и 3 (Тяло): Сбит текст (макс 2-3 изречения), структуриран за бързо четене и завършващ с интригуващ клифхенгър или преход към следващия слайд.
+3) В Слайд 3 ЗАДЪЛЖИТЕЛНО цитирай автентичния далил: ${nextTopic.dalilReference} („${nextTopic.dalilTextBg}“) с преход към действието.
+4) Слайд 4 (CTA): Задължително включи конкретно, стойностно действие с ключови думи като "Запази", "Сподели" или "Коментирай" (напр. "Запази това напомняне...", "Сподели за садака джария!").
+5) Всичко да е строго по Салафитското учение (Ахлу Сунна уал Джама'а) без бид'а и слаби хадиси.
+6) imagePrompt: фотореалистични вертикални природни кадри 8k (dark cinematic -> golden divine light), БЕЗ ХОРА, БЕЗ ЛИЦА И БЕЗ ЖИВОТНИ.
 Използвай типа 'carousel'.`;
 
       const history = messages.slice(1).map((m) => ({
@@ -206,7 +208,7 @@ function AssistantPage() {
       };
       setMessages((prev) => [...prev, newMsg]);
     } catch (err: any) {
-      if (typeof playStudioClick === "function") playStudioClick("error");
+      if (typeof playStudioClick === "function") playStudioClick("click");
       toast.error(err.message || "Грешка при генериране на карусел.");
     } finally {
       setLoading(false);
@@ -367,8 +369,8 @@ function AssistantPage() {
     try {
       if (typeof playStudioClick === 'function') playStudioClick("start");
       setLoading(true);
-      const userText = "Генерирай ми TikTok карусел с 4 слайда. Нека бъде на интересна Ислямска тема. Използвай type: 'carousel'.";
-      const newMsgs = [...messages, { role: "user", text: userText }];
+      const userText = "Генерирай ми TikTok карусел с 4 слайда по рамката за вирусни карусели (Viral Hook -> Сбито тяло с клифхенгъри -> Автентичен Далил -> Стойностен CTA със 'Запази'/'Сподели'). Нека бъде на интересна Ислямска Таухид тема. Използвай type: 'carousel'.";
+      const newMsgs = [...messages, { role: "user" as const, text: userText }];
       setMessages(newMsgs);
       toast.message("Генериране на карусел...");
       
@@ -385,7 +387,7 @@ function AssistantPage() {
       });
       if (typeof playStudioClick === 'function') playStudioClick("success");
       const newMsg = {
-        role: "assistant",
+        role: "assistant" as const,
         text: res.reply,
         proposal: res.proposal,
       };
@@ -394,7 +396,7 @@ function AssistantPage() {
         saveAssistantHistory({ data: { messages: next } }).catch(() => {});
         return next;
       });
-    } catch (e) {
+    } catch (e: any) {
       toast.error(e?.message || "Грешка при генериране на карусел");
     } finally {
       setLoading(false);

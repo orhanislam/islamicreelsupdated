@@ -28,7 +28,7 @@ export function buildCarouselSystemPrompt(
   chosenTopic: ReturnType<typeof getNextTawheedTopic>,
   exclusionText: string,
 ): string {
-  return `Ти си експерт по създаване на вирусни Ислямски карусели за TikTok и Instagram Reels на български език, следващ стриктно Салафитската методология (Коран и Сахих Сунна според разбирането на праведните предци).
+  return `Ти си елитен експерт и продуцент по създаване на вирусни Ислямски карусели за TikTok и Instagram Reels на български език, следващ доказаната рамка за максимално задържане и споделяния (Viral Carousel Framework) и стриктна Салафитска методология (Коран и Сахих Сунна според разбирането на праведните предци).
 
 ${exclusionText}
 
@@ -40,33 +40,44 @@ ${exclusionText}
 - Текст на далила: ${chosenTopic.dalilTextBg}
 - Визуално настроение: ${chosenTopic.suggestedVisualMood}
 
-СТРИКТНА СТРУКТУРА НА ТОЧНО 4 СЛАЙДА:
-1. Слайд 1 (Куката / Hook):
-   - topTitle: Кратък мощен етикет (макс 3 думи, напр. "[ТАУХИД]", "[БОЖЕСТВЕН ЗАКОН]", "[ИЗПИТАНИЕ]").
-   - mainText: Завладяващо твърдение или въпрос на български, адресиращ конкретната подтема на Таухид (БЕЗ банални въпроси като 'Защо си тук?').
-   - bottomText: Кратко пояснение или насока (напр. "Плъзни наляво за истината").
+РАМКА ЗА ВИРУСНИ КАРУСЕЛИ (VIRAL RETENTION FRAMEWORK) — ТОЧНО 4 СЛАЙДА:
+
+1. Слайд 1 (Куката / Viral Hook):
+   - ЦЕЛ: Моментално отваряне на любопитна празнина (curiosity gap), провокативен въпрос или контраинтуитивно твърдение, което спира скролването.
+   - СТРИКТНА ЗАБРАНА ЗА ГЕНЕРИЧНИ ЗАГЛАВИЯ: Абсолютно забранени са общи заглавия като 'Таухид', 'Вярата в Аллах', 'Ислямски урок' или клишета като 'Защо си тук?'.
+   - topTitle: Кратък драматичен етикет (макс 2-3 думи в скоби, напр. "[ТАЙНАТА НА РИЗКА]", "[ПАРАДОКСЪТ]", "[СКРИТИЯТ ЗНАК]").
+   - mainText: Мощен, психологически издържан хук с любопитна празнина, контраинтуитивен факт или провокативен въпрос по темата (напр. базиран на "${chosenTopic.hookAngleBg}").
+   - bottomText: Примамка за плъзгане (напр. "Плъзни наляво, за да разбереш тайната 👉" или "Плъзни наляво за истината").
    - footerText: "1/4 • Плъзнете наляво"
    - imagePrompt: Тъмен, кинематографичен природен пейзаж на АНГЛИЙСКИ (dark, moody, cinematic photorealistic 8k vertical, no people).
 
-2. Слайд 2 (Обяснение и контекст):
-   - topTitle: Подзаглавие по темата (напр. "ВЕЛИКИЯТ БОЖЕСТВЕН ЗАКОН").
-   - mainText: Дълбоко богословско обяснение на български без претрупан текст (20-30 думи).
-   - bottomText: Поука за ежедневието.
+2. Слайд 2 (Тяло 1 / Обяснение, Контекст и Клифхенгър):
+   - ЦЕЛ: Сбито богословско обяснение, структурирано за светкавично четене и задържане на вниманието.
+   - СТРУКТУРА: Максимум 2-3 кратки, ударни изречения (без тежки абзаци).
+   - ЗАДЪЛЖИТЕЛЕН КЛИФХЕНГЪР: Трябва ЗАДЪЛЖИТЕЛНО да завършва с клифхенгър или силен интригуващ преход към следващия слайд (напр. "Но най-поразяващото доказателство за това е скрито в думите на Аллах...", "Виж какво разкрива автентичното предание на следващия слайд 👉").
+   - topTitle: Подзаглавие по темата (напр. "БОЖЕСТВЕНИЯТ ЗАКОН", "СКРИТАТА МЪДРОСТ").
+   - mainText: Стегнати 2-3 изречения по същината на темата, завършващи с клифхенгър към Слайд 3.
+   - bottomText: "Плъзни наляво за далила 👉"
    - footerText: "2/4 • Плъзнете наляво"
    - imagePrompt: Същият пейзаж с постепенно изгряваща светлина (gradually emerging light, misty dawn, no people, vertical 8k).
 
-3. Слайд 3 (Автентичен Далил от Коран или Сахих Хадис):
+3. Слайд 3 (Тяло 2 / Автентичен Далил от Коран или Сахих Хадис):
+   - ЦЕЛ: Безкомпромисен авторитет чрез директно цитиране на свещения далил (Коран или Сахих Хадис).
+   - СТРУКТУРА: Сбит текст (макс 2-3 изречения). Точен цитат в кавички, последван от 1 кратко изречение преход към действието.
+   - ЗАДЪЛЖИТЕЛЕН ПРЕХОД КЪМ ДЕЙСТВИЕТО: Завършва с преход към практическото духовно решение в Слайд 4 (напр. "А ето как да приложиш това спасение в живота си още днес...").
    - topTitle: Точен цитат и номер (напр. "${chosenTopic.dalilReference}").
-   - mainText: Цитат на самия Аят или Хадис в кавички на правилен български език (напр. "${chosenTopic.dalilTextBg}").
-   - bottomText: Кратък размисъл.
+   - mainText: Цитат на самия Аят или Хадис в кавички на правилен български език ("${chosenTopic.dalilTextBg}"), с преход към действието.
+   - bottomText: "Плъзни за духовното решение 👉"
    - footerText: "3/4 • Плъзнете наляво"
    - imagePrompt: Сияйна светлина и слънчеви лъчи пробиващи през облаците (golden rays breaking through dramatic clouds over landscape, no people, vertical 8k).
 
-4. Слайд 4 (Кулминация, Дуа или Призив):
-   - topTitle: Заключителен апел (напр. "ДУХОВНО СПАСЕНИЕ").
-   - mainText: Кратка искрена дуа или духовно решение.
-   - bottomText: Призив за действие (CTA, напр. "Сподели това знание за непрекъсната награда (садака джария)!").
-   - footerText: "4/4 • Последвайте за още"
+4. Слайд 4 (Кулминация и Стойностен Призив за Действие / Value-Driven CTA):
+   - ЦЕЛ: Конкретна дуа/разрешение и МОЩЕН, СТОЙНОСТЕН ПРИЗИВ ЗА ДЕЙСТВИЕ (Value-Driven CTA).
+   - ЗАДЪЛЖИТЕЛНИ КЛЮЧОВИ ДУМИ: Задължително трябва да включва конкретно действие с български глаголи като "Запази" (Save this reminder/checklist), "Сподели" (Share for sadaqah jariyah) или "Коментирай" (Comment for engagement) с ясна полза за читателя.
+   - topTitle: Заключителен апел (напр. "ДЕЙСТВИЕ И ДУА", "ТВОЯТ ПЛАН ЗА ДЕЙСТВИЕ").
+   - mainText: Кратка искрена дуа или духовно практическо решение (1-2 изречения).
+   - bottomText: Стойностен призив за действие (CTA) с ключови думи (напр. "Запази това напомняне за моменти на трудност и го сподели за садака джария!").
+   - footerText: "4/4 • Запази & Сподели"
    - imagePrompt: Пейзажът изцяло окъпан в топла златна божествена светлина (bathed in warm divine golden light, magnificent majestic nature, no people, vertical 8k).
 
 SALAFI HALAL ПРАВИЛА ЗА IMAGEPROMPT:
@@ -116,7 +127,7 @@ export async function generateCarouselScriptDirect(
         { role: "system", content: systemPrompt },
         {
           role: "user",
-          content: `Генерирай 4-слайдов TikTok карусел за следната тема: ${topicQuery}`,
+          content: `Генерирай 4-слайдов TikTok карусел по рамката за вирусни карусели (Viral Hook -> Сбито тяло с клифхенгъри -> Автентичен Далил -> Стойностен CTA със 'Запази'/'Сподели') за следната тема: ${topicQuery}`,
         },
       ],
       true, // json mode
@@ -150,35 +161,35 @@ export async function generateCarouselScriptDirect(
     console.warn("[generateCarouselScriptDirect] AI call failed or fallback:", errorMsg);
   }
 
-  // Fallback deterministic authentic slides from chosen Tawheed topic
+  // Fallback deterministic authentic slides from chosen Tawheed topic using Viral Framework
   const fallbackSlides: CarouselSlideData[] = [
     {
-      topTitle: `[${chosenTopic.pillar === "rububiyyah" ? "РУБУБИЙЯ" : chosenTopic.pillar === "uluhiyyah" ? "УЛЮХИЙЯ" : "АСМА СИФАТ"}]`,
+      topTitle: `[${chosenTopic.pillar === "rububiyyah" ? "ТАЙНАТА НА ГОСПОДСТВОТО" : chosenTopic.pillar === "uluhiyyah" ? "ТАЙНАТА НА ПОКЛОНЕНИЕТО" : "ВЕЛИЧИЕТО НА АЛЛАХ"}]`,
       mainText: chosenTopic.hookAngleBg,
-      bottomText: "Плъзни наляво за истината",
+      bottomText: "Плъзни наляво, за да научиш тайната 👉",
       footerText: "1/4 • Плъзнете наляво",
       imagePrompt: `dark moody cinematic landscape, ${chosenTopic.suggestedVisualMood}, vertical 9:16, photorealistic 8k, no people`,
     },
     {
-      topTitle: "ВЕЛИКИЯТ БОЖЕСТВЕН ЗАКОН",
-      mainText: chosenTopic.summaryBg,
-      bottomText: "Размисли над това",
+      topTitle: "БОЖЕСТВЕНИЯТ ЗАКОН",
+      mainText: `${chosenTopic.summaryBg} Но ето какво разкрива свещеното слово на следващия слайд...`,
+      bottomText: "Плъзни наляво за далила 👉",
       footerText: "2/4 • Плъзнете наляво",
       imagePrompt: `majestic nature with soft morning dawn light breaking through fog, ${chosenTopic.suggestedVisualMood}, vertical 9:16, 8k, no people`,
     },
     {
       topTitle: `[${chosenTopic.dalilReference}]`,
-      mainText: chosenTopic.dalilTextBg,
-      bottomText: "Словото на Аллах и Неговия Пратеник ﷺ",
+      mainText: `${chosenTopic.dalilTextBg} А ето как да приложиш това спасение в живота си още днес...`,
+      bottomText: "Плъзни за духовното решение 👉",
       footerText: "3/4 • Плъзнете наляво",
-      imagePrompt: `golden sunbeams shining through mountains, magnificent nature, vertical 9:16, 8k, no people`,
+      imagePrompt: `golden divine sunbeams shining through mountains, magnificent nature, vertical 9:16, 8k, no people`,
     },
     {
-      topTitle: "ДУХОВЕН ПОКОЙ И ДУА",
+      topTitle: "ДЕЙСТВИЕ И ДУА",
       mainText:
-        "О, Аллах, утвърди сърцата ни в чистия Таухид и ни дари благочестие в този и в отвъдния свят.",
-      bottomText: "Сподели с близък за садака джария!",
-      footerText: "4/4 • Последвайте ни",
+        "О, Аллах, утвърди сърцата ни в чистия Таухид и ни дари с душевна сила и благочестие.",
+      bottomText: "Запази това напомняне за моменти на трудност и сподели за садака джария!",
+      footerText: "4/4 • Запази & Сподели",
       imagePrompt: `warm radiant divine golden light over peaceful calm waters, majestic landscape, vertical 9:16, 8k, no people`,
     },
   ];

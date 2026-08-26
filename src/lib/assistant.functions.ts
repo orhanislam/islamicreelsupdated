@@ -32,6 +32,8 @@ export type VideoProposal = {
 
 async function injectAuthenticCarouselText(proposals: VideoProposal[]) {
   if (!proposals) return;
+  const rx = /[\p{Extended_Pictographic}\p{Emoji_Presentation}\u2728\u2B50\u2600-\u26FF\u2700-\u27BF]/gu;
+
   for (const prop of proposals) {
     if (!prop || prop.type !== 'carousel' || !prop.carouselSlides || prop.carouselSlides.length < 2) continue;
     
@@ -41,11 +43,12 @@ async function injectAuthenticCarouselText(proposals: VideoProposal[]) {
     try {
       if (prop.surah && prop.ayah) {
         const a = await fetchAyah({ data: { surah: Number(prop.surah), ayah: Number(prop.ayah) }});
-        bulgarian = a.bulgarian;
-        reference = a.reference;
+        reference = `Сура ${a.surahName} (${a.surah}:${a.ayah})`;
+        const t = await translateToBulgarian({ data: { english: a.english, sourceRef: reference, arabic: a.arabic, ayahBounds: a.ayahBounds }});
+        bulgarian = t.bulgarian;
       } else if (prop.collection && prop.number) {
         const h = await fetchSunnahHadith({ data: { collection: prop.collection as any, number: Number(prop.number) }});
-        const t = await translateToBulgarian({ data: { english: h.english, sourceRef: h.reference }});
+        const t = await translateToBulgarian({ data: { english: h.english, sourceRef: h.reference, arabic: h.arabic }});
         bulgarian = t.bulgarian;
         reference = h.reference;
       }
@@ -54,40 +57,56 @@ async function injectAuthenticCarouselText(proposals: VideoProposal[]) {
     }
     
     if (bulgarian) {
-      // Create new slides keeping the hook and CTA
-      const hookSlide = prop.carouselSlides[0];
-      const ctaSlide = prop.carouselSlides[prop.carouselSlides.length - 1];
-      const defaultPrompt = prop.carouselSlides[1]?.imagePrompt || 'cinematic, dark, mysterious';
+      const originalSlides = prop.carouselSlides;
+      const hookSlide = { ...originalSlides[0] };
+      const ctaSlide = { ...originalSlides[originalSlides.length - 1] };
+      const defaultPrompt = originalSlides[1]?.imagePrompt || originalSlides[0]?.imagePrompt || 'cinematic, dark landscape, 8k, vertical 9:16, no people';
       
-      const newSlides = [hookSlide];
-      const sentences = bulgarian.match(/[^.!?]+[.!?]+/g) || [bulgarian];
-      let currentText = '';
-      
-      for (const sent of sentences) {
-        const cleanSent = sent.trim();
-        if (!cleanSent) continue;
-        if (currentText.length + cleanSent.length > 250) {
-          if (currentText) {
-            newSlides.push({ topTitle: '[' + reference + ']', mainText: currentText.trim(), bottomText: '', footerText: 'Плъзни настрани', imagePrompt: defaultPrompt });
-          }
-          currentText = cleanSent;
-        } else {
-          currentText += (currentText ? ' ' : '') + cleanSent;
-        }
+      // Build exactly 4 slides adhering strictly to the Viral Framework
+      // Slide 1: Hook
+      hookSlide.footerText = '1/4 • Плъзнете наляво';
+      if (!hookSlide.bottomText) hookSlide.bottomText = 'Плъзни наляво за тайната 👉';
+
+      // Slide 2: Body Context & Cliffhanger
+      let contextSlide: { topTitle: string; mainText: string; bottomText: string; footerText: string; imagePrompt: string };
+      if (originalSlides.length >= 4) {
+        contextSlide = { ...originalSlides[1] };
+      } else {
+        const baseContext = prop.summaryBg || 'Всеки един от нас търси мир, но истинското спасение лежи в правилното разбиране на вярата.';
+        contextSlide = {
+          topTitle: 'БОЖЕСТВЕНИЯТ ЗАКОН',
+          mainText: `${baseContext} Но ето какво разкрива свещеното слово на следващия слайд...`,
+          bottomText: 'Плъзни наляво за далила 👉',
+          footerText: '2/4 • Плъзнете наляво',
+          imagePrompt: originalSlides[1]?.imagePrompt || defaultPrompt,
+        };
       }
-      if (currentText.trim()) {
-        newSlides.push({ topTitle: '[' + reference + ']', mainText: currentText.trim(), bottomText: '', footerText: 'Плъзни настрани', imagePrompt: defaultPrompt });
+      contextSlide.footerText = '2/4 • Плъзнете наляво';
+      if (!contextSlide.bottomText) contextSlide.bottomText = 'Плъзни наляво за далила 👉';
+
+      // Slide 3: Authentic Dalil with Transition
+      const dalilPrompt = originalSlides[2]?.imagePrompt || defaultPrompt;
+      const cleanDalil = bulgarian.replace(/(^|\n)\s*(?:\(\d+\)|\[\d+\]|\d+\.)\s*/g, "$1").trim();
+      const dalilSlide = {
+        topTitle: `[${reference}]`,
+        mainText: `„${cleanDalil}“ А ето как да приложиш това спасение в живота си още днес...`,
+        bottomText: 'Плъзни за духовното решение 👉',
+        footerText: '3/4 • Плъзнете наляво',
+        imagePrompt: dalilPrompt,
+      };
+
+      // Slide 4: Value-Driven CTA
+      if (ctaSlide.footerText) ctaSlide.footerText = ctaSlide.footerText.replace(rx, '').trim();
+      if (ctaSlide.bottomText) ctaSlide.bottomText = ctaSlide.bottomText.replace(rx, '').trim();
+      if (ctaSlide.mainText) ctaSlide.mainText = ctaSlide.mainText.replace(rx, '').trim();
+      if (ctaSlide.topTitle) ctaSlide.topTitle = ctaSlide.topTitle.replace(rx, '').trim();
+      if (!ctaSlide.bottomText || (!ctaSlide.bottomText.includes("Запази") && !ctaSlide.bottomText.includes("Сподели") && !ctaSlide.bottomText.includes("Коментирай"))) {
+        ctaSlide.bottomText = "Запази това напомняне за моменти на трудност и сподели за садака джария!";
       }
-      
-      if (ctaSlide) {
-        const rx = /[\p{Extended_Pictographic}\p{Emoji_Presentation}\u2728\u2B50\u2600-\u26FF\u2700-\u27BF]/gu;
-        if (ctaSlide.footerText) ctaSlide.footerText = ctaSlide.footerText.replace(rx, '').trim();
-        if (ctaSlide.bottomText) ctaSlide.bottomText = ctaSlide.bottomText.replace(rx, '').trim();
-        if (ctaSlide.mainText) ctaSlide.mainText = ctaSlide.mainText.replace(rx, '').trim();
-        if (ctaSlide.topTitle) ctaSlide.topTitle = ctaSlide.topTitle.replace(rx, '').trim();
-      }
-      newSlides.push(ctaSlide);
-      prop.carouselSlides = newSlides;
+      ctaSlide.footerText = '4/4 • Запази & Сподели';
+      if (!ctaSlide.topTitle) ctaSlide.topTitle = 'ДЕЙСТВИЕ И ДУА';
+
+      prop.carouselSlides = [hookSlide, contextSlide, dalilSlide, ctaSlide];
     }
   }
 }
@@ -132,7 +151,7 @@ SALAFI HALAL ПРИНЦИПИ (СТРИКТНО ЗАДЪЛЖИТЕЛНО):
 АБСОЛЮТНО ЗАБРАНЕНО е присъствието на хора (people), човешки лица (faces), мъже, жени (woman, man) или животни.
 СЪЩО ТАКА Е ЗАБРАНЕНО: закрити помещения (indoor, room), музикални инструменти (piano, music) и предмети от бита (book, books, table, coffee). Фоновете трябва да са ВИНАГИ НА ОТКРИТО (outdoor) или АБСТРАКТНИ. Спазвай стриктни Salafi Halal принципи. Всяко съдържание трябва да съответства строго на Салафитската методология (Quran & Sunnah upon the understanding of the Salaf). Без бида (нововъведения), без слаби (da'if) хадиси. ТИ СИ ПРОФЕСИОНАЛЕН И СТРИКТЕН ПРЕВОДАЧ НА КОРАН И СУННА. ПРЕВЕЖДАЙ АЯТИТЕ И ХАДИСИТЕ БУКВАЛНО, ТОЧНО И ПРОФЕСИОНАЛНО ОТ АРАБСКИ НА БЪЛГАРСКИ ЕЗИК, ЗАПАЗВАЙКИ ОРИГИНАЛНИЯ ИМ БОЖЕСТВЕН СМИСЪЛ БЕЗ ДА ДОБАВЯШ СОБСТВЕНИ ИНТЕРПРЕТАЦИИ. ЗАДЪЛЖИТЕЛНО ги взимай САМО от Quran.com и Sunnah.com! ПИШИ АБСОЛЮТНО ГРАМОТНО НА БЪЛГАРСКИ ЕЗИК, БЕЗ ПРАВОПИСНИ ГРЕШКИ (напр. пиши "вярвай", а не "вервай"). ВНИМАВАЙ С ПРЕВОДИТЕ: Не използвай грешни думи като "Анима" (вместо "А наистина" за "Ala inna"). Проверявай всяка дума.
 
-КАРУСЕЛИ (CAROUSEL):
+КАРУСЕЛИ (CAROUSEL) — РАМКА ЗА ВИРУСНИ КАРУСЕЛИ (VIRAL RETENTION FRAMEWORK):
 Ако потребителят иска "карусел" (слайдове със снимки за TikTok/Reels): 
 Върни proposal с type: "carousel", title, summaryBg, и задължително включи "carouselSlides": масив от ТОЧНО 4 обекта, всеки с { topTitle, mainText, bottomText, footerText, imagePrompt }. 
 
@@ -146,11 +165,35 @@ ${carouselExclusionPrompt}
 - Текст на далила: ${nextTawheed.dalilTextBg}
 - Визуална атмосфера: ${nextTawheed.suggestedVisualMood}
 
-СПАЗВАЙ ТОЗИ УПДАТНАТ WORKFLOW ЗА 4-ТЕ СЛАЙДА:
-1. Слайд 1 (Куката): Завладяващо, провокиращо размисъл твърдение/въпрос на български език, изградено строго около конкретната подтема на Таухид (БЕЗ банални въпроси като 'Защо си тук?'). Текстът се запазва умишлено кратък. imagePrompt: ТРЯБВА да бъде мрачно и драматично (dark, shadowy, cinematic photorealistic 8k vertical), красив природен пейзаж съобразен с темата (напр. stormy ocean waves, dark misty mountains, starry desert night).
-2. Слайд 2 (Обяснение и контекст): Разгръщане на съдържанието и богословската поука. imagePrompt: постепенно изгряваща светлина (gradually emerging light, misty dawn) със същия пейзаж.
-3. Слайд 3 (Автентичен Далил): Точен Аят от Корана или достоверен Хадис с цитат и номер в topTitle (напр. "Коран 57:22-23" или "Сахих Бухари #1"). mainText съдържа самия свещен текст в кавички. imagePrompt: сияйна божествена светлина (golden divine light rays breaking through clouds).
-4. Слайд 4 (Кулминация, Дуа и Призив): Окончателна духовна развръзка, дуа и призив за действие (CTA) в bottomText или footerText (напр. "Сподели за садака джария"). imagePrompt: изцяло окъпан в топла, сияйна златна светлина (bathed in warm divine golden light).
+СПАЗВАЙ СТРИКТНАТА РАМКА ЗА ВИРУСНИ КАРУСЕЛИ ЗА 4-ТЕ СЛАЙДА:
+1. Слайд 1 (Куката / Viral Hook):
+   - Моментално грабване на вниманието с curiosity gap (любопитна празнина), контраинтуитивно твърдение или силен провокативен въпрос по темата (напр. "${nextTawheed.hookAngleBg}").
+   - СТРИКТНО ЗАБРАНЕНИ са общи/генерични заглавия и клишета като 'Защо си тук?', 'Какъв е смисълът на живота?'.
+   - topTitle: кратък драматичен етикет в скоби (макс 2-3 думи, напр. "[ТАЙНАТА НА РИЗКА]", "[БОЖЕСТВЕНИЯТ ЗАКОН]").
+   - bottomText: "Плъзни наляво за тайната 👉"
+   - footerText: "1/4 • Плъзнете наляво"
+   - imagePrompt: тъмен, кинематографичен природен пейзаж на английски (dark, atmospheric, dramatic cinematic landscape, vertical 9:16, 8k, no people).
+2. Слайд 2 (Тяло 1 / Обяснение, Контекст и Клифхенгър):
+   - Сбит, стегнат текст (макс 2-3 кратки изречения) за бързо и лесно четене.
+   - ЗАДЪЛЖИТЕЛЕН КЛИФХЕНГЪР: Завършва с интригуващ клифхенгър или отворен преход към следващия слайд (напр. "Но най-поразяващото доказателство за това е скрито в думите на Аллах...", "Виж какво разкрива автентичното предание на следващия слайд 👉").
+   - topTitle: подзаглавие по темата (напр. "БОЖЕСТВЕНИЯТ ЗАКОН").
+   - bottomText: "Плъзни наляво за далила 👉"
+   - footerText: "2/4 • Плъзнете наляво"
+   - imagePrompt: същият пейзаж с постепенно изгряваща светлина (gradually emerging light, misty dawn, vertical 9:16, 8k, no people).
+3. Слайд 3 (Тяло 2 / Автентичен Далил от Коран или Сахих Хадис):
+   - Точен Аят от Корана или достоверен Хадис с цитат и номер в topTitle (напр. "${nextTawheed.dalilReference}").
+   - mainText съдържа самия свещен текст в кавички ("${nextTawheed.dalilTextBg}"), с кратък преход към действието (макс 2-3 изречения).
+   - ЗАДЪЛЖИТЕЛЕН ПРЕХОД КЪМ ДЕЙСТВИЕТО: завършва с преход към действието в Слайд 4 (напр. "А ето как да приложиш това спасение в живота си още днес...").
+   - bottomText: "Плъзни за духовното решение 👉"
+   - footerText: "3/4 • Плъзнете наляво"
+   - imagePrompt: сияйна божествена светлина (golden divine light rays breaking through clouds over landscape, vertical 9:16, 8k, no people).
+4. Слайд 4 (Кулминация и Стойностен Призив / Value-Driven CTA):
+   - Кратка искрена дуа или духовно практическо решение (1-2 изречения).
+   - ЗАДЪЛЖИТЕЛНИ КЛЮЧОВИ ДУМИ В CTA: Трябва да съдържа конкретно стойностно действие с български глаголи като "Запази" (Save), "Сподели" (Share) или "Коментирай" (Comment) (напр. "Запази това напомняне за моменти на трудност и сподели за садака джария!").
+   - topTitle: "ДЕЙСТВИЕ И ДУА" или "ТВОЯТ ПЛАН ЗА ДЕЙСТВИЕ".
+   - bottomText: конкретен призив за действие със "Запази" или "Сподели".
+   - footerText: "4/4 • Запази & Сподели"
+   - imagePrompt: изцяло окъпан в топла, сияйна златна светлина (bathed in warm divine golden light, magnificent nature, vertical 9:16, 8k, no people).
 
 SALAFI HALAL ПРАВИЛА ЗА КАРУСЕЛ ИЗОБРАЖЕНИЯТА (СТРИКТНО):
 imagePrompt във ВСИЧКИ слайдове ТРЯБВА ДА СЪДЪРЖА САМО ПРИРОДА, КОСМОС ИЛИ АБСТРАКТНИ ФОНОВЕ.
@@ -382,7 +425,7 @@ export const suggestBatchViralProposals = createServerFn({ method: "POST" })
 
 ПРОФЕСИОНАЛНИ СТРИКТНИ ПРАВИЛА (PRO WORKFLOW):
 1. СТРИКТНО СЛЕДВАЙ КАТЕГОРИЯТА: "${topicStr}". Ако категорията изисква САМО Хадиси, тогава генерирай ИЗКЛЮЧИТЕЛНО САМО ХАДИСИ (никакъв Коран). Ако изисква САМО Коран, генерирай САМО КОРАН. АБСОЛЮТНО СА ЗАБРАНЕНИ измислени цитати.
-2. ИЗРИЧНО ЗАБРАНЕНО Е да включваш най-популярните текстове като Сура Ал-Бакара 2:255, Сура Ад-Духа (93) или Сура Юсуф! Искаме рядко цитирани, дълбоки и неклиширани текстове.\` + (targetType === "carousel" ? "\nИЗКЛЮЧИТЕЛНО ВАЖНО: ЗАДЪЛЖИТЕЛНО генерирай ВСИЧКИ предложения като тип КАРУСЕЛ (type: 'carousel') с полетата за слайдове (carouselSlides)!" : "") + \`
+2. ИЗРИЧНО ЗАБРАНЕНО Е да включваш най-популярните текстове като Сура Ал-Бакара 2:255, Сура Ад-Духа (93) или Сура Юсуф! Искаме рядко цитирани, дълбоки и неклиширани текстове.${targetType === "carousel" ? "\nИЗКЛЮЧИТЕЛНО ВАЖНО ЗА КАРУСЕЛ: ЗАДЪЛЖИТЕЛНО генерирай ВСИЧКИ предложения като тип КАРУСЕЛ (type: 'carousel') с 'carouselSlides' от ТОЧНО 4 слайда по Viral Framework (Слайд 1: Hook с curiosity gap/въпрос, Слайдове 2-3: сбит текст с клифхенгъри и автентичен Далил, Слайд 4: стойностен CTA със 'Запази'/'Сподели')!" : ""}
 3. ОГРАНИЧЕНИЕ ЗА ВРЕМЕТРАЕНЕ (< 60 секунди): За да се събере във вайръл формат (TikTok/Reels), текстът на български НЕ ТРЯБВА да надвишава 70-80 думи. Ако текстът е дълъг, вземи само част от него! Видеото задължително трябва да е под 1 минута.
 4. Задължително включвай кинематографични настройки: "useBRoll": true, "bRollInterval": 5 и "quality": "high".
 5. ВИНАГИ включвай точния източник в 'title' на български език във формат: [Коран {surah}:{ayah}] Заглавие или [Сахих {collection} #{number}] Заглавие.
@@ -957,8 +1000,8 @@ if (typeof process !== "undefined" && typeof window === "undefined") {
           console.log('Running daily automatic viral TikTok trend analysis...');
           const { geminiChat } = await import('./gemini');
           const prompt = 'Ти си AI TikTok продуцент. Направи бързо търсене в интернет и ми кажи: какви ислямски теми за таухид, мотивация или трудности задържат най-много вниманието на зрителите в TikTok в момента? Анализирай какво се търси и какво се гледа най-много. Избери САМО една тема, която е най-вирална. Върни само името на темата в 3 до 5 думи, без обяснения.';
-          const res = await geminiChat([{ role: 'user', text: prompt }], true);
-          const chosenTopic = res.reply ? res.reply.trim() : 'Таухид и успех в живота';
+          const res = await geminiChat("gemini-3.6-flash", [{ role: 'user', content: prompt }], false, true);
+          const chosenTopic = res ? res.trim() : 'Таухид и успех в живота';
           
           console.log('Daily auto-topic chosen:', chosenTopic);
           await startBackgroundPlanGeneration({ data: { count: 3, topic: chosenTopic, targetType: 'carousel' } });

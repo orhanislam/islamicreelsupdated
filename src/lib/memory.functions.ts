@@ -289,7 +289,7 @@ export async function recordProposalUsagesDirect(proposals: Array<ProposalRecord
       if (identifier) {
         // Prevent immediate duplicates
         if (!history.find((x) => x.identifier === identifier)) {
-          history.push({ type: p.type, identifier, timestamp: now });
+          history.push({ type: p.type as "quran" | "hadith", identifier, timestamp: now });
           hasNew = true;
         }
       }

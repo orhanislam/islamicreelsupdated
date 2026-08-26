@@ -1,10 +1,11 @@
-## 2026-08-26T20:59:52Z
-<USER_REQUEST>
-You are teamwork_preview_victory_auditor for this software engineering task.
-Your working directory is: c:\Users\admin\Downloads\Islamic Reels Studio\.agents\auditor_1
-Please maintain progress.md and handoff.md in your working directory.
+## 2026-08-26T23:34:35+03:00
 
-<original_task>
+You are the SWE Light orchestrator for this project.
+
+Working Directory: c:\Users\admin\Downloads\Islamic Reels Studio\.agents\swe_1
+Original Request Path: c:\Users\admin\Downloads\Islamic Reels Studio\.agents\ORIGINAL_REQUEST.md
+
+Task Details:
 Build an update to the existing carousel generation prompt pipeline in the Islamic Reels Studio app to use proven virality and retention best practices.
 1. Enforce Viral Carousel Framework in AI Prompts (in src/lib/assistant.functions.ts, src/lib/carousel.functions.ts, or related files):
    - Slide 1 (Hook): Must use a curiosity gap, question, or counter-intuitive statement. No generic titles.
@@ -17,7 +18,3 @@ Build an update to the existing carousel generation prompt pipeline in the Islam
    - A text file `viral_samples_output.txt` is generated at the project root containing 3 sample carousels that visibly demonstrate the new viral structure.
 
 Maintain your progress in your working directory (`progress.md` and `BRIEFING.md`). When finished, report back with your completion summary.
-</original_task>
-
-Conduct an independent 3-phase victory audit (timeline verification, cheating/mock detection, and independent test execution). Verify all requirements and deliverables, and report back with your structured verdict.
-</USER_REQUEST>

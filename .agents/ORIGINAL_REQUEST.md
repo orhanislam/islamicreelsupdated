@@ -1,28 +1,22 @@
 # Original User Request
 
-## 2026-08-26T19:36:23Z
+## Initial Request — 2026-08-26T23:34:35+03:00
 
-# Teamwork Project Prompt — Draft
+You are the SWE Light orchestrator for this project.
 
-> Status: Launched
-> Goal: Craft prompt → get user approval → delegate to teamwork_preview
-> Requested team: Use the full teamwork system
+Working Directory: c:\Users\admin\Downloads\Islamic Reels Studio\.agents\swe_1
+Original Request Path: c:\Users\admin\Downloads\Islamic Reels Studio\.agents\ORIGINAL_REQUEST.md
 
-Improve the AI carousel generation logic to ensure a diverse variety of topics centered around Tawheed, rather than repeatedly generating similar topics (e.g., "Why are you here?"). 
+Task Details:
+Build an update to the existing carousel generation prompt pipeline in the Islamic Reels Studio app to use proven virality and retention best practices.
+1. Enforce Viral Carousel Framework in AI Prompts (in src/lib/assistant.functions.ts, src/lib/carousel.functions.ts, or related files):
+   - Slide 1 (Hook): Must use a curiosity gap, question, or counter-intuitive statement. No generic titles.
+   - Middle Slides (Body): Concise text (max 2-3 sentences), structured for easy reading, ending with a cliffhanger or transition to the next slide.
+   - Final Slide (CTA): Must include a specific, value-driven action (e.g., "Save this checklist", "Share this reminder").
+2. Maintain Existing Constraints: Do not break existing Tawheed taxonomy integration or memory/exclusion engine. Authentic Dalils must still be included seamlessly.
+3. Verification & Deliverables:
+   - A new or updated verification script (verify-viral-carousel.test.ts or similar) running successfully via Node/Bun.
+   - The test runs the generator 3 times and asserts that Slide 1 text contains hook elements and the final slide contains explicit CTA keywords (e.g., "Запази", "Сподели", "Коментирай" in Bulgarian).
+   - A text file `viral_samples_output.txt` is generated at the project root containing 3 sample carousels that visibly demonstrate the new viral structure.
 
-Working directory: C:\Users\admin\Downloads\Islamic Reels Studio
-Integrity mode: development
-
-## Requirements
-
-### R1. Diverse Tawheed Topics
-The AI prompt logic for carousels must be updated to focus on various sub-topics of Tawheed (e.g., Ar-Rububiyyah, Al-Uluhiyyah, Al-Asma was-Sifat) ensuring rich and varied content.
-
-### R2. State-Tracked Topic Generation
-The system must implement a local state or storage mechanism (e.g., localStorage or backend state) to explicitly track previously generated topics for carousels. The AI generation logic must read this history to avoid generating identical or highly similar topics in subsequent requests.
-
-## Acceptance Criteria
-
-### Verification
-- [ ] A verification mechanism (e.g., a test script) simulates at least 3 consecutive carousel generations, proving that the tracking state is updated and the topics remain distinct.
-- [ ] The generated topics strictly center around Tawheed and demonstrably avoid repeating the exact same hook or premise.
+Maintain your progress in your working directory (`progress.md` and `BRIEFING.md`). When finished, report back with your completion summary.

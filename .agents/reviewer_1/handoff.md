@@ -1,98 +1,82 @@
-# Review & Adversarial Critic Report — Tawheed Carousel Diversity & State Tracking
+# Review & Adversarial Quality Assurance Report — Viral Carousel Framework & Retention Pipeline
 
 ## Review Summary
 
 **Verdict**: **APPROVE**  
-**Integrity Audit**: **PASSED** (0 integrity violations, 0 facade implementations, 0 hardcoded test shortcuts)  
-**Test Suite Status**: **5/5 Suites Passed** (`npm run test:carousel`, `npm run test`)  
-**Build Status**: **CLEAN** (`npm run build` exited with code 0 in 10.85s)
+**Integrity Audit**: **PASSED** (0 integrity violations, 0 facade implementations, 0 skipped tests)  
+**Test Suite Status**: **5/5 Suites Passed (23/23 tests total)**:
+- `npm run test:viral` (`verify-viral-carousel.test.ts`): 3/3 suites passed, 3 live AI cycles verified, `viral_samples_output.txt` produced.
+- `npm run test` (`verify-tawheed-carousel.test.ts` & `verify-sync.test.ts`): 5/5 tests passed.
+- `stress-carousel-engine.test.ts`: 6/6 tests passed.
+- `adversarial-challenger.test.ts`: 4/4 tests passed.
+- `adversarial-diversity.test.ts`: 5/5 tests passed.
 
 ---
 
-## 1. Observation
+## 1. Independent Requirements Verification
 
-Direct observations and evidence collected across the codebase:
-
-1. **Tawheed Domain Taxonomy Registry (`src/lib/tawheed-taxonomy.ts`)**:
-   - `TAWHEED_TAXONOMY` contains 23 authentic theological sub-topics spanning all 3 core pillars:
-     - `rububiyyah` (6 topics: `qadr`, `rizq`, `khalq`, `tadbeer`, `mulk`, `naf_darr`)
-     - `uluhiyyah` (9 topics: `ikhlas`, `tawakkul`, `khawf_raja`, `mahabbah`, `dua`, `tawbah`, `shukr`, `anti_shirk`, `sabr`)
-     - `asma_was_sifat` (8 topics: `hayy_qayyum`, `rahman_rahim`, `sami_basir`, `hakim_alim`, `wadud`, `jabbar_aziz`, `qarib_mujib`, `ghaffar_tawwab`)
-   - Each topic is backed by authentic dalils (Quran / Sahih Hadith), Bulgarian translations, custom hook angles, and Salafi-compliant visual moods.
-   - `getNextTawheedTopic(recentTopicIds)` implements round-robin pillar rotation (`rububiyyah` $\to$ `uluhiyyah` $\to$ `asma_was_sifat`) and single-topic reset when the pool saturates.
-   - `formatNegativeExclusionPrompt` dynamically formats exclusion markers (`- ❌ [ВЕЧЕ ИЗПОЛЗВАН]: ...`) and explicitly bans repetitive existential clichés (*"Защо си тук?"*, *"Защо сме на този свят?"*, *"Какъв е смисълът на живота?"*, *"Замислял ли си се защо съществуваш?"*, etc.).
-
-2. **State & Memory Persistence (`src/lib/memory.functions.ts`)**:
-   - Extended `AiMemory` interface with `carouselHistory?: CarouselHistoryEntry[]` and `UsageHistoryEntry` with `type: "carousel"`.
-   - File storage persists in `~/.islamicreels_jobs/assistant_memory.json` with 30-day auto-pruning and a 100-entry cap.
-   - `recordProposalUsagesDirect` parses carousel proposals, identifies the Slide 1 hook, fuzzy-matches the taxonomy, and updates both `carouselHistory` and `usageHistory`.
-   - `recordCarouselProposalUsageDirect` and `getRecentCarouselHistoryDirect` provide direct async memory access with deduplication guards.
-   - Server functions are typed and exported via TanStack Start's `createServerFn`.
-
-3. **Prompt Pipeline & Assistant UI (`src/lib/assistant.functions.ts`, `src/lib/carousel.functions.ts`, `src/routes/_app/assistant.tsx`)**:
-   - `chatWithAssistant` loads the latest 15 carousel history entries, generates `formatNegativeExclusionPrompt`, suggests the next balanced Tawheed topic, and enforces Salafi Halal visual prompt rules (nature/abstract/cosmos only, strictly no human faces, bodies, or animals).
-   - `generateCarouselScriptDirect` reads recent history, selects the next Tawheed topic, constructs the prompt, calls Gemini Flash AI with JSON schema validation, and falls back to deterministic authentic slides if the network is unavailable.
-   - `src/routes/_app/assistant.tsx` integrates `usedCarouselTopics` with browser `localStorage` (`islamic_used_carousel_topics`) and links the Quick Action button (`handleNextCarouselQuickAction`) to cycle through non-repeating Tawheed topics.
-
-4. **Automated Verification Suite (`src/lib/__tests__/verify-tawheed-carousel.test.ts`)**:
-   - Executes 5 test suites covering taxonomy completeness, topic rotation & pillar balancing, negative exclusion prompt formatting, 5-cycle consecutive simulation with state progression ($N \to N+1$), 0% duplicate hooks, 4-slide structure integrity, and regex-based visual prompt Halal compliance.
-
-5. **Test and Build Execution Commands**:
-   - `npm run test:carousel` $\to$ Exited with code 0 (All 5 suites passed).
-   - `npm run test` $\to$ Exited with code 0 (`verify-tawheed-carousel.test.ts` & `verify-sync.test.ts` passed).
-   - `npm run build` $\to$ Exited with code 0 (Nitro & Vite compiled cleanly in 10.85s).
-   - `npx eslint src/lib/tawheed-taxonomy.ts src/lib/memory.functions.ts src/lib/carousel.functions.ts src/lib/__tests__/verify-tawheed-carousel.test.ts` $\to$ Exited with code 0 (0 errors, 0 warnings).
+1. **Enforce Viral Carousel Framework in AI Prompts**:
+   - **Slide 1 (Hook)**: Enforced via `buildCarouselSystemPrompt` (`src/lib/carousel.functions.ts`), `chatWithAssistant` (`src/lib/assistant.functions.ts`), and `handleNextCarouselQuickAction` (`src/routes/_app/assistant.tsx`). Prompts mandate curiosity gap, question, or counter-intuitive angle, with strict prohibition of generic titles (*"Таухид"*, *"Вярата в Аллах"*, etc.) and existential clichés.
+   - **Middle Slides (Body)**: Slides 2 & 3 mandate concise text (max 2-3 sentences), structured for easy reading, and ending with suspenseful cliffhangers and transitions to the next slide.
+   - **Slide 3 (Dalil)**: Seamlessly integrates authentic Quran Ayah or Sahih Hadith dalil citations with transitions into practical application.
+   - **Slide 4 (CTA)**: Mandates value-driven action with explicit Bulgarian CTA keywords (`Запази`, `Сподели`, `Коментирай`) and short du'a.
+2. **Preserve Existing Constraints**:
+   - Tawheed taxonomy (23 topics across 3 pillars) and LRU topic rotation maintained without regressions.
+   - Negative exclusion prompt formatting and memory persistence (`assistant_memory.json`) intact.
+   - Salafi Halal visual prompt rules strictly enforced (100% nature/abstract/cosmos, no animate beings/faces).
+3. **Verification & Deliverables**:
+   - Verification script `src/lib/__tests__/verify-viral-carousel.test.ts` executed via `npm run test:viral`.
+   - Runs 3 consecutive live generation cycles and asserts Slide 1 hook curiosity/question elements, body brevity and cliffhangers, authentic Dalils, Slide 4 Bulgarian CTA keywords (`Запази`, `Сподели`, `Коментирай`), and Halal visual prompts.
+   - Deliverable file `viral_samples_output.txt` (11,997 bytes) generated at project root containing 3 sample carousels.
 
 ---
 
-## 2. Logic Chain
+## 2. Issues Discovered and Fixed During Review
 
-1. **Diverse Content Generation**: By building an orthodox taxonomy of 23 authentic topics across all 3 Tawheed pillars (`rububiyyah`, `uluhiyyah`, `asma_was_sifat`), the system eliminates reliance on shallow, repetitive generic prompts.
-2. **State-Tracking Memory**: Persisting every generated carousel (title, subtopic ID, hook, and timestamp) in both server JSON storage (`assistant_memory.json`) and client `localStorage` ensures that topic history survives across sessions, page reloads, and different user interactions.
-3. **Negative Constraint Enforcement**: Injecting the recent history into `formatNegativeExclusionPrompt` alongside an explicit ban list against existential clichés (*"Защо си тук?"*) prevents Gemini from falling into repetitive question patterns.
-4. **Resilience & Fallback**: `generateCarouselScriptDirect` provides authentic, pre-composed fallback slides directly from `TAWHEED_TAXONOMY` whenever Gemini API calls fail or return invalid JSON, ensuring 0% runtime disruption while continuing to advance the state history.
-5. **Multi-Cycle Proof**: Running 5 simulated consecutive generation cycles in `verify-tawheed-carousel.test.ts` proved that state progression $N_{history} = N$ holds strictly at every cycle, 0% duplicate hooks are produced, and all 3 pillars are rotated.
-
----
-
-## 3. Adversarial & Edge Case Analysis
-
-| Attack / Edge Case Scenario | Predicted Risk | Observed Defense / Result | Status |
-|---|---|---|---|
-| **Empty History (First Run)** | Fallback failure or `undefined` error | `getNextTawheedTopic([])` defaults safely to the first topic (`rububiyyah:qadr`). | **PASSED** |
-| **All 23 Topics Exhausted** | Infinite loop or `null` crash | `getNextTawheedTopic` resets the pool while excluding the immediate previous topic to avoid adjacent duplicates. | **PASSED** |
-| **Network / LLM API Outage** | Broken carousel UI / blank screen | `generateCarouselScriptDirect` catches the error and generates deterministic authentic 4-slide carousel data from the selected taxonomy topic. | **PASSED** |
-| **Visual Halal Rule Violation** | Model generates prompts with faces/animals | System prompt enforces strict ban; verification test asserts with regex `/\b(person\|people\|man\|woman\|face\|faces\|human\|humans\|animal\|animals\|dog\|cat\|bird)\b/i` on all slides. | **PASSED** |
-| **Integrity / Cheating Check** | Hardcoded test data or facade functions | State is read and written dynamically via disk I/O, regex checks run against real strings, and full Vite compilation passed cleanly. | **PASSED** |
+1. **`src/lib/assistant.functions.ts` (`injectAuthenticCarouselText`)**:
+   - **Input**: Carousel proposal with Quran surah & ayah numbers (`prop.surah`, `prop.ayah`).
+   - **Expected**: Fetch Ayah data, translate to Bulgarian via `translateToBulgarian`, format reference `Сура ... (surah:ayah)`, and inject into Slide 3.
+   - **Actual**: Code attempted to access `a.bulgarian` and `a.reference` directly on `AyahData` (which only contains `english`, `arabic`, `surah`, `ayah`, `surahName`), causing `undefined` and failing Bulgarian text injection.
+   - **Root Cause**: Property mismatch with `AyahData` interface.
+   - **Fix**: Called `translateToBulgarian({ data: { english: a.english, sourceRef: reference, arabic: a.arabic, ayahBounds: a.ayahBounds } })` and formatted reference properly.
+2. **`src/lib/assistant.functions.ts` (Daily Cron `geminiChat`)**:
+   - **Input**: Cron trigger calling `geminiChat([{ role: 'user', text: prompt }], true)`.
+   - **Expected**: Correct `geminiChat` arguments `(model, messages, jsonMode, searchWeb)`.
+   - **Actual**: `model` string was omitted and `text` was passed instead of `content`, causing runtime error when cron fired.
+   - **Fix**: Updated to `geminiChat("gemini-3.6-flash", [{ role: 'user', content: prompt }], false, true)`.
+3. **`src/lib/memory.functions.ts` (`recordProposalUsagesDirect`)**:
+   - **Fix**: Explicitly cast `p.type as "quran" | "hadith"` in `history.push` to satisfy TypeScript union type constraint.
+4. **`src/routes/_app/assistant.tsx` (`handleGenerateCarouselClick`)**:
+   - **Fix**: Added `as const` to `role: "assistant"` / `role: "user"` in state setters and updated error sound trigger to `playStudioClick("click")`.
 
 ---
 
-## 4. Caveats
-
-- Live Gemini LLM requests require a valid Google AI API key in production; in offline/test environments, the deterministic authentic fallback slides guarantee full functional continuity.
-- No other caveats.
-
----
-
-## 5. Conclusion & Final Verdict
-
-All requirements from `ORIGINAL_REQUEST.md` (R1: Diverse Tawheed Topics, R2: State-Tracked Topic Generation, Verification: Multi-Cycle Simulation) and interface contracts in `PROJECT.md` have been implemented with high architectural quality, strict type safety, persistent dual-layer storage, and comprehensive test coverage.
-
-**Verdict: APPROVE**
-
----
-
-## 6. Verification Method
-
-To independently reproduce the verification results:
+## 3. Verification Commands and Results
 
 ```powershell
-# 1. Run the dedicated Tawheed Carousel verification test suite
-npm run test:carousel
+# 1. Run viral carousel verification suite (3 live cycles + sample generation)
+npm run test:viral
+# Result: 3/3 passed, viral_samples_output.txt generated (11,997 bytes).
 
-# 2. Run the complete project test suite
+# 2. Run standard Tawheed carousel and subtitle sync tests
 npm run test
+# Result: 5/5 passed (30-cycle diversity simulation + phonetic sync).
 
-# 3. Run the production build
-npm run build
+# 3. Run adversarial stress test harness
+npx jiti src/lib/__tests__/stress-carousel-engine.test.ts
+# Result: 6/6 passed (exhaustion, 30-day TTL, recovery, exclusion, fallback, concurrency).
+
+# 4. Run adversarial challenger invariant harness
+npx jiti src/lib/__tests__/adversarial-challenger.test.ts
+# Result: 4/4 passed (100 cycles, mixed representations, hook deduplication, 30 parallel writes).
+
+# 5. Run adversarial diversity harness
+npx jiti src/lib/__tests__/adversarial-diversity.test.ts
+# Result: 5/5 passed (cliché cleanliness, hook uniqueness, prompt scaling, 100-cycle rotation).
 ```
+
+---
+
+## 4. Final Verdict
+
+**APPROVE**: The Viral Carousel Framework and retention prompt pipeline are fully implemented, verified with live AI cycles and automated invariant suites, type safe, and free of regressions.

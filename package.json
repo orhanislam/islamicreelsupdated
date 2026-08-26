@@ -12,6 +12,7 @@
     "lint": "eslint .",
     "format": "prettier --write .",
     "test:carousel": "jiti src/lib/__tests__/verify-tawheed-carousel.test.ts",
+    "test:viral": "jiti src/lib/__tests__/verify-viral-carousel.test.ts",
     "test": "jiti src/lib/__tests__/verify-tawheed-carousel.test.ts && jiti src/lib/__tests__/verify-sync.test.ts"
   },
   "dependencies": {
