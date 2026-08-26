@@ -8,6 +8,7 @@ import { synthesizeHadithNarration } from "@/lib/tts.functions";
 import { startServerRenderJob, getJobsDir } from "@/lib/render.functions";
 import { getAiMemory, updateAiMemory, recordProposalUsages } from "@/lib/memory.functions";
 import { createTask, updateTask, listTasks, clearAllTasks } from "@/lib/tasks-engine";
+import { getNextTawheedTopic, formatNegativeExclusionPrompt, getTawheedTaxonomy } from "@/lib/tawheed-taxonomy";
 
 export type VideoProposal = {
   title: string;
@@ -96,6 +97,10 @@ export const chatWithAssistant = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     const memory = await getAiMemory();
     const historyList = (memory.usageHistory || []).map(x => `- ${x.identifier}`).join("\n");
+    const recentCarousels = (memory.carouselHistory || []).slice(-15);
+    const nextTawheed = getNextTawheedTopic(recentCarousels.map(c => c.subtopicId || c.title));
+    const carouselExclusionPrompt = formatNegativeExclusionPrompt(recentCarousels);
+
     const historyContext = historyList ? `\n\nСКОРОШНО ИЗПОЛЗВАНИ ТЕМИ (СТРИКТНО ЗАБРАНЕНО Е ДА ГИ ПРЕДЛАГАШ ОТНОВО):\n${historyList}` : "";
 
     const memoryContext = `
@@ -127,18 +132,29 @@ SALAFI HALAL ПРИНЦИПИ (СТРИКТНО ЗАДЪЛЖИТЕЛНО):
 АБСОЛЮТНО ЗАБРАНЕНО е присъствието на хора (people), човешки лица (faces), мъже, жени (woman, man) или животни.
 СЪЩО ТАКА Е ЗАБРАНЕНО: закрити помещения (indoor, room), музикални инструменти (piano, music) и предмети от бита (book, books, table, coffee). Фоновете трябва да са ВИНАГИ НА ОТКРИТО (outdoor) или АБСТРАКТНИ. Спазвай стриктни Salafi Halal принципи. Всяко съдържание трябва да съответства строго на Салафитската методология (Quran & Sunnah upon the understanding of the Salaf). Без бида (нововъведения), без слаби (da'if) хадиси. ТИ СИ ПРОФЕСИОНАЛЕН И СТРИКТЕН ПРЕВОДАЧ НА КОРАН И СУННА. ПРЕВЕЖДАЙ АЯТИТЕ И ХАДИСИТЕ БУКВАЛНО, ТОЧНО И ПРОФЕСИОНАЛНО ОТ АРАБСКИ НА БЪЛГАРСКИ ЕЗИК, ЗАПАЗВАЙКИ ОРИГИНАЛНИЯ ИМ БОЖЕСТВЕН СМИСЪЛ БЕЗ ДА ДОБАВЯШ СОБСТВЕНИ ИНТЕРПРЕТАЦИИ. ЗАДЪЛЖИТЕЛНО ги взимай САМО от Quran.com и Sunnah.com! ПИШИ АБСОЛЮТНО ГРАМОТНО НА БЪЛГАРСКИ ЕЗИК, БЕЗ ПРАВОПИСНИ ГРЕШКИ (напр. пиши "вярвай", а не "вервай"). ВНИМАВАЙ С ПРЕВОДИТЕ: Не използвай грешни думи като "Анима" (вместо "А наистина" за "Ala inna"). Проверявай всяка дума.
 
-
-
 КАРУСЕЛИ (CAROUSEL):
 Ако потребителят иска "карусел" (слайдове със снимки за TikTok/Reels): 
-Върни proposal с type: "carousel", title, summaryBg, и задължително включи "carouselSlides": масив от обекти, всеки с { topTitle, mainText, bottomText, footerText, imagePrompt }. 
-СПАЗВАЙ ТОЗИ УПДАТНАТ WORKFLOW ЗА СЛАЙДОВЕТЕ:
-1. Слайд 1 (Куката): Завладяващо, провокиращо размисъл твърдение/въпрос на български език, адресиращо универсална нужда или трудност. Текстът се запазва умишлено кратък. imagePrompt: ТРЯБВА да бъде мрачно и драматично (dark, shadowy, cinematic), НО добави и специфичен красив природен пейзаж, съобразен с темата (напр. stormy ocean waves, dark misty mountains, desert at night).
-2. Слайдове 2 до N-1 (Същинска стойност): Разгръщане на съдържанието (Аят, Хадис, Сунна) стъпка по стъпка. АБСОЛЮТНО ЗАБРАНЕНО Е ПРЕТРУПВАНЕТО с много текст на един екран! Ако хадисът има 3 стъпки, отдели им отделни слайдове. imagePrompt: визуалната естетика постепенно става по-светла (gradually brighter, emerging light), като запазиш същия природен пейзаж от Слайд 1.
-ВАЖНО ЗА СЛАЙДОВЕТЕ (ИЗТОЧНИК И РАЗДЕЛЯНЕ):
-- ЗАДЪЛЖИТЕЛНО изписвай точния източник и номер на Хадиса/Аята (напр. "Сахих Тирмизи #2344" или "Коран 2:255") в "topTitle" или "bottomText" на съответните слайдове. ПОТРЕБИТЕЛЯТ ИЗРИЧНО ИСКА ДА ВИЖДА НОМЕРАТА НА ХАДИСИТЕ.
-- Ако потребителят иска визуално разделение между Аят/Хадис и твой коментар, СТРИКТНО ЗАБРАНЕНО е да използваш markdown линии (--- или ___), емоджита (💡, 📖) или буквални фрази като "Наш пояснителен текст:". ТЕ ЩЕ СЧУПЯТ ДИЗАЙНА! Вместо това, използвай JSON полетата: сложи Аята в "mainText" (в кавички), а твоят коментар в "bottomText". Рендърът автоматично ще ги раздалечи красиво.
-3. Последен Слайд N (Кулминация и Призив): Окончателната духовна развръзка, мир или върховно обещание. imagePrompt: изцяло окъпан в топла, сияйна и божествена златна светлина (bathed in warm golden divine light), същият пейзаж напълно озарен от слънцето. ЗАДЪЛЖИТЕЛНО завърши с призив за действие (CTA) в долната част на екрана (bottomText или footerText), подтикващ зрителите да последват или споделят.
+Върни proposal с type: "carousel", title, summaryBg, и задължително включи "carouselSlides": масив от ТОЧНО 4 обекта, всеки с { topTitle, mainText, bottomText, footerText, imagePrompt }. 
+
+${carouselExclusionPrompt}
+
+ПРЕПОРЪЧИТЕЛНА СЛЕДВАЩА ТАУХИД ПОДТЕМА (РОТАЦИЯ):
+- Стълб: ${nextTawheed.pillarBg}
+- Заглавие/Тема: ${nextTawheed.titleBg}
+- Препоръчан фокус за Куката (Слайд 1): "${nextTawheed.hookAngleBg}"
+- Автентичен Далил: ${nextTawheed.dalilReference}
+- Текст на далила: ${nextTawheed.dalilTextBg}
+- Визуална атмосфера: ${nextTawheed.suggestedVisualMood}
+
+СПАЗВАЙ ТОЗИ УПДАТНАТ WORKFLOW ЗА 4-ТЕ СЛАЙДА:
+1. Слайд 1 (Куката): Завладяващо, провокиращо размисъл твърдение/въпрос на български език, изградено строго около конкретната подтема на Таухид (БЕЗ банални въпроси като 'Защо си тук?'). Текстът се запазва умишлено кратък. imagePrompt: ТРЯБВА да бъде мрачно и драматично (dark, shadowy, cinematic photorealistic 8k vertical), красив природен пейзаж съобразен с темата (напр. stormy ocean waves, dark misty mountains, starry desert night).
+2. Слайд 2 (Обяснение и контекст): Разгръщане на съдържанието и богословската поука. imagePrompt: постепенно изгряваща светлина (gradually emerging light, misty dawn) със същия пейзаж.
+3. Слайд 3 (Автентичен Далил): Точен Аят от Корана или достоверен Хадис с цитат и номер в topTitle (напр. "Коран 57:22-23" или "Сахих Бухари #1"). mainText съдържа самия свещен текст в кавички. imagePrompt: сияйна божествена светлина (golden divine light rays breaking through clouds).
+4. Слайд 4 (Кулминация, Дуа и Призив): Окончателна духовна развръзка, дуа и призив за действие (CTA) в bottomText или footerText (напр. "Сподели за садака джария"). imagePrompt: изцяло окъпан в топла, сияйна златна светлина (bathed in warm divine golden light).
+
+SALAFI HALAL ПРАВИЛА ЗА КАРУСЕЛ ИЗОБРАЖЕНИЯТА (СТРИКТНО):
+imagePrompt във ВСИЧКИ слайдове ТРЯБВА ДА СЪДЪРЖА САМО ПРИРОДА, КОСМОС ИЛИ АБСТРАКТНИ ФОНОВЕ.
+СТРИКТНО ЗАБРАНЕНО Е да се споменават хора (people, person, man, woman), човешки лица (faces), силуети или животни!
 
 CAPCUT-ПОДОБНИ ИНСТРУКЦИИ ЗА РЕДАКТИРАНЕ:
 Ти разбираш и прилагаш всякакви инструкции за редактиране на видеото, подобно на CapCut/Premiere/DaVinci:

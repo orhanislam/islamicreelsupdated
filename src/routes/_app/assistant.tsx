@@ -12,6 +12,7 @@ import { getAiMemory, updateAiMemory, type AiMemory } from "@/lib/memory.functio
 import { generateViralThumbnail } from "@/lib/thumbnail.functions";
 import { formatViralSocialCaption } from "@/lib/caption.functions";
 import { playStudioClick } from "@/lib/sfx";
+import { getNextTawheedTopic, getTawheedTaxonomy } from "@/lib/tawheed-taxonomy";
 
 export const Route = createFileRoute("/_app/assistant")({
   component: AssistantPage,
@@ -107,6 +108,18 @@ function AssistantPage() {
     return [];
   });
 
+  const [usedCarouselTopics, setUsedCarouselTopics] = useState<string[]>(() => {
+    if (typeof window !== "undefined" && window.localStorage) {
+      try {
+        const parsed = JSON.parse(window.localStorage.getItem("islamic_used_carousel_topics") || "[]");
+        return Array.isArray(parsed) ? parsed : [];
+      } catch {
+        return [];
+      }
+    }
+    return [];
+  });
+
   const handleNextQuranQuickAction = () => {
     playStudioClick();
     const unpicked = VIRAL_QURAN_PRESETS.filter(
@@ -145,6 +158,59 @@ function AssistantPage() {
     }
     setPrompt(selected.prompt);
     toast.message(`📜 Избран нов хадис: ${selected.title}`);
+  };
+
+  const handleNextCarouselQuickAction = async () => {
+    if (loading) return;
+    try {
+      if (typeof playStudioClick === "function") playStudioClick("start");
+      setLoading(true);
+
+      const nextTopic = getNextTawheedTopic(usedCarouselTopics);
+      const updatedUsed = [...usedCarouselTopics, nextTopic.id];
+      const boundedUsed = updatedUsed.length > 30 ? updatedUsed.slice(-30) : updatedUsed;
+      setUsedCarouselTopics(boundedUsed);
+      if (typeof window !== "undefined" && window.localStorage) {
+        try {
+          window.localStorage.setItem("islamic_used_carousel_topics", JSON.stringify(boundedUsed));
+        } catch {}
+      }
+
+      toast.message(`🕋 Избрана Таухид тема: ${nextTopic.titleBg}`);
+
+      const carouselPrompt = `Генерирай ми TikTok карусел от ТОЧНО 4 слайда на тема: "${nextTopic.pillarBg} - ${nextTopic.titleBg}".
+ВАЖНО:
+1) Куката (Слайд 1) трябва да бъде свързана с: "${nextTopic.hookAngleBg}". СТРИКТНО ЗАБРАНЕНО Е да използваш банални клишета като 'Защо си тук?', 'Какъв е смисълът на живота?' или 'Защо си създаден?'.
+2) В Слайд 3 ЗАДЪЛЖИТЕЛНО цитирай автентичния далил: ${nextTopic.dalilReference} („${nextTopic.dalilTextBg}“).
+3) Всичко да е строго по Салафитското учение (Ахлу Сунна уал Джама'а) без бид'а и слаби хадиси.
+4) imagePrompt: фотореалистични вертикални природни кадри 8k (dark cinematic -> golden divine light), БЕЗ ХОРА, БЕЗ ЛИЦА И БЕЗ ЖИВОТНИ.
+Използвай типа 'carousel'.`;
+
+      const history = messages.slice(1).map((m) => ({
+        role: m.role === "user" ? "user" : "assistant",
+        content: m.text,
+      }));
+
+      const res = await chatWithAssistant({
+        data: {
+          prompt: carouselPrompt,
+          history,
+        },
+      });
+      if (typeof playStudioClick === "function") playStudioClick("success");
+      
+      const newMsg = {
+        role: "assistant" as const,
+        text: res.reply,
+        proposal: res.proposal,
+      };
+      setMessages((prev) => [...prev, newMsg]);
+    } catch (err: any) {
+      if (typeof playStudioClick === "function") playStudioClick("error");
+      toast.error(err.message || "Грешка при генериране на карусел.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   const getThumbTitle = (title?: string) => {
@@ -783,47 +849,14 @@ function AssistantPage() {
         <div className="rounded-2xl border border-blue-500/30 bg-gradient-to-r from-blue-500/10 via-cyan-500/5 to-transparent p-3.5 sm:p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4 mt-6">
           <div>
             <div className="flex items-center gap-2 text-blue-400 font-bold text-sm">
-              <ImageIcon className="size-4" /> ГЕНЕРАТОР НА TIKTOK КАРУСЕЛИ
+              <ImageIcon className="size-4" /> ГЕНЕРАТОР НА TIKTOK КАРУСЕЛИ (ТАУХИД)
             </div>
             <p className="text-xs text-muted-foreground mt-1">
-              Генерирай 4 слайда със снимки за TikTok/Reels по всякаква тема. AI ще измисли текста и изображенията.
+              Генерирай 4 слайда по разнородни подтеми на Таухид (Господство, Поклонение, Имена и Качества) без повторения.
             </p>
           </div>
           <button
-            onClick={async () => {
-              if (loading) return;
-              try {
-                if (typeof playStudioClick === 'function') playStudioClick("start");
-                setLoading(true);
-                const carouselPrompt = "Генерирай ми TikTok карусел на силна ислямска тема. ВАЖНО: 1) Провери предишните съобщения и избери НАПЪЛНО НОВА ТЕМА, която НЕ Е била генерирана досега в този чат! 2) ЗАДЪЛЖИТЕЛНО се увери, че всичко (текст, хадиси, цитати) е строго в съответствие със Салафитското учение (Ахлу Сунна уал Джама'а, според разбирането на Салафите) без никакви нововъведения (бид'а) и слаби хадиси. ТИ СИ ПРОФЕСИОНАЛЕН И СТРИКТЕН ПРЕВОДАЧ НА КОРАН И СУННА. ПРЕВЕЖДАЙ АЯТИТЕ И ХАДИСИТЕ БУКВАЛНО, ТОЧНО И ПРОФЕСИОНАЛНО ОТ АРАБСКИ НА БЪЛГАРСКИ ЕЗИК, ЗАПАЗВАЙКИ ОРИГИНАЛНИЯ ИМ БОЖЕСТВЕН СМИСЪЛ БЕЗ ДА ДОБАВЯШ СОБСТВЕНИ ИНТЕРПРЕТАЦИИ. ЗАДЪЛЖИТЕЛНО ги взимай САМО от Quran.com и Sunnah.com!    Избери тема свързана с Таухид (Единобожието), величието на Аллах, историите на пророците, чудесата в Корана или смисъла на живота. Избягвай депресиращи теми и стрес. Използвай типа 'carousel'.";
-                /* Removed user message append */
-                
-                const history = messages.slice(1).map((m) => ({
-                  role: m.role === "user" ? "user" : "assistant",
-                  content: m.text,
-                }));
-
-                const res = await chatWithAssistant({
-                  data: {
-                    prompt: carouselPrompt,
-                    history,
-                  },
-                });
-                if (typeof playStudioClick === 'function') playStudioClick("success");
-                
-                const newMsg = {
-                  role: "assistant",
-                  text: res.reply,
-                  proposal: res.proposal,
-                };
-                setMessages(prev => [...prev, newMsg]);
-              } catch (err: any) {
-                if (typeof playStudioClick === 'function') playStudioClick("error");
-                toast.error(err.message || "Грешка.");
-              } finally {
-                setLoading(false);
-              }
-            }}
+            onClick={handleNextCarouselQuickAction}
             disabled={loading}
             className="inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-blue-500 to-blue-600 px-5 py-3 text-xs font-bold text-white shadow-lg hover:from-blue-400 hover:to-blue-500 transition shrink-0 cursor-pointer self-stretch sm:self-auto"
           >
@@ -833,7 +866,7 @@ function AssistantPage() {
               </>
             ) : (
               <>
-                <ImageIcon className="size-4" /> Създай Карусел
+                <ImageIcon className="size-4" /> Създай Таухид Карусел
               </>
             )}
           </button>

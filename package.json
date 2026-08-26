@@ -10,7 +10,9 @@
     "build:dev": "vite build --mode development",
     "preview": "vite preview",
     "lint": "eslint .",
-    "format": "prettier --write ."
+    "format": "prettier --write .",
+    "test:carousel": "jiti src/lib/__tests__/verify-tawheed-carousel.test.ts",
+    "test": "jiti src/lib/__tests__/verify-tawheed-carousel.test.ts && jiti src/lib/__tests__/verify-sync.test.ts"
   },
   "dependencies": {
     "@ffmpeg-installer/ffmpeg": "^1.1.0",

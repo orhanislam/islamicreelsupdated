@@ -1,28 +1,28 @@
 # Original User Request
 
-## Initial Request — 2026-07-26T14:15:03Z
+## 2026-08-26T19:36:23Z
 
-Implement two dedicated quick-generation features in the AI Assistant: a "Viral Quran Series" that tracks history to ensure unique generations, and a new "Viral Hadith" button for hadith-specific content.
+# Teamwork Project Prompt — Draft
 
-Working directory: `C:\Users\admin\Downloads\Islamic Reels Studio`
-Integrity mode: benchmark
+> Status: Launched
+> Goal: Craft prompt → get user approval → delegate to teamwork_preview
+> Requested team: Use the full teamwork system
+
+Improve the AI carousel generation logic to ensure a diverse variety of topics centered around Tawheed, rather than repeatedly generating similar topics (e.g., "Why are you here?"). 
+
+Working directory: C:\Users\admin\Downloads\Islamic Reels Studio
+Integrity mode: development
 
 ## Requirements
 
-### R1. Non-Repetitive Quran Generation
-Modify the existing "Viral Quran" generation logic in the AI assistant. It must maintain a history/context (either via the prompt or an internal state) so that consecutive clicks never generate the same Surah/Ayah. The user wants a viral series of Quran videos without repetition.
+### R1. Diverse Tawheed Topics
+The AI prompt logic for carousels must be updated to focus on various sub-topics of Tawheed (e.g., Ar-Rububiyyah, Al-Uluhiyyah, Al-Asma was-Sifat) ensuring rich and varied content.
 
-### R2. Viral Hadith Button
-Add a new, distinct "Вирални Хадиси" (Viral Hadiths) button right next to the existing Quran button. This button must trigger the AI assistant to specifically fetch and generate a viral Hadith video. It must match the current premium glassmorphism design.
-
-### R3. Professional Implementation & Auto-Deployment
-Ensure the UI looks premium. The teamwork agent must write the code, verify the application still builds, test that the assistant logic works, and deploy the final result to the production server via `npm run build` and `deploy-node.cjs`.
+### R2. State-Tracked Topic Generation
+The system must implement a local state or storage mechanism (e.g., localStorage or backend state) to explicitly track previously generated topics for carousels. The AI generation logic must read this history to avoid generating identical or highly similar topics in subsequent requests.
 
 ## Acceptance Criteria
 
 ### Verification
-- [ ] A new "Вирални Хадиси" button is present and beautifully styled next to the Quran button.
-- [ ] Generating multiple Quran videos sequentially produces different verses each time.
-- [ ] Generating a Hadith produces valid Hadith content.
-- [ ] `npm run build` exits with code 0 (no build errors).
-- [ ] The team successfully deploys the final code using the existing `deploy-node.cjs` script.
+- [ ] A verification mechanism (e.g., a test script) simulates at least 3 consecutive carousel generations, proving that the tracking state is updated and the topics remain distinct.
+- [ ] The generated topics strictly center around Tawheed and demonstrably avoid repeating the exact same hook or premise.

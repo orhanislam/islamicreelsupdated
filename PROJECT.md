@@ -1,40 +1,102 @@
-# Project: Islamic Reels Studio — Improvement & Deployment Plan
+# Project: Islamic Reels Studio — Diverse Tawheed Topics & State-Tracked Carousel Generation
 
 ## Architecture
-Islamic Reels Studio web application for generating, customizing, and managing Islamic video reels.
-- Front-end: React / TypeScript / Vite / Tailwind CSS / Radix UI / Lucide React / TanStack Query
-- Backend / BaaS: Supabase / Edge Functions / Node scripts / Server functions
-- Deployment: SSH script (`deploy-node.cjs`) / Clouding PowerShell (`deploy-clouding.ps1`)
+Islamic Reels Studio generates viral Islamic carousels and reels based on authentic Islamic sources (Quran & Sahih Sunnah). 
+The carousel generation pipeline consists of:
+1. **Domain Taxonomy Registry (`src/lib/tawheed-taxonomy.ts`)**: Structured repository of authentic Tawheed pillars (*Ar-Rububiyyah*, *Al-Uluhiyyah*, *Al-Asma was-Sifat*) and 25+ rich theological sub-topics with authentic dalils and distinct hook angles.
+2. **State & Memory Engine (`src/lib/memory.functions.ts`)**: Server-persisted (`~/.islamicreels_jobs/assistant_memory.json`) and client-synced (`localStorage`) tracking of generated carousel topics, hooks, premises, and timestamps.
+3. **AI Generation & Prompt Pipeline (`src/lib/assistant.functions.ts`, `src/lib/carousel.functions.ts`, `src/routes/_app/assistant.tsx`)**: Dynamic topic selection, past generation history injection for negative constraint exclusion, and strict anti-cliché enforcement.
+4. **Verification & Testing Engine (`src/lib/__tests__/verify-tawheed-carousel.test.ts`)**: Deterministic multi-cycle simulation test runner proving consecutive generation state updates, 0% duplicate hooks, and authentic 4-slide structure.
+
+```
+┌──────────────────────────────────────────────────────────┐
+│                   UI: assistant.tsx                      │
+│   (Quick Action / Chat / LocalStorage Carousel State)    │
+└────────────────────────────┬─────────────────────────────┘
+                             │
+                             ▼
+┌──────────────────────────────────────────────────────────┐
+│             Server: assistant.functions.ts               │
+│  - Reads AiMemory (usageHistory & carouselHistory)       │
+│  - Selects Tawheed Sub-Topic from tawheed-taxonomy.ts    │
+│  - Injects Exclusion List & Negative Constraints         │
+│  - Calls Gemini Flash AI                                 │
+│  - Records Generated Carousel into Memory                │
+└────────────────────────────┬─────────────────────────────┘
+                             │
+                             ▼
+┌──────────────────────────────────────────────────────────┐
+│        Renderer & Export: CarouselRendererButton         │
+│   (Renders 1080x1920 4-slide carousel & Halal visuals)   │
+└──────────────────────────────────────────────────────────┘
+```
+
+## Feature Inventory
+| # | Feature | Description | Milestone | Source |
+|---|---------|-------------|-----------|--------|
+| 1 | Tawheed Domain Taxonomy Registry | Authentic 3-pillar taxonomy (Rububiyyah, Uluhiyyah, Asma was-Sifat) with 25+ subtopics, dalils, and rotation logic | M1 | ORIGINAL_REQUEST §R1 |
+| 2 | Carousel State & Memory Tracking | Server & client state tracking for carousel topics, hooks, and premises in `AiMemory` and `localStorage` | M2 | ORIGINAL_REQUEST §R2 |
+| 3 | AI Prompt Diversification & Cliché Exclusion | History-aware prompt construction injecting exclusion lists and banning clichés like "Защо си тук?" | M3 | ORIGINAL_REQUEST §R1, §R2 |
+| 4 | Multi-Cycle Automated Verification Test | Test script simulating >= 3 consecutive generations validating state updates, topic diversity, and 0% hook duplicates | M4 | ORIGINAL_REQUEST §Verification |
 
 ## Milestones
 | # | Name | Scope | Dependencies | Status |
 |---|------|-------|-------------|--------|
-| 1 | Codebase Analysis & Target Identification | Audit AI Assistant quick action buttons, prompt handlers, and UI layout | None | DONE |
-| 2 | Milestone 1: Non-Repetitive Quran & Viral Hadith UI | Implement Quran generation history context and "Вирални Хадиси" glassmorphism button | M1 | DONE |
-| 3 | Milestone 2: Build Verification & Integrity Audit | Clean `npm run build` verification, Reviewer, Challenger, and Forensic Audit | M2 | DONE |
-| 4 | Milestone 3: Auto-Deployment | Execute production deployment via `deploy-node.cjs` | M3 | DONE |
+| 1 | M1: Tawheed Taxonomy Module | Create `src/lib/tawheed-taxonomy.ts` with authentic subtopics, dalils, and rotation utilities | none | DONE |
+| 2 | M2: State Tracking & Memory Persistence | Update `src/lib/memory.functions.ts` to record carousel entries with hooks/topics and sync to client state | M1 | DONE |
+| 3 | M3: Prompt Diversification & Anti-Repetition | Update `src/lib/assistant.functions.ts`, `src/lib/carousel.functions.ts`, and `src/routes/_app/assistant.tsx` | M1, M2 | DONE |
+| 4 | M4: Multi-Cycle Simulation Test & Final Hardening | Create `src/lib/__tests__/verify-tawheed-carousel.test.ts`, add test scripts to `package.json`, run full verification suite and forensic audit | M1, M2, M3 | DONE |
 
 ## Interface Contracts
-- Build Command: `npm run build`
-- Deploy Command: `node deploy-node.cjs`
+### `src/lib/tawheed-taxonomy.ts`
+```typescript
+export type TawheedPillar = "rububiyyah" | "uluhiyyah" | "asma_was_sifat";
 
-## Detailed Milestone Specifications
+export interface TawheedTopic {
+  id: string; // e.g. "rububiyyah:qadr"
+  pillar: TawheedPillar;
+  titleBg: string; // e.g. "Ал-Кадр: Божественият указ и предопределение"
+  titleAr?: string;
+  summaryBg: string;
+  hookAngleBg: string;
+  dalilReference: string; // e.g. "Сура Ал-Хадид (57:22-23)"
+  dalilTextBg: string;
+  suggestedVisualMood: string;
+}
 
-### Milestone 1: Non-Repetitive Quran & Viral Hadith UI (DONE)
-1. `src/routes/_app/assistant.tsx`: Presets `VIRAL_QURAN_PRESETS` (10 verses) and `VIRAL_HADITH_PRESETS` (6 Hadiths) defined. Dynamic state and `localStorage` tracking (`islamic_used_quran_keys`, `islamic_used_hadith_keys`) cycle through unpicked items on consecutive clicks. Hardened with `Array.isArray` verification, `try...catch` storage exception wrappers, and `unpicked.length === 1` full cycle resets. Verified cleanly.
-2. `src/routes/_app/assistant.tsx`: Added glassmorphism quick-action button titled "Вирални Хадиси" with `ScrollText` icon and amber glass styling, positioned immediately adjacent to the "Вирален Коран" button. Verified cleanly.
+export function getTawheedTaxonomy(): TawheedTopic[];
+export function getNextTawheedTopic(recentTopicIds: string[]): TawheedTopic;
+export function formatNegativeExclusionPrompt(recentEntries: Array<{ topic?: string; hook?: string }>): string;
+```
 
-### Milestone 2: Build Verification & Quality Control (DONE)
-1. Verified `npm run build` exits with code 0 (built cleanly in 14.88s).
-2. Independent verification by Reviewer 1 (APPROVE), Challenger 2 (PASS), and Forensic Auditor (CLEAN - zero integrity violations).
+### `src/lib/memory.functions.ts`
+```typescript
+export interface CarouselHistoryEntry {
+  id: string;
+  type: "carousel";
+  pillar?: TawheedPillar;
+  subtopicId?: string;
+  title: string;
+  hook: string;
+  premise?: string;
+  timestamp: number;
+}
 
-### Milestone 3: Auto-Deployment (DONE)
-1. Executed `node deploy-node.cjs` — local build succeeded, deployment to production host finished successfully with exit code 0.
+export interface AiMemory {
+  lastUpdated: number;
+  usageHistory: UsageHistoryEntry[];
+  carouselHistory?: CarouselHistoryEntry[];
+}
+
+export function recordCarouselProposalUsage(entry: Omit<CarouselHistoryEntry, "timestamp">): Promise<void>;
+export function getRecentCarouselHistory(limit?: number): Promise<CarouselHistoryEntry[]>;
+```
 
 ## Code Layout
-- `src/`: Core React app source code
-  - `src/routes/`: TanStack Router pages (`_app/create.tsx`, `_app/assistant.tsx`, `_app/downloads.tsx`, etc.)
-  - `src/components/`: UI components (`ui/card.tsx`, `ui/dropdown-menu.tsx`, etc.)
-  - `src/lib/`: Server functions, API handlers, canvas and render utilities (`sunnah.functions.ts`, `render.functions.ts`, `render-video.ts`, etc.)
-  - `src/styles.css`: Global Tailwind CSS and keyframe definitions
-- `deploy-node.cjs`: Production SSH deployment script
+- `src/lib/tawheed-taxonomy.ts`: Authentic Tawheed domain taxonomy and topic rotation engine
+- `src/lib/memory.functions.ts`: Memory persistence and carousel history recording
+- `src/lib/assistant.functions.ts`: AI assistant orchestration, prompt building, proposal generation
+- `src/lib/carousel.functions.ts`: Carousel generation endpoints
+- `src/routes/_app/assistant.tsx`: UI client interface, quick action triggers, localStorage syncing
+- `src/lib/__tests__/verify-tawheed-carousel.test.ts`: Automated multi-cycle verification test
+- `package.json`: Script definitions for running tests
