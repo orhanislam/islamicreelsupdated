@@ -1,49 +1,44 @@
-# BRIEFING — 2026-08-26T19:40:00Z
+# BRIEFING — 2026-08-29T14:49:08Z
 
 ## Mission
-Investigate the Tawheed domain taxonomy and testing architecture for carousel generation diversity and state tracking.
+Investigate R3 (Title Generation Cleanup - strip '[tiktok carousels]') and R4 (Dynamic Background Images selection from asset pool).
 
 ## 🔒 My Identity
 - Archetype: explorer
-- Roles: survey, domain analysis, testing architecture analysis
+- Roles: read-only investigation, codebase search, synthesis
 - Working directory: C:\Users\admin\Downloads\Islamic Reels Studio\.agents\explorer_survey_3
-- Original parent: c3ed46ac-381f-449d-99b1-f0344f3e11de
-- Milestone: survey & test design completed
+- Original parent: 8bfda9e9-5272-49ec-a6bd-62bd513c6b61
+- Milestone: Survey Phase - Explorer 3 (R3 & R4) Completed
 
 ## 🔒 Key Constraints
 - Read-only investigation — do NOT implement
-- Analyze authentic Tawheed categories and sub-topics
-- Check existing test setups, scripts, runners
-- Formulate verification criteria and simulation test design for >= 3 consecutive carousel generations with state tracking
+- Follow Handoff Protocol (5 components)
+- Output handoff.md in working directory
+- Communicate via send_message with caller
 
 ## Current Parent
-- Conversation ID: c3ed46ac-381f-449d-99b1-f0344f3e11de
-- Updated: 2026-08-26T19:40:00Z
+- Conversation ID: 8bfda9e9-5272-49ec-a6bd-62bd513c6b61
+- Updated: 2026-08-29T14:49:08Z
 
 ## Investigation State
 - **Explored paths**:
-  - `package.json`
-  - `src/lib/__tests__/verify-sync.test.ts`
-  - `src/lib/carousel.functions.ts`
   - `src/lib/assistant.functions.ts`
-  - `src/lib/memory.functions.ts`
-  - `src/lib/gemini.ts`
-  - `src/lib/suggestions.functions.ts`
+  - `src/lib/carousel.functions.ts`
+  - `src/lib/backgrounds.functions.ts`
   - `src/lib/render-carousel.ts`
-  - `src/routes/_app/assistant.tsx`
+  - `src/lib/render-photo.ts`
   - `src/components/CarouselRendererButton.tsx`
+  - `src/routes/_app/assistant.tsx`
+  - `src/routes/_app/create.tsx`
+  - `tiktok_images/` & `tiktok_output/`
+  - `src/lib/__tests__/verify-viral-carousel.test.ts`
 - **Key findings**:
-  - Authentic 3-pillar Tawheed taxonomy designed (Ar-Rububiyyah, Al-Uluhiyyah, Al-Asma was-Sifat) with 25+ rich sub-topics.
-  - Identified root cause of topic repetition: lack of carousel tracking in `src/lib/memory.functions.ts` and generic unconstrained prompts in `assistant.tsx` / `carousel.functions.ts`.
-  - Validated test runner using `jiti` (`./node_modules/.bin/jiti`) under Node.js v24.18.0.
-  - Formulated simulation test design running >= 3 consecutive generations with history persistence and 0% hook duplicates.
-- **Unexplored areas**: None for survey milestone.
+  - R3: Root cause of `[tiktok carousels]` prefix is unconstrained AI prompting and missing sanitization filter across `chatWithAssistant`, `suggestViralProposal`, and `suggestBatchViralProposals`. Concrete `cleanProposalTitle` sanitizer and prompt negative constraint designed.
+  - R4: 8 high-res vertical 9:16 background JPEG images exist in `tiktok_images/` (4 images) and `tiktok_output/` (4 images). Current `CarouselRendererButton.tsx` relies on AI image generation which is slow and rate-limited. Concrete `getCarouselBackgrounds` server function with cycle rotation across generations and variety per slide designed.
+- **Unexplored areas**: None for R3 and R4.
 
 ## Key Decisions Made
-- Outlined complete taxonomy matrix with authentic Dalils.
-- Designed simulation test architecture with both deterministic mock mode and live Gemini verification.
-- Documented findings in `analysis.md` and `handoff.md`.
+- Survey completed. Full findings, code locations, and design written to `handoff.md`.
 
 ## Artifact Index
-- analysis.md — C:\Users\admin\Downloads\Islamic Reels Studio\.agents\explorer_survey_3\analysis.md
-- handoff.md — C:\Users\admin\Downloads\Islamic Reels Studio\.agents\explorer_survey_3\handoff.md
+- C:\Users\admin\Downloads\Islamic Reels Studio\.agents\explorer_survey_3\handoff.md — Final survey report for R3 and R4

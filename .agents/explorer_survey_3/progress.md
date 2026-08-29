@@ -1,11 +1,12 @@
-# Progress — explorer_survey_3
+# Progress - Explorer 3
 
-Last visited: 2026-08-26T19:40:00Z
+- Status: Completed Survey Phase for R3 & R4
+- Last visited: 2026-08-29T14:49:17Z
 
-- [x] Initialized DISPATCH.md and BRIEFING.md
-- [x] Investigate package.json, test setups, scripts, runners
-- [x] Investigate current carousel generation implementation in src
-- [x] Systematically define authentic Tawheed domain taxonomy and sub-topics
-- [x] Design verification criteria and simulation test architecture (>= 3 consecutive runs)
-- [x] Produce analysis.md and handoff.md
-- [x] Send completion message to parent
+## Tasks
+- [x] Read ORIGINAL_REQUEST.md
+- [x] Investigate R3: Title generation cleanup (strip '[tiktok carousels]')
+- [x] Investigate R4: Background image asset inventory, location, formats, current loading/referencing
+- [x] Investigate dynamic background selection across slides & batches
+- [x] Synthesize findings and write handoff.md
+- [x] Notify parent agent

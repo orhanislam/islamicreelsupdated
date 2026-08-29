@@ -1,102 +1,90 @@
-# Project: Islamic Reels Studio — Diverse Tawheed Topics & State-Tracked Carousel Generation
+# Project: TikTok Photo Carousel Generation Upgrade
 
 ## Architecture
-Islamic Reels Studio generates viral Islamic carousels and reels based on authentic Islamic sources (Quran & Sahih Sunnah). 
-The carousel generation pipeline consists of:
-1. **Domain Taxonomy Registry (`src/lib/tawheed-taxonomy.ts`)**: Structured repository of authentic Tawheed pillars (*Ar-Rububiyyah*, *Al-Uluhiyyah*, *Al-Asma was-Sifat*) and 25+ rich theological sub-topics with authentic dalils and distinct hook angles.
-2. **State & Memory Engine (`src/lib/memory.functions.ts`)**: Server-persisted (`~/.islamicreels_jobs/assistant_memory.json`) and client-synced (`localStorage`) tracking of generated carousel topics, hooks, premises, and timestamps.
-3. **AI Generation & Prompt Pipeline (`src/lib/assistant.functions.ts`, `src/lib/carousel.functions.ts`, `src/routes/_app/assistant.tsx`)**: Dynamic topic selection, past generation history injection for negative constraint exclusion, and strict anti-cliché enforcement.
-4. **Verification & Testing Engine (`src/lib/__tests__/verify-tawheed-carousel.test.ts`)**: Deterministic multi-cycle simulation test runner proving consecutive generation state updates, 0% duplicate hooks, and authentic 4-slide structure.
-
-```
-┌──────────────────────────────────────────────────────────┐
-│                   UI: assistant.tsx                      │
-│   (Quick Action / Chat / LocalStorage Carousel State)    │
-└────────────────────────────┬─────────────────────────────┘
-                             │
-                             ▼
-┌──────────────────────────────────────────────────────────┐
-│             Server: assistant.functions.ts               │
-│  - Reads AiMemory (usageHistory & carouselHistory)       │
-│  - Selects Tawheed Sub-Topic from tawheed-taxonomy.ts    │
-│  - Injects Exclusion List & Negative Constraints         │
-│  - Calls Gemini Flash AI                                 │
-│  - Records Generated Carousel into Memory                │
-└────────────────────────────┬─────────────────────────────┘
-                             │
-                             ▼
-┌──────────────────────────────────────────────────────────┐
-│        Renderer & Export: CarouselRendererButton         │
-│   (Renders 1080x1920 4-slide carousel & Halal visuals)   │
-└──────────────────────────────────────────────────────────┘
-```
+Islamic Reels Studio generates 4-slide TikTok photo carousels (1080x1920 9:16) with Tawheed theological authenticity and viral structure. The system consists of:
+1. **AI Generation & Prompt Engine** (`src/lib/assistant.functions.ts`, `src/lib/carousel.functions.ts`): Produces structured 4-slide carousel scripts with Hook, Body, Dalil (Quran/Hadith), and CTA, accompanied by sanitized titles and prompt instructions.
+2. **Background Asset Service** (`src/lib/backgrounds.functions.ts`): Dynamically serves and rotates high-resolution vertical background assets from local pools (`tiktok_images/`, `tiktok_output/`).
+3. **Canvas Rendering Engine** (`src/lib/render-carousel.ts`): Client/server-compatible Canvas 2D renderer formatting text within TikTok UI safe zones with intelligent word wrapping, auto-fit dynamic scaling, and dual-color differentiation for Quran/Hadith vs human commentary.
+4. **Interactive UI & Export Layer** (`src/components/CarouselRendererButton.tsx`, `src/routes/_app/assistant.tsx`): Integrates slide generation, background fetching, live progress, ZIP bundle download, title copying, and Make.com webhook automation.
 
 ## Feature Inventory
 | # | Feature | Description | Milestone | Source |
 |---|---------|-------------|-----------|--------|
-| 1 | Tawheed Domain Taxonomy Registry | Authentic 3-pillar taxonomy (Rububiyyah, Uluhiyyah, Asma was-Sifat) with 25+ subtopics, dalils, and rotation logic | M1 | ORIGINAL_REQUEST §R1 |
-| 2 | Carousel State & Memory Tracking | Server & client state tracking for carousel topics, hooks, and premises in `AiMemory` and `localStorage` | M2 | ORIGINAL_REQUEST §R2 |
-| 3 | AI Prompt Diversification & Cliché Exclusion | History-aware prompt construction injecting exclusion lists and banning clichés like "Защо си тук?" | M3 | ORIGINAL_REQUEST §R1, §R2 |
-| 4 | Multi-Cycle Automated Verification Test | Test script simulating >= 3 consecutive generations validating state updates, topic diversity, and 0% hook duplicates | M4 | ORIGINAL_REQUEST §Verification |
+| 1 | Title Sanitizer & Prompt Cleanup (R3) | Strip `[tiktok carousels]` and similar prefixes from titles while preserving Quran/Hadith citations | M1 | ORIGINAL_REQUEST R3 |
+| 2 | Dynamic Background Pool & Rotation (R4) | Serve 8 local background assets from `tiktok_images/` & `tiktok_output/` with multi-slide and inter-generation rotation | M2 | ORIGINAL_REQUEST R4 |
+| 3 | Quran/Hadith Differentiation & Spacing (R1) | Dual-color styling (gold for sacred text, crisp white for commentary) with dedicated vertical interval spacing | M3 | ORIGINAL_REQUEST R1 |
+| 4 | TikTok Safe Zone & Intelligent Wrapping (R2) | Exact 1080x1920 safe zone margins (`SAFE_TOP=300`, `SAFE_BOTTOM=400`, `SAFE_LEFT=100`, `SAFE_RIGHT=220`, `CENTER_X=480`) + auto-fit downscaling | M4 | ORIGINAL_REQUEST R2 |
+| 5 | E2E Testing Suite & Quality Assurance | 4-Tier requirement-driven opaque-box test suite + Tier 5 adversarial coverage hardening | M5 | ORIGINAL_REQUEST Acceptance |
 
 ## Milestones
 | # | Name | Scope | Dependencies | Status |
 |---|------|-------|-------------|--------|
-| 1 | M1: Tawheed Taxonomy Module | Create `src/lib/tawheed-taxonomy.ts` with authentic subtopics, dalils, and rotation utilities | none | DONE |
-| 2 | M2: State Tracking & Memory Persistence | Update `src/lib/memory.functions.ts` to record carousel entries with hooks/topics and sync to client state | M1 | DONE |
-| 3 | M3: Prompt Diversification & Anti-Repetition | Update `src/lib/assistant.functions.ts`, `src/lib/carousel.functions.ts`, and `src/routes/_app/assistant.tsx` | M1, M2 | DONE |
-| 4 | M4: Multi-Cycle Simulation Test & Final Hardening | Create `src/lib/__tests__/verify-tawheed-carousel.test.ts`, add test scripts to `package.json`, run full verification suite and forensic audit | M1, M2, M3 | DONE |
+| M1 | Title Generation Cleanup (R3) | `src/lib/assistant.functions.ts`, `src/components/CarouselRendererButton.tsx`, `src/routes/_app/assistant.tsx` | None | DONE |
+| M2 | Dynamic Background Images (R4) | `src/lib/backgrounds.functions.ts`, `src/components/CarouselRendererButton.tsx` | None | DONE |
+| M3 | Ayah/Hadith Differentiation (R1) | `src/lib/carousel.functions.ts`, `src/lib/assistant.functions.ts`, `src/lib/render-carousel.ts` | None | DONE |
+| M4 | TikTok Safe Zone & Wrapping (R2) | `src/lib/render-carousel.ts`, `src/components/CarouselRendererButton.tsx` | M3 | DONE |
+| M5 | E2E Testing Track & Final Hardening | `src/lib/__tests__/`, `TEST_READY.md`, E2E test execution & verification | M1, M2, M3, M4 | DONE |
 
 ## Interface Contracts
-### `src/lib/tawheed-taxonomy.ts`
-```typescript
-export type TawheedPillar = "rububiyyah" | "uluhiyyah" | "asma_was_sifat";
 
-export interface TawheedTopic {
-  id: string; // e.g. "rububiyyah:qadr"
-  pillar: TawheedPillar;
-  titleBg: string; // e.g. "Ал-Кадр: Божественият указ и предопределение"
-  titleAr?: string;
-  summaryBg: string;
-  hookAngleBg: string;
-  dalilReference: string; // e.g. "Сура Ал-Хадид (57:22-23)"
-  dalilTextBg: string;
-  suggestedVisualMood: string;
-}
-
-export function getTawheedTaxonomy(): TawheedTopic[];
-export function getNextTawheedTopic(recentTopicIds: string[]): TawheedTopic;
-export function formatNegativeExclusionPrompt(recentEntries: Array<{ topic?: string; hook?: string }>): string;
+### M1: Title Sanitizer Contract
+```ts
+export function cleanProposalTitle(rawTitle: string): string;
+// Strips: [tiktok carousels], [tiktok carousel], [tiktok], [карусел], [карусели], [коран / tiktok]
+// Preserves: [Коран 2:255] Аят ал-Курси, [Сахих ал-Бухари #6424]
 ```
 
-### `src/lib/memory.functions.ts`
-```typescript
-export interface CarouselHistoryEntry {
-  id: string;
-  type: "carousel";
-  pillar?: TawheedPillar;
-  subtopicId?: string;
-  title: string;
-  hook: string;
-  premise?: string;
-  timestamp: number;
+### M2: Dynamic Backgrounds Contract
+```ts
+export const LOCAL_BACKGROUND_POOL: string[];
+export const getCarouselBackgrounds: ServerFunction<{ count?: number; cycleIndex?: number }, { backgrounds: string[] }>;
+```
+
+### M3: Slide Segment & Dual-Color Contract
+```ts
+export interface CarouselSlideData {
+  topTitle: string;
+  mainText: string;
+  bottomText: string;
+  footerText: string;
+  imagePrompt: string;
+  quoteText?: string;
+  commentaryText?: string;
+  sourceBadge?: string;
 }
 
-export interface AiMemory {
-  lastUpdated: number;
-  usageHistory: UsageHistoryEntry[];
-  carouselHistory?: CarouselHistoryEntry[];
-}
+export type CarouselSlideOptions = {
+  backgroundUrl: string;
+  topTitle: string;
+  mainText: string;
+  bottomText: string;
+  footerText: string;
+  quoteText?: string;
+  commentaryText?: string;
+};
+```
 
-export function recordCarouselProposalUsage(entry: Omit<CarouselHistoryEntry, "timestamp">): Promise<void>;
-export function getRecentCarouselHistory(limit?: number): Promise<CarouselHistoryEntry[]>;
+### M4: Safe Zone Layout Contract
+```ts
+export const TIKTOK_SAFE_ZONE = {
+  W: 1080,
+  H: 1920,
+  SAFE_TOP: 300,
+  SAFE_BOTTOM: 400,
+  SAFE_LEFT: 100,
+  SAFE_RIGHT: 220,
+  get W_SAFE() { return this.W - this.SAFE_LEFT - this.SAFE_RIGHT; }, // 760px
+  get H_SAFE() { return this.H - this.SAFE_TOP - this.SAFE_BOTTOM; }, // 1220px
+  get CENTER_X() { return this.SAFE_LEFT + this.W_SAFE / 2; },         // 480px
+};
 ```
 
 ## Code Layout
-- `src/lib/tawheed-taxonomy.ts`: Authentic Tawheed domain taxonomy and topic rotation engine
-- `src/lib/memory.functions.ts`: Memory persistence and carousel history recording
-- `src/lib/assistant.functions.ts`: AI assistant orchestration, prompt building, proposal generation
-- `src/lib/carousel.functions.ts`: Carousel generation endpoints
-- `src/routes/_app/assistant.tsx`: UI client interface, quick action triggers, localStorage syncing
-- `src/lib/__tests__/verify-tawheed-carousel.test.ts`: Automated multi-cycle verification test
-- `package.json`: Script definitions for running tests
+- `src/lib/assistant.functions.ts`: Gemini assistant prompts, proposal parsers, and title sanitization.
+- `src/lib/carousel.functions.ts`: 4-slide viral carousel prompt generation, schema, and taxonomy injection.
+- `src/lib/backgrounds.functions.ts`: Local background pool loader and dynamic rotation server function.
+- `src/lib/render-carousel.ts`: Canvas 2D 1080x1920 rendering engine with safe zones, wrapping, auto-fit, and dual-color segmentation.
+- `src/components/CarouselRendererButton.tsx`: Client component rendering slides, dynamic background fetching, ZIP export, Make.com webhook.
+- `src/routes/_app/assistant.tsx`: Main assistant view consuming sanitized titles and carousel proposals.
+- `src/lib/__tests__/`: Automated unit and integration test suite.
+- `tiktok_images/`, `tiktok_output/`: High-resolution vertical background image assets.

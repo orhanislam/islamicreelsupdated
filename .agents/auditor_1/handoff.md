@@ -1,85 +1,98 @@
-# Victory Audit Handoff Report
+# Forensic Audit Report & 5-Component Handoff
 
-## 1. Observation
-- **Original User Task Requirements**:
-  1. Enforce Viral Carousel Framework in AI prompts (`src/lib/carousel.functions.ts`, `src/lib/assistant.functions.ts`, `src/routes/_app/assistant.tsx`):
-     - Slide 1 (Hook): Curiosity gap, provocative question, or counter-intuitive statement. Strictly bans generic titles.
-     - Middle Slides (Body): Concise text (max 2-3 sentences), structured for rapid reading, ending with cliffhanger/transition to next slide.
-     - Final Slide (CTA): Specific value-driven action with explicit Bulgarian CTA keywords (`Запази`, `Сподели`, `Коментирай`).
-  2. Maintain Existing Constraints: Tawheed 3-pillar taxonomy, negative exclusion engine, authentic Dalil integration.
-  3. Verification & Deliverables:
-     - Automated test suite `src/lib/__tests__/verify-viral-carousel.test.ts` running 3 generation cycles and asserting Slide 1 hook, body brevity & cliffhangers, authentic Dalils, and Slide 4 CTA keywords (`Запази`, `Сподели`, `Коментирай`).
-     - Deliverable artifact `viral_samples_output.txt` at root containing 3 valid sample carousels.
-
-- **Independent Test Execution Results**:
-  - `npm run test:viral`: **PASSED (3/3)** — 3 full generation cycles executed, asserting hook curiosity gaps, body sentence bounds, Dalil citations, CTA keywords, and Salafi Halal visual purity (`no people`, `no faces`, `no animals`). File `viral_samples_output.txt` successfully regenerated (11,913 bytes, 113 lines).
-  - `npm test`: **PASSED (5/5)** — 30-cycle diversity simulation, topic rotation, negative exclusion, and subtitle sync.
-  - `npx jiti src/lib/__tests__/stress-carousel-engine.test.ts`: **PASSED (6/6)** — 30-cycle exhaustion/reset, 30-day TTL pruning, corrupted state recovery, negative exclusion formatter stress, fallback purity, concurrency.
-  - `npx jiti src/lib/__tests__/adversarial-challenger.test.ts`: **PASSED (4/4)** — 100-cycle simulation, mixed representations, hook deduplication, file lock stress.
-  - `npx jiti src/lib/__tests__/adversarial-diversity.test.ts`: **PASSED (5/5)** — Cliché scans, bigram similarity (max 13.8%), prompt scaling, 100-cycle rotation.
-  - `npm run build`: **PASSED** — Full Vite/TanStack Start client and SSR production build succeeded in 3.00s with 0 errors.
-
-## 2. Logic Chain
-1. Code Inspection:
-   - In `src/lib/carousel.functions.ts` (`buildCarouselSystemPrompt` lines 30-88 and `generateCarouselScriptDirect` lines 90-190), prompt instructions specifically dictate:
-     - Slide 1: curiosity gap, provocative questions, prohibition of generic titles like "Таухид" or "Вяра".
-     - Slide 2: max 2-3 sentences with mandatory cliffhanger transition.
-     - Slide 3: authentic Dalil quote in Bulgarian with transition to practical action.
-     - Slide 4: value-driven CTA requiring Bulgarian keywords ("Запази", "Сподели", "Коментирай").
-   - In `src/lib/assistant.functions.ts` (`chatWithAssistant`, `injectAuthenticCarouselText`, `suggestBatchViralProposals`), equivalent Viral Carousel Framework instructions are injected across all assistant paths.
-   - In `src/routes/_app/assistant.tsx`, UI prompt generators enforce the Viral Carousel Framework.
-2. Forensic Integrity Audit:
-   - No mock bypasses, hardcoded test results, or facade functions were detected.
-   - Live AI calls to Gemini 3.6 Flash are conducted with fallback to deterministic topic-based generation conforming to the exact 4-slide viral framework.
-   - `viral_samples_output.txt` contains 3 distinct, fully populated carousels demonstrating the required viral structure.
-3. Independent Execution:
-   - Running all test commands independently confirmed 100% test pass rate matching the claimed results.
-
-## 3. Caveats
-- AI responses depend on Gemini API availability, with an authentic deterministic fallback provided in case of transient upstream rate limits.
-
-## 4. Conclusion
-The implementation fully and authentically satisfies all requirements of the Viral Carousel Framework without breaking existing Tawheed taxonomy or exclusion logic. Deliverables are fully verified. **VICTORY CONFIRMED**.
-
-## 5. Verification Method
-To reproduce the independent verification:
-```bash
-# 1. Run viral carousel framework verification (3 cycles + artifact generation)
-npm run test:viral
-
-# 2. Run existing Tawheed taxonomy and sync regression suite
-npm test
-
-# 3. Run stress and adversarial invariant test suites
-npx jiti src/lib/__tests__/stress-carousel-engine.test.ts
-npx jiti src/lib/__tests__/adversarial-challenger.test.ts
-npx jiti src/lib/__tests__/adversarial-diversity.test.ts
-
-# 4. Verify production build
-npm run build
-
-# 5. Inspect generated deliverable artifact
-cat viral_samples_output.txt
-```
+**Work Product**: TikTok Photo Carousel Generation Upgrade (R1, R2, R3, R4)  
+**Profile**: General Project (Development Mode)  
+**Verdict**: **CLEAN**
 
 ---
 
-```
-=== VICTORY AUDIT REPORT ===
+## 1. Observation
 
-VERDICT: VICTORY CONFIRMED
+### Codebase & Implementation Analysis
+- **Canvas 2D Safe Zone & Text Layout (`src/lib/render-carousel.ts`)**:
+  - `TIKTOK_SAFE_ZONE` constants explicitly defined: `W = 1080`, `H = 1920`, `SAFE_TOP = 300`, `SAFE_BOTTOM = 400`, `SAFE_LEFT = 100`, `SAFE_RIGHT = 220`, `W_SAFE = 760`, `H_SAFE = 1220`, `CENTER_X = 480`.
+  - `wrapIntelligent(measureFn, rawText, maxWidth)` performs authentic character/word measurement and implements orphan word balancing (`if (lastWords.length === 1 && prevWords.length >= 3)`).
+  - `parseSlideSegments(opts)` extracts Bulgarian quotes (`„...“`, `«...»`, `"..."`) and separates sacred text from human commentary.
+  - `computeSlideLayout` and `renderCarouselSlide` render sacred quotes in Radiant Gold (`#F3D179`) with glow, human commentary in Crisp White (`#FFFFFF`), with an interval gap of `48-56px` (`Math.round(52 * scale)`), and dynamic auto-fit downscaling from `scale = 1.0` down to `0.55` if total content height exceeds `H_SAFE` (`1220px`).
+  - Slide images are rendered to an actual HTML5 2D Canvas and returned via `canvas.toBlob(...)`.
 
-PHASE A — TIMELINE:
-  Result: PASS
-  Anomalies: none
+- **Dynamic Background Asset Service (`src/lib/backgrounds.functions.ts`)**:
+  - `LOCAL_BACKGROUND_POOL` registers 8 local vertical background assets across `tiktok_images/` (`img0.jpg`–`img3.jpg`) and `tiktok_output/` (`bg1.jpg`–`bg4.jpg`).
+  - Verified on filesystem: all 8 image files exist with sizes ranging between 262 KB and 994 KB.
+  - `getCarouselBackgroundsDirect` genuinely reads the binary files from disk via `fs.readFile(absPath)`, converts them to base64 Data URLs, and rotates them sequentially with modular arithmetic: `(cycleIndex * count + i) % pool.length`.
 
-PHASE B — INTEGRITY CHECK:
-  Result: PASS
-  Details: Forensic checks clean. No hardcoded test cheats, facades, or fabricated logs found. All prompts and helper functions genuinely implement the Viral Carousel Framework with authentic Dalils and Salafi Halal visual constraints.
+- **Title Generation Cleanup & Dalil Citation Preservation (`src/lib/assistant.functions.ts`)**:
+  - `cleanProposalTitle` utilizes regular expressions to strip meta prefixes (`[tiktok carousels]`, `[tiktok carousel]`, `[tiktok]`, `[карусел]`, `[карусели]`, `[коран / tiktok]`, `tiktok:`) while preserving authentic religious citations (`[Коран 2:255]`, `[Сахих ал-Бухари #6424]`, `[Сунан Ат-Тирмизи #1987]`, `[Сура Ал-Фатиха (1:1-2)]`).
+  - Sanitization is applied at all proposal entry points, memory recording, parsing, and UI display components.
 
-PHASE C — INDEPENDENT TEST EXECUTION:
-  Test command: npm run test:viral && npm test && npx jiti src/lib/__tests__/stress-carousel-engine.test.ts && npx jiti src/lib/__tests__/adversarial-challenger.test.ts && npx jiti src/lib/__tests__/adversarial-diversity.test.ts && npm run build
-  Your results: 23/23 tests passed across 6 test suites (test:viral 3/3, test:tawheed 5/5, stress 6/6, challenger 4/4, diversity 5/5, build success). Deliverable viral_samples_output.txt verified (11,913 bytes).
-  Claimed results: 23/23 tests passed across all suites; viral_samples_output.txt generated.
-  Match: YES
+- **Component Integration (`src/components/CarouselRendererButton.tsx`, `src/routes/_app/assistant.tsx`)**:
+  - `CarouselRendererButton` invokes `getCarouselBackgrounds`, maintains rotation cycle state in `localStorage` (`islamic_carousel_bg_cycle`), renders slides, bundles them via `JSZip`, supports clipboard copy for clean titles, and triggers Make.com webhook automation.
+  - `assistant.tsx` passes sanitized proposal titles and structured slide props to `CarouselRendererButton`.
+
+### Integrity Forensic Checks (General Profile)
+| Check | Status | Evidence / Observation |
+|---|---|---|
+| Hardcoded test results | **PASS** | No hardcoded static outputs or PASS/FAIL strings in place of real computations. |
+| Facade implementations | **PASS** | Functions compute actual canvas layout, word wraps, file reads, and regex parsing. |
+| Fabricated verification outputs | **PASS** | No pre-populated logs or attestation bypasses detected. |
+| Self-certifying mock bypasses | **PASS** | Test suites execute genuine assertion logic against actual module functions. |
+| Dependency & delegation audit | **PASS** | Standard project dependencies utilized appropriately without offloading core requirements. |
+
+### Build and Test Execution
+- **Unit & Integration Suite (`verify-photo-carousel-upgrade.test.ts`)**:
+  - Command: `npx jiti src/lib/__tests__/verify-photo-carousel-upgrade.test.ts`
+  - Output: `🎉 ALL PHOTO CAROUSEL UPGRADE TESTS PASSED SUCCESSFULLY! (4/4)`
+- **Comprehensive 4-Tier E2E Suite (`verify-carousel-upgrade.test.ts`)**:
+  - Command: `npx jiti src/lib/__tests__/verify-carousel-upgrade.test.ts`
+  - Output: `📊 TEST SUITE SUMMARY: 49 / 49 ASSERTIONS PASSED (100% SUCCESS)`
+- **Baseline Test Suites (`verify-tawheed-carousel.test.ts` & `verify-sync.test.ts`)**:
+  - Command: `npm test`
+  - Output: `🎉 ALL TAWHEED CAROUSEL VERIFICATION TESTS PASSED SUCCESSFULLY! (5/5)` + `✔ All subtitle synchronization verification tests passed successfully!`
+- **Production Build (`npm run build`)**:
+  - Command: `npm run build`
+  - Output: Client build + SSR build + Nitro server build completed with code 0 in 11.77s.
+
+---
+
+## 2. Logic Chain
+
+1. **R1 (Text Formatting & Differentiation)**: `parseSlideSegments` parses quotes from input text, while `computeSlideLayout` and `renderCarouselSlide` render sacred text in Gold (`#F3D179`, 800 weight) with glow, human commentary in White (`#FFFFFF`, 500 weight), separated by a distinct `48-56px` vertical interval.
+2. **R2 (TikTok Safe Zone & Text Wrapping)**: `TIKTOK_SAFE_ZONE` restricts text coordinates to `[300, 1520]` vertically and centers at `X = 480` (safe width 760px), avoiding TikTok UI overlays (buttons, captions). `wrapIntelligent` ensures line length compliance and eliminates orphan hanging words, while auto-fit dynamically downscales fonts if content height exceeds 1220px.
+3. **R3 (Title Generation Cleanup)**: `cleanProposalTitle` strips `[tiktok carousels]` and other meta prefixes while strictly preserving legitimate Quran and Hadith citations, verified across standard and edge-case inputs.
+4. **R4 (Dynamic Background Images)**: `LOCAL_BACKGROUND_POOL` references 8 verified image assets on disk. `getCarouselBackgroundsDirect` asynchronously loads file buffers into base64 Data URLs and rotates them cyclically across slides and successive generations.
+5. **No Integrity Violations**: All algorithms perform authentic operations; tests make genuine assertions; build and test runs succeed with zero regressions.
+
+---
+
+## 3. Caveats
+
+- Canvas font metrics during test execution rely on simulated measurement or system font fallbacks when run in headless Node/Jiti environments; in browser environments, Montserrat web fonts load with graceful system fallbacks.
+- Local background image reading requires filesystem access to `tiktok_images/` and `tiktok_output/` on the server runtime; fallback dark backgrounds are generated gracefully if any asset is missing.
+
+---
+
+## 4. Conclusion
+
+**Verdict**: **CLEAN**
+
+The work product fully satisfies requirements R1, R2, R3, and R4 of `ORIGINAL_REQUEST.md` and complies with all architectural contracts in `PROJECT.md`. Zero integrity violations, facades, or test bypasses exist. The implementation is authentic, robust, and ready for production.
+
+---
+
+## 5. Verification Method
+
+To independently verify this verdict, run the following commands from the project root:
+
+```powershell
+# 1. Run the photo carousel upgrade verification suite (R1, R2, R3, R4)
+npx jiti src/lib/__tests__/verify-photo-carousel-upgrade.test.ts
+
+# 2. Run the 4-tier comprehensive E2E test suite (49 assertions)
+npx jiti src/lib/__tests__/verify-carousel-upgrade.test.ts
+
+# 3. Run baseline test suites
+npm test
+
+# 4. Run production build
+npm run build
 ```

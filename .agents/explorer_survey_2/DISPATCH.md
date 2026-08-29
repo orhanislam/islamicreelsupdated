@@ -1,11 +1,16 @@
-## 2026-08-26T19:37:13Z
-<USER_REQUEST>
-Read C:\Users\admin\Downloads\Islamic Reels Studio\.agents\ORIGINAL_REQUEST.md.
-Your working directory is C:\Users\admin\Downloads\Islamic Reels Studio\.agents\explorer_survey_2.
-Your task is to investigate state and persistence mechanisms in C:\Users\admin\Downloads\Islamic Reels Studio:
-1. Identify how client-side state / localStorage / sessionStorage / Supabase or backend tables are currently used in the app.
-2. Determine the best architecture for tracking generation history (topic, subtopic, hook, premise, timestamp, generation ID) across sessions.
-3. Map how the generation pipeline can read this state and supply it to the AI prompt / logic to prevent duplicate or near-duplicate hooks and premises.
-4. Note any existing storage helpers, schemas, or hooks that should be leveraged or updated.
-Write your detailed analysis to C:\Users\admin\Downloads\Islamic Reels Studio\.agents\explorer_survey_2\analysis.md and a handoff report to C:\Users\admin\Downloads\Islamic Reels Studio\.agents\explorer_survey_2\handoff.md. Send a completion message back with your findings.
-</USER_REQUEST>
+## 2026-08-29T14:45:49Z
+
+You are Explorer 2 on the Survey phase for Islamic Reels Studio TikTok Photo Carousel Generation Upgrade.
+Working directory: C:\Users\admin\Downloads\Islamic Reels Studio\.agents\explorer_survey_2
+Original Request: C:\Users\admin\Downloads\Islamic Reels Studio\.agents\ORIGINAL_REQUEST.md
+Project Root: C:\Users\admin\Downloads\Islamic Reels Studio
+
+Your Mission:
+Investigate R2 (TikTok Safe Zone & Intelligent Text Wrapping) and carousel rendering architecture.
+1. Read ORIGINAL_REQUEST.md.
+2. Investigate the carousel rendering code:
+   - Search for CarouselRendererButton, CarouselRenderer, Canvas rendering functions, or any component generating the 1080x1920 (9:16) carousel slide images.
+   - Analyze exact layout margins, font sizes, line height, text measurement, and TikTok safe zone requirements (safe margins avoiding right-side action buttons: like, comment, share, bookmark; top header/status bar; bottom caption and audio title).
+   - Analyze how long text is currently handled: does it overflow or clip? How can we implement intelligent text wrapping and dynamic font scaling or multi-line chunking so text is never cut off mid-sentence and stays strictly inside the safe zone?
+3. Document exact file paths, line numbers, calculations, rendering logic, and recommended design.
+4. Write your comprehensive report to C:\Users\admin\Downloads\Islamic Reels Studio\.agents\explorer_survey_2\handoff.md and notify parent when done.

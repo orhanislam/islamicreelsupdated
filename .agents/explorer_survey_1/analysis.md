@@ -1,256 +1,358 @@
-﻿# Deep Architecture Survey: AI Carousel Generation Pipeline & Topic Diversity
+# Comprehensive Survey & Architectural Analysis: R1 (Text Formatting & Differentiation)
 
-## Executive Summary
-This report presents an end-to-end investigation of the AI carousel generation pipeline in **Islamic Reels Studio** (C:\Users\admin\Downloads\Islamic Reels Studio).
-It identifies the exact files, functions, UI controls, API endpoints, prompt templates, and storage mechanisms involved in carousel generation.
-Furthermore, it pinpoints the exact root causes of topic repetition (e.g. Why are you here? / Защо си тук?) and establishes a concrete technical plan to ensure diverse, state-tracked carousel generation centered around the pillars and sub-topics of **Tawheed (Единобожие)**.
+## 1. Executive Summary
+
+Requirement **R1 (Text Formatting & Differentiation)** mandates modifying the carousel generation and rendering logic to clearly differentiate sacred Quran/Hadith text from human commentary using **intervals (line spacing)** and **distinct colors** in the final generated TikTok photo carousel slides.
+
+Our architectural survey of the Islamic Reels Studio codebase examined all files across the prompt generation, parsing, schema, memory, and rendering pipelines:
+- `src/lib/carousel.functions.ts`
+- `src/lib/assistant.functions.ts`
+- `src/lib/render-carousel.ts`
+- `src/components/CarouselRendererButton.tsx`
+- `src/routes/_app/assistant.tsx`
+- `src/lib/memory.functions.ts`
+- `src/lib/tawheed-taxonomy.ts`
+
+### Key Finding:
+Currently, Slide 3 (the Dalil slide) and general carousel slides concatenate the sacred text (e.g. `„Всеки, който се бои от Аллах...“`) and the human commentary/transition (e.g. `А ето как да приложиш това спасение в живота си още днес...`) into a single string in `mainText`. In `render-carousel.ts`, the entire `mainText` is wrapped into lines and drawn on Canvas with identical typography (`700 65px 'Montserrat'`), identical color (`#ffedb3`), and zero vertical separation between divine words and human words.
+
+This analysis provides a complete map of the pipeline, data structures, and a concrete multi-tier design (schema extension + intelligent in-text parser + dual-styled Canvas rendering) that solves R1 with 100% backward compatibility.
 
 ---
 
-## 1. Full Pipeline Architecture Map
+## 2. Complete Pipeline Architecture & File Mapping
 
-The carousel creation feature spans the frontend UI, TanStack Start server functions, Google Gemini LLM & Imagen integrations, canvas rendering, and filesystem/memory persistence:
-
-`
-[User UI: assistant.tsx]
+```
+[User Trigger / AI Chat]
        │
-       ├─► Quick Action Toolbar (Създай Карусел, line 783)
-       ├─► Chat Prompt (e.g., Генерирай ми TikTok карусел..., line 304, 338)
+       ├─► src/routes/_app/assistant.tsx (Quick Action Button: `handleGenerateCarousel` / Chat)
+       │         │
+       │         ▼
+       ├─► src/lib/assistant.functions.ts (`chatWithAssistant`, `suggestBatchViralProposals`)
+       │         │
+       │         ▼ (Calls Gemini AI / Tawheed Taxonomy)
+       │   `injectAuthenticCarouselText()` (Lines 33–113)
+       │         │
+       │         ▼
+       ├─► src/lib/carousel.functions.ts (`generateCarouselScriptDirect`, `buildCarouselSystemPrompt`)
+       │         │
+       │         ▼
+[Carousel Slide Data Schema]
+       │   - topTitle: string
+       │   - mainText: string (Concatenates Dalil + Commentary)
+       │   - bottomText: string
+       │   - footerText: string
+       │   - imagePrompt: string
        │
        ▼
-[TanStack Start Server Function: chatWithAssistant (assistant.functions.ts)]
+[Client UI Preview & Actions]
        │
-       ├─► 1. Read AI Memory & History: getAiMemory() (memory.functions.ts)
-       ├─► 2. Build History Context (historyContext)
-       ├─► 3. Build System Prompt (systemPrompt - includes КАРУСЕЛИ workflow)
-       ├─► 4. Call Google Gemini API: geminiChat() (gemini.ts)
-       │         └─ Model: gemini-3.6-flash (or fallback)
-       ├─► 5. Parse JSON Proposal & Slides
-       ├─► 6. injectAuthenticCarouselText() (assistant.functions.ts)
-       │         └─ If surah/ayah or hadith present, fetches text and updates slides
-       ├─► 7. recordProposalUsages() (memory.functions.ts)
-       │         └─ BUG: Currently ignores carousel proposals!
-       ├─► 8. Auto-save Chat History: assistant_chat_history.json
-       │
-       ▼
-[Client Response & UI Render: assistant.tsx (line 963)]
-       │
-       ▼
-[Carousel Rendering: CarouselRendererButton.tsx]
-       │
-       ├─► 1. generateBackground() (backgrounds.functions.ts)
-       │         └─ geminiGenerateImage() (gemini.ts via Google Imagen 3)
-       ├─► 2. renderCarouselSlide() (render-carousel.ts)
-       │         └─ HTML5 Canvas 1080x1920 (Golden typography, Montserrat font)
-       ├─► 3. ZIP Export (jszip) or Make.com Webhook (triggerMakeWebhook)
-`
+       ├─► src/routes/_app/assistant.tsx (Lines 998–1013: 4-Slide Card Grid)
+       │         │
+       │         ▼
+       └─► src/components/CarouselRendererButton.tsx (`handleGenerate` / `handleSendToMake`)
+                 │
+                 ▼
+[Canvas Rendering Engine]
+       └─► src/lib/render-carousel.ts (`renderCarouselSlide`)
+                 │
+                 ├─► HTML5 Canvas (1080x1920)
+                 ├─► Draws Background + Dark Vignette Overlay
+                 ├─► Draws `topTitle` (#f3d179)
+                 ├─► Draws `mainText` (#ffedb3 - uniform, no interval, no quote differentiation)
+                 └─► Draws `bottomText` (#f3d179)
+```
 
 ---
 
-## 2. Codebase Breakdown: Exact Files, Functions & Prompts
+## 3. Detailed File & Interface Investigation
 
-### A. Client-Side Entry Points & UI Controls
+### 3.1 `src/lib/carousel.functions.ts`
+- **Interfaces**:
+  ```ts
+  export interface CarouselSlideData {
+    topTitle: string;
+    mainText: string;
+    bottomText: string;
+    footerText: string;
+    imagePrompt: string;
+  }
 
-#### 1. src/routes/_app/assistant.tsx
-- **Location 1 (Quick Action Toolbar - Lines 782–840)**:
-  - **Component**: Carousel Quick Action Card.
-  - **Trigger**: Създай Карусел button.
-  - **Handler**: Inline onClick sending static carouselPrompt to chatWithAssistant:
-    `	s
-    const carouselPrompt = Генерирай ми TikTok карусел на силна ислямска тема. ВАЖНО: 1) Провери предишните съобщения и избери НАПЪЛНО НОВА ТЕМА, която НЕ Е била генерирана досега в този чат! 2) ЗАДЪЛЖИТЕЛНО се увери, че всичко (текст, хадиси, цитати) е строго в съответствие със Салафитското учение (Ахлу Сунна уал Джама'а, според разбирането на Салафите) без никакви нововъведения (бид'а) и слаби хадиси. ТИ СИ ПРОФЕСИОНАЛЕН И СТРИКТЕН ПРЕВОДАЧ НА КОРАН И СУННА. ПРЕВЕЖДАЙ АЯТИТЕ И ХАДИСИТЕ БУКВАЛНО, ТОЧНО И ПРОФЕСИОНАЛНО ОТ АРАБСКИ НА БЪЛГАРСКИ ЕЗИК, ЗАПАЗВАЙКИ ОРИГИНАЛНИЯ ИМ БОЖЕСТВЕН СМИСЪЛ БЕЗ ДА ДОБАВЯШ СОБСТВЕНИ ИНТЕРПРЕТАЦИИ. ЗАДЪЛЖИТЕЛНО ги взимай САМО от Quran.com и Sunnah.com! Избери тема свързана с Таухид (Единобожието), величието на Аллах, историите на пророците, чудесата в Корана или смисъла на живота. Избягвай депресиращи теми и стрес. Използвай типа 'carousel'.;
-    `
-  - **History Passing**: messages.slice(1).map(...). Note that line 799 contains /* Removed user message append */, so user prompts are not added to messages before sending.
+  export interface GenerateCarouselInput {
+    topic?: string;
+    recentTopicIds?: string[];
+    pillar?: "rububiyyah" | "uluhiyyah" | "asma_was_sifat";
+  }
+  ```
+- **Prompt Definition (`buildCarouselSystemPrompt`, lines 27–88)**:
+  - Slide 1: Hook (`topTitle`: dramatic label `[ТАЙНАТА НА ...]`, `mainText`: curiosity gap hook, `bottomText`: swipe prompt, `footerText`: `1/4 • Плъзнете наляво`).
+  - Slide 2: Context (`topTitle`: subtitle `БОЖЕСТВЕНИЯТ ЗАКОН`, `mainText`: 2-3 sentences theological context + cliffhanger).
+  - Slide 3: Dalil (`topTitle`: citation `${chosenTopic.dalilReference}`, `mainText`: `Цитат на самия Аят или Хадис в кавички на правилен български език ("${chosenTopic.dalilTextBg}"), с преход към действието.`).
+  - Slide 4: CTA (`topTitle`: `ДЕЙСТВИЕ И ДУА`, `mainText`: short Du'a/action, `bottomText`: CTA with "Запази", "Сподели").
+- **Fallback Slides (lines 165–195)**:
+  - Slide 3 fallback:
+    ```ts
+    {
+      topTitle: `[${chosenTopic.dalilReference}]`,
+      mainText: `${chosenTopic.dalilTextBg} А ето как да приложиш това спасение в живота си още днес...`,
+      bottomText: "Плъзни за духовното решение 👉",
+      footerText: "3/4 • Плъзнете наляво",
+      imagePrompt: `...`
+    }
+    ```
 
-- **Location 2 (Helper Handler - Lines 300–336)**:
-  - handleGenerateCarouselClick:
-    `	s
-    const userText = Генерирай ми TikTok карусел с 4 слайда. Нека бъде на интересна Ислямска тема. Използвай type: 'carousel'.;
-    `
-- **Location 3 (Message Rendering - Lines 963–978)**:
-  - Detects m.proposal.type === 'carousel' && m.proposal.carouselSlides.
-  - Renders 4 slide preview cards with 	opTitle, mainText, imagePrompt.
-  - Mounts <CarouselRendererButton slides={m.proposal.carouselSlides} title={m.proposal.title} />.
+### 3.2 `src/lib/assistant.functions.ts`
+- **Interfaces (`VideoProposal`, lines 13–31)**:
+  ```ts
+  export type VideoProposal = {
+    title: string;
+    type: "hadith" | "quran" | "tiktok" | "general" | "carousel";
+    collection?: string;
+    number?: number;
+    surah?: number;
+    ayah?: number;
+    count?: number;
+    summaryBg: string;
+    themeBg: string;
+    searchQuery: string;
+    tiktokTheme?: "hormozi" | "emerald" | "neon" | "classic";
+    bRollInterval?: number;
+    useBRoll?: boolean;
+    subtitlePosition?: "bottom" | "middle" | "lower-third";
+    quality?: "high" | "720p";
+    carouselSlides?: {
+      topTitle: string;
+      mainText: string;
+      bottomText: string;
+      footerText: string;
+      imagePrompt: string;
+    }[];
+  };
+  ```
+- **Post-Processing (`injectAuthenticCarouselText`, lines 33–113)**:
+  - Fetches authentic text from `fetchAyah` (Quran) or `fetchSunnahHadith` (Hadith) via Sunnah.com / Quran.com.
+  - Translates to Bulgarian via `translateToBulgarian`.
+  - Injects Dalil into Slide 3 (lines 87–97):
+    ```ts
+    const flatBulgarian = bulgarian.replace(/\r?\n|\r/g, " ");
+    const cleanDalil = flatBulgarian.replace(/(^|\s+)(?:\(\d+\)|\[\d+\]|\d+\.)\s*/g, "$1").trim();
+    const dalilSlide = {
+      topTitle: `[${reference}]`,
+      mainText: `„${cleanDalil}“ А ето как да приложиш това спасение в живота си още днес...`,
+      bottomText: 'Плъзни за духовното решение 👉',
+      footerText: '3/4 • Плъзнете наляво',
+      imagePrompt: dalilPrompt,
+    };
+    ```
 
----
-
-### B. Server-Side Pipeline & AI Generation
-
-#### 1. src/lib/assistant.functions.ts
-- **chatWithAssistant (Lines 94–258)**:
-  - TanStack Start server function receiving { prompt: string; history: { role: string; content: string }[] }.
-  - Loads memory via getAiMemory().
-  - Builds historyContext from memory.usageHistory (Lines 98–99).
-  - System prompt (Lines 111–185) defines the Carousel schema:
-    `
-    КАРУСЕЛИ (CAROUSEL):
-    Ако потребителят иска карусел (слайдове със снимки за TikTok/Reels): 
-    Върни proposal с type: carousel, title, summaryBg, и задължително включи carouselSlides: масив от обекти, всеки с { topTitle, mainText, bottomText, footerText, imagePrompt }. 
-    СПАЗВАЙ ТОЗИ УПДАТНАТ WORKFLOW ЗА СЛАЙДОВЕТЕ:
-    1. Слайд 1 (Куката): Завладяващо, провокиращо размисъл твърдение/въпрос на български език, адресиращо универсална нужда или трудност. Текстът се запазва умишлено кратък. imagePrompt: ТРЯБВА да бъде мрачно и драматично (dark, shadowy, cinematic), НО добави и специфичен красив природен пейзаж, съобразен с темата (напр. stormy ocean waves, dark misty mountains, desert at night).
-    2. Слайдове 2 до N-1 (Същинска стойност): Разгръщане на съдържанието (Аят, Хадис, Сунна) стъпка по стъпка. АБСОЛЮТНО ЗАБРАНЕНО Е ПРЕТРУПВАНЕТО с много текст на един екран! Ако хадисът има 3 стъпки, отдели им отделни слайдове. imagePrompt: визуалната естетика постепенно става по-светла (gradually brighter, emerging light), като запазиш същия природен пейзаж от Слайд 1.
-    ВАЖНО ЗА СЛАЙДОВЕТЕ (ИЗТОЧНИК И РАЗДЕЛЯНЕ):
-    - ЗАДЪЛЖИТЕЛНО изписвай точния източник и номер на Хадиса/Аята (напр. Сахих Тирмизи #2344 или Коран 2:255) в topTitle или bottomText на съответните слайдове. ПОТРЕБИТЕЛЯТ ИЗРИЧНО ИСКА ДА ВИЖДА НОМЕРАТА НА ХАДИСИТЕ.
-    - Ако потребителят иска визуално разделение между Аят/Хадис и твой коментар, СТРИКТНО ЗАБРАНЕНО е да използваш markdown линии (--- или ___), емоджита (💡, 📖) или буквални фрази като Наш пояснителен текст:. ТЕ ЩЕ СЧУПЯТ ДИЗАЙНА! Вместо това, използвай JSON полетата: сложи Аята в mainText (в кавички), а твоят коментар в bottomText. Рендърът автоматично ще ги раздалечи красиво.
-    3. Последен Слайд N (Кулминация и Призив): Окончателната духовна развръзка, мир или върховно обещание. imagePrompt: изцяло окъпан в топла, сияйна и божествена златна светлина (bathed in warm golden divine light), същият пейзаж напълно озарен от слънцето. ЗАДЪЛЖИТЕЛНО завърши с призив за действие (CTA) в долната част на екрана (bottomText или footerText), подтикващ зрителите да последват или споделят.
-    `
-- **injectAuthenticCarouselText (Lines 32–92)**:
-  - If proposal has surah && ayah or collection && number, fetches text and splits into sentence slides, preserving hook (slide 0) and CTA (slide N-1).
-- **suggestBatchViralProposals (Lines 342–461)**:
-  - Supports 	argetType === carousel: adds instruction:
-    ИЗКЛЮЧИТЕЛНО ВАЖНО: ЗАДЪЛЖИТЕЛНО генерирай ВСИЧКИ предложения като тип КАРУСЕЛ (type: 'carousel') с полетата за слайдове (carouselSlides)!
-- **Daily Cron Job (Lines 934–955)**:
-  - Uses 
-ode-cron to schedule 9:00 AM daily plan generation with 	argetType: 'carousel'.
-
-#### 2. src/lib/carousel.functions.ts
-- **generateCarouselScript (Lines 21–38)**:
-  - Server function taking 	opic: string.
-  - System prompt PROMPT_SYSTEM (Lines 4–19) defining 4-slide structure:
-    1. Хук (въпрос или интересна мисъл)
-    2. Обяснение или контекст
-    3. Доказателство от Корана или Сунната
-    4. Решение, Дуа или Призив
-
----
-
-### C. State & Memory Management
-
-#### src/lib/memory.functions.ts
-- **Data Structures (Lines 6–18)**:
-  `	s
-  export type UsageHistoryEntry = {
-    type: quran | hadith;
-    identifier: string; // e.g. quran:2:255 or hadith:nawawi40:1
-    timestamp: number;
+### 3.3 `src/lib/render-carousel.ts`
+- **Function Signature & Options**:
+  ```ts
+  export type CarouselSlideOptions = {
+    backgroundUrl: string;
+    topTitle: string;
+    mainText: string;
+    bottomText: string;
+    footerText: string;
   };
 
-  export type AiMemory = {
-    userName?: string;
-    preferredStyle?: hormozi | emerald | neon | classic;
-    customInstructions: string[];
-    learnedFacts: string[];
-    usageHistory?: UsageHistoryEntry[];
+  export async function renderCarouselSlide(opts: CarouselSlideOptions): Promise<Blob>
+  ```
+- **Rendering Mechanism (Lines 69–180)**:
+  1. Creates 1080x1920 `<canvas>` with 2D context.
+  2. Loads background image (`loadImage`), scales with aspect ratio cover (`sx, sy, sw, sh`).
+  3. Applies dark vertical gradient overlay (`rgba(0,0,0,0.5)` to `rgba(0,0,0,0.8)`).
+  4. Wraps text with `wrap(ctx, text, maxW)` where `maxW = 820`.
+  5. Computes layout heights:
+     - `lhTitle = 95; lhMain = 85; lhBottom = 65;`
+     - `gapTitleMain = 80; gapMainBottom = 60;`
+  6. Draws lines:
+     - `titleLines`: font `800 85px 'Montserrat'`, fillStyle `#f3d179` (Gold).
+     - `mainLines`: font `700 65px 'Montserrat'`, fillStyle `#ffedb3` (Single pale gold color for all lines).
+     - `bottomLines`: font `700 50px 'Montserrat'`, fillStyle `#f3d179` (Gold).
+
+### 3.4 `src/components/CarouselRendererButton.tsx`
+- Receives `{ slides: Slide[], title: string }`.
+- In `_renderAllSlides` (lines 29–45):
+  - Calls `generateBackground({ data: { prompt: slide.imagePrompt } })`.
+  - Calls `renderCarouselSlide` for each slide with `{ backgroundUrl, topTitle, mainText, bottomText, footerText }`.
+  - Zips all slide blobs into `${title}_Carousel.zip` or sends base64 slides to Make.com webhook.
+
+---
+
+## 4. Root Cause Analysis for R1 (Lack of Differentiation)
+
+1. **Monolithic `mainText` Representation**:
+   Both Gemini AI prompt generation and `injectAuthenticCarouselText` assemble the authentic Quran/Hadith quote and the human commentary/transition into a single contiguous string inside `slide.mainText`.
+
+2. **Homogeneous Canvas Rendering**:
+   In `render-carousel.ts`, `mainText` is split only by `\n` or wrapped across words into `mainLines`. The rendering loop iterates over all lines in `mainLines` and applies the exact same font (`700 65px 'Montserrat'`), line height (`lhMain = 85px`), and fill color (`#ffedb3`).
+
+3. **Absence of Vertical Interval (Spacing)**:
+   There is no separate vertical gap between the end of the quote and the beginning of the commentary. They look like a single uninterrupted sentence.
+
+4. **Theological & UX Impact**:
+   - The user cannot distinguish where the sacred words of Allah or the Prophet ﷺ end and where the human commentary begins.
+   - On mobile screens (TikTok carousel), the eye does not catch the quote as the focal authority of the slide.
+
+---
+
+## 5. Recommended Technical Design for R1
+
+To achieve complete visual differentiation with zero regression, we recommend a **Dual-Tier Architecture**:
+1. **Schema Extension (Explicit Fields)**
+2. **Resilient Delimiter & Quote Parser (In-Text Fallback)**
+3. **Canvas Multi-Segment Dual-Color & Interval Renderer**
+
+### 5.1 Enhanced Slide Interface
+Extend `CarouselSlideData` in `carousel.functions.ts` and `CarouselSlideOptions` in `render-carousel.ts`:
+```ts
+export interface CarouselSlideData {
+  topTitle: string;
+  mainText: string;
+  bottomText: string;
+  footerText: string;
+  imagePrompt: string;
+  
+  // R1 Holy Text Differentiation Fields (Optional for backward compatibility)
+  quoteText?: string;        // Exact Quran Ayah or Sahih Hadith text (e.g. "„Не сполита земята...“")
+  commentaryText?: string;   // Human commentary or transition (e.g. "А ето как да приложиш...")
+  sourceBadge?: string;      // Explicit citation badge (e.g., "[Сура Ал-Хадид: 22-23]")
+}
+
+export type CarouselSlideOptions = {
+  backgroundUrl: string;
+  topTitle: string;
+  mainText: string;
+  bottomText: string;
+  footerText: string;
+  
+  // R1 Differentiation Options
+  quoteText?: string;
+  commentaryText?: string;
+  sourceBadge?: string;
+};
+```
+
+### 5.2 Intelligent Text Segmentation Parser (`parseSlideSegments`)
+A pure helper function in `render-carousel.ts` (or `carousel.functions.ts`):
+```ts
+export interface SlideTextSegments {
+  isQuoteSlide: boolean;
+  quoteText?: string;
+  commentaryText?: string;
+  generalText?: string;
+}
+
+export function parseSlideSegments(opts: { mainText: string; quoteText?: string; commentaryText?: string }): SlideTextSegments {
+  // Tier 1: Explicit fields provided
+  if (opts.quoteText && opts.quoteText.trim()) {
+    return {
+      isQuoteSlide: true,
+      quoteText: opts.quoteText.trim(),
+      commentaryText: opts.commentaryText?.trim() || undefined,
+    };
+  }
+
+  const raw = (opts.mainText || "").trim();
+  if (!raw) return { isQuoteSlide: false, generalText: "" };
+
+  // Tier 2: In-Text Bulgarian Quotation Mark Detection: „ ... “ or " ... " or « ... »
+  const quoteMatch = raw.match(/^([„"«][\s\S]+?["”»])\s*([\s\S]*)$/);
+  if (quoteMatch) {
+    const extractedQuote = quoteMatch[1].trim();
+    const extractedCommentary = quoteMatch[2].trim();
+    return {
+      isQuoteSlide: true,
+      quoteText: extractedQuote,
+      commentaryText: extractedCommentary || undefined,
+    };
+  }
+
+  // Tier 3: Delimiter detection (\n\n or transition markers)
+  if (raw.includes("\n\n")) {
+    const parts = raw.split(/\n\n+/);
+    return {
+      isQuoteSlide: true,
+      quoteText: parts[0].trim(),
+      commentaryText: parts.slice(1).join("\n\n").trim(),
+    };
+  }
+
+  // Fallback: General standard text (Slides 1, 2, 4 without quotes)
+  return {
+    isQuoteSlide: false,
+    generalText: raw,
   };
-  `
-- **Persistence**: Saved to ~/.islamicreels_jobs/assistant_memory.json.
-- **ecordProposalUsages (Lines 67–99)**:
-  `	s
-  for (const p of proposals) {
-    if (!p) continue;
-    let identifier = ";
- if (p.type === quran && p.surah && p.ayah) {
- identifier = quran::;
- } else if (p.type === hadith && p.collection && p.number) {
- identifier = hadith::;
- }
+}
+```
 
- if (identifier) {
- if (!history.find(x => x.identifier === identifier)) {
- history.push({ type: p.type, identifier, timestamp: now });
- hasNew = true;
- }
- }
- }
- `
+### 5.3 Canvas Rendering Engine Specifications (`render-carousel.ts`)
 
----
+#### Visual Styling Matrix:
+| Element | Typography & Size | Color | Line Height | Role & Meaning |
+|---|---|---|---|---|
+| **Top Title / Badge** | `800 80px 'Montserrat'` | `#F3D179` (Gold) | 90px | Hook / Category / Dalil Reference |
+| **Holy Quran / Hadith Text** | `700 62px 'Montserrat'` | `#FFD700` (Radiant Divine Gold) | 82px | Sacred revelation, wrapped in `„...“` |
+| **Interval Divider** | Blank gap: `55px` (or optional subtle separator) | N/A | 55px | Explicit visual boundary |
+| **Human Commentary / Transition** | `600 48px 'Montserrat'` | `#E2E8F0` / `#FFFFFF` (Soft Crisp White) | 64px | Human reflection, action transition |
+| **General Body Text** (Non-quote slides) | `700 65px 'Montserrat'` | `#FFEDB3` (Pale Gold / Warm Cream) | 85px | Body content for Slides 1, 2, 4 |
+| **Bottom Swipe / Action** | `700 50px 'Montserrat'` | `#F3D179` (Gold) | 65px | TikTok swipe prompt / CTA |
 
-### D. Carousel Slide Rendering & Export
+#### Layout Calculation:
+```ts
+// Calculate heights
+let totalH = titleH;
+if (segments.isQuoteSlide) {
+  const quoteH = quoteLines.length * lhQuote;
+  const commentaryH = commentaryLines.length * lhCommentary;
+  totalH += quoteH;
+  if (commentaryH > 0) {
+    totalH += gapQuoteCommentary + commentaryH;
+  }
+} else {
+  totalH += generalLines.length * lhGeneral;
+}
+if (bottomH > 0) totalH += gapMainBottom + bottomH;
 
-#### 1. src/components/CarouselRendererButton.tsx
-- Iterates over slides.
-- Calls generateBackground({ data: { prompt: slide.imagePrompt } }) to get AI generated background.
-- Calls enderCarouselSlide(...) from src/lib/render-carousel.ts.
-- Uses JSZip to bundle Slide_1.png .. Slide_4.png into ${title}_Carousel.zip.
-- Or triggers Make.com webhook via riggerMakeWebhook.
-
-#### 2. src/lib/render-carousel.ts
-- Dimensions: 1080 x 1920 (9:16).
-- Loads background image, applies dark gradient overlay.
-- Renders opTitle (font size 85px, gold #f3d179), mainText (65px, light gold #ffedb3), ottomText (50px, gold #f3d179).
-- Shifts text slightly left (centerX = (W / 2) - 40) to avoid TikTok UI overlay buttons.
+// Dynamic centering inside safe area
+let currentY = (H - totalH) / 2 - 40;
+```
 
 ---
 
-## 3. Detailed Root Cause Analysis: Why Repetitive Topics (e.g. Why are you here?) Occur
+## 6. Prompt & Post-Processing Adjustments
 
-### Root Cause 1: Complete Absence of Carousel Topic State Tracking
-- In src/lib/memory.functions.ts line 80, ecordProposalUsages **only** checks for p.type === quran and p.type === hadith.
-- Proposals of ype === carousel (or generic conceptual topics) produce an empty identifier = .
-- Consequently, memory.usageHistory is never updated with carousel topics, titles, or hooks.
-- When chatWithAssistant is called on the next request, historyList and historyContext contain **zero** past carousel topics. The LLM has zero awareness of what carousels were generated in earlier sessions or minutes ago.
+### 6.1 `src/lib/carousel.functions.ts` (`buildCarouselSystemPrompt`)
+Update Slide 3 instruction:
+```
+3. Слайд 3 (Тяло 2 / Автентичен Далил от Коран или Сахих Хадис):
+   - topTitle: Точен цитат и номер (напр. "${chosenTopic.dalilReference}").
+   - mainText: Постави свещения цитат в кавички „${chosenTopic.dalilTextBg}“, последван от 1 празен ред и краткото човешко преходно изречение към действието.
+```
 
-### Root Cause 2: Static, Broad Prompt with Open Existential Keywords
-- In src/routes/_app/assistant.tsx line 798, every click sends the exact same static text:
- ... Избери тема свързана с Таухид (Единобожието), величието на Аллах, историите на пророците, чудесата в Корана или смисъла на живота. Избягвай депресиращи теми и стрес. Използвай типа 'carousel'.
-- Key issues with this prompt:
- 1. The phrase смисъла на живота (meaning of life) is a classic trigger for existential rhetorical questions in LLMs.
- 2. The prompt does not supply a specific sub-topic or dynamic seed.
- 3. The prompt is 100% static across all clicks.
-
-### Root Cause 3: Lack of Granular Taxonomy for Tawheed Sub-Topics
-- In Islamic theology, **Tawheed** has rich, diverse divisions:
- - **Tawheed Ar-Rububiyyah (Единственост в Господството)**: All-Creating (Al-Khaliq), All-Sustaining (Ar-Razzaq - provision/rizq), Sole Controller of destiny and nature (Al-Mudabbir), Life & Death.
- - **Tawheed Al-Uluhiyyah / Al-Ibadah (Единственост в Поклонението)**: Sincerity (Ikhlas), Pure Du'a to Allah alone, Trust/Reliance (Tawakkul), Fear & Hope (Khawf & Raja), Negation of minor shirk (Riya / ostentation, superstitions, amulets), Conditions of La ilaha illa Allah.
- - **Tawheed Al-Asma was-Sifat (Единственост в Имената и Качествата)**: Affirming divine names/attributes without distortion or comparison (Al-Aliyy, Al-Hakim, Al-Ghafur, Ar-Rahim, As-Sami', Al-Baseer, Al-Qayyum).
-- Because neither the frontend prompt nor the backend system prompt specifies this taxonomy, Gemini falls back to its default statistical attractor for meaning of life: **Защо си тук? / Why are you here?**.
-
-### Root Cause 4: Open Hook Instructions in System Prompt
-- In src/lib/assistant.functions.ts line 136:
- 1. Слайд 1 (Куката): Завладяващо, провокиращо размисъл твърдение/въпрос на български език, адресиращо универсална нужда или трудност.
-- Without negative constraints prohibiting generic questions like Защо си тук?, the model repeatedly generates the same existential hook.
+### 6.2 `src/lib/assistant.functions.ts` (`injectAuthenticCarouselText`)
+Update Dalil slide construction:
+```ts
+const dalilSlide = {
+  topTitle: `[${reference}]`,
+  mainText: `„${cleanDalil}“\n\nА ето как да приложиш това спасение в живота си още днес...`,
+  quoteText: `„${cleanDalil}“`,
+  commentaryText: `А ето как да приложиш това спасение в живота си още днес...`,
+  bottomText: 'Плъзни за духовното решение 👉',
+  footerText: '3/4 • Плъзнете наляво',
+  imagePrompt: dalilPrompt,
+};
+```
 
 ---
 
-## 4. Architectural & Implementation Blueprint for Resolution
+## 7. Verification Strategy
 
-To fulfill **R1 (Diverse Tawheed Topics)** and **R2 (State-Tracked Topic Generation)**:
-
-### 1. State-Tracked Carousel History (memory.functions.ts & ssistant.tsx)
-- **Extend UsageHistoryEntry**:
- ` s
- export type UsageHistoryEntry = {
- type: quran | hadith | carousel | tiktok;
- identifier: string; // e.g. carousel:tawheed_rububiyyah_rizq or carousel:title:<title>
- title?: string;
- topicCategory?: string;
- timestamp: number;
- };
- `
-- **Update ecordProposalUsages**:
- Handle p.type === carousel by recording sanitized slug, title, and Tawheed category into memory.usageHistory.
-- **Client-Side Fallback Tracking**:
- Add localStorage tracking (islamic_used_carousel_topics) in ssistant.tsx (mirroring usedQuranKeys and usedHadithKeys).
-
-### 2. Comprehensive Tawheed Sub-Topic Catalog & Rotation Engine
-- Create a structured catalogue of at least 15–20 distinct Tawheed sub-topics across:
- 1. *Ar-Rububiyyah* (e.g. Rizq & Provision from Ar-Razzaq, Flawless Creation of the Heavens, Absolute Sovereignty).
- 2. *Al-Uluhiyyah* (e.g. Sincerity/Ikhlas, Power of Du'a alone, Tawakkul in hardships, Escaping Riya, The 7 conditions of La ilaha illa Allah).
- 3. *Al-Asma was-Sifat* (e.g. Al-Baseer & As-Sami' watching over you, Al-Hakim's wisdom behind delays, Al-Ghafur forgiving all sins, Al-Aliyy's loftiness).
- 4. *Tawheed of the Prophets* (e.g. Ibrahim's destruction of idols, Musa calling Pharaoh to Tawheed, Yusuf in prison).
-- Implement a deterministic/randomized non-repeating picker that filters out recently used topics and feeds the chosen sub-topic directly into the prompt.
-
-### 3. Prompt Refactoring
-- In src/routes/_app/assistant.tsx:
- - Dynamically construct carouselPrompt with the chosen Tawheed sub-topic, theological category, and negative constraints:
- ИЗРИЧНО ЗАБРАНЕНО Е да повтаряш клиширани въпроси като 'Защо си тук?', 'Каква е целта на живота ти?' или 'Защо си създаден?'.
- - Pass the list of previously generated topics to the prompt.
-- In src/lib/assistant.functions.ts:
- - Update historyContext to include recent carousel topics in the ban list.
- - Refine the carousel workflow instructions to require hooks directly tailored to the specific Tawheed sub-theme.
-
----
-
-## 5. Summary Table of Pipeline Components
-
-| Component | File Path | Function / Constant | Role & Responsibilities |
-|---|---|---|---|
-| **Quick Action Button** | src/routes/_app/assistant.tsx | Carousel Card onClick (line 793) | Client trigger for carousel creation |
-| **Chat Server Handler** | src/lib/assistant.functions.ts | chatWithAssistant (line 94) | Coordinates memory, prompts, Gemini LLM call |
-| **Authentic Text Injector** | src/lib/assistant.functions.ts | injectAuthenticCarouselText (line 32) | Fetches Quran/Hadith text and builds slide text |
-| **Memory & History State** | src/lib/memory.functions.ts | getAiMemory, ecordProposalUsages | Reads/persists used topics to ssistant_memory.json |
-| **Standalone Script Gen** | src/lib/carousel.functions.ts | generateCarouselScript (line 21) | 4-slide JSON script generator |
-| **LLM Gateway** | src/lib/gemini.ts | geminiChat (line 29) | Google Gemini API completions with fallback |
-| **Background AI Generator** | src/lib/backgrounds.functions.ts | generateBackground (line 44) | Generates vertical backgrounds via Imagen 3 |
-| **Slide Canvas Renderer** | src/lib/render-carousel.ts | enderCarouselSlide (line 69) | 1080x1920 2D Canvas typography renderer |
-| **Carousel UI Action Button** | src/components/CarouselRendererButton.tsx | CarouselRendererButton (line 23) | Handles ZIP download and Make.com export |
+1. **Automated Unit & Integration Tests**:
+   - `npm test` (`verify-tawheed-carousel.test.ts` & `verify-sync.test.ts`).
+   - `npm run test:viral` (`verify-viral-carousel.test.ts`).
+   - New assertions in test suite checking that Slide 3 contains quote delimiters or explicit `quoteText` / `commentaryText`.
+2. **Canvas Rendering Verification**:
+   - Verify `parseSlideSegments` correctly separates quotes from commentary for diverse inputs (Bulgarian `„...“`, quotes with transitions, multi-line quotes).
+   - Verify canvas render produces valid PNG blobs and correct line wrapping within 820px safe width.

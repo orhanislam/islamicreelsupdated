@@ -1,81 +1,129 @@
-﻿# 5-Component Handoff Report: Carousel Generation Pipeline & Topic Repetition Analysis
+# Handoff Report — Explorer 1 (Survey: R1 Text Formatting & Differentiation)
 
 ## 1. Observation
-1. **Frontend Carousel UI Trigger**:
-   - In src/routes/_app/assistant.tsx lines 783–840, the ГЕНЕРАТОР НА TIKTOK КАРУСЕЛИ button executes an inline click handler that issues a static request to TanStack Start server function chatWithAssistant:
-     const carouselPrompt = Генерирай ми TikTok карусел на силна ислямска тема. ВАЖНО: 1) Провери предишните съобщения и избери НАПЪЛНО НОВА ТЕМА... Избери тема свързана с Таухид (Единобожието), величието на Аллах, историите на пророците, чудесата в Корана или смисъла на живота. Избягвай депресиращи теми и стрес. Използвай типа 'carousel'.;
-   - A helper handler handleGenerateCarouselClick (lines 300–336) also defines a static prompt:
-     const userText = Генерирай ми TikTok карусел с 4 слайда. Нека бъде на интересна Ислямска тема. Използвай type: 'carousel'.;
-2. **Server-Side Proposal Handling**:
-   - In src/lib/assistant.functions.ts lines 94–258 (chatWithAssistant), Gemini produces proposals with 	ype: carousel and carouselSlides: [{ topTitle, mainText, bottomText, footerText, imagePrompt }].
-   - On lines 219–222:
-     wait injectAuthenticCarouselText(proposalsToRecord);
-     wait recordProposalUsages({ data: { proposals: proposalsToRecord } }).catch(() => {});
-3. **State & Memory Omission**:
-   - In src/lib/memory.functions.ts lines 67–99 (ecordProposalUsages):
-     `	s
-     for (const p of proposals) {
-       if (!p) continue;
-       let identifier = ";
- if (p.type === quran && p.surah && p.ayah) {
- identifier = quran::;
- } else if (p.type === hadith && p.collection && p.number) {
- identifier = hadith::;
- }
- if (identifier) { ... }
- }
- `
- When p.type === carousel, identifier is empty. Carousels are **never** recorded in memory.usageHistory or ssistant_memory.json.
-4. **Prompt Steering toward Clichés**:
- - The UI prompt explicitly specifies смисъла на живота (meaning of life).
- - In src/lib/assistant.functions.ts line 136, Slide 1 is instructed to be a *Завладяващо, провокиращо размисъл твърдение/въпрос... адресиращо универсална нужда или трудност*.
- - Without category-level sub-topic injection (e.g. Ar-Rububiyyah, Al-Uluhiyyah, Al-Asma was-Sifat) or negative constraints, Gemini defaults to rhetorical existential hooks (Защо си тук? / Why are you here?).
-5. **Rendering & Export Infrastructure**:
- - src/components/CarouselRendererButton.tsx iterates over slides, fetches AI background images via generateBackground (src/lib/backgrounds.functions.ts / gemini.ts using Google Imagen 3), renders 1080x1920 canvas slides with enderCarouselSlide (src/lib/render-carousel.ts), and exports to ZIP (jszip) or Make.com webhook.
+
+Direct code observations from the codebase investigation:
+
+1. **Slide Data Structures**:
+   - `src/lib/carousel.functions.ts` (lines 13–19):
+     ```ts
+     export interface CarouselSlideData {
+       topTitle: string;
+       mainText: string;
+       bottomText: string;
+       footerText: string;
+       imagePrompt: string;
+     }
+     ```
+   - `src/lib/assistant.functions.ts` (lines 30):
+     `carouselSlides?: { topTitle: string; mainText: string; bottomText: string; footerText: string; imagePrompt: string }[];`
+   - `src/lib/render-carousel.ts` (lines 4–10):
+     ```ts
+     export type CarouselSlideOptions = {
+       backgroundUrl: string;
+       topTitle: string;
+       mainText: string;
+       bottomText: string;
+       footerText: string;
+     };
+     ```
+
+2. **Concatenation of Sacred Dalil and Human Commentary**:
+   - `src/lib/carousel.functions.ts` (lines 68–69):
+     `topTitle: Точен цитат и номер (напр. "${chosenTopic.dalilReference}").`
+     `mainText: Цитат на самия Аят или Хадис в кавички на правилен български език ("${chosenTopic.dalilTextBg}"), с преход към действието.`
+   - `src/lib/carousel.functions.ts` (lines 181–183):
+     `topTitle: \`[\${chosenTopic.dalilReference}]\`,`
+     `mainText: \`\${chosenTopic.dalilTextBg} А ето как да приложиш това спасение в живота си още днес...\`,`
+   - `src/lib/assistant.functions.ts` (lines 91–97):
+     ```ts
+     const dalilSlide = {
+       topTitle: `[${reference}]`,
+       mainText: `„${cleanDalil}“ А ето как да приложиш това спасение в живота си още днес...`,
+       bottomText: 'Плъзни за духовното решение 👉',
+       footerText: '3/4 • Плъзнете наляво',
+       imagePrompt: dalilPrompt,
+     };
+     ```
+
+3. **Homogeneous Canvas Rendering Without Intervals or Distinct Colors**:
+   - `src/lib/render-carousel.ts` (lines 124–128):
+     ```ts
+     ctx.font = fontMain;
+     const mainLines: string[] = [];
+     for (const raw of opts.mainText.trim().split("\n")) {
+       if (raw) mainLines.push(...wrap(ctx, raw, maxW));
+     }
+     ```
+   - `src/lib/render-carousel.ts` (lines 138, 164–167):
+     ```ts
+     const lhMain = 85;
+     ...
+     mainLines.forEach(line => {
+       drawTextLine(ctx, line, centerX, currentY + (lhMain / 2), fontMain, "#ffedb3");
+       currentY += lhMain;
+     });
+     ```
+   - Every line in `mainLines` is rendered with font `700 65px 'Montserrat'` and fillStyle `#ffedb3`. There is no visual separation, no color contrast, and no line gap between the sacred text and the human commentary.
+
+4. **Reference Implementation in `render-photo.ts`**:
+   - `src/lib/render-photo.ts` (lines 100–124, 227–278) demonstrates auto-fitting, gold capsule badges (`drawReferencePill`), and distinct font hierarchies for Arabic vs Bulgarian translations.
+
+5. **Test Infrastructure Execution**:
+   - Running `npm test` executes `jiti src/lib/__tests__/verify-tawheed-carousel.test.ts && jiti src/lib/__tests__/verify-sync.test.ts` which exited code 0 (5/5 Tawheed tests + sync tests passed).
+   - Running `npm run test:viral` executes `jiti src/lib/__tests__/verify-viral-carousel.test.ts`.
 
 ---
 
 ## 2. Logic Chain
-- **Step 1**: The client clicks Създай Карусел, which sends an identical static prompt mentioning broad concepts (смисъла на живота, Таухид) without selecting a specific Tawheed sub-topic or passing past topic state.
-- **Step 2**: Server function chatWithAssistant loads memory.usageHistory to build historyContext. Because ecordProposalUsages previously dropped all carousel proposals, historyContext contains zero past carousel entries.
-- **Step 3**: Gemini receives a stateless request with generic instructions to produce a provocative existential question addressing a universal need or difficulty about the meaning of life.
-- **Step 4**: Statistical language modeling dictates that generic existential Islamic prompts converge on the most frequent token sequences in the training set: Защо си тук? (Why are you here?), Каква е целта на живота ти? (What is the purpose of your life?).
-- **Step 5**: The newly generated carousel is presented to the user, but its topic is again dropped by ecordProposalUsages, ensuring subsequent clicks repeat the exact same failure cycle.
+
+1. **Premise 1 (Observation 1 & 2)**: The carousel AI prompt generators and post-processing helpers (`buildCarouselSystemPrompt`, `generateCarouselScriptDirect`, `injectAuthenticCarouselText`) represent slide text using a monolithic string in `mainText`, combining the holy Quran/Hadith quote (in Bulgarian quotes `„...“`) with human transition commentary.
+2. **Premise 2 (Observation 3)**: In `render-carousel.ts`, the Canvas engine wraps `mainText` into lines and iterates over them with uniform line height (`lhMain = 85px`), uniform font size (`65px`), and a single fill color (`#ffedb3`).
+3. **Inference (R1 Gap)**: Because there is neither structural differentiation in the data nor parser/styling differentiation in the Canvas renderer, the generated carousel images fail requirement R1 — the audience cannot distinguish divine revelation from human commentary.
+4. **Solution Formulation**:
+   - Adding optional fields `quoteText?: string`, `commentaryText?: string`, `sourceBadge?: string` to `CarouselSlideData` and `CarouselSlideOptions` provides explicit structural differentiation.
+   - Adding an in-text segmentation parser (`parseSlideSegments`) that detects Bulgarian quotation marks `„...“`, standard quotes `"..."`, `«...»`, or dual newlines `\n\n` guarantees backward compatibility with raw AI responses and legacy data.
+   - Updating `renderCarouselSlide` in `src/lib/render-carousel.ts` to render `quoteText` in Radiant Gold (`#FFD700` / `#F3D179`, 62px, bold), insert a dedicated vertical interval (`gapQuoteCommentary = 55px`), and render `commentaryText` in Soft Crisp White (`#FFFFFF` / `#E2E8F0`, 48px, medium/semi-bold) completes the visual and theological differentiation.
 
 ---
 
 ## 3. Caveats
-- No changes to source code files were made during this exploration phase (adhering to read-only investigation constraints).
-- The Gemini API quota and response latency depend on external Google AI services; temperature and randomness parameters are set to 1.2 in gemini.ts.
-- Make.com webhook integration ( riggerMakeWebhook at src/lib/make.functions.ts) is an external webhook and was not directly modified or triggered during this survey.
+
+1. **Non-Quote Slides**: Slides 1, 2, and 4 typically contain only human words (Hook, Theological Context, CTA/Du'a). The segmentation engine must safely fall back to single-block general rendering when no quote marks or explicit `quoteText` exist.
+2. **Multi-Dalil Slides**: In rare cases where a slide contains two quotes (e.g. Ayah + Hadith), the quotation regex should parse all quoted blocks or format multiple paragraphs with consistent gold styling.
+3. **No Code Implementation**: Per the explorer role constraints, no source code has been altered during this survey phase.
 
 ---
 
 ## 4. Conclusion
-The root cause of carousel topic repetition is twofold:
-1. **Architectural Gap in State Tracking**: src/lib/memory.functions.ts exclusively tracks quran and hadith keys, completely omitting carousel topics and titles from usageHistory.
-2. **Generic, Unseeded Prompting Without Tawheed Sub-Category Rotation**: The UI quick action button in src/routes/_app/assistant.tsx sends a static prompt mentioning смисъла на живота rather than rotating through a taxonomy of Tawheed sub-topics (Ar-Rububiyyah, Al-Uluhiyyah, Al-Asma was-Sifat) with explicit negative constraints against overused hooks.
 
-**Actionable Solution Plan**:
-1. Extend UsageHistoryEntry and ecordProposalUsages in src/lib/memory.functions.ts to track carousel topics and titles.
-2. Build a curated catalogue of 15+ diverse Tawheed sub-topics across Ar-Rububiyyah, Al-Uluhiyyah, and Al-Asma was-Sifat.
-3. Implement a state-aware rotation/picker in src/routes/_app/assistant.tsx that selects an unpicked Tawheed sub-topic, bans past topics, and includes explicit negative constraints (forbidding Защо си тук?).
-4. Add client-side localStorage tracking (islamic_used_carousel_topics) as an additional persistence guarantee.
-5. Create a verification script simulating consecutive carousel generations to ensure distinct topics and persistent state updates.
+Requirement R1 is fully analyzed. The architectural blueprint to achieve text differentiation is:
+1. **Schema**: Extend `CarouselSlideData` and `CarouselSlideOptions` with optional `quoteText`, `commentaryText`, `sourceBadge`.
+2. **Prompt & Post-Processing**: In `carousel.functions.ts` and `assistant.functions.ts` (`injectAuthenticCarouselText`), format Slide 3 with clear quotation marks and newline separation (`„${cleanDalil}“\n\n${transitionText}`).
+3. **Canvas Engine**: In `render-carousel.ts`, parse segments and render:
+   - Quran/Hadith quote in **Radiant Gold (`#FFD700` / `#F3D179`)** at 62px.
+   - **55px Vertical Interval** between quote and commentary.
+   - Human commentary in **Soft Crisp White (`#FFFFFF` / `#E2E8F0`)** at 48px.
+   - Top Title / Reference in **Gold Capsule / Badge (`#F3D179`)**.
+   - Bottom CTA in **Action Gold / Emerald (`#F3D179` / `#34D399`)**.
 
 ---
 
 ## 5. Verification Method
-1. **Inspection Verification**:
- - Inspect src/lib/memory.functions.ts:77-94 to confirm p.type === carousel was not handled.
- - Inspect src/routes/_app/assistant.tsx:798 to confirm the static prompt string.
-2. **Build and Lint Verification**:
- - Run 
-pm run build or un run build to verify project builds without errors.
- - Run 
-pm run lint to verify code quality.
-3. **Simulation Test**:
- - Execute a Node/Bun test script that simulates 3 consecutive carousel generation requests, verifying that:
- - Each generated topic maps to a distinct Tawheed sub-topic.
- - State tracking in usageHistory / localStorage increments with distinct identifiers.
- - The hook in Slide 1 is unique and never repeats Защо си тук?.
+
+1. **Unit & Taxonomy Test**:
+   ```powershell
+   npm test
+   ```
+   *Expected result*: Exit code 0, all 5 Tawheed carousel tests and subtitle sync tests pass.
+
+2. **Viral Carousel Framework Test**:
+   ```powershell
+   npm run test:viral
+   ```
+   *Expected result*: Exit code 0, validates 3 consecutive carousel generation cycles and generates `viral_samples_output.txt`.
+
+3. **Visual Invalidation Conditions**:
+   - If Slide 3 in the generated canvas image renders Quran/Hadith text in the same color as the human commentary → FAIL.
+   - If there is no extra spacing/interval between the quote and the transition sentence → FAIL.
+   - If legacy single-string `mainText` without `quoteText` fails to render → FAIL.

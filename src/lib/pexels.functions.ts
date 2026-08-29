@@ -5,7 +5,7 @@
 // vertical candidates, score them, and return the best ones.
 
 import { createServerFn } from "@tanstack/react-start";
-import { geminiChat, geminiImageAnalysis } from "@/lib/gemini";
+import { geminiChat, geminiImageAnalysis } from "./gemini";
 
 type Mood = "calm" | "majestic" | "reflective" | "hopeful" | "solemn";
 type Analysis = { theme: string; mood: Mood; queries: string[] };

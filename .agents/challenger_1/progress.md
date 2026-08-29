@@ -1,16 +1,17 @@
-# Progress — Challenger 1
+# Progress — Challenger 1 (R1 & R2 Adversarial Stress Testing)
 
-Last visited: 2026-08-26T19:55:15Z
+Last visited: 2026-08-29T15:15:30Z
 
-## Current Status
-- [x] Initialized workspace, briefing, and dispatch
-- [x] Inspected implementation code and interface contracts
-- [x] Executed baseline test suite `npm run test:carousel` (passed 5/5 on minimal 5 cycles)
-- [x] Designed and executed adversarial stress test harness with 30+ cycles
-- [x] Empirically discovered and reproduced 3 critical bugs:
-  1. 3-Topic infinite attractor loop on pool exhaustion in `getNextTawheedTopic` (`tawheed-taxonomy.ts`)
-  2. Memory duplicate check dropping future carousel generations in `recordCarouselProposalUsageDirect` (`memory.functions.ts`)
-  3. Client-side state array bound ($N=25 > 23$) trapping UI quick action in `assistant.tsx`
-- [x] Formulated tested LRU resolution model verifying 100% topic distribution over 100 cycles
-- [x] Documented complete 5-component handoff report
-- [x] Issued verdict: REQUEST_CHANGES to orchestrator
+- [x] Initial dispatch received and logged in `DISPATCH.md`
+- [x] Initialized `BRIEFING.md` and `progress.md`
+- [x] Analyzed codebase architecture: `render-carousel.ts`, `carousel.functions.ts`, `CarouselRendererButton.tsx`, `verify-photo-carousel-upgrade.test.ts`
+- [x] Designed and built adversarial stress test harness: `src/lib/__tests__/adversarial-r1-r2-challenger.test.ts`
+- [x] Executed test harness across 5 suites:
+  - Suite 1: Bulgarian & International Quotation Syntax Stress (`„...“`, `«...»`, `“...”`, `"..."`, embedded, title-based)
+  - Suite 2: Adversarial Orphan Balancer & 100% Word Retention (Zero Cutoff)
+  - Suite 3: Safe Zone Geometry & Extreme Length Auto-Fit Stress (28 extreme slides, horizontal `[100px, 860px]`, vertical `[300px, 1520px]`)
+  - Suite 4: Dual-Color Hierarchy (#F3D179 gold vs #FFFFFF white) & 52px interval spacing
+  - Suite 5: Degenerate & Boundary Edge Cases
+- [x] Result: All 5 suites passed (5/5), 0 failures
+- [x] Created 5-component handoff report `handoff.md` with explicit verdict `APPROVE`
+- [ ] Send handoff message to parent orchestrator

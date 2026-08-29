@@ -1,14 +1,14 @@
-﻿# BRIEFING — 2026-08-26T19:40:00Z
+# BRIEFING — 2026-08-29T14:48:40Z
 
 ## Mission
-Investigate the codebase to map the full carousel generation pipeline, identify exact prompt locations, trace data structures, and determine the root cause of topic repetition.
+Investigate R1 (Ayah/Hadith text formatting & differentiation from human commentary) and related codebase architecture (prompts, schemas, parsing, rendering pipeline).
 
 ## 🔒 My Identity
 - Archetype: Explorer
 - Roles: Read-only investigation, codebase surveying, root cause analysis, architecture mapping
 - Working directory: C:\Users\admin\Downloads\Islamic Reels Studio\.agents\explorer_survey_1
-- Original parent: c3ed46ac-381f-449d-99b1-f0344f3e11de
-- Milestone: explorer_survey
+- Original parent: 8bfda9e9-5272-49ec-a6bd-62bd513c6b61
+- Milestone: explorer_survey_1
 
 ## 🔒 Key Constraints
 - Read-only investigation — do NOT implement changes in source code
@@ -16,27 +16,28 @@ Investigate the codebase to map the full carousel generation pipeline, identify 
 - Communicate completion via send_message to parent agent
 
 ## Current Parent
-- Conversation ID: c3ed46ac-381f-449d-99b1-f0344f3e11de
-- Updated: 2026-08-26T19:40:00Z
+- Conversation ID: 8bfda9e9-5272-49ec-a6bd-62bd513c6b61
+- Updated: 2026-08-29T14:48:40Z
 
 ## Investigation State
 - **Explored paths**:
-  - src/routes/_app/assistant.tsx (UI triggers, quick action button, history sync)
-  - src/lib/assistant.functions.ts (chatWithAssistant, injectAuthenticCarouselText, prompts)
-  - src/lib/memory.functions.ts (AiMemory, recordProposalUsages, usageHistory)
-  - src/lib/carousel.functions.ts (generateCarouselScript)
-  - src/components/CarouselRendererButton.tsx (slide rendering, ZIP, Make.com)
-  - src/lib/render-carousel.ts (HTML5 Canvas slide renderer)
-  - src/lib/backgrounds.functions.ts & src/lib/gemini.ts (Gemini & Imagen 3)
+  - `src/lib/carousel.functions.ts` (`CarouselSlideData`, `buildCarouselSystemPrompt`, `generateCarouselScriptDirect`)
+  - `src/lib/assistant.functions.ts` (`VideoProposal`, `injectAuthenticCarouselText`, `chatWithAssistant`, `suggestBatchViralProposals`)
+  - `src/lib/render-carousel.ts` (`renderCarouselSlide`, Canvas 1080x1920 layout, text wrapping, uniform color/font styling)
+  - `src/components/CarouselRendererButton.tsx` (slide iteration, background fetch, ZIP export, Make.com webhook)
+  - `src/routes/_app/assistant.tsx` (quick action generation trigger, chat proposals rendering, preview grid)
+  - `src/lib/memory.functions.ts` (`recordProposalUsagesDirect`, carousel history tracking)
+  - `src/lib/tawheed-taxonomy.ts` (Tawheed taxonomy registry, `dalilReference`, `dalilTextBg`)
 - **Key findings**:
-  1. ecordProposalUsages in memory.functions.ts completely omits carousel proposals, leaving usageHistory empty for carousels.
-  2. The Quick Action button in ssistant.tsx sends a static prompt mentioning смисъла на живота, steering Gemini towards existential clichés like Why are you here?.
-  3. No granular Tawheed taxonomy (Ar-Rububiyyah, Al-Uluhiyyah, Al-Asma was-Sifat) is currently used for topic rotation.
-- **Unexplored areas**: None. Entire carousel generation pipeline mapped.
+  1. Slide 3 (Dalil slide) currently concatenates the sacred quote and human transition sentence into a single `mainText` string.
+  2. `renderCarouselSlide` renders all `mainText` lines with identical font (`700 65px 'Montserrat'`), identical color (`#ffedb3`), and zero interval between sacred text and human commentary.
+  3. Formulated a 3-tier solution: optional schema extension (`quoteText`, `commentaryText`, `sourceBadge`), resilient Bulgarian quote delimiter parser (`parseSlideSegments`), and dual-color Canvas renderer (Gold `#FFD700` for quotes, 55px interval, Soft Crisp White `#FFFFFF` for commentary).
+- **Unexplored areas**: None. R1 architecture fully surveyed and designed.
 
 ## Key Decisions Made
-- Fully documented findings in nalysis.md and handoff.md.
+- Completed in-depth survey and documented in `analysis.md` and `handoff.md`.
 
 ## Artifact Index
 - C:\Users\admin\Downloads\Islamic Reels Studio\.agents\explorer_survey_1\analysis.md — Comprehensive pipeline analysis
 - C:\Users\admin\Downloads\Islamic Reels Studio\.agents\explorer_survey_1\handoff.md — 5-component handoff report
+- C:\Users\admin\Downloads\Islamic Reels Studio\.agents\explorer_survey_1\progress.md — Liveness & step progress

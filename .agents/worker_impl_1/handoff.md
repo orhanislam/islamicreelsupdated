@@ -1,49 +1,35 @@
-# Handoff Report — Tawheed Carousel Diversity & State-Tracking Engine
+﻿# 5-Component Handoff Report — TikTok Photo Carousel Upgrade (R1, R2, R3, R4)
 
 ## 1. Observation
-- **Root Cause Verified**: Prior to this implementation, `src/lib/memory.functions.ts:80-90` exclusively filtered for `p.type === "quran"` and `p.type === "hadith"`. Proposals of `type === "carousel"` were discarded without persisting their topic, title, or hook. Consequently, `memory.usageHistory` was empty for carousels across requests, and the system prompt provided no previous carousel exclusion list.
-- **Trigger Cliché**: In `src/routes/_app/assistant.tsx`, the carousel prompt contained the generic phrase `"или смисъла на живота"`, causing the Gemini model to default to repetitive existential hooks such as *"Защо си тук?"*.
-- **Implementation Accomplished**:
-  - `src/lib/tawheed-taxonomy.ts`: Created with 23 authentic theological sub-topics across `rububiyyah`, `uluhiyyah`, and `asma_was_sifat`, complete with Bulgarian translations, authentic Quran/Hadith dalils, suggested visual moods, and dynamic rotation/exclusion formatters.
-  - `src/lib/memory.functions.ts`: Extended `AiMemory` to include `carouselHistory?: CarouselHistoryEntry[]`, implemented `recordCarouselProposalUsageDirect`, `getRecentCarouselHistoryDirect`, and enhanced `recordProposalUsagesDirect` to parse and persist carousel entries.
-  - `src/lib/assistant.functions.ts`: Injected dynamic Tawheed rotation, history-aware negative constraint prompts, and explicit bans on existential clichés into `chatWithAssistant` system prompt.
-  - `src/lib/carousel.functions.ts`: Integrated state tracking, Tawheed taxonomy rotation, and Salafi Halal visual prompt rules into `generateCarouselScript`.
-  - `src/routes/_app/assistant.tsx`: Added `usedCarouselTopics` in `localStorage` (`islamic_used_carousel_topics`) and upgraded the Quick Action button to dynamically cycle through diverse Tawheed topics.
-  - `src/lib/__tests__/verify-tawheed-carousel.test.ts`: Created a 5-suite verification test covering taxonomy completeness, topic rotation, negative exclusion prompts, 5-cycle simulation with state progression ($N \to N+1$), 0% duplicate hooks, 4-slide structure integrity, and Salafi Halal visual prompt rules.
-  - `package.json`: Added `test:carousel` and `test` scripts.
+- **Original Task**: Implement the complete upgrade for the Islamic Reels Studio TikTok Photo Carousel feature across requirements R1 (Quran/Hadith differentiation), R2 (TikTok Safe Zone & Intelligent Wrapping), R3 (Title Cleanup), and R4 (Dynamic Background Images).
+- **Files Modified**:
+  - `src/lib/assistant.functions.ts` (lines 13-35, 100-140, 310-330, 470-480, 580-610): Added `cleanProposalTitle`, extended `VideoProposal`, formatted Slide 3 Dalil text, sanitized all generation paths.
+  - `src/lib/backgrounds.functions.ts` (lines 53-92): Added `LOCAL_BACKGROUND_POOL` (8 assets), `getCarouselBackgroundsDirect`, `getCarouselBackgrounds` server function with sequential modulo rotation.
+  - `src/lib/carousel.functions.ts` (lines 13-20, 175-190): Extended `CarouselSlideData` with `quoteText?`, `commentaryText?`, `sourceBadge?` and updated fallback Slide 3 format.
+  - `src/lib/render-carousel.ts` (lines 1-320): Implemented `TIKTOK_SAFE_ZONE` constants (`W=1080`, `H=1920`, `SAFE_TOP=300`, `SAFE_BOTTOM=400`, `SAFE_LEFT=100`, `SAFE_RIGHT=220`, `W_SAFE=760`, `H_SAFE=1220`, `CENTER_X=480`), `wrapIntelligent` with orphan elimination, `parseSlideSegments` with Bulgarian quote matching, dual-color rendering (`#F3D179` and `#FFFFFF`), 48-56px interval spacing, and dynamic auto-fit font scaling (1.0 to 0.60).
+  - `src/components/CarouselRendererButton.tsx` (lines 1-155): Updated slide rendering with `getCarouselBackgrounds`, local storage rotation cycle tracking (`islamic_carousel_bg_cycle`), `cleanProposalTitle`, and quote separation.
+  - `src/routes/_app/assistant.tsx` (lines 10, 995, 1011, 1180): Sanitized displayed proposal titles and props using `cleanProposalTitle`.
+  - `src/lib/__tests__/verify-photo-carousel-upgrade.test.ts`: Added comprehensive verification suite.
+- **Verification Commands & Results**:
+  - `npx jiti src/lib/__tests__/verify-photo-carousel-upgrade.test.ts`: Passed (4/4 test suites).
+  - `npm test`: Passed (5/5 tests: `verify-tawheed-carousel.test.ts` & `verify-sync.test.ts`).
+  - `npm run test:viral`: Passed (3/3 tests: `verify-viral-carousel.test.ts`).
+  - `npm run build`: Succeeded with 0 errors in 12.47s.
 
 ## 2. Logic Chain
-1. By defining a rich, structured catalog of 23 authentic Tawheed sub-topics across all 3 pillars (`rububiyyah`, `uluhiyyah`, `asma_was_sifat`) in `src/lib/tawheed-taxonomy.ts`, the system has a deterministic, theologically sound foundation for content variety.
-2. By persisting generated carousels (titles, hooks, subtopics, timestamps) to both server storage (`~/.islamicreels_jobs/assistant_memory.json`) and client storage (`localStorage: islamic_used_carousel_topics`), every subsequent request is aware of past generations across sessions.
-3. By feeding the recent carousel history into `formatNegativeExclusionPrompt` and injecting it into Gemini's system prompt along with an explicit ban on clichés (*"Защо си тук?"*, *"Защо сме на този свят?"*, *"смисъла на живота"*), the LLM is constrained from generating repetitive hooks.
-4. By implementing `getNextTawheedTopic` with pillar balancing and single-item pool reset, the carousel generator rotates smoothly through Lordship, Worship, and Divine Names & Attributes without repeating topics.
-5. In `verify-tawheed-carousel.test.ts`, 5 consecutive generation cycles were executed in sequence, proving that:
-   - State increases strictly from $N-1 \to N$ at each cycle.
-   - All 5 generated topics and hooks are 100% unique (0% duplicates).
-   - Generated pillars rotate across Rububiyyah, Uluhiyyah, and Asma was-Sifat.
-   - 4-slide structure and Salafi Halal visual prompt rules are strictly preserved.
+- **R3**: Meta tags like `[tiktok carousels]` were confusing users. `cleanProposalTitle` uses regex matching to strip prefixes while strictly whitelisting authentic religious references (`[Коран {surah}:{ayah}]`, `[Сахих {collection} #{number}]`, `[Сура ...]`).
+- **R4**: Static/duplicate backgrounds were replaced with `LOCAL_BACKGROUND_POOL` referencing the 8 vertical 9:16 images on disk (`tiktok_images/img0.jpg`–`img3.jpg` and `tiktok_output/bg1.jpg`–`bg4.jpg`). `getCarouselBackgrounds` rotates through the assets sequentially using `(cycleIndex * count + i) % pool.length`, and `CarouselRendererButton` manages `islamic_carousel_bg_cycle` in `localStorage`.
+- **R1**: Quran/Hadith text requires visual reverence and clear separation from human commentary. `parseSlideSegments` detects quotes (`„...“`, `«...»`, `"..."`) or dedicated quote fields. The renderer applies Radiant Gold (`#F3D179`, bold 800) with subtle glow to the sacred text, introduces a 48-56px gap, and renders human commentary in Crisp White (`#FFFFFF`, medium 500).
+- **R2**: Standard canvas rendering previously suffered from text collision with TikTok's UI overlays (header, right-side action buttons, bottom caption). `TIKTOK_SAFE_ZONE` restricts content to a 760x1220px box shifted to `CENTER_X = 480`. `wrapIntelligent` prevents dangling orphan single words, and `computeSlideLayout` dynamically computes scaling factor `scale` (1.0 down to 0.60) so that text never exceeds `H_SAFE` (1220px) and centers vertically within `[300, 1520]`.
 
 ## 3. Caveats
-- The external Google Gemini LLM network API is called during live user interactions; if the Gemini API is temporarily unreachable, `generateCarouselScriptDirect` provides deterministic authentic fallback slides derived directly from the selected Tawheed taxonomy topic.
-- No other caveats; all changes conform to existing code styles, lint rules, and build configurations.
+- Browser canvas font measurement depends on standard system/browser font metrics; fallback metrics are supported if web fonts have not finished streaming.
+- If background images on disk cannot be read, fallback dark background Data URLs are returned gracefully without throwing errors.
 
 ## 4. Conclusion
-The diverse Tawheed topic generation, state-tracking memory mechanism, prompt anti-repetition engine, dynamic UI quick action rotation, and automated multi-cycle verification test suite are fully implemented, verified, and operational. All acceptance criteria from `ORIGINAL_REQUEST.md` (R1, R2, Verification) are 100% satisfied.
+All four core requirements (R1, R2, R3, R4) are fully implemented, strictly tested, and verified across all build and test targets with zero regressions.
 
 ## 5. Verification Method
-To independently reproduce and verify:
-1. Run the carousel verification test:
-   ```powershell
-   npm run test:carousel
-   ```
-   *Expected result: 5/5 test suites pass with exit code 0.*
-2. Run the full test suite:
-   ```powershell
-   npm run test
-   ```
-   *Expected result: Both `verify-tawheed-carousel.test.ts` and `verify-sync.test.ts` pass with exit code 0.*
-3. Run the project production build:
-   ```powershell
-   npm run build
-   ```
-   *Expected result: TypeScript compilation and Nitro bundle build succeed with exit code 0.*
+1. Run `npx jiti src/lib/__tests__/verify-photo-carousel-upgrade.test.ts` to test R1, R2, R3, R4 logic.
+2. Run `npm test` and `npm run test:viral` to ensure baseline suites pass.
+3. Run `npm run build` to confirm production compilation passes cleanly.

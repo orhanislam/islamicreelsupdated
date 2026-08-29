@@ -16,6 +16,9 @@ export interface CarouselSlideData {
   bottomText: string;
   footerText: string;
   imagePrompt: string;
+  quoteText?: string;
+  commentaryText?: string;
+  sourceBadge?: string;
 }
 
 export interface GenerateCarouselInput {
@@ -179,10 +182,13 @@ export async function generateCarouselScriptDirect(
     },
     {
       topTitle: `[${chosenTopic.dalilReference}]`,
-      mainText: `${chosenTopic.dalilTextBg} А ето как да приложиш това спасение в живота си още днес...`,
+      mainText: `„${chosenTopic.dalilTextBg}“\n\nА ето как да приложиш това спасение в живота си още днес...`,
       bottomText: "Плъзни за духовното решение 👉",
       footerText: "3/4 • Плъзнете наляво",
       imagePrompt: `golden divine sunbeams shining through mountains, magnificent nature, vertical 9:16, 8k, no people`,
+      quoteText: chosenTopic.dalilTextBg,
+      commentaryText: "А ето как да приложиш това спасение в живота си още днес...",
+      sourceBadge: chosenTopic.dalilReference,
     },
     {
       topTitle: "ДЕЙСТВИЕ И ДУА",

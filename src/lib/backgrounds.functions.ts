@@ -1,5 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
-import { geminiChat, geminiGenerateImage } from "@/lib/gemini";
+import { geminiChat, geminiGenerateImage } from "./gemini";
 
 const PROMPT_SYSTEM = `Ти си арт-директор за вирално ислямско съдържание в TikTok. Получаваш ислямски текст (аят или хадис) и измисляш 3 различни визуални идеи за вертикален фон 9:16. ВАЖНИ ПРАВИЛА:
 - БЕЗ хора, БЕЗ животни, БЕЗ лица, БЕЗ ръце, БЕЗ силуети на хора.
@@ -48,4 +48,53 @@ export const generateBackground = createServerFn({ method: "POST" })
     const safePrompt = (data && data.prompt) ? data.prompt : "beautiful cinematic islamic background";
     const { base64, mimeType } = await geminiGenerateImage(safePrompt);
     return { base64, mimeType };
+  });
+
+export const LOCAL_BACKGROUND_POOL: string[] = [
+  "tiktok_images/img0.jpg",
+  "tiktok_images/img1.jpg",
+  "tiktok_images/img2.jpg",
+  "tiktok_images/img3.jpg",
+  "tiktok_output/bg1.jpg",
+  "tiktok_output/bg2.jpg",
+  "tiktok_output/bg3.jpg",
+  "tiktok_output/bg4.jpg",
+];
+
+export async function getCarouselBackgroundsDirect(data?: {
+  count?: number;
+  cycleIndex?: number;
+}): Promise<{ backgrounds: string[] }> {
+  const count = Math.max(1, Math.min(20, Number(data?.count) || 4));
+  const cycleIndex = Math.max(0, Number(data?.cycleIndex) || 0);
+  const fs = await import("fs/promises");
+  const path = await import("path");
+
+  const pool = LOCAL_BACKGROUND_POOL;
+  const backgrounds: string[] = [];
+
+  for (let i = 0; i < count; i++) {
+    const assetIdx = (cycleIndex * count + i) % pool.length;
+    const relPath = pool[assetIdx];
+    const absPath = path.resolve(process.cwd(), relPath);
+
+    try {
+      const buf = await fs.readFile(absPath);
+      const base64 = buf.toString("base64");
+      backgrounds.push(`data:image/jpeg;base64,${base64}`);
+    } catch (err) {
+      console.warn(`[getCarouselBackgrounds] Failed to read ${relPath}:`, err);
+      backgrounds.push(
+        `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="1920"><rect width="1080" height="1920" fill="%23111827"/></svg>`,
+      );
+    }
+  }
+
+  return { backgrounds };
+}
+
+export const getCarouselBackgrounds = createServerFn({ method: "POST" })
+  .validator((input: { count?: number; cycleIndex?: number } | undefined) => input || {})
+  .handler(async ({ data }: { data?: { count?: number; cycleIndex?: number } }): Promise<{ backgrounds: string[] }> => {
+    return getCarouselBackgroundsDirect(data);
   });

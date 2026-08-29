@@ -1,4 +1,4 @@
-import { getJobsDir } from "@/lib/render.functions";
+import { getJobsDir } from "./render.functions";
 
 export interface BackgroundTaskRecord {
   id: string;

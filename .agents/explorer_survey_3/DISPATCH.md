@@ -1,8 +1,15 @@
-## 2026-08-26T19:37:13Z
-Read C:\Users\admin\Downloads\Islamic Reels Studio\.agents\ORIGINAL_REQUEST.md.
-Your working directory is C:\Users\admin\Downloads\Islamic Reels Studio\.agents\explorer_survey_3.
-Your task is to investigate the Tawheed domain taxonomy and testing architecture:
-1. Systematically outline the authentic categories of Tawheed (Ar-Rububiyyah, Al-Uluhiyyah/Al-Ibadah, Al-Asma was-Sifat) and rich sub-topics (e.g. Tawakkul, Al-Khawf & Ar-Raja, Divine Decree/Qadr, Sincerity/Ikhlas, Beautiful Names of Allah, gratitude, reliance, pure monotheism, avoiding superstition/shirk).
-2. Check existing test setups, scripts, and runners in package.json (vitest, jest, node scripts, etc.).
-3. Formulate the verification criteria and test design for a simulation test that runs >= 3 consecutive carousel generations to prove that history state is updated and topics/hooks remain strictly distinct and non-repeating.
-Write your detailed analysis to C:\Users\admin\Downloads\Islamic Reels Studio\.agents\explorer_survey_3\analysis.md and a handoff report to C:\Users\admin\Downloads\Islamic Reels Studio\.agents\explorer_survey_3\handoff.md. Send a completion message back with your findings.
+## 2026-08-29T14:45:49Z
+You are Explorer 3 on the Survey phase for Islamic Reels Studio TikTok Photo Carousel Generation Upgrade.
+Working directory: C:\Users\admin\Downloads\Islamic Reels Studio\.agents\explorer_survey_3
+Original Request: C:\Users\admin\Downloads\Islamic Reels Studio\.agents\ORIGINAL_REQUEST.md
+Project Root: C:\Users\admin\Downloads\Islamic Reels Studio
+
+Your Mission:
+Investigate R3 (Title Generation Cleanup - strip '[tiktok carousels]') and R4 (Dynamic Background Images selection from asset pool).
+1. Read ORIGINAL_REQUEST.md.
+2. Investigate:
+   - Title generation in src/lib/assistant.functions.ts, carousel prompts, or assistant responses. Find where '[tiktok carousels]' or similar prefixes are produced or passed, and how title cleaning should be implemented.
+   - Background image assets: search project directory for background image assets (e.g., tiktok_images, src/assets, public/assets, or static folders). How many background images exist? What formats? How are background images currently referenced or loaded during carousel generation/rendering?
+   - How can background selection be made dynamic across slides and across successive carousel generations (e.g. pool indexing, rotation, random with history/exclusion, variety per slide)?
+3. Document exact file paths, functions, image directories/lists, and recommended design.
+4. Write your comprehensive report to C:\Users\admin\Downloads\Islamic Reels Studio\.agents\explorer_survey_3\handoff.md and notify parent when done.

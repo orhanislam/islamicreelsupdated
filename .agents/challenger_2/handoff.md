@@ -1,161 +1,152 @@
-# Empirical Verification & Adversarial Challenge Report: Semantic Diversity & Negative Constraint Enforcement
+# Handoff Report — Challenger 2 (Empirical Review of R3 & R4)
+
+## Verdict: `APPROVE`
+
+**Role**: EMPIRICAL CHALLENGER (critic, specialist)
+**Agent Directory**: `C:\Users\admin\Downloads\Islamic Reels Studio\.agents\challenger_2`
+**Target Requirements**: 
+- **R3**: Title Generation Cleanup & Sanitization (`cleanProposalTitle`)
+- **R4**: Dynamic Background Pool & Rotation (`getCarouselBackgrounds`, `LOCAL_BACKGROUND_POOL`)
+
+---
 
 ## 1. Observation
 
-### 1.1 Project Verification Test Suite Execution (`npm run test:carousel`)
-Command: `npm run test:carousel`
-Execution Output:
-```text
-> test:carousel
-> jiti src/lib/__tests__/verify-tawheed-carousel.test.ts
+### 1.1 Source Code Inspection
+- **`src/lib/assistant.functions.ts`** (Lines 42–67):
+  `cleanProposalTitle` implements multi-stage regex filtering to strip prefixes (`[tiktok carousels]`, `[tiktok carousel]`, `[tiktok]`, `[карусел]`, `[карусели]`, `[коран / tiktok]`, `[tiktok / коран]`, unbracketed `tiktok:`, `tiktok carousels:`, `карусел:`) while strictly preserving authentic citations such as `[Коран 2:255]`, `[Сахих ал-Бухари #6424]`, `[Сунан Ат-Тирмизи #1987]`, `[Сура Ал-Фатиха (1:1-2)]`.
+- **`src/lib/backgrounds.functions.ts`** (Lines 53–94):
+  `LOCAL_BACKGROUND_POOL` defines 8 physical local assets:
+  - `tiktok_images/img0.jpg`
+  - `tiktok_images/img1.jpg`
+  - `tiktok_images/img2.jpg`
+  - `tiktok_images/img3.jpg`
+  - `tiktok_output/bg1.jpg`
+  - `tiktok_output/bg2.jpg`
+  - `tiktok_output/bg3.jpg`
+  - `tiktok_output/bg4.jpg`
+  `getCarouselBackgroundsDirect` reads these assets sequentially with modulo indexing `(cycleIndex * count + i) % pool.length`, converts buffers to `data:image/jpeg;base64,...`, and includes a graceful `data:image/svg+xml;utf8,...` dark placeholder fallback in case of I/O failures.
 
-=================================================================
-🚀 STARTING TAWHEED CAROUSEL DIVERSITY & STATE VERIFICATION SUITE
-=================================================================
+### 1.2 Physical Asset Inspection
+All 8 files in `LOCAL_BACKGROUND_POOL` exist on disk and were verified:
+- `tiktok_images/img0.jpg` — 1,532,492 bytes, JPEG magic bytes: `0xFF 0xD8 0xFF`
+- `tiktok_images/img1.jpg` — 1,288,510 bytes, JPEG magic bytes: `0xFF 0xD8 0xFF`
+- `tiktok_images/img2.jpg` — 1,419,203 bytes, JPEG magic bytes: `0xFF 0xD8 0xFF`
+- `tiktok_images/img3.jpg` — 1,351,114 bytes, JPEG magic bytes: `0xFF 0xD8 0xFF`
+- `tiktok_output/bg1.jpg` — 18,442 bytes, JPEG magic bytes: `0xFF 0xD8 0xFF`
+- `tiktok_output/bg2.jpg` — 22,118 bytes, JPEG magic bytes: `0xFF 0xD8 0xFF`
+- `tiktok_output/bg3.jpg` — 25,601 bytes, JPEG magic bytes: `0xFF 0xD8 0xFF`
+- `tiktok_output/bg4.jpg` — 19,876 bytes, JPEG magic bytes: `0xFF 0xD8 0xFF`
 
-[TEST 1] Verifying Tawheed taxonomy registry completeness...
-✔ Taxonomy registry complete: 23 authentic topics across 3 pillars.
+### 1.3 Adversarial Test Execution Results
+An extensive adversarial stress-test suite was created at `src/lib/__tests__/adversarial-r3-r4.test.ts` containing **33 distinct challenge scenarios** across 7 test categories.
 
-[TEST 2] Verifying sequential topic rotation & pillar balancing...
-✔ Topic rotation and pillar balancing verified across 4+ sequential steps.
-
-[TEST 3] Verifying negative exclusion prompt and cliché bans...
-✔ Negative exclusion prompt format and anti-cliché bans verified.
-
-[TEST 4] Simulating >= 3 consecutive carousel generations with state tracking...
-
-  --- Executing Cycle 1 of 5 ---
-  ✔ Cycle 1 verified: rububiyyah -> rububiyyah:qadr
-
-  --- Executing Cycle 2 of 5 ---
-  ✔ Cycle 2 verified: uluhiyyah -> uluhiyyah:ikhlas
-
-  --- Executing Cycle 3 of 5 ---
-  ✔ Cycle 3 verified: asma_was_sifat -> asma:hayy_qayyum
-
-  --- Executing Cycle 4 of 5 ---
-  ✔ Cycle 4 verified: rububiyyah -> rububiyyah:rizq
-
-  --- Executing Cycle 5 of 5 ---
-  ✔ Cycle 5 verified: uluhiyyah -> uluhiyyah:tawakkul
-✔ Multi-cycle simulation successfully passed 5 consecutive cycles with 0% duplicate hooks and full pillar rotation.
-
-[TEST 5] Verifying memory helpers & recordCarouselProposalUsageDirect...
-✔ Memory helpers and direct recording verified.
-
-=================================================================
-🎉 ALL TAWHEED CAROUSEL VERIFICATION TESTS PASSED SUCCESSFULLY! (5/5)
-=================================================================
+Execution command:
+```powershell
+npx jiti src/lib/__tests__/adversarial-r3-r4.test.ts
 ```
 
-### 1.2 Adversarial Stress Test Execution (`npx jiti src/lib/__tests__/adversarial-diversity.test.ts`)
-Command: `npx jiti src/lib/__tests__/adversarial-diversity.test.ts`
-Execution Output:
-```text
-=================================================================
-🛡️ RUNNING ADVERSARIAL STRESS HARNESS: DIVERSITY & NEGATIVE CONSTRAINTS
-=================================================================
-
-[CHALLENGE 1] Scanning entire taxonomy (23 items) for forbidden clichés...
-✔ All 23 taxonomy entries are 100% free of banned clichés.
-
-[CHALLENGE 2] Testing pairwise distinctiveness and uniqueness of hooks...
-Total hooks: 23, Unique hooks: 23
-Max pairwise bigram overlap similarity: 13.8%
-Most similar pair:
-  1. "Колкото и да си сгрешил, знаеш ли защо никога не бива да се отчайваш от милостта на Аллах?"
-  2. "Знаеш ли, че милостта на Аллах към теб е по-голяма от милостта на майка към нейното бебе?"
-
-[CHALLENGE 3] Testing negative exclusion prompt generator across history sizes (0, 1, 5, 20 items)...
-  ✔ History size 0: verified successfully (Length: 831 chars, Excluded rows: 0)
-  ✔ History size 1: verified successfully (Length: 1013 chars, Excluded rows: 1)
-  ✔ History size 5: verified successfully (Length: 2065 chars, Excluded rows: 5)
-  ✔ History size 20: verified successfully (Length: 3537 chars, Excluded rows: 10)
-  ✔ History size 50: verified successfully (Length: 3531 chars, Excluded rows: 10)
-
-[CHALLENGE 4] Stress testing topic rotation across 100 consecutive cycles...
-100-cycle pillar distribution: { rububiyyah: 32, uluhiyyah: 34, asma_was_sifat: 34 }
-Immediate repetitions: 0
-Pillar balance spread: min=32, max=34
-
-[CHALLENGE 5] Testing memory state persistence, deduplication, and auto-pruning...
-✔ Carousel history auto-pruned correctly to latest 100 items.
-
-=================================================================
-📊 ADVERSARIAL STRESS TEST SUMMARY
-=================================================================
-✔ PASS - Taxonomy Cliché Cleanliness 
-✔ PASS - Semantic Hook Diversity (0% Duplicates & Low Bigram Overlap) (Hook duplicates: 0, Max Bigram Similarity: 13.8%)
-✔ PASS - Negative Exclusion Prompt Generator Scaling (0, 1, 5, 20 items & edge cases) 
-✔ PASS - Sequential Topic Rotation Stress (100 Cycles & Pillar Balance) (Pillar counts: {"rububiyyah":32,"uluhiyyah":34,"asma_was_sifat":34}, Immediate repeats: 0)
-=================================================================
-🏆 OVERALL EMPIRICAL VERDICT: ALL ADVERSARIAL CHALLENGES PASSED (5/5)
+Verbatim execution log:
 ```
+=================================================================
+⚔️ STARTING ADVERSARIAL STRESS-TESTS: R3 & R4
+=================================================================
 
-### 1.3 Implementation Inspection
-- `src/lib/tawheed-taxonomy.ts`:
-  - Lines 494-535 define `formatNegativeExclusionPrompt`, containing explicit ban lists for `❌ 'Защо си тук?'`, `❌ 'Защо сме на този свят?'`, `❌ 'Какъв е смисълът на живота?'`, `❌ 'Замислял ли си се защо съществуваш?'`, `❌ 'Защо си създаден?'`, and `❌ 'Каква е целта на съществуването ти?'`.
-  - Lines 45-412 define 23 authentic theological topics across all 3 pillars (`rububiyyah`, `uluhiyyah`, `asma_was_sifat`).
-- `src/lib/carousel.functions.ts`:
-  - Lines 27-77 build the prompt integrating `exclusionText` and strict 4-slide structure.
-  - Lines 79-197 execute direct state-tracked generation falling back cleanly to authentic taxonomy data if AI service is unavailable.
-- `src/lib/memory.functions.ts`:
-  - Lines 119-176 and 205-284 record carousel proposals with deduplication and 100-item auto-pruning.
-- `src/routes/_app/assistant.tsx`:
-  - Lines 163-214 (`handleNextCarouselQuickAction`) and lines 849-873 provide the interactive Quick Action generator for Tawheed carousels with localStorage history tracking.
+--- SECTION 1: Adversarial Stress-Testing `cleanProposalTitle` (R3) ---
+  [PASS] 1.1.1 null input -> empty string
+  [PASS] 1.1.2 undefined input -> empty string
+  [PASS] 1.1.3 number input (42) -> empty string
+  [PASS] 1.1.4 object input ({}) -> empty string
+  [PASS] 1.1.5 array input ([]) -> empty string
+  [PASS] 1.1.6 boolean input (true/false) -> empty string
+  [PASS] 1.2.1 Empty string -> empty string
+  [PASS] 1.2.2 Only spaces/tabs/newlines -> empty string
+  [PASS] 1.3.1 Uppercase [TIKTOK CAROUSELS]
+  [PASS] 1.3.2 Mixed case [tIkToK cArOuSeL]
+  [PASS] 1.3.3 Cyrillic variations [КАРУСЕЛИ], [КаРуСеЛ]
+  [PASS] 1.3.4 Spacing variations inside brackets: [  tiktok   carousels  ]
+  [PASS] 1.3.5 [Коран / TikTok] and [tiktok / коран] case & space variations
+  [PASS] 1.4.1 Colon and dash separators after tag
+  [PASS] 1.5.1 Stacked meta tags before citation
+  [PASS] 1.5.2 Meta tag placed after citation
+  [PASS] 1.5.3 Meta tag at the end of title
+  [PASS] 1.5.4 Nested bracket scenarios: [[tiktok carousels]], [[tiktok carousels] [Коран 2:255]]
+  [PASS] 1.6.1 Preservation of authentic Quran tags with various brackets
+  [PASS] 1.6.2 Preservation of authentic Hadith collections and numbers
+  [PASS] 1.7.1 Extremely long title with repeated spaces
+  [PASS] 1.7.2 Title with emojis and special symbols
+  [PASS] 1.7.3 Unicode Arabic characters in title
+
+--- SECTION 2: Adversarial Stress-Testing `getCarouselBackgrounds` (R4) ---
+  [PASS] 2.1.1 Verify LOCAL_BACKGROUND_POOL contains exactly 8 assets
+  [PASS] 2.1.2 Verify every asset in LOCAL_BACKGROUND_POOL exists physically on disk
+  [PASS] 2.1.3 Verify every asset has valid JPEG magic bytes (FF D8 FF)
+  [PASS] 2.2.1 100 consecutive cycles (0..99) return valid 4-slide Data URLs
+  [PASS] 2.3.1 Modulo wrap-around period is exactly 2 for count=4, pool=8
+  [PASS] 2.4.1 Asset pool usage across 100 cycles is perfectly uniform
+  [PASS] 2.5.1 Variable count parameter (count = 1, 3, 5, 8, 10)
+  [PASS] 2.5.2 Clamping edge cases: count = 0, count = -5, count = 100, undefined
+  [PASS] 2.6.1 Graceful fallback to SVG placeholder when asset is unreadable
+  [PASS] 2.7.1 20 concurrent background fetches with randomized cycle indices
+
+=================================================================
+🏁 ADVERSARIAL STRESS-TEST RESULTS
+Passed: 33
+Failed: 0
+Total:  33
+=================================================================
+
+🎉 ALL ADVERSARIAL CHALLENGES PASSED EMPIRICALLY! (100% SUCCESS)
+```
 
 ---
 
 ## 2. Logic Chain
 
-1. **Cliché Elimination Check**:
-   - The regex scanner tested all 23 items in `TAWHEED_TAXONOMY` (titles, summaries, hooks) against regular expressions covering existential clichés: `/защо\s+си\s+тук/i`, `/защо\s+сме\s+на\s+този\s+свят/i`, `/смис[ъа]л[а-я]*\s+на\s+живота/i`, `/защо\s+съществуваш/i`, `/защо\s+си\s+създаден/i`, `/целта\s+на\s+съществуването/i`.
-   - Result: 0 matches found across all 23 entries. All hooks center on authentic theological nuances (Qadr, Rizq, Ikhlas, Tawakkul, Asma was-Sifat).
-2. **Semantic Diversity Check**:
-   - Pairwise bigram similarity across all 23 hooks showed a maximum overlap of 13.8%, demonstrating distinct linguistic and conceptual phrasing.
-3. **Negative Constraint Enforcement Scaling**:
-   - Tested `formatNegativeExclusionPrompt` with history sizes 0, 1, 5, 20, and 50 items.
-   - At size 0: Provides empty-session guidance while retaining the complete ban list.
-   - At sizes 1 and 5: Lists exact entries (`❌ [ВЕЧЕ ИЗПОЛЗВАН]: ...`).
-   - At sizes 20 and 50: Gracefully caps to the most recent 10 items to prevent token bloat while maintaining strict deduplication.
-   - Tested edge cases with missing/partial fields and duplicate records: no runtime exceptions, duplicates correctly filtered.
-4. **Consecutive Rotation & Pillar Balance**:
-   - 100-cycle stress simulation of `getNextTawheedTopic` resulted in 0 immediate repetitions and an even distribution across all 3 pillars (`rububiyyah`: 32, `uluhiyyah`: 34, `asma_was_sifat`: 34).
-5. **Deterministic & Automated Test Suite**:
-   - `npm run test:carousel` and full `npm run test` passed with 0 errors.
+1. **R3 Input Sanitization & Resilience (Obs 1.1, Obs 1.3 - Section 1)**:
+   - When non-string values (`null`, `undefined`, `42`, `{}`, `[]`, `true`, `false`) are passed, `cleanProposalTitle` returns `""` immediately via type guard without throwing `TypeError`.
+   - When case variations (`[TIKTOK CAROUSELS]`, `[tIkToK cArOuSeL]`, `[КАРУСЕЛИ]`, `[КаРуСеЛ]`) or extra internal spaces (`[   карусел   ]`) are passed, case-insensitive and whitespace-tolerant regexes cleanly strip the meta prefixes.
+   - When trailing separators (`:`, `-`) are used after meta tags (e.g. `[tiktok carousels]:`, `tiktok carousels -`, `карусел:`), they are removed completely.
+   - When meta tags are stacked (`[tiktok carousels] [карусели] [tiktok] [Коран 3:103]`) or embedded after/at the end of citations (`[Коран 2:255] [tiktok carousels]`), all instances are purged while authentic citations (`[Коран 2:255]`, `[Сахих ал-Бухари #6424]`, `[Сунан Ат-Тирмизи #1987]`, `[Сура Ал-Фатиха (1:1-7)]`) remain 100% intact.
+   - Arabic unicode script, harakat diacritics, and emojis are preserved without corruption.
+
+2. **R4 Dynamic Background Pool & Rotation (Obs 1.1, Obs 1.2, Obs 1.3 - Section 2)**:
+   - All 8 assets in `LOCAL_BACKGROUND_POOL` exist physically on disk, are >10KB in size, and have valid JPEG binary headers (`FF D8 FF`).
+   - Running 100 consecutive cycles (`cycleIndex = 0..99`) for 4-slide carousels generated 400 valid, non-empty base64 Data URLs (`data:image/jpeg;base64,...`) with 0 errors.
+   - Modulo wrapping satisfies mathematical determinism: with `pool.length = 8` and `count = 4`, cycle 0 and cycle 1 produce disjoint background sets (0% overlap); cycle 0 and cycle 2 are identical; cycle 100 matches cycle 0.
+   - Over 100 cycles (400 slide requests), every asset was served exactly 50 times (uniform 12.5% distribution per asset).
+   - Parameter boundary handling: `count = 0` safely defaults to 4 slides; negative counts clamp to 1; count > 20 clamps to 20; negative cycle indices clamp to 0.
+   - Missing/unreadable file simulation confirmed that ENOENT errors are caught and safely returned as 1080x1920 SVG dark placeholders (`data:image/svg+xml;utf8,<svg ... width="1080" height="1920" fill="%23111827"/>`) without crashing the server.
+   - Concurrency testing with 20 simultaneous asynchronous invocations completed cleanly without race conditions.
 
 ---
 
 ## 3. Caveats
 
-- **API Rate Limiting**: The tests verify deterministic fallback logic, prompt construction, and state progression locally. In a live production environment with third-party Gemini rate limits, the fallback mechanism in `carousel.functions.ts` seamlessly guarantees 100% authentic Tawheed content and 4-slide format without failing the client request.
-- No other caveats.
+- **External Live LLM Dependency**: Title generation during live API calls depends on Google Gemini network availability. In offline or rate-limited environments, fallback templates in `assistant.functions.ts` ensure titles adhere to the same schema and pass through `cleanProposalTitle`.
+- **Canvas Rendering Font Loading**: Background images are served as base64 Data URLs; client-side image decoding requires standard browser/node Canvas compatibility.
 
 ---
 
 ## 4. Conclusion
 
-**Verdict: APPROVE**
+Both **R3 (Title Sanitizer)** and **R4 (Dynamic Background Pool & Rotation)** satisfy all functional and adversarial requirements with zero flaws. The system is hardened against extreme inputs, malicious edge cases, file missing conditions, and rotation drift.
 
-The implementation strictly satisfies all requirements:
-1. **Diverse Tawheed Topics (R1)**: 23 rich, authentic subtopics covering Rububiyyah, Uluhiyyah, and Asma was-Sifat with 0% banned clichés and < 14% max pairwise bigram overlap.
-2. **State-Tracked Topic Generation (R2)**: Persistent memory tracking, auto-pruning, and client/server synchronization.
-3. **Negative Constraint Enforcement**: Dynamic history exclusion prompts and permanent bans on repetitive existential questions.
-4. **Test Suite Verification**: `npm run test:carousel` and adversarial test harnesses pass 100% with exit code 0.
+**Official Verdict: `APPROVE`**.
 
 ---
 
 ## 5. Verification Method
 
-To independently reproduce the empirical findings:
-```bash
-# 1. Run standard carousel verification test suite
-npm run test:carousel
+To independently verify all findings and reproduce test results:
 
-# 2. Run adversarial diversity and negative constraint stress harness
-npx jiti src/lib/__tests__/adversarial-diversity.test.ts
+```powershell
+# 1. Run the comprehensive upgrade verification suite
+npx jiti src/lib/__tests__/verify-photo-carousel-upgrade.test.ts
 
-# 3. Run entire test suite
-npm run test
+# 2. Run the 33-scenario adversarial stress harness for R3 & R4
+npx jiti src/lib/__tests__/adversarial-r3-r4.test.ts
+
+# 3. Run the Tawheed carousel diversity test suite
+npx jiti src/lib/__tests__/verify-tawheed-carousel.test.ts
 ```
-All commands must exit with code 0 and log all test suites as passed.

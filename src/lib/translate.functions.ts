@@ -1,5 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
-import { geminiChat } from "@/lib/gemini";
+import { geminiChat } from "./gemini";
 
 const SYSTEM = `Ти си експертен преводач на ислямски текстове на БЪЛГАРСКИ ЕЗИК (на кирилица).
 ВАЖНО: НИКОГА НЕ ПИШИ АРАБСКИ ТЕКСТ В ОТГОВОРА! Върни САМО И ЕДИНСТВЕНО превода на български език на кирилица!

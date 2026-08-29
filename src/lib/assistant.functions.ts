@@ -1,14 +1,14 @@
 import { createServerFn } from "@tanstack/react-start";
-import { geminiChat, type ChatMessage } from "@/lib/gemini";
-import { fetchSunnahHadith } from "@/lib/sunnah.functions";
-import { fetchAyah } from "@/lib/quran.functions";
-import { translateToBulgarian } from "@/lib/translate.functions";
-import { searchPexelsVideos } from "@/lib/pexels.functions";
-import { synthesizeHadithNarration } from "@/lib/tts.functions";
-import { startServerRenderJob, getJobsDir } from "@/lib/render.functions";
-import { getAiMemory, updateAiMemory, recordProposalUsages } from "@/lib/memory.functions";
-import { createTask, updateTask, listTasks, clearAllTasks } from "@/lib/tasks-engine";
-import { getNextTawheedTopic, formatNegativeExclusionPrompt, getTawheedTaxonomy } from "@/lib/tawheed-taxonomy";
+import { geminiChat, type ChatMessage } from "./gemini";
+import { fetchSunnahHadith } from "./sunnah.functions";
+import { fetchAyah } from "./quran.functions";
+import { translateToBulgarian } from "./translate.functions";
+import { searchPexelsVideos } from "./pexels.functions";
+import { synthesizeHadithNarration } from "./tts.functions";
+import { startServerRenderJob, getJobsDir } from "./render.functions";
+import { getAiMemory, updateAiMemory, recordProposalUsages } from "./memory.functions";
+import { createTask, updateTask, listTasks, clearAllTasks } from "./tasks-engine";
+import { getNextTawheedTopic, formatNegativeExclusionPrompt, getTawheedTaxonomy } from "./tawheed-taxonomy";
 
 export type VideoProposal = {
   title: string;
@@ -27,15 +27,55 @@ export type VideoProposal = {
   useBRoll?: boolean;            // enable multi-scene B-Roll
   subtitlePosition?: "bottom" | "middle" | "lower-third";
   quality?: "high" | "720p";
-  carouselSlides?: { topTitle: string; mainText: string; bottomText: string; footerText: string; imagePrompt: string }[];
+  carouselSlides?: {
+    topTitle: string;
+    mainText: string;
+    bottomText: string;
+    footerText: string;
+    imagePrompt: string;
+    quoteText?: string;
+    commentaryText?: string;
+    sourceBadge?: string;
+  }[];
 };
+
+export function cleanProposalTitle(rawTitle: string): string {
+  if (!rawTitle || typeof rawTitle !== "string") return "";
+  let title = rawTitle.trim();
+
+  // Strip meta tags/prefixes like [tiktok carousels], [tiktok carousel], [tiktok], [карусел], [карусели], [коран / tiktok], [tiktok / коран]
+  // while strictly preserving authentic citations like [Коран 2:255], [Сахих ал-Бухари #6424], [Сура Ал-Фатиха (1:1-2)], [Сунан Ат-Тирмизи #1987], etc.
+  const metaPrefixRegex = /^\s*\[\s*(?:tiktok\s*carousels?|tiktok|карусели?|коран\s*\/\s*tiktok|tiktok\s*\/\s*коран)\s*\]\s*[:-]?\s*/i;
+
+  while (metaPrefixRegex.test(title)) {
+    title = title.replace(metaPrefixRegex, "").trim();
+  }
+
+  // Handle cases where [Коран / TikTok] or similar is anywhere
+  title = title.replace(/\[\s*коран\s*\/\s*tiktok\s*\]\s*/gi, "").trim();
+  title = title.replace(/\[\s*tiktok\s*\/\s*коран\s*\]\s*/gi, "").trim();
+  title = title.replace(/\[\s*tiktok\s*carousels?\s*\]\s*/gi, "").trim();
+  title = title.replace(/\[\s*карусели?\s*\]\s*/gi, "").trim();
+
+  // Strip unbracketed leading "tiktok carousels:" or "tiktok:"
+  title = title.replace(/^(?:tiktok\s*carousels?|tiktok|карусели?)\s*[:-]\s*/i, "").trim();
+
+  // Clean extra spaces
+  title = title.replace(/\s{2,}/g, " ").trim();
+
+  return title;
+}
 
 async function injectAuthenticCarouselText(proposals: VideoProposal[]) {
   if (!proposals) return;
   const rx = /[\p{Extended_Pictographic}\p{Emoji_Presentation}\u2728\u2B50\u2600-\u26FF\u2700-\u27BF]/gu;
 
   for (const prop of proposals) {
-    if (!prop || prop.type !== 'carousel' || !prop.carouselSlides || prop.carouselSlides.length < 2) continue;
+    if (!prop) continue;
+    if (prop.title) {
+      prop.title = cleanProposalTitle(prop.title);
+    }
+    if (prop.type !== 'carousel' || !prop.carouselSlides || prop.carouselSlides.length < 2) continue;
     
     let bulgarian = '';
     let reference = '';
@@ -68,7 +108,7 @@ async function injectAuthenticCarouselText(proposals: VideoProposal[]) {
       if (!hookSlide.bottomText) hookSlide.bottomText = 'Плъзни наляво за тайната 👉';
 
       // Slide 2: Body Context & Cliffhanger
-      let contextSlide: { topTitle: string; mainText: string; bottomText: string; footerText: string; imagePrompt: string };
+      let contextSlide: { topTitle: string; mainText: string; bottomText: string; footerText: string; imagePrompt: string; quoteText?: string; commentaryText?: string; sourceBadge?: string };
       if (originalSlides.length >= 4) {
         contextSlide = { ...originalSlides[1] };
       } else {
@@ -86,13 +126,18 @@ async function injectAuthenticCarouselText(proposals: VideoProposal[]) {
 
       // Slide 3: Authentic Dalil with Transition
       const dalilPrompt = originalSlides[2]?.imagePrompt || defaultPrompt;
-      const cleanDalil = bulgarian.replace(/(^|\n)\s*(?:\(\d+\)|\[\d+\]|\d+\.)\s*/g, "$1").trim();
+      const flatBulgarian = bulgarian.replace(/\r?\n|\r/g, " ");
+      const cleanDalil = flatBulgarian.replace(/(^|\s+)(?:\(\d+\)|\[\d+\]|\d+\.)\s*/g, "$1").trim();
+      const transitionText = "А ето как да приложиш това спасение в живота си още днес...";
       const dalilSlide = {
         topTitle: `[${reference}]`,
-        mainText: `„${cleanDalil}“ А ето как да приложиш това спасение в живота си още днес...`,
+        mainText: `„${cleanDalil}“\n\n${transitionText}`,
         bottomText: 'Плъзни за духовното решение 👉',
         footerText: '3/4 • Плъзнете наляво',
         imagePrompt: dalilPrompt,
+        quoteText: cleanDalil,
+        commentaryText: transitionText,
+        sourceBadge: reference,
       };
 
       // Slide 4: Value-Driven CTA
@@ -216,7 +261,7 @@ CAPCUT-ПОДОБНИ ИНСТРУКЦИИ ЗА РЕДАКТИРАНЕ:
   "reply": "Твоят учтив отговор на български език, в който представяш предложението и питаш дали му харесва.",
   "newLearnedFact": "Ако в това съобщение потребителят ти е казал нещо важно за себе си или ново предпочитание, запиши го тук (иначе остави null)",
   "proposal": {
-    "title": "Точно заглавие на български (напр. [Коран] Аят ал-Курси или [TikTok] 3 неща, които отнемат спокойствието)",
+    "title": "Точно заглавие на български (напр. [Коран 2:255] Аят ал-Курси или [Сахих ал-Бухари #6424] Изпитанията). СТРИКТНО ЗАБРАНЕНО Е да слагаш мета префикси като '[tiktok carousels]', '[tiktok carousel]', '[tiktok]' или '[карусел]' в заглавието!",
     "type": "hadith" | "quran" | "tiktok" | "general" | "carousel",
     "collection": "nawawi40" | "bukhari" | "muslim" | "tirmidhi" (ако type е hadith),
     "number": число номер на хадиса (ако type е hadith),
@@ -263,6 +308,15 @@ CAPCUT-ПОДОБНИ ИНСТРУКЦИИ ЗА РЕДАКТИРАНЕ:
       let cleanText = raw.replace(/```json[\s\S]*?```/g, "").replace(/[{}"_]/g, " ").trim();
       if (!cleanText || cleanText.length < 5) cleanText = raw;
       parsed = { reply: cleanText, proposal: null };
+    }
+
+    if (parsed.proposal && parsed.proposal.title) {
+      parsed.proposal.title = cleanProposalTitle(parsed.proposal.title);
+    }
+    if (Array.isArray(parsed.proposals)) {
+      parsed.proposals.forEach((p: any) => {
+        if (p && p.title) p.title = cleanProposalTitle(p.title);
+      });
     }
 
     if (parsed.newLearnedFact && typeof parsed.newLearnedFact === "string" && parsed.newLearnedFact.trim().length > 2) {
@@ -346,7 +400,7 @@ SALAFI HALAL ПРИНЦИПИ (СТРИКТНО ЗАДЪЛЖИТЕЛНО):
 {
   "reply": "Вълнуващо представяне на български защо тази тема ще стане вайръл и каква е мъдростта ѝ.",
   "proposal": {
-    "title": "ЗАДЪЛЖИТЕЛНО във формат [Коран {surah}:{ayah}] Заглавие ИЛИ [Сахих {collection} #{number}] Заглавие",
+    "title": "ЗАДЪЛЖИТЕЛНО във формат [Коран {surah}:{ayah}] Заглавие ИЛИ [Сахих {collection} #{number}] Заглавие (СТРИКТНО БЕЗ '[tiktok]' или мета етикети)",
     "type": "hadith",
     "collection": "bukhari",
     "number": 6424,
@@ -388,6 +442,10 @@ SALAFI HALAL ПРИНЦИПИ (СТРИКТНО ЗАДЪЛЖИТЕЛНО):
       };
     }
     
+    if (parsed.proposal && parsed.proposal.title) {
+      parsed.proposal.title = cleanProposalTitle(parsed.proposal.title);
+    }
+
     if (parsed.proposal) {
       await recordProposalUsages({ data: { proposals: [parsed.proposal] } }).catch(() => {});
     }
@@ -428,7 +486,7 @@ export const suggestBatchViralProposals = createServerFn({ method: "POST" })
 2. ИЗРИЧНО ЗАБРАНЕНО Е да включваш най-популярните текстове като Сура Ал-Бакара 2:255, Сура Ад-Духа (93) или Сура Юсуф! Искаме рядко цитирани, дълбоки и неклиширани текстове.${targetType === "carousel" ? "\nИЗКЛЮЧИТЕЛНО ВАЖНО ЗА КАРУСЕЛ: ЗАДЪЛЖИТЕЛНО генерирай ВСИЧКИ предложения като тип КАРУСЕЛ (type: 'carousel') с 'carouselSlides' от ТОЧНО 4 слайда по Viral Framework (Слайд 1: Hook с curiosity gap/въпрос, Слайдове 2-3: сбит текст с клифхенгъри и автентичен Далил, Слайд 4: стойностен CTA със 'Запази'/'Сподели')!" : ""}
 3. ОГРАНИЧЕНИЕ ЗА ВРЕМЕТРАЕНЕ (< 60 секунди): За да се събере във вайръл формат (TikTok/Reels), текстът на български НЕ ТРЯБВА да надвишава 70-80 думи. Ако текстът е дълъг, вземи само част от него! Видеото задължително трябва да е под 1 минута.
 4. Задължително включвай кинематографични настройки: "useBRoll": true, "bRollInterval": 5 и "quality": "high".
-5. ВИНАГИ включвай точния източник в 'title' на български език във формат: [Коран {surah}:{ayah}] Заглавие или [Сахих {collection} #{number}] Заглавие.
+5. ВИНАГИ включвай точния източник в 'title' на български език във формат: [Коран {surah}:{ayah}] Заглавие или [Сахих {collection} #{number}] Заглавие. СТРИКТНО ЗАБРАНЕНО Е да добавяш '[tiktok carousels]', '[tiktok]' или подобни мета префикси.
 6. ИЗРИЧНО Е ЗАБРАНЕНО ДА КОПИРАШ ПРИМЕРНИТЕ АЯТИ И ХАДИСИ ОТ ДОЛНИЯ JSON! ГЕНЕРИРАЙ ИЗЦЯЛО НОВИ, СЛУЧАЙНИ И УНИКАЛНИ ПРЕДЛОЖЕНИЯ!
 7. ПРАВИЛО ЗА БЕКГРАУНД ВИДЕО (searchQuery): ЗАБРАНЕНО Е ДА ИМА ХОРА (мъже или жени) във видеата! Твоят searchQuery трябва ВИНАГИ да бъде само за природа, пейзажи и абстрактни неща (напр. "nature landscape mountain sunset peaceful no people"). Никога не включвай думи като "person", "woman", "man", "people".
 
@@ -492,7 +550,7 @@ export const suggestBatchViralProposals = createServerFn({ method: "POST" })
       parsed = {
         reply: `Ето специално подбран пакет от ${countNum} топ вирусни идеи от Корана, Хадисите и TikTok трендовете! Избери кои от тях да одобрим и генерираме:`,
         proposals: fallbackShuffled.slice(0, countNum).map(p => ({
-          title: `[Коран / TikTok] ${p.ref}`,
+          title: `[Коран] ${p.ref}`,
           type: "quran",
           surah: p.surah,
           ayah: p.ayah,
@@ -509,6 +567,9 @@ export const suggestBatchViralProposals = createServerFn({ method: "POST" })
     }
 
     if (Array.isArray(parsed.proposals) && parsed.proposals.length > 0) {
+      parsed.proposals.forEach((p: any) => {
+        if (p && p.title) p.title = cleanProposalTitle(p.title);
+      });
       await injectAuthenticCarouselText(parsed.proposals);
       await recordProposalUsages({ data: { proposals: parsed.proposals } }).catch(() => {});
     }
@@ -522,6 +583,9 @@ export const suggestBatchViralProposals = createServerFn({ method: "POST" })
 export const confirmAndGenerateVideo = createServerFn({ method: "POST" })
   .validator((input: { proposal: VideoProposal }) => input)
   .handler(async ({ data: { proposal } }) => {
+    if (proposal.title) {
+      proposal.title = cleanProposalTitle(proposal.title);
+    }
     let arabic = "";
     let english = "";
     let bulgarian = "";
@@ -671,7 +735,7 @@ export const confirmAndGenerateVideo = createServerFn({ method: "POST" })
     // Fetch multi-scene B-Roll always for Assistant videos
     let bRollUrls: string[] | undefined;
     try {
-      const { fetchMultiSceneBRoll } = await import("@/lib/pexels.functions");
+      const { fetchMultiSceneBRoll } = await import("./pexels.functions");
       const bRollResult = await fetchMultiSceneBRoll({
         data: { 
           query: proposal.searchQuery || "islamic nature cinematic",

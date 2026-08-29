@@ -1,10 +1,13 @@
-## 2026-08-26T19:51:56Z
-Read ORIGINAL_REQUEST.md at C:\Users\admin\Downloads\Islamic Reels Studio\.agents\ORIGINAL_REQUEST.md.
-Also read C:\Users\admin\Downloads\Islamic Reels Studio\PROJECT.md and C:\Users\admin\Downloads\Islamic Reels Studio\TEST_INFRA.md.
-Your working directory is C:\Users\admin\Downloads\Islamic Reels Studio\.agents\challenger_2.
+## 2026-08-29T15:13:22Z
+You are Challenger 2 for Islamic Reels Studio TikTok Photo Carousel Upgrade.
+Working directory: C:\Users\admin\Downloads\Islamic Reels Studio\.agents\challenger_2
+Original Request: C:\Users\admin\Downloads\Islamic Reels Studio\.agents\ORIGINAL_REQUEST.md
+Project Root: C:\Users\admin\Downloads\Islamic Reels Studio
+Project Plan: C:\Users\admin\Downloads\Islamic Reels Studio\PROJECT.md
 
-Empirically challenge semantic diversity and negative constraint enforcement:
-- Verify that generated topics and hooks strictly avoid repeating the cliché "Защо си тук?" / "Защо сме на този свят?" / "смисъла на живота".
-- Test the negative exclusion prompt generator with various history sizes (0, 1, 5, 20 items).
-- Run `npm run test:carousel` and verify all tests pass.
-Write your findings to C:\Users\admin\Downloads\Islamic Reels Studio\.agents\challenger_2\handoff.md and report your verdict: APPROVE or REQUEST_CHANGES.
+Your Mission:
+Adversarially challenge and stress-test R3 (Title Sanitizer) and R4 (Dynamic Background Pool & Rotation).
+1. Design adversarial test cases for `cleanProposalTitle`: test extreme inputs, nested brackets (`[[tiktok carousels]]`), mixed citations (`[tiktok carousels] [Коран 2:255]`), case variations (`[TIKTOK CAROUSELS]`), trailing punctuation, empty inputs, non-string inputs.
+2. Design adversarial test cases for `getCarouselBackgrounds`: test 100 consecutive cycle indices, check modulo wrap-around, verify asset existence and non-empty base64 Data URLs, test error handling for missing files.
+3. Verify empirically by executing test scripts.
+4. Document tests and write your handoff report to `C:\Users\admin\Downloads\Islamic Reels Studio\.agents\challenger_2\handoff.md` with an explicit verdict (`APPROVE` or `FAIL`) and notify parent.

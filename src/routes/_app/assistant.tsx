@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { copyToClipboardFallback } from "@/lib/utils";
 import { toast } from "sonner";
-import { chatWithAssistant, suggestViralProposal, suggestBatchViralProposals, confirmAndGenerateVideo, startBatchViralSeries, startBatchViralHadithSeries, getAssistantHistory, saveAssistantHistory, clearAssistantHistory, startBackgroundPlanGeneration, startBackgroundBatchGeneration, checkActiveBackgroundTasks, type VideoProposal } from "@/lib/assistant.functions";
+import { chatWithAssistant, suggestViralProposal, suggestBatchViralProposals, confirmAndGenerateVideo, startBatchViralSeries, startBatchViralHadithSeries, getAssistantHistory, saveAssistantHistory, clearAssistantHistory, startBackgroundPlanGeneration, startBackgroundBatchGeneration, checkActiveBackgroundTasks, cleanProposalTitle, type VideoProposal } from "@/lib/assistant.functions";
 import { getAiMemory, updateAiMemory, type AiMemory } from "@/lib/memory.functions";
 import { generateViralThumbnail } from "@/lib/thumbnail.functions";
 import { formatViralSocialCaption } from "@/lib/caption.functions";
@@ -992,7 +992,7 @@ function AssistantPage() {
                     <div className="space-y-1.5 text-xs">
                       <div>
                         <span className="font-semibold text-muted-foreground">Заглавие: </span>
-                        <span className="font-medium text-foreground">{m.proposal.title}</span>
+                        <span className="font-medium text-foreground">{cleanProposalTitle(m.proposal.title)}</span>
                       </div>
 
                       {m.proposal.type === 'carousel' && m.proposal.carouselSlides && (
@@ -1008,7 +1008,7 @@ function AssistantPage() {
                               </div>
                             ))}
                           </div>
-                          <CarouselRendererButton slides={m.proposal.carouselSlides} title={m.proposal.title} />
+                          <CarouselRendererButton slides={m.proposal.carouselSlides} title={cleanProposalTitle(m.proposal.title)} />
                         </div>
                       )}
 
@@ -1177,7 +1177,7 @@ function AssistantPage() {
                             <div className="flex-1 text-xs space-y-1">
                               <div className="font-bold text-sm flex items-center gap-2 flex-wrap">
                                 <span className="text-teal-400">#{propIdx + 1}.</span>
-                                <span>{prop.title}</span>
+                                <span>{cleanProposalTitle(prop.title)}</span>
                                 <span className="text-[10px] px-2 py-0.5 rounded-md bg-black/40 border border-border">
                                   {prop.type === "hadith" ? "📖 Сахих Хадис" : "🕋 Коран / Тренд"}
                                 </span>

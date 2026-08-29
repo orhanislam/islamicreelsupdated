@@ -1,66 +1,48 @@
-# BRIEFING — 2026-08-26T19:55:00Z
+# BRIEFING — 2026-08-29T15:15:30Z
 
 ## Mission
-Adversarially stress-test and empirically challenge the carousel generation and state tracking engine (Tawheed topic rotation, state persistence, cycle resets, edge cases, negative exclusions) with >= 10-15 cycles and deep boundary analysis.
+Adversarially challenge and stress-test R1 (Ayah/Hadith text differentiation & intervals) and R2 (TikTok Safe Zone boundaries & Intelligent Text Wrapping) with empirical layout & canvas bounding box measurements, extreme length stresses, quote variations, and orphan word elimination.
 
 ## 🔒 My Identity
 - Archetype: EMPIRICAL CHALLENGER
 - Roles: critic, specialist
 - Working directory: C:\Users\admin\Downloads\Islamic Reels Studio\.agents\challenger_1
-- Original parent: c3ed46ac-381f-449d-99b1-f0344f3e11de
-- Milestone: M4 Verification & Adversarial Challenge
+- Original parent: 8bfda9e9-5272-49ec-a6bd-62bd513c6b61
+- Milestone: M3 (R1 Ayah/Hadith Differentiation) & M4 (R2 TikTok Safe Zone & Wrapping)
 - Instance: 1 of 1
 
 ## 🔒 Key Constraints
-- Review-only — do NOT modify implementation code.
-- Must find bugs/weaknesses by writing and executing tests (generators, oracles, stress harnesses).
-- Must run verification code directly using Node / jiti.
-- .agents/ must contain only metadata (briefing, progress, dispatch, handoff, analysis).
+- Review-only — do NOT modify implementation code directly; write adversarial test scripts and stress harnesses.
+- Must execute all verification code empirically.
+- Strict Safe Zone validation: Horizontal `[100px, 860px]` (W_SAFE = 760px, CENTER_X = 480px) and Vertical `[300px, 1520px]` (H_SAFE = 1220px).
+- Zero mid-sentence cutoff.
+- Dual-color differentiation (Gold #F3D179 for sacred quote, White #FFFFFF for commentary) and spacing intervals (48-56px).
 
 ## Current Parent
-- Conversation ID: c3ed46ac-381f-449d-99b1-f0344f3e11de
-- Updated: 2026-08-26T19:55:00Z
-
-## Attack Surface
-- **Hypotheses tested**:
-  1. Extended multi-cycle generation (>= 15-30 cycles) maintains uniqueness and balanced rotation across all 3 pillars without deadlocks or repetitive looping: **FAILED (BUG FOUND)**.
-  2. Pool exhaustion / rotation cycle reset logic behaves gracefully when history length exceeds taxonomy count ($N \ge 23$): **FAILED (BUG FOUND)**.
-  3. Memory state deduplication and record tracking: **FAILED (BUG FOUND)**.
-  4. State array pruning/bounds (30-day filter, 100 max entries, client-side 25 slice): **VERIFIED**.
-  5. Corrupted state recovery (missing file, malformed JSON, empty arrays): **VERIFIED**.
-  6. Anti-cliché filter & negative exclusion prompt: **VERIFIED**.
-  7. Salafi Halal visual prompt purity (no people, faces, animals in imagePrompt): **VERIFIED**.
-
-- **Vulnerabilities found**:
-  1. **CRITICAL BUG 1**: `getNextTawheedTopic` in `src/lib/tawheed-taxonomy.ts` falls into an infinite 3-topic lock-in loop (`qadr` -> `ikhlas` -> `hayy_qayyum` -> repeat) when `recentTopicIdsOrTitles` contains $\ge 23$ items, completely starving the remaining 20 topics.
-  2. **CRITICAL BUG 2**: `recordCarouselProposalUsageDirect` and `recordProposalUsagesDirect` in `src/lib/memory.functions.ts` check `(x.title === entry.title && x.subtopicId === finalSubtopicId)` across entire history, permanently dropping new carousel generations after cycle 23.
-  3. **HIGH BUG 3**: `usedCarouselTopics` in `src/routes/_app/assistant.tsx` slices at 25 items, which is $> 23$, guaranteeing that the UI quick action becomes trapped in the 3-topic lock-in loop.
-
-- **Untested angles**: Full end-to-end browser DOM interaction (verified via automated headless execution).
-
-## Loaded Skills
-- None required.
+- Conversation ID: 8bfda9e9-5272-49ec-a6bd-62bd513c6b61
+- Updated: 2026-08-29T15:15:30Z
 
 ## Review Scope
-- **Files reviewed**:
-  - `src/lib/tawheed-taxonomy.ts`
-  - `src/lib/memory.functions.ts`
-  - `src/lib/assistant.functions.ts`
-  - `src/lib/carousel.functions.ts`
-  - `src/routes/_app/assistant.tsx`
-  - `src/lib/__tests__/verify-tawheed-carousel.test.ts`
-- **Interface contracts**: `PROJECT.md`, `TEST_INFRA.md`, `ORIGINAL_REQUEST.md`
+- **Files to review**: `src/lib/render-carousel.ts`, `src/lib/carousel.functions.ts`, `src/components/CarouselRendererButton.tsx`, `src/lib/assistant.functions.ts`
+- **Interface contracts**: `TIKTOK_SAFE_ZONE`, `computeSlideLayout`, `wrapIntelligent`, `parseSlideSegments`, `renderCarouselSlide`
+- **Review criteria**: Exact coordinate bounding boxes, extreme text lengths (500+ chars), auto-fit scaling down to 0.60, orphan elimination, quote marks (`„...“`, `«...»`, `“...”`, `"..."`), multi-line text balancing.
+
+## Attack Surface
+- **Hypotheses tested**: 
+  1. Vertical overflow beyond `[300px, 1520px]` under massive 500+ and 800+ character text blocks: PASSED (Auto-fit dynamic scaling automatically engages, reducing scale down to 0.60/0.55 while keeping total height within 1220px).
+  2. Horizontal overflow beyond `[100px, 860px]`: PASSED (Intelligent wrapper guarantees each line <= 760px; center alignment at X=480px guarantees text remains in [100px, 860px]).
+  3. Quotation syntax resilience: PASSED (Bulgarian `„...“`, Russian/French `«...»`, English `“...”`, straight `"..."`, and embedded quote extraction all parsed cleanly).
+  4. Orphan word prevention & zero mid-sentence cutoff: PASSED (100% word retention, orphan balancer successfully balances single trailing words without exceeding maxWidth).
+  5. Dual-color styling & sacred text hierarchy: PASSED (Gold #F3D179 with glow for Quran/Hadith, White #FFFFFF for commentary, interval gap 52px).
+- **Vulnerabilities found**: None. All invariants hold strictly.
+- **Untested angles**: Hardware-accelerated GPU canvas memory allocation in resource-constrained mobile browsers (client UI handles through standard HTML5 canvas).
 
 ## Key Decisions Made
-- Issue verdict: **REQUEST_CHANGES** due to 2 Critical and 1 High verified defects that break extended multi-cycle carousel diversity and state persistence.
-- Provide comprehensive mathematical and empirical reproduction evidence along with tested drop-in fixes.
+- Created and executed `src/lib/__tests__/adversarial-r1-r2-challenger.test.ts` with 5 adversarial test suites and 28 stress scenarios.
+- Issued verdict: **APPROVE**.
 
 ## Artifact Index
 - `.agents/challenger_1/BRIEFING.md` — Situational awareness
-- `.agents/challenger_1/DISPATCH.md` — Received dispatch
-- `.agents/challenger_1/progress.md` — Liveness & step progress
-- `.agents/challenger_1/handoff.md` — 5-component handoff report
-- `src/lib/__tests__/stress-carousel-engine.test.ts` — Comprehensive stress harness
-- `src/lib/__tests__/reproduce-loop-bug.ts` — Empirical reproduction of 3-topic loop
-- `src/lib/__tests__/reproduce-memory-bug.ts` — Empirical reproduction of memory duplicate rejection
-- `src/lib/__tests__/verify-lru-fix.ts` — Proof of 100-cycle uniform distribution fix
+- `.agents/challenger_1/progress.md` — Liveness & progress tracker
+- `.agents/challenger_1/handoff.md` — Final 5-component handoff report
+- `src/lib/__tests__/adversarial-r1-r2-challenger.test.ts` — Challenger 1 adversarial test harness
