@@ -26,11 +26,14 @@ export type CarouselSlideOptions = {
   commentaryText?: string;
 };
 
+export interface TextSegment {
+  type: "sacred" | "human";
+  text: string;
+}
+
 export interface SlideSegments {
   isQuoteSlide: boolean;
-  quoteText?: string;
-  commentaryText?: string;
-  normalText?: string;
+  segments: TextSegment[];
 }
 
 export function stripEmojis(text: string): string {
@@ -76,7 +79,6 @@ export function wrapIntelligent(
   }
 
   // Orphan word elimination:
-  // If the last line contains only 1 word and previous line has >= 3 words, balance lines.
   if (lines.length >= 2) {
     const lastLine = lines[lines.length - 1];
     const prevLine = lines[lines.length - 2];
@@ -101,64 +103,59 @@ export function wrapIntelligent(
  * Parse slide text segments to extract sacred quote vs human commentary.
  */
 export function parseSlideSegments(opts: CarouselSlideOptions): SlideSegments {
+  const segments: TextSegment[] = [];
+
   if (opts.quoteText && opts.quoteText.trim()) {
-    return {
-      isQuoteSlide: true,
-      quoteText: opts.quoteText.trim(),
-      commentaryText: (opts.commentaryText || "").trim(),
-    };
+    segments.push({ type: "sacred", text: opts.quoteText.trim() });
+    if (opts.commentaryText && opts.commentaryText.trim()) {
+      segments.push({ type: "human", text: opts.commentaryText.trim() });
+    }
+    return { isQuoteSlide: true, segments };
   }
 
   const raw = (opts.mainText || "").trim();
   if (!raw) {
-    return { isQuoteSlide: false, normalText: "" };
+    return { isQuoteSlide: false, segments: [] };
   }
 
-  // Check for Bulgarian/European quotes: „...“ or «...» or standard "..."
-  const quoteMatch = raw.match(/^[„«"“]([\s\S]+?)[”»"“](?:\s*[\r\n\s]+([\s\S]*))?$/);
-  if (quoteMatch) {
-    return {
-      isQuoteSlide: true,
-      quoteText: quoteMatch[1].trim(),
-      commentaryText: (quoteMatch[2] || "").trim(),
-    };
-  }
+  // Split by quotes „...“ or «...» or "..."
+  const regex = /([„«"“][\s\S]+?[”»"“])/g;
+  const parts = raw.split(regex);
+  
+  let hasSacred = false;
 
-  const embeddedQuoteMatch = raw.match(/[„«"“]([\s\S]+?)[”»"“]/);
-  if (embeddedQuoteMatch && embeddedQuoteMatch.index !== undefined) {
-    const quoteText = embeddedQuoteMatch[1].trim();
-    const before = raw.slice(0, embeddedQuoteMatch.index).trim();
-    const after = raw.slice(embeddedQuoteMatch.index + embeddedQuoteMatch[0].length).trim();
-    const commentary = [before, after].filter(Boolean).join(" ").trim();
-    if (quoteText.length > 5) {
-      return {
-        isQuoteSlide: true,
-        quoteText,
-        commentaryText: commentary,
-      };
+  for (const part of parts) {
+    if (!part.trim()) continue;
+    if (part.match(/^[„«"“][\s\S]+?[”»"“]$/)) {
+      segments.push({ type: "sacred", text: part.trim() });
+      hasSacred = true;
+    } else {
+      segments.push({ type: "human", text: part.trim() });
     }
   }
 
-  if (raw.includes("\n\n")) {
-    const parts = raw.split(/\n\n+/);
+  // If there are no quotes, treat as one human block unless the title implies it's a quote
+  if (!hasSacred) {
     if (
-      parts.length >= 2 &&
-      (opts.topTitle.includes("Коран") ||
-        opts.topTitle.includes("Хадис") ||
-        opts.topTitle.includes("Сура") ||
-        opts.topTitle.startsWith("["))
+      opts.topTitle.includes("Коран") ||
+      opts.topTitle.includes("Хадис") ||
+      opts.topTitle.includes("Сура") ||
+      opts.topTitle.startsWith("[")
     ) {
       return {
         isQuoteSlide: true,
-        quoteText: parts[0].replace(/^[„«"“]|[”»"“]$/g, "").trim(),
-        commentaryText: parts.slice(1).join(" ").trim(),
+        segments: [{ type: "sacred", text: raw }],
       };
     }
+    return {
+      isQuoteSlide: false,
+      segments: [{ type: "human", text: raw }],
+    };
   }
 
   return {
-    isQuoteSlide: false,
-    normalText: raw,
+    isQuoteSlide: true,
+    segments,
   };
 }
 
@@ -202,13 +199,21 @@ function drawTextLine(
   ctx.shadowOffsetY = 0;
 }
 
+export interface LayoutSegment {
+  type: "sacred" | "human";
+  lines: string[];
+  font: string;
+  lh: number;
+  color: string;
+}
+
 export function computeSlideLayout(
   ctx: CanvasRenderingContext2D,
   opts: CarouselSlideOptions,
   scale: number,
 ) {
   const maxWidth = TIKTOK_SAFE_ZONE.W_SAFE;
-  const segments = parseSlideSegments(opts);
+  const parsed = parseSlideSegments(opts);
 
   const fontTop = `800 ${Math.round(54 * scale)}px 'Montserrat', sans-serif`;
   const lhTop = Math.round(68 * scale);
@@ -219,44 +224,35 @@ export function computeSlideLayout(
   const fontCommentary = `500 ${Math.round(46 * scale)}px 'Montserrat', sans-serif`;
   const lhCommentary = Math.round(62 * scale);
 
-  const fontNormal = `700 ${Math.round(60 * scale)}px 'Montserrat', sans-serif`;
-  const lhNormal = Math.round(76 * scale);
-
   const fontBottom = `700 ${Math.round(48 * scale)}px 'Montserrat', sans-serif`;
   const lhBottom = Math.round(64 * scale);
 
   const gapTopToBody = Math.round(44 * scale);
-  const gapQuoteToCommentary = Math.round(52 * scale);
+  const gapBetweenSegments = Math.round(52 * scale);
   const gapBodyToBottom = Math.round(44 * scale);
 
   ctx.font = fontTop;
   const topLines = wrapIntelligent((t) => ctx.measureText(t).width, opts.topTitle || "", maxWidth);
 
-  let quoteLines: string[] = [];
-  let commentaryLines: string[] = [];
-  let normalLines: string[] = [];
+  const layoutSegments: LayoutSegment[] = [];
+  let bodyH = 0;
 
-  if (segments.isQuoteSlide) {
-    const rawQuote = segments.quoteText || "";
-    const qText = rawQuote.startsWith("„") || rawQuote.startsWith("«") ? rawQuote : `„${rawQuote}“`;
-    ctx.font = fontQuote;
-    quoteLines = wrapIntelligent((t) => ctx.measureText(t).width, qText, maxWidth);
-
-    if (segments.commentaryText) {
+  for (const seg of parsed.segments) {
+    if (seg.type === "sacred") {
+      ctx.font = fontQuote;
+      const lines = wrapIntelligent((t) => ctx.measureText(t).width, seg.text, maxWidth);
+      layoutSegments.push({ type: "sacred", lines, font: fontQuote, lh: lhQuote, color: "#F3D179" });
+      bodyH += lines.length * lhQuote;
+    } else {
       ctx.font = fontCommentary;
-      commentaryLines = wrapIntelligent(
-        (t) => ctx.measureText(t).width,
-        segments.commentaryText,
-        maxWidth,
-      );
+      const lines = wrapIntelligent((t) => ctx.measureText(t).width, seg.text, maxWidth);
+      layoutSegments.push({ type: "human", lines, font: fontCommentary, lh: lhCommentary, color: "#FFFFFF" });
+      bodyH += lines.length * lhCommentary;
     }
-  } else {
-    ctx.font = fontNormal;
-    normalLines = wrapIntelligent(
-      (t) => ctx.measureText(t).width,
-      segments.normalText || opts.mainText || "",
-      maxWidth,
-    );
+  }
+
+  if (layoutSegments.length > 1) {
+    bodyH += (layoutSegments.length - 1) * gapBetweenSegments;
   }
 
   ctx.font = fontBottom;
@@ -267,16 +263,6 @@ export function computeSlideLayout(
   );
 
   const topH = topLines.length * lhTop;
-  let bodyH = 0;
-  if (segments.isQuoteSlide) {
-    bodyH += quoteLines.length * lhQuote;
-    if (commentaryLines.length > 0) {
-      bodyH += gapQuoteToCommentary + commentaryLines.length * lhCommentary;
-    }
-  } else {
-    bodyH += normalLines.length * lhNormal;
-  }
-
   const bottomH = bottomLines.length * lhBottom;
 
   let totalH = topH;
@@ -287,24 +273,16 @@ export function computeSlideLayout(
 
   return {
     scale,
-    segments,
+    parsed,
     topLines,
     lhTop,
     fontTop,
-    quoteLines,
-    lhQuote,
-    fontQuote,
-    commentaryLines,
-    lhCommentary,
-    fontCommentary,
-    normalLines,
-    lhNormal,
-    fontNormal,
+    layoutSegments,
     bottomLines,
     lhBottom,
     fontBottom,
     gapTopToBody,
-    gapQuoteToCommentary,
+    gapBetweenSegments,
     gapBodyToBottom,
     topH,
     bodyH,
@@ -371,7 +349,7 @@ export async function renderCarouselSlide(opts: CarouselSlideOptions): Promise<B
     }
   }
 
-  const centerX = TIKTOK_SAFE_ZONE.CENTER_X; // 480px (safe from right-side TikTok buttons)
+  const centerX = TIKTOK_SAFE_ZONE.CENTER_X; 
   let currentY =
     TIKTOK_SAFE_ZONE.SAFE_TOP + Math.max(0, (TIKTOK_SAFE_ZONE.H_SAFE - layout.totalH) / 2);
 
@@ -384,50 +362,28 @@ export async function renderCarouselSlide(opts: CarouselSlideOptions): Promise<B
     currentY += layout.gapTopToBody;
   }
 
-  // 2. Draw Body
-  if (layout.segments.isQuoteSlide) {
-    // Sacred Quran/Hadith quote in Radiant Gold
-    layout.quoteLines.forEach((line) => {
+  // 2. Draw Body Segments (Alternating Gold/White with intervals)
+  for (let i = 0; i < layout.layoutSegments.length; i++) {
+    const seg = layout.layoutSegments[i];
+    const isGlow = seg.type === "sacred";
+    
+    seg.lines.forEach((line) => {
       drawTextLine(
         ctx,
         line,
         centerX,
-        currentY + layout.lhQuote / 2,
-        layout.fontQuote,
-        "#F3D179",
-        true,
+        currentY + seg.lh / 2,
+        seg.font,
+        seg.color,
+        isGlow
       );
-      currentY += layout.lhQuote;
+      currentY += seg.lh;
     });
 
-    if (layout.commentaryLines.length > 0) {
-      currentY += layout.gapQuoteToCommentary;
-      // Human commentary in Crisp White
-      layout.commentaryLines.forEach((line) => {
-        drawTextLine(
-          ctx,
-          line,
-          centerX,
-          currentY + layout.lhCommentary / 2,
-          layout.fontCommentary,
-          "#FFFFFF",
-        );
-        currentY += layout.lhCommentary;
-      });
+    // Add interval between segments
+    if (i < layout.layoutSegments.length - 1) {
+      currentY += layout.gapBetweenSegments;
     }
-  } else {
-    // Normal body text in Soft Crisp White
-    layout.normalLines.forEach((line) => {
-      drawTextLine(
-        ctx,
-        line,
-        centerX,
-        currentY + layout.lhNormal / 2,
-        layout.fontNormal,
-        "#FFFFFF",
-      );
-      currentY += layout.lhNormal;
-    });
   }
 
   if (layout.bodyH > 0 && layout.bottomH > 0) {
