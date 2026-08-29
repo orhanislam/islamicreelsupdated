@@ -55,10 +55,6 @@ export const LOCAL_BACKGROUND_POOL: string[] = [
   "tiktok_images/img1.jpg",
   "tiktok_images/img2.jpg",
   "tiktok_images/img3.jpg",
-  "tiktok_output/bg1.jpg",
-  "tiktok_output/bg2.jpg",
-  "tiktok_output/bg3.jpg",
-  "tiktok_output/bg4.jpg",
 ];
 
 export async function getCarouselBackgroundsDirect(data?: {
