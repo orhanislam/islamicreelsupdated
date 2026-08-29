@@ -1,104 +1,103 @@
-# Final Review & Adversarial Quality Report: Tawheed Carousel Diversity & State Tracking
+# Adversarial Reviewer Round 2 Handoff Report: Vertical Text Overflow Auto-Fitting & Multi-Segment Spacing
 
-**Reviewer / Critic Agent**: `reviewer_r2`  
-**Verdict**: **APPROVE**  
-**Date**: 2026-08-26T20:06:30Z  
-**Status**: Complete  
-
----
-
-## 1. Observation
-
-1. **Taxonomy & LRU Rotation (`src/lib/tawheed-taxonomy.ts`)**:
-   - `TAWHEED_TAXONOMY` (lines 45–412) contains 23 authentic theological subtopics across all 3 Salafi Tawheed pillars (*Ar-Rububiyyah*: 6 topics, *Al-Uluhiyyah*: 8 topics, *Al-Asma was-Sifat*: 9 topics), complete with Bulgarian titles, Arabic terms, authentic Quran/Hadith citations (e.g., Surat Al-Hadid 57:22-23, Sahih Bukhari #1), summaries, distinct hook angles, and visual moods.
-   - `getNextTawheedTopic` (lines 432–509) implements LRU candidate selection (`getLastSeenIdx`, lines 482–498) paired with dynamic 3-pillar rotational balancing (`pillarOrder`, lines 468–474). When history reaches or exceeds 23 items, candidates are sorted by least-recently-used index (`aIdx - bIdx`), avoiding the 3-topic lock-in starvation bug.
-   - `formatNegativeExclusionPrompt` (lines 515–555) dynamically generates negative exclusion prompts from recent generation history and explicitly enforces a strict ban list on philosophical/existential clichés (e.g., *"Защо си тук?"*, *"Защо сме на този свят?"*, *"Какъв е смисълът на живота?"*).
-
-2. **Memory Persistence & Concurrency Locking (`src/lib/memory.functions.ts`)**:
-   - `withMemoryLock` (lines 47–56) serializes all file I/O operations through a promise-chain async mutex, guaranteeing thread safety during concurrent writes.
-   - `recordCarouselProposalUsageDirect` (lines 138–196) and `recordProposalUsagesDirect` (lines 225–304) deduplicate entries based on normalized hook strings (`x.hook.toLowerCase() === normalizedHook.toLowerCase()`, lines 158–160, 248–250). This allows previously explored topics to be revisited in subsequent rotation cycles when fresh hooks are supplied.
-   - `_writeAiMemoryRaw` (lines 87–114) enforces 30-day TTL auto-pruning and bounds `carouselHistory` to the latest 100 entries.
-
-3. **Assistant Prompt Orchestration & Carousel Fallback (`src/lib/assistant.functions.ts`, `src/lib/carousel.functions.ts`)**:
-   - `chatWithAssistant` (lines 95–274) reads `carouselHistory`, calculates the next LRU Tawheed topic, and injects exclusion prompts into the system prompt.
-   - `buildCarouselSystemPrompt` (`carousel.functions.ts:27-77`) enforces the authentic 4-slide structure:
-     - Slide 1: Hook (brief, dark/moody landscape, no clichés)
-     - Slide 2: Context & Explanation (gradually emerging light)
-     - Slide 3: Authentic Dalil (Quran/Hadith in quotes, golden light)
-     - Slide 4: CTA / Du'a & Sadaqah Jariyah (warm golden light)
-   - `generateCarouselScriptDirect` (`carousel.functions.ts:79-197`) persists generated carousel entries to memory and provides deterministic fallback slides conforming strictly to Salafi Halal visual prompt rules (no humans, faces, or animals).
-
-4. **UI Sliding Window & Quick Actions (`src/routes/_app/assistant.tsx`)**:
-   - `handleNextCarouselQuickAction` (lines 163–214) tracks used carousel topic IDs in `localStorage` (`islamic_used_carousel_topics`) with a bounded sliding window of 30 items (`updatedUsed.length > 30 ? updatedUsed.slice(-30) : updatedUsed`, line 171), ensuring smooth multi-cycle LRU rotation without lock-in.
-
-5. **Test Executions and Build Results**:
-   - `npm run test:carousel`: Executed with exit code 0 (5/5 test suites passed across 30 consecutive simulation cycles).
-   - `npm run test`: Executed with exit code 0 (passed carousel verification and subtitle alignment test suites).
-   - `npm run build`: Executed with exit code 0 (Vite + Nitro production client and server bundles generated with 0 errors).
-   - `npx jiti src/lib/__tests__/reproduce-loop-bug.ts`: Confirmed uniform cycling across cycles 24..35 without 3-topic lock-in.
-   - `npx jiti src/lib/__tests__/reproduce-memory-bug.ts`: Confirmed duplicate hook relaxation allows multiple generations of the same topic with distinct hooks.
-   - `npx jiti src/lib/__tests__/stress-carousel-engine.test.ts`: Passed all 6/6 adversarial chaos suites (exhaustion & reset, TTL pruning, corrupted JSON recovery, heavy negative exclusion, fallback purity, concurrency).
-   - `npx jiti src/lib/__tests__/adversarial-diversity.test.ts`: Passed all 5/5 empirical challenges (100% cliché cleanliness, <14% bigram overlap, 100-cycle rotation balance).
+## Overview
+- **Role**: `teamwork_preview_reviewer` (Round 2)
+- **Target**: `src/lib/render-carousel.ts`
+- **Scope**: Vertical text auto-fitting, multi-segment gap balancing, quotation mark nesting/pairing, punctuation ghost segment elimination, quote deduplication, canonical Dalil collection detection, stroke scaling for readability, and 30-segment stress containment.
 
 ---
 
-## 2. Logic Chain
+## 1. What the Prior Attempt Got Wrong & Fixed Defects
 
-1. **Requirement R1 (Diverse Tawheed Topics)**:
-   - *Observation*: `tawheed-taxonomy.ts` defines 23 authentic theological subtopics spanning Rububiyyah, Uluhiyyah, and Asma was-Sifat.
-   - *Deduction*: By rotating across pillars and subtopics with specific Quran/Hadith references, the AI cannot default to vague or repetitive philosophical topics.
-   - *Stress-test validation*: 100-cycle test in `adversarial-diversity.test.ts` showed balanced pillar distribution (32/34/34) and 0 immediate repeats.
+### Bug 1: Nested Quotes & Guillemets Premature Termination
+- **Input**: `"„Пророкът Мухаммад ﷺ каза: «Действията се оценяват само според намеренията» и всяко дело има своята стойност.“\n\nИскреността (Ихляс)..."`
+- **Expected**: Exactly 1 sacred segment containing the full outer Bulgarian quote, and 1 human commentary segment.
+- **Actual**: The regex `([„«"“][\s\S]+?[”»"“])` opened on `„` but prematurely closed on the inner guillemet `»`, partitioning the sentence into a truncated sacred quote and an orphaned human commentary segment starting with `и всяко дело има своята стойност.“`.
+- **Root Cause**: The character class `[”»"“]` in the split regex matched ANY closing quotation mark regardless of the opening character type.
+- **Fix**: Replaced generic quote splitting with paired quote regex `(„[\s\S]+?[“"”]|«[\s\S]+?»|“[\s\S]+?[”"]|"[^"\n]+?")` which correctly preserves nested quotes across styles.
 
-2. **Requirement R2 (State-Tracked Topic Generation & Anti-Repetition)**:
-   - *Observation*: Topic and hook usage is persisted on the server (`assistant_memory.json`) and synced via client `localStorage` (`islamic_used_carousel_topics`).
-   - *Deduction*: State tracking enables the exclusion prompt generator to explicitly forbid previously used topics and ban overused clichés.
-   - *Stress-test validation*: Consecutive simulation test in `verify-tawheed-carousel.test.ts` proved state progression ($N \to N+1$) and 0% duplicate hooks across 30 consecutive generations.
+### Bug 2: Phantom Segments from Trailing Punctuation After Quotes
+- **Input**: `"„Аллах е Всемъдър.“.\n\n„Той знае какво крият гърдите ви.“!"` or `"„Цитат 1“ — „Цитат 2“"`
+- **Expected**: 2 sacred quote segments without empty/punctuation-only human segments.
+- **Actual**: Split produced phantom human segments `{ type: "human", text: "." }` and `{ type: "human", text: "—" }`, which rendered standalone punctuation marks on separate lines with extra 52px segment intervals.
+- **Root Cause**: `parseSlideSegments` accepted all non-empty substrings between quotes without verifying if they contained real word/alphanumeric content.
+- **Fix**: Added content guard in `parseSlideSegments` that filters out tokens without letters or digits (`!/[a-zA-Z\u0400-\u04FF\u0600-\u06FF0-9]/.test(trimmed)`).
 
-3. **Integrity & Clean Implementation**:
-   - No mock test shortcuts, hardcoded results, or dummy facade logic exist in the production source files.
-   - Type definitions in TypeScript are strict and clean across all files.
-   - Concurrency locking with `withMemoryLock` ensures file access safety under async race conditions.
+### Bug 3: Quote Duplication when Explicit `opts.quoteText` is Passed with Compound `opts.mainText`
+- **Input**: `{ quoteText: "„И който се бои от Аллах...“", mainText: "„И който се бои от Аллах...“\n\nТова обещание дава пълно спокойствие..." }`
+- **Expected**: Segment 1 is sacred quote, Segment 2 is human commentary ("Това обещание...").
+- **Actual**: Segment 1 had the quote, and Segment 2 duplicated the entire `mainText` (including the quote), repeating the quote in both gold and white text.
+- **Root Cause**: When `opts.quoteText` was passed without `opts.commentaryText`, `parseSlideSegments` fell back to copying `opts.mainText` directly into commentary if `opts.mainText !== opts.quoteText`.
+- **Fix**: Stripped `opts.quoteText` and `cleanQuote` from `opts.mainText` and trimmed leftover leading delimiters to cleanly extract only the remaining commentary.
+
+### Bug 4: Case-Sensitivity and Missing Canonical Hadith Collections in Dalil Detection
+- **Input**: Slide with lowercase topTitle `[коран 2:255]` or `[абу дауд #456]`, `[ибн маджа #202]`, `[насаи #101]`.
+- **Expected**: Recognized as Dalil quote slide and partitioned into quote + commentary.
+- **Actual**: `title.includes("Коран")` failed due to case sensitivity, and collections like Abu Daud, Nasai, and Ibn Majah were not in the keyword list.
+- **Root Cause**: Case-sensitive string matching without lowercase normalization, and limited collection list.
+- **Fix**: Normalized `opts.topTitle` to lowercase and expanded collection list to include `коран`, `хадис`, `сура`, `бухари`, `муслим`, `тирмизи`, `абу дауд`, `насаи`, `ибн маджа`, and citation number regexes.
+
+### Bug 5: Excessive Text Stroke Occlusion at Scaled-Down Font Sizes (R2)
+- **Input**: Slide downscaled to scale = 0.25 - 0.40 (font size ~15px - 24px).
+- **Expected**: Text remains legible with clear letterforms.
+- **Actual**: Constant `ctx.lineWidth = 6` occluded thin letters and diacritics when font size dropped.
+- **Root Cause**: Static stroke width of 6px in `drawTextLine`.
+- **Fix**: Made `ctx.lineWidth` proportional to font size (`Math.max(2, Math.min(6, Math.round(fontSize * 0.1)))`), keeping full 6px stroke at 60px while scaling down to 2-3px for small text.
+
+### Bug 6: Incomplete Downscaling Range for Hyper-Dense Slides (30+ segments / 3500+ chars)
+- **Input**: Extreme 30-segment / 3500-character slides.
+- **Expected**: Continued progressive downscaling to fit inside `H_SAFE` (1220px).
+- **Actual**: Step 4 loop terminated at `scale = 0.08` and clamped at `scale > 0.08`.
+- **Root Cause**: Restrictive floor on the ultimate fallback pass.
+- **Fix**: Extended fallback scaling range down to `scale = 0.05` and `gapScale = 0.01` with minimum font clamps (`Math.max(8, ...)` and `Math.max(10, ...)`).
 
 ---
 
-## 3. Caveats
+## 2. Changes Summary
 
-- Live AI calls to Gemini Flash API will fall back gracefully to deterministic authentic 4-slide generation if API rate limits or network issues occur.
-- Client-side `localStorage` retains up to 30 recent topic IDs to maintain a minimal storage footprint while allowing optimal LRU cycle execution across all 23 taxonomy items.
+### `src/lib/render-carousel.ts`
+- **Quotation Pairing**: Implemented paired quotation matching `(„[\s\S]+?[“"”]|«[\s\S]+?»|“[\s\S]+?[”"]|"[^"\n]+?")` to support nested quotes (e.g. `«...»` inside `„...“`).
+- **Punctuation Ghost Removal**: Added alphanumeric guard to prevent standalone punctuation tokens (`.`, `—`, `,`, `!`) from creating phantom human segments.
+- **Quote Deduplication**: Fixed `opts.quoteText` fallback to strip the sacred quote from compound `opts.mainText` so commentary is never duplicated.
+- **Case-Insensitive Dalil Detection**: Normalized titles to lowercase and added support for all major Hadith collections (Abu Daud, Nasai, Ibn Majah, Bukhari, Muslim, Tirmidhi).
+- **Adaptive Stroke Width**: Scaled `ctx.lineWidth` dynamically with font size to preserve text legibility at small scales (R2).
+- **Extended Auto-Fit Downscaling**: Lowered ultimate fallback threshold to `0.05` scale and `0.01` gapScale with safe line-height clamps (`lh >= 10`).
+- **Emoji Sanitation**: Enhanced `stripEmojis` to strip variation selectors (`\uFE0F`) and zero-width joiners (`\u200D`).
+
+### `src/lib/__tests__/adversarial-r2-reviewer-stress.test.ts` (New Comprehensive Test Suite)
+- Test 1: Quotation nesting (guillemets inside Bulgarian quotes) & trailing punctuation isolation (. , — !).
+- Test 2: QuoteText extraction & compound mainText deduplication across 3 scenarios.
+- Test 3: Case-insensitive Dalil detection across 10 canonical title variants.
+- Test 4: Full 4-slide carousel framework validation (Hook, Body, Dalil, Value-CTA) & Multi-Ayah slides strictly contained in TikTok safe bounds (`[100, 860]` and `[300, 1520]`).
+- Test 5: Readability, emoji variation selectors, and minimum font size clamps.
+- Test 6: Hyper-dense 30-segment / 3500-character stress test fitting within `H_SAFE` (1220px).
 
 ---
 
-## 4. Conclusion
+## 3. Verification Record
 
-The implementation satisfies all requirements (R1, R2, and Acceptance Criteria) from `ORIGINAL_REQUEST.md` and conforms strictly to the architecture defined in `PROJECT.md`. All automated test suites, reproduction tests, stress harnesses, and production builds pass with zero errors.
+- **Deep Verification (Ran Actual Tests)**:
+  - `npx jiti src/lib/__tests__/adversarial-r2-reviewer-stress.test.ts` -> **6/6 PASSED (100%)**
+  - `npx jiti src/lib/__tests__/verify-vertical-autofit-adversarial.test.ts` -> **5/5 PASSED (100%)**
+  - `npx jiti src/lib/__tests__/verify-vertical-autofit-segments.test.ts` -> **4/4 PASSED (100%)**
+  - `npx jiti src/lib/__tests__/verify-carousel-upgrade.test.ts` -> **49/49 PASSED (100%)**
+  - `npx jiti src/lib/__tests__/adversarial-r1-r2-challenger.test.ts` -> **5/5 PASSED (100%)**
+  - `npx jiti src/lib/__tests__/verify-photo-carousel-upgrade.test.ts` -> **4/4 PASSED (100%)**
+  - `npx jiti src/lib/__tests__/stress-carousel-engine.test.ts` -> **6/6 PASSED (100%)**
+  - `npx jiti src/lib/__tests__/adversarial-r3-r4.test.ts` -> **33/33 PASSED (100%)**
+  - `npm test` (`verify-tawheed-carousel.test.ts` & `verify-sync.test.ts`) -> **PASSED (100%)**
+  - `npm run build` -> **0 errors, full client & server/SSR bundle built cleanly in 3.05s**.
 
-**Verdict**: **APPROVE**
+- **Shallow Verification**: None — all invariants verified with automated executable test suites.
+- **Unverified Aspects**: Native mobile rendering on physical device TikTok client screens (safe zone layout coordinates `[300px, 1520px]` and `[100px, 860px]` strictly verified against canvas pixel boundaries).
 
 ---
 
-## 5. Verification Method
+## 4. Known Issues & Risks
+- **Minor Robustness Risk**: Extreme artificial inputs (> 5,000 characters on a single slide) will downscale text to ~8px font size to guarantee 100% containment within `H_SAFE`. In real-world operation, AI assistant carousel slides are bounded to 1-4 sentences per slide.
 
-To independently verify the implementation, execute the following commands in the workspace root:
+---
 
-```bash
-# 1. Run Tawheed Carousel Multi-Cycle Verification (30 consecutive simulation cycles)
-npm run test:carousel
-
-# 2. Run Full Test Suite (Carousel Verification & Subtitle Synchronization)
-npm run test
-
-# 3. Run Adversarial Stress & Chaos Test Suite (6/6 Stress Scenarios)
-npx jiti src/lib/__tests__/stress-carousel-engine.test.ts
-
-# 4. Run Empirical Diversity & Cliché Scanner Harness
-npx jiti src/lib/__tests__/adversarial-diversity.test.ts
-
-# 5. Run Production Build
-npm run build
-```
-
-*Invalidation Conditions*:
-- Any failure in topic rotation (immediate repeat or 3-topic lock-in).
-- Any duplicate hook generated during multi-cycle simulations.
-- Any violation of Salafi Halal visual prompt rules (presence of animate beings/faces).
-- Build compilation errors or TypeScript type mismatches.
+## 5. Remaining Risk & Next Step
+- **Verdict**: **APPROVE & COMPLETE**.
+- All requirements R1 (strict vertical overflow prevention) and R2 (readability, dynamic gap balancing, adaptive stroke width) are fully satisfied and verified with deep regression and adversarial suites.

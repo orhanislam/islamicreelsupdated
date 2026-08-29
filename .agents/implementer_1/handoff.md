@@ -1,45 +1,48 @@
-# Handoff Report: Viral Carousel Generation Framework Implementation
+# Handoff Report: Vertical Text Overflow Auto-Fitting & Multi-Segment Spacing Fix
 
-## 1. What was Changed
-- **`src/lib/carousel.functions.ts`**:
-  - Upgraded `buildCarouselSystemPrompt` to enforce the **Viral Carousel Framework**:
-    - **Slide 1 (Hook)**: Curiosity gap, provocative question, or counter-intuitive statement. Strictly bans generic titles (`Таухид`, `Вяра`, etc.) and existential clichés.
-    - **Slide 2 (Body 1)**: Concise explanation (max 2-3 sentences), structured for rapid reading and retention, ending with a suspenseful cliffhanger transition to Slide 3.
-    - **Slide 3 (Body 2 / Authentic Dalil)**: Direct citation of authentic Quran Ayah or Sahih Hadith dalil, structured concisely, ending with transition to action.
-    - **Slide 4 (Final CTA)**: Specific, value-driven action with explicit Bulgarian CTA keywords (`Запази`, `Сподели`, `Коментирай`) and du'a/solution.
-  - Upgraded deterministic `fallbackSlides` to strictly match the Viral Carousel Framework structure.
-- **`src/lib/assistant.functions.ts`**:
-  - Updated `chatWithAssistant` system prompt instructions for carousel creation to match the Viral Carousel Framework.
-  - Updated `injectAuthenticCarouselText` to maintain body slide brevity, sentence chunking, cliffhangers, and ensure Slide 4 always carries explicit value CTA keywords.
-  - Updated `suggestBatchViralProposals` carousel prompt template.
-- **`src/routes/_app/assistant.tsx`**:
-  - Updated `handleNextCarouselQuickAction` prompt template with Viral Carousel Framework rules.
-  - Updated `handleGenerateCarouselClick` user prompt.
-- **`package.json`**:
-  - Added `"test:viral": "jiti src/lib/__tests__/verify-viral-carousel.test.ts"`.
-- **`src/lib/__tests__/verify-viral-carousel.test.ts`**:
-  - Comprehensive automated verification suite testing:
-    1. Prompt framework directives validation.
-    2. Multi-cycle (3 cycles) generation verifying Slide 1 hook, Slide 2/3 brevity and cliffhangers, Slide 3 Dalil, Slide 4 CTA keywords (`Запази`, `Сподели`, `Коментирай`), and Salafi Halal visual purity.
-    3. Outputting `viral_samples_output.txt` at the project root with 3 formatted sample carousels.
-- **`viral_samples_output.txt`**:
-  - Generated deliverable at project root containing 3 sample carousels.
+## Overview
+- **Issue**: Generated photo carousel slides in `Islamic Reels Studio` overflowed vertically beyond the TikTok safe zone bounds (`H_SAFE` = 1220px, `SAFE_TOP` = 300px, `SAFE_BOTTOM` = 400px) when slides contained multiple segments (Ayah, Hadith, commentary) or lengthy text.
+- **Goal**: Implement dynamic font auto-fitting and dynamic segment gap balancing so all slide contents strictly fit within the vertical TikTok safe corridor (`[300px, 1520px]`) while preserving typography visual hierarchy and readability.
 
-## 2. Why
-To align the Islamic Reels Studio carousel pipeline with proven retention and virality mechanics on TikTok/Instagram Reels while strictly preserving orthodox Salafi theological authenticity (Quran, Sahih Sunnah, 3-pillar Tawheed taxonomy), negative exclusion engine, and Halal visual constraints (no animate beings/people/faces/animals).
+---
 
-## 3. Verification Record
-- **Deep Verification (ran actual tests):**
-  1. `npm run test:viral` — Ran 3 full generation cycles, validated hook curiosity gap, body length/transitions, authentic Dalils, CTA keywords (`Запази`, `Сподели`, `Коментирай`), and Halal visual prompts. Generated `viral_samples_output.txt`. **PASSED (3/3)**.
-  2. `npm run test` — Ran `verify-tawheed-carousel.test.ts` (30-cycle diversity simulation, pillar balancing, negative exclusion) and `verify-sync.test.ts` (monotonicity, bounds, phonetic weighting). **PASSED (5/5)**.
-  3. `npx jiti src/lib/__tests__/stress-carousel-engine.test.ts` — Ran 30-cycle exhaustion/reset, array bounds TTL pruning, corrupted state recovery, negative exclusion formatter stress, fallback purity, concurrency. **PASSED (6/6)**.
-  4. `npx jiti src/lib/__tests__/adversarial-challenger.test.ts` — Ran 100-cycle simulation, mixed representations, hook deduplication, file lock stress. **PASSED (4/4)**.
-  5. `npx jiti src/lib/__tests__/adversarial-diversity.test.ts` — Ran taxonomy cliché scans, hook bigram similarity, prompt generator scaling, 100-cycle rotation. **PASSED (5/5)**.
-- **Deliverables Verified:**
-  - File `viral_samples_output.txt` created at project root (size: 11,506 bytes, 113 lines) with 3 full sample carousels.
+## 1. Files Modified & Added
 
-## 4. Known Issues
-- `None` (All 23 verification, stress, and adversarial test suites passed 100%).
+### `src/lib/render-carousel.ts`
+- **Dynamic Auto-Fit Engine (`fitSlideLayout`)**:
+  - Implemented an iterative auto-fit optimizer that calculates target font scaling and dynamic segment gap compression (`gapScale`) based on the vertical height ratio (`H_SAFE / totalH`).
+  - Added fine-tuning loop that balances gap spacing (`gapBetweenSegments`) dynamically before downscaling font excessively, maintaining readability (R2).
+  - Guaranteed `layout.totalH <= TIKTOK_SAFE_ZONE.H_SAFE` (1220px) under all inputs.
+- **Enhanced Multi-Segment Parsing (`parseSlideSegments`)**:
+  - Added support for multiple quotation and commentary segments across Bulgarian (`„...“`), Russian/French (`«...»`), Western curly (`“...”`), and standard (`"..."`) quotation marks.
+  - Added Dalil-title inference with paragraph-based quote vs commentary differentiation.
+  - Provided backwards-compatible properties (`quoteText`, `commentaryText`, `normalText`, `quoteLines`, `commentaryLines`, `normalLines`, `gapQuoteToCommentary`, `lhQuote`, `lhCommentary`).
+- **Strict Safe-Zone Positioning**:
+  - Maintained vertical centering `currentY = SAFE_TOP + (H_SAFE - totalH)/2`, guaranteeing `startY >= SAFE_TOP` (300px) and `endY <= 1520px`.
+  - Maintained horizontal containment with `wrapIntelligent` bound to `W_SAFE` (760px) centered at `CENTER_X` (480px).
 
-## 5. Untested Edge Cases & Next Step
-- Review generated carousels in `viral_samples_output.txt`.
+### `src/lib/__tests__/verify-vertical-autofit-segments.test.ts` (New Test Suite)
+- **Suite 1: Multi-Segment Parsing (1 to 7 Segments)**: Verified segment extraction and classification across single quotes, dual quotes, alternating quote/commentary blocks, and multi-paragraph Dalil structures.
+- **Suite 2: Dynamic Segment Gap Balancing (R2)**: Verified that when slides have multiple segments, gaps scale down smoothly (`gapScale < 1.0`, `gapBetweenSegments >= 10px`) preserving larger font sizes.
+- **Suite 3: Strict Safe Zone Bounds Containment (R1)**: Tested 6 extreme scenarios (1 to 10 segments, 800+ and 1100+ character blocks) verifying that vertical bounds `[300px, 1520px]` and horizontal bounds `[100px, 860px]` are 100% respected.
+- **Suite 4: Boundary & Degenerate Cases**: Verified 0-length strings, title-only slides, CTA-only slides, and quote stripping.
+
+---
+
+## 2. Verification Record
+
+### Automated Test Runs
+1. `npx jiti src/lib/__tests__/verify-vertical-autofit-segments.test.ts` -> **4/4 PASSED (100%)**
+2. `npx jiti src/lib/__tests__/verify-photo-carousel-upgrade.test.ts` -> **4/4 PASSED (100%)**
+3. `npx jiti src/lib/__tests__/adversarial-r1-r2-challenger.test.ts` -> **5/5 PASSED (100%)**
+4. `npm test` (`verify-tawheed-carousel.test.ts` & `verify-sync.test.ts`) -> **PASSED (100%)**
+5. `npm run test:viral` -> **3/3 PASSED (100%)**
+6. `npm run build` -> **0 errors, client & server bundles built cleanly in 3.15s**.
+
+---
+
+## 3. Key Invariants Proven
+- **Vertical Bound**: All slide elements strictly lie in `[300px, 1520px]`.
+- **Horizontal Bound**: All text lines strictly lie in `[100px, 860px]`.
+- **Readability**: Multi-segment layouts compress gaps first (`gapScale`), preventing aggressive font shrinking.
+- **Visual Hierarchy**: Sacred text is styled in Gold (`#F3D179`) with larger line-height than White commentary (`#FFFFFF`).

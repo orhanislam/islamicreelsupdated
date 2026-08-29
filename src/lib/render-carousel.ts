@@ -34,21 +34,54 @@ export interface TextSegment {
 export interface SlideSegments {
   isQuoteSlide: boolean;
   segments: TextSegment[];
+  quoteText?: string;
+  commentaryText?: string;
+  normalText?: string;
 }
 
 export function stripEmojis(text: string): string {
   if (!text) return "";
   return text
     .replace(
-      /[\p{Extended_Pictographic}\p{Emoji_Presentation}\u2728\u2B50\u2600-\u26FF\u2700-\u27BF]/gu,
+      /[\p{Extended_Pictographic}\p{Emoji_Presentation}\uFE0F\u200D\u2728\u2B50\u2600-\u26FF\u2700-\u27BF]/gu,
       "",
     )
     .replace(/\s+/g, " ")
     .trim();
 }
 
+export function stripOuterQuotes(text: string): string {
+  if (!text) return "";
+  return text
+    .replace(/^[„«"“'‘\s]+|[”»"“'’\s]+$/g, "")
+    .trim();
+}
+
+function splitOversizedWord(
+  word: string,
+  measureFn: (t: string) => number,
+  maxWidth: number,
+): string[] {
+  if (measureFn(word) <= maxWidth) return [word];
+  const chunks: string[] = [];
+  let currentChunk = "";
+  for (const char of word) {
+    const candidate = currentChunk + char;
+    if (measureFn(candidate) <= maxWidth || currentChunk === "") {
+      currentChunk = candidate;
+    } else {
+      chunks.push(currentChunk);
+      currentChunk = char;
+    }
+  }
+  if (currentChunk) {
+    chunks.push(currentChunk);
+  }
+  return chunks;
+}
+
 /**
- * Intelligent text-wrapping with orphan word elimination.
+ * Intelligent text-wrapping with orphan word elimination and oversized token splitting.
  */
 export function wrapIntelligent(
   measureFn: (text: string) => number,
@@ -58,7 +91,17 @@ export function wrapIntelligent(
   const clean = stripEmojis(rawText).trim();
   if (!clean) return [];
 
-  const words = clean.split(/\s+/).filter(Boolean);
+  const rawWords = clean.split(/\s+/).filter(Boolean);
+  if (rawWords.length === 0) return [];
+
+  const words: string[] = [];
+  for (const w of rawWords) {
+    if (measureFn(w) > maxWidth) {
+      words.push(...splitOversizedWord(w, measureFn, maxWidth));
+    } else {
+      words.push(w);
+    }
+  }
   if (words.length === 0) return [];
 
   const lines: string[] = [];
@@ -89,7 +132,7 @@ export function wrapIntelligent(
       const stolenWord = prevWords.pop()!;
       const newPrev = prevWords.join(" ");
       const newLast = stolenWord + " " + lastLine;
-      if (measureFn(newLast) <= maxWidth) {
+      if (measureFn(newLast) <= maxWidth && measureFn(newPrev) <= maxWidth) {
         lines[lines.length - 2] = newPrev;
         lines[lines.length - 1] = newLast;
       }
@@ -105,57 +148,150 @@ export function wrapIntelligent(
 export function parseSlideSegments(opts: CarouselSlideOptions): SlideSegments {
   const segments: TextSegment[] = [];
 
-  if (opts.quoteText && opts.quoteText.trim()) {
+  // Case 1: Explicit quoteText / commentaryText passed in opts
+  if (opts.quoteText && opts.quoteText.trim() && stripOuterQuotes(opts.quoteText.trim()).length > 0) {
+    const cleanQuote = stripOuterQuotes(opts.quoteText.trim());
     segments.push({ type: "sacred", text: opts.quoteText.trim() });
-    if (opts.commentaryText && opts.commentaryText.trim()) {
-      segments.push({ type: "human", text: opts.commentaryText.trim() });
+    let commentary = opts.commentaryText?.trim() || "";
+    if (!commentary && opts.mainText) {
+      let stripped = opts.mainText.trim();
+      if (stripped.includes(opts.quoteText.trim())) {
+        stripped = stripped.replace(opts.quoteText.trim(), "").trim();
+      } else if (cleanQuote && stripped.includes(cleanQuote)) {
+        stripped = stripped.replace(cleanQuote, "").trim();
+      }
+      stripped = stripped
+        .replace(/^[„«"“'‘\s,.:;—–-]+/g, "")
+        .replace(/[”»"“'’\s]+$/g, "")
+        .trim();
+      if (stripped && stripped !== opts.quoteText.trim() && stripped !== cleanQuote) {
+        commentary = stripped;
+      }
     }
-    return { isQuoteSlide: true, segments };
+    if (commentary) {
+      segments.push({ type: "human", text: commentary });
+    }
+    return {
+      isQuoteSlide: true,
+      segments,
+      quoteText: cleanQuote,
+      commentaryText: commentary,
+      normalText: "",
+    };
   }
 
-  const raw = (opts.mainText || "").trim();
-  if (!raw) {
-    return { isQuoteSlide: false, segments: [] };
+  const raw = (opts.mainText || opts.commentaryText || "")
+    .replace(/\r\n/g, "\n")
+    .replace(/\r/g, "\n")
+    .trim();
+  if (!raw || !/[a-zA-Z\u0400-\u04FF\u0600-\u06FF0-9]/.test(raw)) {
+    return { isQuoteSlide: false, segments: [], quoteText: "", commentaryText: "", normalText: "" };
   }
 
-  // Split by quotes „...“ or «...» or "..."
-  const regex = /([„«"“][\s\S]+?[”»"“])/g;
+  // Quote pair regex respecting nested quotation styles:
+  // 1. Bulgarian „...“ / „..."
+  // 2. Guillemets «...»
+  // 3. Curly “...” / “..."
+  // 4. Straight quotes "..."
+  const regex = /(„[\s\S]+?[“"”]|«[\s\S]+?»|“[\s\S]+?[”"]|"[^"\n]+?")/g;
   const parts = raw.split(regex);
   
   let hasSacred = false;
 
   for (const part of parts) {
-    if (!part.trim()) continue;
-    if (part.match(/^[„«"“][\s\S]+?[”»"“]$/)) {
-      segments.push({ type: "sacred", text: part.trim() });
+    const trimmed = part.trim();
+    if (!trimmed) continue;
+    // Filter out ghost segments that contain only punctuation / symbols
+    if (!/[a-zA-Z\u0400-\u04FF\u0600-\u06FF0-9]/.test(trimmed)) {
+      continue;
+    }
+    if (
+      trimmed.match(/^(„[\s\S]+?[“"”]|«[\s\S]+?»|“[\s\S]+?[”"]|"[^"\n]+?")$/) &&
+      stripOuterQuotes(trimmed).length > 0
+    ) {
+      segments.push({ type: "sacred", text: trimmed });
       hasSacred = true;
     } else {
-      segments.push({ type: "human", text: part.trim() });
+      segments.push({ type: "human", text: trimmed });
     }
   }
 
-  // If there are no quotes, treat as one human block unless the title implies it's a quote
+  // If there are no quotes, check if topTitle implies quote or if explicit quote keywords exist
   if (!hasSacred) {
-    if (
-      opts.topTitle.includes("Коран") ||
-      opts.topTitle.includes("Хадис") ||
-      opts.topTitle.includes("Сура") ||
-      opts.topTitle.startsWith("[")
-    ) {
+    const lowerTitle = (opts.topTitle || "").toLowerCase();
+    const isDalilTitle =
+      lowerTitle.includes("коран") ||
+      lowerTitle.includes("хадис") ||
+      lowerTitle.includes("сура") ||
+      lowerTitle.includes("аят") ||
+      lowerTitle.includes("знамение") ||
+      lowerTitle.includes("бухари") ||
+      lowerTitle.includes("муслим") ||
+      lowerTitle.includes("тирмизи") ||
+      lowerTitle.includes("абу дауд") ||
+      lowerTitle.includes("насаи") ||
+      lowerTitle.includes("ибн маджа") ||
+      lowerTitle.includes("quran") ||
+      lowerTitle.includes("hadith") ||
+      lowerTitle.includes("surah") ||
+      lowerTitle.includes("bukhari") ||
+      lowerTitle.includes("muslim") ||
+      /\b\d+:\d+\b/.test(lowerTitle) ||
+      /#\d+\b/.test(lowerTitle);
+
+    if (isDalilTitle) {
+      // If double newline separates quote from commentary
+      if (raw.includes("\n\n")) {
+        const paragraphs = raw.split(/\n\n+/).map((p) => p.trim()).filter(Boolean);
+        if (paragraphs.length >= 2) {
+          const quotePara = paragraphs[0];
+          const commentaryPara = paragraphs.slice(1).join("\n\n");
+          return {
+            isQuoteSlide: true,
+            segments: [
+              { type: "sacred", text: quotePara },
+              { type: "human", text: commentaryPara },
+            ],
+            quoteText: stripOuterQuotes(quotePara),
+            commentaryText: commentaryPara,
+            normalText: "",
+          };
+        }
+      }
+
       return {
         isQuoteSlide: true,
         segments: [{ type: "sacred", text: raw }],
+        quoteText: stripOuterQuotes(raw),
+        commentaryText: "",
+        normalText: "",
       };
     }
+
     return {
       isQuoteSlide: false,
       segments: [{ type: "human", text: raw }],
+      quoteText: "",
+      commentaryText: "",
+      normalText: raw,
     };
   }
+
+  const sacredTexts = segments
+    .filter((s) => s.type === "sacred")
+    .map((s) => stripOuterQuotes(s.text))
+    .filter(Boolean);
+  const humanTexts = segments
+    .filter((s) => s.type === "human")
+    .map((s) => s.text.trim())
+    .filter(Boolean);
 
   return {
     isQuoteSlide: true,
     segments,
+    quoteText: sacredTexts.join("\n\n"),
+    commentaryText: humanTexts.join("\n\n"),
+    normalText: "",
   };
 }
 
@@ -188,7 +324,9 @@ function drawTextLine(
   ctx.shadowOffsetY = 4;
 
   ctx.lineJoin = "round";
-  ctx.lineWidth = 6;
+  const sizeMatch = font.match(/(\d+)px/);
+  const fontSize = sizeMatch ? parseInt(sizeMatch[1], 10) : 50;
+  ctx.lineWidth = Math.max(2, Math.min(6, Math.round(fontSize * 0.1)));
   ctx.strokeStyle = "rgba(0, 0, 0, 0.85)";
   ctx.strokeText(text, x, y);
 
@@ -207,29 +345,58 @@ export interface LayoutSegment {
   color: string;
 }
 
+export interface SlideLayoutResult {
+  scale: number;
+  gapScale: number;
+  parsed: SlideSegments;
+  segments: SlideSegments;
+  topLines: string[];
+  lhTop: number;
+  fontTop: string;
+  layoutSegments: LayoutSegment[];
+  quoteLines: string[];
+  commentaryLines: string[];
+  normalLines: string[];
+  bottomLines: string[];
+  lhBottom: number;
+  fontBottom: string;
+  lhQuote: number;
+  lhCommentary: number;
+  gapTopToBody: number;
+  gapBetweenSegments: number;
+  gapQuoteToCommentary: number;
+  gapBodyToBottom: number;
+  topH: number;
+  bodyH: number;
+  bottomH: number;
+  totalH: number;
+}
+
 export function computeSlideLayout(
   ctx: CanvasRenderingContext2D,
   opts: CarouselSlideOptions,
-  scale: number,
-) {
+  scale: number = 1.0,
+  gapScale?: number,
+): SlideLayoutResult {
+  const actualGapScale = typeof gapScale === "number" ? gapScale : scale;
   const maxWidth = TIKTOK_SAFE_ZONE.W_SAFE;
   const parsed = parseSlideSegments(opts);
 
-  const fontTop = `800 ${Math.round(54 * scale)}px 'Montserrat', sans-serif`;
-  const lhTop = Math.round(68 * scale);
+  const fontTop = `800 ${Math.max(8, Math.round(54 * scale))}px 'Montserrat', sans-serif`;
+  const lhTop = Math.max(10, Math.round(68 * scale));
 
-  const fontQuote = `800 ${Math.round(60 * scale)}px 'Montserrat', sans-serif`;
-  const lhQuote = Math.round(76 * scale);
+  const fontQuote = `800 ${Math.max(8, Math.round(60 * scale))}px 'Montserrat', sans-serif`;
+  const lhQuote = Math.max(10, Math.round(76 * scale));
 
-  const fontCommentary = `500 ${Math.round(46 * scale)}px 'Montserrat', sans-serif`;
-  const lhCommentary = Math.round(62 * scale);
+  const fontCommentary = `500 ${Math.max(8, Math.round(46 * scale))}px 'Montserrat', sans-serif`;
+  const lhCommentary = Math.max(10, Math.round(62 * scale));
 
-  const fontBottom = `700 ${Math.round(48 * scale)}px 'Montserrat', sans-serif`;
-  const lhBottom = Math.round(64 * scale);
+  const fontBottom = `700 ${Math.max(8, Math.round(48 * scale))}px 'Montserrat', sans-serif`;
+  const lhBottom = Math.max(10, Math.round(64 * scale));
 
-  const gapTopToBody = Math.round(44 * scale);
-  const gapBetweenSegments = Math.round(52 * scale);
-  const gapBodyToBottom = Math.round(44 * scale);
+  const gapTopToBody = Math.max(0, Math.round(44 * actualGapScale));
+  const gapBetweenSegments = Math.max(0, Math.round(52 * actualGapScale));
+  const gapBodyToBottom = Math.max(0, Math.round(44 * actualGapScale));
 
   ctx.font = fontTop;
   const topLines = wrapIntelligent((t) => ctx.measureText(t).width, opts.topTitle || "", maxWidth);
@@ -241,13 +408,17 @@ export function computeSlideLayout(
     if (seg.type === "sacred") {
       ctx.font = fontQuote;
       const lines = wrapIntelligent((t) => ctx.measureText(t).width, seg.text, maxWidth);
-      layoutSegments.push({ type: "sacred", lines, font: fontQuote, lh: lhQuote, color: "#F3D179" });
-      bodyH += lines.length * lhQuote;
+      if (lines.length > 0) {
+        layoutSegments.push({ type: "sacred", lines, font: fontQuote, lh: lhQuote, color: "#F3D179" });
+        bodyH += lines.length * lhQuote;
+      }
     } else {
       ctx.font = fontCommentary;
       const lines = wrapIntelligent((t) => ctx.measureText(t).width, seg.text, maxWidth);
-      layoutSegments.push({ type: "human", lines, font: fontCommentary, lh: lhCommentary, color: "#FFFFFF" });
-      bodyH += lines.length * lhCommentary;
+      if (lines.length > 0) {
+        layoutSegments.push({ type: "human", lines, font: fontCommentary, lh: lhCommentary, color: "#FFFFFF" });
+        bodyH += lines.length * lhCommentary;
+      }
     }
   }
 
@@ -266,23 +437,47 @@ export function computeSlideLayout(
   const bottomH = bottomLines.length * lhBottom;
 
   let totalH = topH;
-  if (topH > 0 && bodyH > 0) totalH += gapTopToBody;
+  if (topH > 0 && bodyH > 0) {
+    totalH += gapTopToBody;
+  } else if (topH > 0 && bottomH > 0) {
+    totalH += gapTopToBody;
+  }
   totalH += bodyH;
-  if (bodyH > 0 && bottomH > 0) totalH += gapBodyToBottom;
+  if (bodyH > 0 && bottomH > 0) {
+    totalH += gapBodyToBottom;
+  }
   totalH += bottomH;
+
+  const quoteLines = parsed.isQuoteSlide
+    ? layoutSegments.filter((s) => s.type === "sacred").flatMap((s) => s.lines)
+    : [];
+  const commentaryLines = parsed.isQuoteSlide
+    ? layoutSegments.filter((s) => s.type === "human").flatMap((s) => s.lines)
+    : [];
+  const normalLines = !parsed.isQuoteSlide
+    ? layoutSegments.flatMap((s) => s.lines)
+    : [];
 
   return {
     scale,
+    gapScale: actualGapScale,
     parsed,
+    segments: parsed,
     topLines,
     lhTop,
     fontTop,
     layoutSegments,
+    quoteLines,
+    commentaryLines,
+    normalLines,
     bottomLines,
     lhBottom,
     fontBottom,
+    lhQuote,
+    lhCommentary,
     gapTopToBody,
     gapBetweenSegments,
+    gapQuoteToCommentary: gapBetweenSegments,
     gapBodyToBottom,
     topH,
     bodyH,
@@ -291,11 +486,74 @@ export function computeSlideLayout(
   };
 }
 
+/**
+ * Dynamic auto-fit calculation that iteratively adjusts scale and gap spacing
+ * to ensure all text lines and segments strictly fit within H_SAFE (1220px).
+ */
+export function fitSlideLayout(
+  ctx: CanvasRenderingContext2D,
+  opts: CarouselSlideOptions,
+): SlideLayoutResult {
+  const safeH = TIKTOK_SAFE_ZONE.H_SAFE;
+  let scale = 1.0;
+  let gapScale = 1.0;
+  let layout = computeSlideLayout(ctx, opts, scale, gapScale);
+
+  if (layout.totalH <= safeH) {
+    return layout;
+  }
+
+  const hasMultipleSegments = layout.layoutSegments.length > 1;
+
+  // 1. Proactive multi-segment gap compression to preserve font size (R2)
+  if (hasMultipleSegments) {
+    gapScale = Math.max(0.35, Math.min(1.0, safeH / layout.totalH));
+    layout = computeSlideLayout(ctx, opts, scale, gapScale);
+    if (layout.totalH <= safeH) {
+      return layout;
+    }
+  }
+
+  // 2. Initial proactive estimation based on height ratio
+  scale = Math.min(1.0, Math.max(0.20, (safeH / layout.totalH) * 0.96));
+  gapScale = hasMultipleSegments ? Math.max(0.25, Math.min(gapScale, scale * 0.85)) : scale;
+  layout = computeSlideLayout(ctx, opts, scale, gapScale);
+
+  // 3. Fine-tuning loop with dynamic gap balancing
+  while (layout.totalH > safeH && (scale > 0.20 || gapScale > 0.10)) {
+    if (hasMultipleSegments && gapScale > 0.30 && gapScale > scale * 0.5) {
+      gapScale = Math.max(0.15, gapScale - 0.05);
+    } else if (scale > 0.30) {
+      scale = Math.max(0.25, scale - 0.03);
+      gapScale = Math.min(gapScale, scale);
+    } else if (gapScale > 0.10) {
+      gapScale = Math.max(0.08, gapScale - 0.04);
+    } else {
+      scale = Math.max(0.15, scale - 0.02);
+    }
+
+    layout = computeSlideLayout(ctx, opts, scale, gapScale);
+  }
+
+  // 4. Ultimate safety fallback for extreme edge cases (e.g. 20+ segments / 2000+ chars)
+  while (layout.totalH > safeH && scale > 0.05) {
+    scale = Math.max(0.05, scale - 0.01);
+    gapScale = Math.max(0.01, gapScale - 0.01);
+    layout = computeSlideLayout(ctx, opts, scale, gapScale);
+  }
+
+  return layout;
+}
+
 export async function renderCarouselSlide(opts: CarouselSlideOptions): Promise<Blob> {
-  try {
-    await document.fonts.load("700 60px 'Montserrat', sans-serif");
-  } catch {
-    /* best-effort font loading */
+  if (typeof document !== "undefined" && document?.fonts && typeof document.fonts.load === "function") {
+    try {
+      await document.fonts.load("800 60px 'Montserrat', sans-serif");
+      await document.fonts.load("700 60px 'Montserrat', sans-serif");
+      await document.fonts.load("500 46px 'Montserrat', sans-serif");
+    } catch {
+      /* best-effort font loading */
+    }
   }
 
   const W = TIKTOK_SAFE_ZONE.W;
@@ -335,19 +593,8 @@ export async function renderCarouselSlide(opts: CarouselSlideOptions): Promise<B
   ctx.fillStyle = grad;
   ctx.fillRect(0, 0, W, H);
 
-  // Dynamic auto-fit font scaling
-  let scale = 1.0;
-  let layout = computeSlideLayout(ctx, opts, scale);
-
-  if (layout.totalH > TIKTOK_SAFE_ZONE.H_SAFE) {
-    scale = Math.max(0.6, (TIKTOK_SAFE_ZONE.H_SAFE / layout.totalH) * 0.95);
-    layout = computeSlideLayout(ctx, opts, scale);
-
-    while (layout.totalH > TIKTOK_SAFE_ZONE.H_SAFE && scale > 0.55) {
-      scale -= 0.05;
-      layout = computeSlideLayout(ctx, opts, scale);
-    }
-  }
+  // Dynamic auto-fit font scaling & gap balancing
+  const layout = fitSlideLayout(ctx, opts);
 
   const centerX = TIKTOK_SAFE_ZONE.CENTER_X; 
   let currentY =
@@ -359,6 +606,8 @@ export async function renderCarouselSlide(opts: CarouselSlideOptions): Promise<B
     currentY += layout.lhTop;
   });
   if (layout.topH > 0 && layout.bodyH > 0) {
+    currentY += layout.gapTopToBody;
+  } else if (layout.topH > 0 && layout.bottomH > 0) {
     currentY += layout.gapTopToBody;
   }
 
