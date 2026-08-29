@@ -63,6 +63,10 @@ export function cleanProposalTitle(rawTitle: string): string {
   // Clean extra spaces
   title = title.replace(/\s{2,}/g, " ").trim();
 
+  // Strip ALL square brackets from the title as requested by the user
+  title = title.replace(/\[|\]/g, "").trim();
+  title = title.replace(/\s{2,}/g, " ").trim(); // re-clean double spaces
+
   return title;
 }
 
@@ -130,7 +134,7 @@ async function injectAuthenticCarouselText(proposals: VideoProposal[]) {
       const cleanDalil = flatBulgarian.replace(/(^|\s+)(?:\(\d+\)|\[\d+\]|\d+\.)\s*/g, "$1").trim();
       const transitionText = "А ето как да приложиш това спасение в живота си още днес...";
       const dalilSlide = {
-        topTitle: `[${reference}]`,
+        topTitle: `${reference}`,
         mainText: `„${cleanDalil}“\n\n${transitionText}`,
         bottomText: 'Плъзни за духовното решение 👉',
         footerText: '3/4 • Плъзнете наляво',
@@ -214,7 +218,7 @@ ${carouselExclusionPrompt}
 1. Слайд 1 (Куката / Viral Hook):
    - Моментално грабване на вниманието с curiosity gap (любопитна празнина), контраинтуитивно твърдение или силен провокативен въпрос по темата (напр. "${nextTawheed.hookAngleBg}").
    - СТРИКТНО ЗАБРАНЕНИ са общи/генерични заглавия и клишета като 'Защо си тук?', 'Какъв е смисълът на живота?'.
-   - topTitle: кратък драматичен етикет в скоби (макс 2-3 думи, напр. "[ТАЙНАТА НА РИЗКА]", "[БОЖЕСТВЕНИЯТ ЗАКОН]").
+   - topTitle: кратък драматичен етикет (макс 2-3 думи, напр. "ТАЙНАТА НА РИЗКА", "БОЖЕСТВЕНИЯТ ЗАКОН"). Без скоби.
    - bottomText: "Плъзни наляво за тайната 👉"
    - footerText: "1/4 • Плъзнете наляво"
    - imagePrompt: тъмен, кинематографичен природен пейзаж на английски (dark, atmospheric, dramatic cinematic landscape, vertical 9:16, 8k, no people).
