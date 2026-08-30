@@ -500,29 +500,29 @@ export function fitSlideLayout(
   }
 
   // 2. Initial proactive estimation based on height ratio
-  scale = Math.min(1.0, Math.max(0.20, (safeH / layout.totalH) * 0.96));
+  scale = Math.min(1.0, Math.max(0.55, (safeH / layout.totalH) * 0.96));
   gapScale = hasMultipleSegments ? Math.max(0.25, Math.min(gapScale, scale * 0.85)) : scale;
   layout = computeSlideLayout(ctx, opts, scale, gapScale);
 
   // 3. Fine-tuning loop with dynamic gap balancing
-  while (layout.totalH > safeH && (scale > 0.20 || gapScale > 0.10)) {
+  while (layout.totalH > safeH && (scale > 0.50 || gapScale > 0.10)) {
     if (hasMultipleSegments && gapScale > 0.30 && gapScale > scale * 0.5) {
       gapScale = Math.max(0.15, gapScale - 0.05);
-    } else if (scale > 0.30) {
-      scale = Math.max(0.25, scale - 0.03);
+    } else if (scale > 0.55) {
+      scale = Math.max(0.50, scale - 0.03);
       gapScale = Math.min(gapScale, scale);
     } else if (gapScale > 0.10) {
       gapScale = Math.max(0.08, gapScale - 0.04);
     } else {
-      scale = Math.max(0.15, scale - 0.02);
+      scale = Math.max(0.45, scale - 0.02);
     }
 
     layout = computeSlideLayout(ctx, opts, scale, gapScale);
   }
 
   // 4. Ultimate safety fallback for extreme edge cases (e.g. 20+ segments / 2000+ chars)
-  while (layout.totalH > safeH && scale > 0.05) {
-    scale = Math.max(0.05, scale - 0.01);
+  while (layout.totalH > safeH && scale > 0.40) {
+    scale = Math.max(0.40, scale - 0.01);
     gapScale = Math.max(0.01, gapScale - 0.01);
     layout = computeSlideLayout(ctx, opts, scale, gapScale);
   }
