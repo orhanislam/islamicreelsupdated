@@ -50,12 +50,7 @@ export const generateBackground = createServerFn({ method: "POST" })
     return { base64, mimeType };
   });
 
-export const LOCAL_BACKGROUND_POOL: string[] = [
-  "tiktok_images/img0.jpg",
-  "tiktok_images/img1.jpg",
-  "tiktok_images/img2.jpg",
-  "tiktok_images/img3.jpg",
-];
+export const LOCAL_BACKGROUND_POOL: string[] = [];
 
 export async function getCarouselBackgroundsDirect(data?: {
   count?: number;
