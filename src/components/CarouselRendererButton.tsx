@@ -62,6 +62,38 @@ export function CarouselRendererButton({ slides, title }: { slides: Slide[]; tit
       console.warn("Could not fetch local backgrounds, using fallback generator:", err);
     }
 
+    setProgress("Изчисляване на глобален размер на текста...");
+    // Pre-compute the minimum scale across ALL slides to guarantee consistency
+    let minScale = 1.0;
+    let minGapScale = 1.0;
+    if (typeof document !== "undefined") {
+      const tempCanvas = document.createElement("canvas");
+      tempCanvas.width = 1080;
+      tempCanvas.height = 1920;
+      const ctx = tempCanvas.getContext("2d");
+      if (ctx) {
+        // Import fitSlideLayout dynamically to avoid SSR issues if necessary, but it's statically imported above
+        import("@/lib/render-carousel").then(({ fitSlideLayout }) => {
+          // We can do this synchronously if we already have it imported
+        });
+        const { fitSlideLayout } = await import("@/lib/render-carousel");
+        
+        for (const slide of slides) {
+          const layout = fitSlideLayout(ctx, {
+            backgroundUrl: "",
+            topTitle: slide.topTitle || "",
+            mainText: slide.mainText || "",
+            bottomText: slide.bottomText || "",
+            footerText: slide.footerText || "",
+            quoteText: slide.quoteText,
+            commentaryText: slide.commentaryText,
+          });
+          if (layout.scale < minScale) minScale = layout.scale;
+          if (layout.gapScale < minGapScale) minGapScale = layout.gapScale;
+        }
+      }
+    }
+
     setProgress("Рендиране на слайдовете в TikTok Safe Zone...");
     return await Promise.all(
       slides.map(async (slide, i) => {
@@ -72,15 +104,19 @@ export function CarouselRendererButton({ slides, title }: { slides: Slide[]; tit
           bgUrl = `data:${bgRes.mimeType};base64,${bgRes.base64}`;
         }
 
-        const blob = await renderCarouselSlide({
-          backgroundUrl: bgUrl,
-          topTitle: slide.topTitle || "",
-          mainText: slide.mainText || "",
-          bottomText: slide.bottomText || "",
-          footerText: slide.footerText || "",
-          quoteText: slide.quoteText,
-          commentaryText: slide.commentaryText,
-        });
+        const blob = await renderCarouselSlide(
+          {
+            backgroundUrl: bgUrl,
+            topTitle: slide.topTitle || "",
+            mainText: slide.mainText || "",
+            bottomText: slide.bottomText || "",
+            footerText: slide.footerText || "",
+            quoteText: slide.quoteText,
+            commentaryText: slide.commentaryText,
+          },
+          minScale,
+          minGapScale
+        );
         return { blob, name: `Slide_${i + 1}.png` };
       }),
     );

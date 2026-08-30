@@ -10,7 +10,7 @@ export { TIKTOK_SAFE_ZONE, type SafeZoneGeometry };
  * - Right: 140px (action buttons are smaller on carousel)
  * Gives H_SAFE ~1510px vs the video's 1220px → much more room for text.
  */
-const CAROUSEL_SAFE_ZONE: SafeZoneGeometry = createSafeZone({
+export const CAROUSEL_SAFE_ZONE: SafeZoneGeometry = createSafeZone({
   W: 1080,
   H: 1920,
   SAFE_TOP: 120,
@@ -385,17 +385,17 @@ export function computeSlideLayout(
   const maxWidth = CAROUSEL_SAFE_ZONE.W_SAFE;
   const parsed = parseSlideSegments(opts);
 
-  const fontTop = `800 ${Math.max(8, Math.round(76 * scale))}px 'Montserrat', sans-serif`;
-  const lhTop = Math.max(10, Math.round(92 * scale));
+  const fontTop = `800 ${Math.max(8, Math.round(68 * scale))}px 'Montserrat', sans-serif`;
+  const lhTop = Math.max(10, Math.round(82 * scale));
 
-  const fontQuote = `800 ${Math.max(8, Math.round(84 * scale))}px 'Montserrat', sans-serif`;
-  const lhQuote = Math.max(10, Math.round(100 * scale));
+  const fontQuote = `800 ${Math.max(8, Math.round(76 * scale))}px 'Montserrat', sans-serif`;
+  const lhQuote = Math.max(10, Math.round(92 * scale));
 
-  const fontCommentary = `500 ${Math.max(8, Math.round(84 * scale))}px 'Montserrat', sans-serif`;
-  const lhCommentary = Math.max(10, Math.round(100 * scale));
+  const fontCommentary = `500 ${Math.max(8, Math.round(76 * scale))}px 'Montserrat', sans-serif`;
+  const lhCommentary = Math.max(10, Math.round(92 * scale));
 
-  const fontBottom = `700 ${Math.max(8, Math.round(68 * scale))}px 'Montserrat', sans-serif`;
-  const lhBottom = Math.max(10, Math.round(86 * scale));
+  const fontBottom = `700 ${Math.max(8, Math.round(64 * scale))}px 'Montserrat', sans-serif`;
+  const lhBottom = Math.max(10, Math.round(80 * scale));
 
   const gapTopToBody = Math.max(0, Math.round(60 * actualGapScale));
   const gapBetweenSegments = Math.max(0, Math.round(90 * actualGapScale));
@@ -563,7 +563,11 @@ export function fitSlideLayout(
   return layout;
 }
 
-export async function renderCarouselSlide(opts: CarouselSlideOptions): Promise<Blob> {
+export async function renderCarouselSlide(
+  opts: CarouselSlideOptions,
+  forcedScale?: number,
+  forcedGapScale?: number
+): Promise<Blob> {
   if (typeof document !== "undefined" && document?.fonts && typeof document.fonts.load === "function") {
     try {
       await document.fonts.load("800 60px 'Montserrat', sans-serif");
