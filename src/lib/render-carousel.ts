@@ -367,21 +367,21 @@ export function computeSlideLayout(
   const maxWidth = TIKTOK_SAFE_ZONE.W_SAFE;
   const parsed = parseSlideSegments(opts);
 
-  const fontTop = `800 ${Math.max(8, Math.round(54 * scale))}px 'Montserrat', sans-serif`;
-  const lhTop = Math.max(10, Math.round(68 * scale));
+  const fontTop = `800 ${Math.max(8, Math.round(76 * scale))}px 'Montserrat', sans-serif`;
+  const lhTop = Math.max(10, Math.round(92 * scale));
 
-  const fontQuote = `800 ${Math.max(8, Math.round(60 * scale))}px 'Montserrat', sans-serif`;
-  const lhQuote = Math.max(10, Math.round(76 * scale));
+  const fontQuote = `800 ${Math.max(8, Math.round(84 * scale))}px 'Montserrat', sans-serif`;
+  const lhQuote = Math.max(10, Math.round(102 * scale));
 
-  const fontCommentary = `500 ${Math.max(8, Math.round(46 * scale))}px 'Montserrat', sans-serif`;
-  const lhCommentary = Math.max(10, Math.round(62 * scale));
+  const fontCommentary = `500 ${Math.max(8, Math.round(66 * scale))}px 'Montserrat', sans-serif`;
+  const lhCommentary = Math.max(10, Math.round(84 * scale));
 
-  const fontBottom = `700 ${Math.max(8, Math.round(48 * scale))}px 'Montserrat', sans-serif`;
-  const lhBottom = Math.max(10, Math.round(64 * scale));
+  const fontBottom = `700 ${Math.max(8, Math.round(68 * scale))}px 'Montserrat', sans-serif`;
+  const lhBottom = Math.max(10, Math.round(86 * scale));
 
-  const gapTopToBody = Math.max(0, Math.round(44 * actualGapScale));
-  const gapBetweenSegments = Math.max(0, Math.round(52 * actualGapScale));
-  const gapBodyToBottom = Math.max(0, Math.round(44 * actualGapScale));
+  const gapTopToBody = Math.max(0, Math.round(52 * actualGapScale));
+  const gapBetweenSegments = Math.max(0, Math.round(64 * actualGapScale));
+  const gapBodyToBottom = Math.max(0, Math.round(52 * actualGapScale));
 
   ctx.font = fontTop;
   const topLines = wrapIntelligent((t) => ctx.measureText(t).width, opts.topTitle || "", maxWidth);
