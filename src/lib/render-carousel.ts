@@ -385,17 +385,17 @@ export function computeSlideLayout(
   const maxWidth = CAROUSEL_SAFE_ZONE.W_SAFE;
   const parsed = parseSlideSegments(opts);
 
-  const fontTop = `800 ${Math.max(8, Math.round(88 * scale))}px 'Montserrat', sans-serif`;
-  const lhTop = Math.max(10, Math.round(106 * scale));
+  const fontTop = `800 ${Math.max(8, Math.round(76 * scale))}px 'Montserrat', sans-serif`;
+  const lhTop = Math.max(10, Math.round(92 * scale));
 
-  const fontQuote = `800 ${Math.max(8, Math.round(96 * scale))}px 'Montserrat', sans-serif`;
-  const lhQuote = Math.max(10, Math.round(116 * scale));
+  const fontQuote = `800 ${Math.max(8, Math.round(84 * scale))}px 'Montserrat', sans-serif`;
+  const lhQuote = Math.max(10, Math.round(100 * scale));
 
-  const fontCommentary = `500 ${Math.max(8, Math.round(96 * scale))}px 'Montserrat', sans-serif`;
-  const lhCommentary = Math.max(10, Math.round(116 * scale));
+  const fontCommentary = `500 ${Math.max(8, Math.round(84 * scale))}px 'Montserrat', sans-serif`;
+  const lhCommentary = Math.max(10, Math.round(100 * scale));
 
-  const fontBottom = `700 ${Math.max(8, Math.round(76 * scale))}px 'Montserrat', sans-serif`;
-  const lhBottom = Math.max(10, Math.round(96 * scale));
+  const fontBottom = `700 ${Math.max(8, Math.round(68 * scale))}px 'Montserrat', sans-serif`;
+  const lhBottom = Math.max(10, Math.round(86 * scale));
 
   const gapTopToBody = Math.max(0, Math.round(60 * actualGapScale));
   const gapBetweenSegments = Math.max(0, Math.round(90 * actualGapScale));
@@ -496,14 +496,28 @@ export function fitSlideLayout(
   ctx: CanvasRenderingContext2D,
   opts: CarouselSlideOptions,
 ): SlideLayoutResult {
-  // Reserve space at bottom for the pinned CTA (bottomText ~96px) + footerText (~56px) + gap.
-  const BOTTOM_RESERVED = 150;
-  const safeH = CAROUSEL_SAFE_ZONE.H_SAFE - BOTTOM_RESERVED;
   let scale = 1.0;
   let gapScale = 1.0;
   let layout = computeSlideLayout(ctx, opts, scale, gapScale);
 
-  if (layout.totalH <= safeH) {
+  // Calculate exact space taken by bottom elements (matches renderCarouselSlide logic)
+  const FOOTER_LH = 64;
+  const GAP_FOOTER_TO_BOTTOM = 20;
+  const footerClean = (opts.footerText || "").trim();
+  const footerBaselineY = CAROUSEL_SAFE_ZONE.BOTTOM_MAX_Y - 10;
+  
+  const bottomAnchorBaselineY = footerClean
+    ? footerBaselineY - FOOTER_LH - GAP_FOOTER_TO_BOTTOM
+    : CAROUSEL_SAFE_ZONE.BOTTOM_MAX_Y - 10;
+
+  const getSafeH = (currentLayout: SlideLayoutResult) => {
+    const bottomBlockTop = currentLayout.bottomLines.length > 0
+      ? (bottomAnchorBaselineY - currentLayout.bottomH - GAP_FOOTER_TO_BOTTOM)
+      : (footerClean ? footerBaselineY - FOOTER_LH - GAP_FOOTER_TO_BOTTOM : CAROUSEL_SAFE_ZONE.BOTTOM_MAX_Y);
+    return bottomBlockTop - CAROUSEL_SAFE_ZONE.SAFE_TOP;
+  };
+
+  if (layout.totalH <= getSafeH(layout)) {
     return layout;
   }
 
@@ -511,20 +525,20 @@ export function fitSlideLayout(
 
   // 1. Proactive multi-segment gap compression to preserve font size (R2)
   if (hasMultipleSegments) {
-    gapScale = Math.max(0.35, Math.min(1.0, safeH / layout.totalH));
+    gapScale = Math.max(0.35, Math.min(1.0, getSafeH(layout) / layout.totalH));
     layout = computeSlideLayout(ctx, opts, scale, gapScale);
-    if (layout.totalH <= safeH) {
+    if (layout.totalH <= getSafeH(layout)) {
       return layout;
     }
   }
 
   // 2. Initial proactive estimation based on height ratio
-  scale = Math.min(1.0, Math.max(0.55, (safeH / layout.totalH) * 0.96));
+  scale = Math.min(1.0, Math.max(0.55, (getSafeH(layout) / layout.totalH) * 0.96));
   gapScale = hasMultipleSegments ? Math.max(0.25, Math.min(gapScale, scale * 0.85)) : scale;
   layout = computeSlideLayout(ctx, opts, scale, gapScale);
 
   // 3. Fine-tuning loop with dynamic gap balancing
-  while (layout.totalH > safeH && (scale > 0.50 || gapScale > 0.10)) {
+  while (layout.totalH > getSafeH(layout) && (scale > 0.50 || gapScale > 0.10)) {
     if (hasMultipleSegments && gapScale > 0.30 && gapScale > scale * 0.5) {
       gapScale = Math.max(0.15, gapScale - 0.05);
     } else if (scale > 0.55) {
@@ -540,7 +554,7 @@ export function fitSlideLayout(
   }
 
   // 4. Ultimate safety fallback for extreme edge cases (e.g. 20+ segments / 2000+ chars)
-  while (layout.totalH > safeH && scale > 0.40) {
+  while (layout.totalH > getSafeH(layout) && scale > 0.40) {
     scale = Math.max(0.40, scale - 0.01);
     gapScale = Math.max(0.01, gapScale - 0.01);
     layout = computeSlideLayout(ctx, opts, scale, gapScale);
