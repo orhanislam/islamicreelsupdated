@@ -411,6 +411,8 @@ export function computeSlideLayout(
     bodyH += (layoutSegments.length - 1) * gapBetweenSegments;
   }
 
+  // bottomText is NOT part of the flow — it is anchored absolutely at the bottom of the safe zone.
+  // We still compute bottomLines/bottomH so the caller can reserve that space.
   ctx.font = fontBottom;
   const bottomLines = wrapIntelligent(
     (t) => ctx.measureText(t).width,
@@ -421,17 +423,13 @@ export function computeSlideLayout(
   const topH = topLines.length * lhTop;
   const bottomH = bottomLines.length * lhBottom;
 
+  // totalH only accounts for the flowing content (topTitle + body segments).
+  // bottomText is rendered separately at an absolute anchor.
   let totalH = topH;
   if (topH > 0 && bodyH > 0) {
     totalH += gapTopToBody;
-  } else if (topH > 0 && bottomH > 0) {
-    totalH += gapTopToBody;
   }
   totalH += bodyH;
-  if (bodyH > 0 && bottomH > 0) {
-    totalH += gapBodyToBottom;
-  }
-  totalH += bottomH;
 
   const quoteLines = parsed.isQuoteSlide
     ? layoutSegments.filter((s) => s.type === "sacred").flatMap((s) => s.lines)
@@ -473,13 +471,16 @@ export function computeSlideLayout(
 
 /**
  * Dynamic auto-fit calculation that iteratively adjusts scale and gap spacing
- * to ensure all text lines and segments strictly fit within H_SAFE (1220px).
+ * to ensure all flowing content (topTitle + body) fits within the body-only safe height.
+ * bottomText and footerText are excluded — they are anchored absolutely at the bottom.
  */
 export function fitSlideLayout(
   ctx: CanvasRenderingContext2D,
   opts: CarouselSlideOptions,
 ): SlideLayoutResult {
-  const safeH = TIKTOK_SAFE_ZONE.H_SAFE;
+  // Reserve space at bottom for the pinned CTA (bottomText ~86px) + footerText (~56px) + gaps.
+  const BOTTOM_RESERVED = 200;
+  const safeH = TIKTOK_SAFE_ZONE.H_SAFE - BOTTOM_RESERVED;
   let scale = 1.0;
   let gapScale = 1.0;
   let layout = computeSlideLayout(ctx, opts, scale, gapScale);
@@ -578,12 +579,76 @@ export async function renderCarouselSlide(opts: CarouselSlideOptions): Promise<B
   ctx.fillStyle = grad;
   ctx.fillRect(0, 0, W, H);
 
-  // Dynamic auto-fit font scaling & gap balancing
+  // Dynamic auto-fit font scaling & gap balancing (body content only, bottomText excluded)
   const layout = fitSlideLayout(ctx, opts);
 
-  const centerX = TIKTOK_SAFE_ZONE.CENTER_X; 
+  const centerX = TIKTOK_SAFE_ZONE.CENTER_X;
+
+  // ── FIXED-POSITION BOTTOM ELEMENTS ───────────────────────────────────────
+  // These are anchored absolutely to the bottom of the TikTok safe zone so they
+  // never overflow the canvas or get hidden by TikTok UI elements.
+
+  // footerText: swipe indicator (e.g. "← Плъзнете наляво") — pinned at very bottom
+  const FOOTER_FONT_SIZE = 44;
+  const FOOTER_LH = 56;
+  const FOOTER_FONT = `500 ${FOOTER_FONT_SIZE}px 'Montserrat', sans-serif`;
+  const footerClean = stripEmojis((opts.footerText || "").trim());
+  // Anchor baseline to 10px above BOTTOM_MAX_Y so nothing bleeds into TikTok UI
+  const footerBaselineY = TIKTOK_SAFE_ZONE.BOTTOM_MAX_Y - 10;
+
+  if (footerClean) {
+    ctx.font = FOOTER_FONT;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "bottom";
+    ctx.shadowColor = "rgba(0,0,0,0.85)";
+    ctx.shadowBlur = 12;
+    ctx.shadowOffsetY = 2;
+    ctx.strokeStyle = "rgba(0,0,0,0.7)";
+    ctx.lineWidth = 3;
+    ctx.lineJoin = "round";
+    ctx.strokeText(footerClean, centerX, footerBaselineY);
+    ctx.fillStyle = "rgba(255,255,255,0.60)";
+    ctx.fillText(footerClean, centerX, footerBaselineY);
+    ctx.shadowBlur = 0;
+    ctx.shadowOffsetY = 0;
+    ctx.textBaseline = "middle";
+  }
+
+  // bottomText: CTA (e.g. "Плъзни наляво за тайната") — anchored above footerText
+  const GAP_FOOTER_TO_BOTTOM = 20;
+  const bottomAnchorBaselineY = footerClean
+    ? footerBaselineY - FOOTER_LH - GAP_FOOTER_TO_BOTTOM
+    : TIKTOK_SAFE_ZONE.BOTTOM_MAX_Y - 10;
+
+  if (layout.bottomLines.length > 0) {
+    // Draw lines bottom-up: last line sits at bottomAnchorBaselineY
+    const totalBottomH = layout.bottomLines.length * layout.lhBottom;
+    const bottomStartY = bottomAnchorBaselineY - totalBottomH;
+
+    layout.bottomLines.forEach((line, i) => {
+      drawTextLine(
+        ctx,
+        line,
+        centerX,
+        bottomStartY + i * layout.lhBottom + layout.lhBottom / 2,
+        layout.fontBottom,
+        "#F3D179",
+        false,
+      );
+    });
+  }
+
+  // ── FLOWING BODY CONTENT ──────────────────────────────────────────────────
+  // Compute available vertical space for body (everything above the bottom elements)
+  const bottomBlockTop = layout.bottomLines.length > 0
+    ? (bottomAnchorBaselineY - layout.bottomH - GAP_FOOTER_TO_BOTTOM)
+    : (footerClean ? footerBaselineY - FOOTER_LH - GAP_FOOTER_TO_BOTTOM : TIKTOK_SAFE_ZONE.BOTTOM_MAX_Y);
+
+  // Vertically center the body block within the available space
+  const bodyAreaHeight = bottomBlockTop - TIKTOK_SAFE_ZONE.SAFE_TOP;
   let currentY =
-    TIKTOK_SAFE_ZONE.SAFE_TOP + Math.max(0, (TIKTOK_SAFE_ZONE.H_SAFE - layout.totalH) / 2);
+    TIKTOK_SAFE_ZONE.SAFE_TOP +
+    Math.max(0, Math.round((bodyAreaHeight - layout.totalH) / 2));
 
   // 1. Draw Top Title (Gold)
   layout.topLines.forEach((line) => {
@@ -592,15 +657,13 @@ export async function renderCarouselSlide(opts: CarouselSlideOptions): Promise<B
   });
   if (layout.topH > 0 && layout.bodyH > 0) {
     currentY += layout.gapTopToBody;
-  } else if (layout.topH > 0 && layout.bottomH > 0) {
-    currentY += layout.gapTopToBody;
   }
 
   // 2. Draw Body Segments (Alternating Gold/White with intervals)
   for (let i = 0; i < layout.layoutSegments.length; i++) {
     const seg = layout.layoutSegments[i];
     const isGlow = seg.type === "sacred";
-    
+
     seg.lines.forEach((line) => {
       drawTextLine(
         ctx,
@@ -619,23 +682,6 @@ export async function renderCarouselSlide(opts: CarouselSlideOptions): Promise<B
       currentY += layout.gapBetweenSegments;
     }
   }
-
-  if (layout.bodyH > 0 && layout.bottomH > 0) {
-    currentY += layout.gapBodyToBottom;
-  }
-
-  // 3. Draw Bottom CTA (Gold accent)
-  layout.bottomLines.forEach((line) => {
-    drawTextLine(
-      ctx,
-      line,
-      centerX,
-      currentY + layout.lhBottom / 2,
-      layout.fontBottom,
-      "#F3D179",
-    );
-    currentY += layout.lhBottom;
-  });
 
   return await new Promise<Blob>((resolve, reject) =>
     canvas.toBlob((b) => (b ? resolve(b) : reject(new Error("toBlob failed"))), "image/png"),
