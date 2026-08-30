@@ -385,19 +385,19 @@ export function computeSlideLayout(
   const maxWidth = CAROUSEL_SAFE_ZONE.W_SAFE;
   const parsed = parseSlideSegments(opts);
 
-  const fontTop = `800 ${Math.max(8, Math.round(104 * scale))}px 'Montserrat', sans-serif`;
-  const lhTop = Math.max(10, Math.round(124 * scale));
+  const fontTop = `800 ${Math.max(8, Math.round(88 * scale))}px 'Montserrat', sans-serif`;
+  const lhTop = Math.max(10, Math.round(106 * scale));
 
-  const fontQuote = `800 ${Math.max(8, Math.round(112 * scale))}px 'Montserrat', sans-serif`;
-  const lhQuote = Math.max(10, Math.round(132 * scale));
+  const fontQuote = `800 ${Math.max(8, Math.round(96 * scale))}px 'Montserrat', sans-serif`;
+  const lhQuote = Math.max(10, Math.round(116 * scale));
 
-  const fontCommentary = `500 ${Math.max(8, Math.round(112 * scale))}px 'Montserrat', sans-serif`;
-  const lhCommentary = Math.max(10, Math.round(132 * scale));
+  const fontCommentary = `500 ${Math.max(8, Math.round(96 * scale))}px 'Montserrat', sans-serif`;
+  const lhCommentary = Math.max(10, Math.round(116 * scale));
 
-  const fontBottom = `700 ${Math.max(8, Math.round(86 * scale))}px 'Montserrat', sans-serif`;
-  const lhBottom = Math.max(10, Math.round(108 * scale));
+  const fontBottom = `700 ${Math.max(8, Math.round(76 * scale))}px 'Montserrat', sans-serif`;
+  const lhBottom = Math.max(10, Math.round(96 * scale));
 
-  const gapTopToBody = Math.max(0, Math.round(70 * actualGapScale));
+  const gapTopToBody = Math.max(0, Math.round(60 * actualGapScale));
   const gapBetweenSegments = Math.max(0, Math.round(90 * actualGapScale));
   const gapBodyToBottom = Math.max(0, Math.round(70 * actualGapScale));
 
