@@ -6,10 +6,25 @@ Project Root: C:\Users\admin\Downloads\Islamic Reels Studio
 
 Your Mission:
 Investigate R3 (Title Generation Cleanup - strip '[tiktok carousels]') and R4 (Dynamic Background Images selection from asset pool).
-1. Read ORIGINAL_REQUEST.md.
-2. Investigate:
-   - Title generation in src/lib/assistant.functions.ts, carousel prompts, or assistant responses. Find where '[tiktok carousels]' or similar prefixes are produced or passed, and how title cleaning should be implemented.
-   - Background image assets: search project directory for background image assets (e.g., tiktok_images, src/assets, public/assets, or static folders). How many background images exist? What formats? How are background images currently referenced or loaded during carousel generation/rendering?
-   - How can background selection be made dynamic across slides and across successive carousel generations (e.g. pool indexing, rotation, random with history/exclusion, variety per slide)?
-3. Document exact file paths, functions, image directories/lists, and recommended design.
-4. Write your comprehensive report to C:\Users\admin\Downloads\Islamic Reels Studio\.agents\explorer_survey_3\handoff.md and notify parent when done.
+
+## 2026-08-30T07:00:38Z
+You are Survey Explorer 3 (Text Rendering, Dynamic Sizing & Layout Engine Explorer).
+Your working directory is: c:\Users\admin\Downloads\Islamic Reels Studio\.agents\explorer_survey_3
+The project workspace is: c:\Users\admin\Downloads\Islamic Reels Studio
+
+Read ORIGINAL_REQUEST.md at:
+c:\Users\admin\Downloads\Islamic Reels Studio\.agents\ORIGINAL_REQUEST.md
+
+Investigate the text rendering and layout logic thoroughly:
+1. Identify all places where text formatting, font sizes, line heights, word wrapping, text bounding boxes, container padding, dynamic auto-fitting, or canvas/DOM rendering occur.
+2. Analyze how different text layers (Arabic text, English/translation text, transliteration, surah title, verse reference, audio/reciter badge) interact:
+   - How are their positions and heights calculated? Are they in flex/grid flow or absolute positioning?
+   - How does the layout handle long text (e.g., long Ayat, long translations, multi-line phrases)?
+   - Are there font size recalculations or auto-shrink / line-clamping logic?
+3. Check build and test commands (e.g., npm run build, npm test, etc.) and see if there are existing tests or lint checks.
+4. Provide recommendations for dynamic text scaling, bounding box containment, spacing calculation, and collision/overlap prevention.
+
+Write your complete findings and handoff report to:
+c:\Users\admin\Downloads\Islamic Reels Studio\.agents\explorer_survey_3\handoff.md
+
+Send a message back when complete.

@@ -1,90 +1,83 @@
-# Project: TikTok Photo Carousel Generation Upgrade
+# Project: Islamic Reels Studio UI Layout & Safe Zone Fixes
 
 ## Architecture
-Islamic Reels Studio generates 4-slide TikTok photo carousels (1080x1920 9:16) with Tawheed theological authenticity and viral structure. The system consists of:
-1. **AI Generation & Prompt Engine** (`src/lib/assistant.functions.ts`, `src/lib/carousel.functions.ts`): Produces structured 4-slide carousel scripts with Hook, Body, Dalil (Quran/Hadith), and CTA, accompanied by sanitized titles and prompt instructions.
-2. **Background Asset Service** (`src/lib/backgrounds.functions.ts`): Dynamically serves and rotates high-resolution vertical background assets from local pools (`tiktok_images/`, `tiktok_output/`).
-3. **Canvas Rendering Engine** (`src/lib/render-carousel.ts`): Client/server-compatible Canvas 2D renderer formatting text within TikTok UI safe zones with intelligent word wrapping, auto-fit dynamic scaling, and dual-color differentiation for Quran/Hadith vs human commentary.
-4. **Interactive UI & Export Layer** (`src/components/CarouselRendererButton.tsx`, `src/routes/_app/assistant.tsx`): Integrates slide generation, background fetching, live progress, ZIP bundle download, title copying, and Make.com webhook automation.
+- **Framework**: TanStack Start + React 19 + Vite + Tailwind CSS v4
+- **Shared Geometry Registry**: `src/lib/safe-zone.ts` defining standard Safe Zones (`TikTok`, `Instagram Reels`, `YouTube Shorts`, `Universal`)
+- **Canvas Render Engines**:
+  - Carousel Renderer: `src/lib/render-carousel.ts`
+  - Single Photo Renderer: `src/lib/render-photo.ts`
+  - Client Video Renderer: `src/lib/render-video.ts`
+- **Server Media Engines**:
+  - FFmpeg & ASS Subtitles: `src/lib/render.functions.ts`
+  - Thumbnail Generator: `src/lib/thumbnail.functions.ts`
+- **Interactive UI Preview**:
+  - Studio Creator: `src/routes/_app/create.tsx`
+  - Assistant Studio: `src/routes/_app/assistant.tsx`
+  - Proposal Sanitizer: `src/lib/assistant.functions.ts`
 
 ## Feature Inventory
 | # | Feature | Description | Milestone | Source |
 |---|---------|-------------|-----------|--------|
-| 1 | Title Sanitizer & Prompt Cleanup (R3) | Strip `[tiktok carousels]` and similar prefixes from titles while preserving Quran/Hadith citations | M1 | ORIGINAL_REQUEST R3 |
-| 2 | Dynamic Background Pool & Rotation (R4) | Serve 8 local background assets from `tiktok_images/` & `tiktok_output/` with multi-slide and inter-generation rotation | M2 | ORIGINAL_REQUEST R4 |
-| 3 | Quran/Hadith Differentiation & Spacing (R1) | Dual-color styling (gold for sacred text, crisp white for commentary) with dedicated vertical interval spacing | M3 | ORIGINAL_REQUEST R1 |
-| 4 | TikTok Safe Zone & Intelligent Wrapping (R2) | Exact 1080x1920 safe zone margins (`SAFE_TOP=300`, `SAFE_BOTTOM=400`, `SAFE_LEFT=100`, `SAFE_RIGHT=220`, `CENTER_X=480`) + auto-fit downscaling | M4 | ORIGINAL_REQUEST R2 |
-| 5 | E2E Testing Suite & Quality Assurance | 4-Tier requirement-driven opaque-box test suite + Tier 5 adversarial coverage hardening | M5 | ORIGINAL_REQUEST Acceptance |
+| F1 | Unified Safe Zone Geometry Registry | Standardized safe boundaries for TikTok (300/400/100/220), Reels, Shorts, and Universal 9:16 safe corridor | M1 | Survey & R2 |
+| F2 | Photo Canvas Safe Zone Alignment | Update `render-photo.ts` to strictly adhere to safe margins (X: 100-860px, Y: 300-1520px) | M2 | Survey & R2 |
+| F3 | Photo Reference Pill & Text Collision Prevention | Position Reference Pill at safe top and anchor Arabic text below pill with guaranteed vertical gap | M2 | Survey & R3 |
+| F4 | Photo Dynamic Auto-Fit Engine | Dynamic decremental font scaling down to 24px and remove artificial height override `Math.max(420, ...)` to prevent overflow | M2 | Survey & R1 |
+| F5 | Viral Thumbnail SVG Safe Bounding | Restrict thumbnail title SVG to safe corridor with dynamic font scaling to avoid right sidebar button clipping | M2 | Survey & R1, R2 |
+| F6 | Client Video Safe Zone & Subtitle Alignment | Update `render-video.ts` to support `opts.subtitlePosition`, center at X=480px (TikTok) / X=500px, clamp bottom anchor to Y<=1520px | M3 | Survey & R2 |
+| F7 | Client Video Reference Pill Clearance | Move video reference pill into safe top bounds (Y: 310-340px) | M3 | Survey & R3 |
+| F8 | Server ASS Subtitle Safe Positioning & Margins | Configure ASS styles with asymmetric margins (`MarginL: 100`, `MarginR: 220`), dynamic `\pos` per platform profile | M3 | Survey & R2 |
+| F9 | Server ASS Dynamic Text Slicing & Wrapping | Replace fixed word-count slicing with pixel/char-width measurement (<= 760px) and vertical collision cap to protect reference badge | M3 | Survey & R1, R3 |
+| F10 | Live Preview 1:1 Export Alignment & Typography | Align preview subtitle placement with selected profile (lower-third Y~72-74% vs center Y~50%) and responsive fluid font scaling | M4 | Survey & R1, R2 |
+| F11 | Safe Zone Overlay Visual Guide Component | Interactive visual guide overlay in `create.tsx` showing TikTok/Reels UI bounds with user toggle switch | M4 | Survey & R2 |
+| F12 | Live Preview Audio Player Layout Separation | Dock or relocate preview audio player below the 9:16 frame to prevent covering bottom video captions | M4 | Survey & R2 |
+| F13 | Citation Bracket Preservation | Fix `cleanProposalTitle` in `assistant.functions.ts` to preserve bracketed scripture references (e.g. `[Коран 2:255]`) | M4 | Survey & R3 |
+| F14 | Comprehensive E2E Testing Suite (Tiers 1-4) | Requirement-driven opaque-box test suites verifying R1 (overflow), R2 (safe zones), R3 (overlap), and R4 (dynamic adaptation) across all engines | E2E | ORIGINAL_REQUEST |
+| F15 | Adversarial Coverage Hardening (Tier 5) | White-box stress tests, extreme token counts, boundary fuzzing, and font metric regression tests | Final | Project Pattern |
 
 ## Milestones
 | # | Name | Scope | Dependencies | Status |
 |---|------|-------|-------------|--------|
-| M1 | Title Generation Cleanup (R3) | `src/lib/assistant.functions.ts`, `src/components/CarouselRendererButton.tsx`, `src/routes/_app/assistant.tsx` | None | DONE |
-| M2 | Dynamic Background Images (R4) | `src/lib/backgrounds.functions.ts`, `src/components/CarouselRendererButton.tsx` | None | DONE |
-| M3 | Ayah/Hadith Differentiation (R1) | `src/lib/carousel.functions.ts`, `src/lib/assistant.functions.ts`, `src/lib/render-carousel.ts` | None | DONE |
-| M4 | TikTok Safe Zone & Wrapping (R2) | `src/lib/render-carousel.ts`, `src/components/CarouselRendererButton.tsx` | M3 | DONE |
-| M5 | E2E Testing Track & Final Hardening | `src/lib/__tests__/`, `TEST_READY.md`, E2E test execution & verification | M1, M2, M3, M4 | DONE |
+| M1 | Unified Safe Zone Geometry Registry | Create `src/lib/safe-zone.ts` with typed geometries for TikTok, Reels, Shorts, and Universal | none | DONE |
+| M2 | Single Photo & Thumbnail Layout Hardening | Implement safe zone margins, dynamic auto-fit, reference pill collision fix in `render-photo.ts` and `thumbnail.functions.ts` | M1 | PLANNED |
+| M3 | Video Rendering Engines Hardening | Update `render-video.ts` and `render.functions.ts` for safe zone alignment, profile selection, ASS script margins, and dynamic wrapping | M1 | PLANNED |
+| M4 | Live UI Preview, Safe Zone Guides & Title Sanitizer | Implement safe zone visual guide toggle, responsive preview typography, audio player docking in `create.tsx`, and fix `assistant.functions.ts` | M1 | PLANNED |
+| M_Final | 100% E2E Test Pass & Adversarial Hardening | Pass all Tiers 1-4 E2E tests, then run Tier 5 adversarial challenger hardening | M2, M3, M4, E2E | PLANNED |
+| E2E | E2E Testing Track | Design test runner and test cases across Tiers 1-4 published via `TEST_READY.md` | none | IN_PROGRESS |
 
 ## Interface Contracts
-
-### M1: Title Sanitizer Contract
+### `src/lib/safe-zone.ts`
 ```ts
-export function cleanProposalTitle(rawTitle: string): string;
-// Strips: [tiktok carousels], [tiktok carousel], [tiktok], [карусел], [карусели], [коран / tiktok]
-// Preserves: [Коран 2:255] Аят ал-Курси, [Сахих ал-Бухари #6424]
-```
+export type PlatformSafeZoneProfile = 'tiktok' | 'reels' | 'shorts' | 'universal' | 'center';
 
-### M2: Dynamic Backgrounds Contract
-```ts
-export const LOCAL_BACKGROUND_POOL: string[];
-export const getCarouselBackgrounds: ServerFunction<{ count?: number; cycleIndex?: number }, { backgrounds: string[] }>;
-```
-
-### M3: Slide Segment & Dual-Color Contract
-```ts
-export interface CarouselSlideData {
-  topTitle: string;
-  mainText: string;
-  bottomText: string;
-  footerText: string;
-  imagePrompt: string;
-  quoteText?: string;
-  commentaryText?: string;
-  sourceBadge?: string;
+export interface SafeZoneGeometry {
+  W: number;          // 1080
+  H: number;          // 1920
+  SAFE_TOP: number;   // e.g. 300
+  SAFE_BOTTOM: number;// e.g. 400
+  SAFE_LEFT: number;  // e.g. 100
+  SAFE_RIGHT: number; // e.g. 220
+  W_SAFE: number;     // W - SAFE_LEFT - SAFE_RIGHT (760)
+  H_SAFE: number;     // H - SAFE_TOP - SAFE_BOTTOM (1220)
+  CENTER_X: number;   // SAFE_LEFT + W_SAFE / 2 (480)
+  BOTTOM_MAX_Y: number; // H - SAFE_BOTTOM (1520)
 }
 
-export type CarouselSlideOptions = {
-  backgroundUrl: string;
-  topTitle: string;
-  mainText: string;
-  bottomText: string;
-  footerText: string;
-  quoteText?: string;
-  commentaryText?: string;
-};
+export const SOCIAL_SAFE_ZONES: Record<PlatformSafeZoneProfile, SafeZoneGeometry>;
+export const TIKTOK_SAFE_ZONE: SafeZoneGeometry;
 ```
 
-### M4: Safe Zone Layout Contract
-```ts
-export const TIKTOK_SAFE_ZONE = {
-  W: 1080,
-  H: 1920,
-  SAFE_TOP: 300,
-  SAFE_BOTTOM: 400,
-  SAFE_LEFT: 100,
-  SAFE_RIGHT: 220,
-  get W_SAFE() { return this.W - this.SAFE_LEFT - this.SAFE_RIGHT; }, // 760px
-  get H_SAFE() { return this.H - this.SAFE_TOP - this.SAFE_BOTTOM; }, // 1220px
-  get CENTER_X() { return this.SAFE_LEFT + this.W_SAFE / 2; },         // 480px
-};
-```
+### `render-photo.ts` & `render-video.ts`
+- Must import `SOCIAL_SAFE_ZONES` / `TIKTOK_SAFE_ZONE` from `src/lib/safe-zone.ts`.
+- Subtitles and text blocks must never exceed `W_SAFE` or draw outside `[SAFE_TOP, BOTTOM_MAX_Y]`.
+- Reference Pill must be placed at `SAFE_TOP` (or `SAFE_TOP + 10`), and succeeding text must start at `pillY + pillH + gap` (gap >= 24px).
 
 ## Code Layout
-- `src/lib/assistant.functions.ts`: Gemini assistant prompts, proposal parsers, and title sanitization.
-- `src/lib/carousel.functions.ts`: 4-slide viral carousel prompt generation, schema, and taxonomy injection.
-- `src/lib/backgrounds.functions.ts`: Local background pool loader and dynamic rotation server function.
-- `src/lib/render-carousel.ts`: Canvas 2D 1080x1920 rendering engine with safe zones, wrapping, auto-fit, and dual-color segmentation.
-- `src/components/CarouselRendererButton.tsx`: Client component rendering slides, dynamic background fetching, ZIP export, Make.com webhook.
-- `src/routes/_app/assistant.tsx`: Main assistant view consuming sanitized titles and carousel proposals.
-- `src/lib/__tests__/`: Automated unit and integration test suite.
-- `tiktok_images/`, `tiktok_output/`: High-resolution vertical background image assets.
+- `src/lib/safe-zone.ts` — Centralized safe zone constants and geometric calculation utilities.
+- `src/lib/render-photo.ts` — Single photo canvas composer.
+- `src/lib/render-video.ts` — Client video canvas + MediaRecorder generator.
+- `src/lib/render.functions.ts` — Server FFmpeg ASS subtitle generator & renderer.
+- `src/lib/thumbnail.functions.ts` — Viral thumbnail SVG overlay generator.
+- `src/routes/_app/create.tsx` — Studio Creator UI & Live Preview player.
+- `src/routes/_app/assistant.tsx` — AI Assistant Studio UI.
+- `src/lib/assistant.functions.ts` — AI helper functions and proposal title sanitizer.
+- `src/lib/__tests__/` — Test suites directory for unit, integration, and E2E tests.

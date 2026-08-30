@@ -1,30 +1,28 @@
 # Original User Request
 
-## 2026-08-29T17:17:15Z
+## Initial Request — 2026-08-30T06:59:51Z
 
-<USER_REQUEST>
-# Teamwork Project Prompt — Draft
+Fix UI layout issues in Islamic Reels Studio where text overflows its background containers (comes out of the photo), is hidden by TikTok/Reels UI elements, and overlaps with other text, ensuring all text remains clearly visible and well-spaced within social media safe zones.
 
-> Status: Launched
-> Goal: Craft prompt → get user approval → delegate to teamwork_preview
-> Requested team: [small focused team]
-
-This is a single self-contained fix; keep it small and focused. The goal is to fix a bug in the `Islamic Reels Studio` web application where the text in the generated photo carousels is overflowing vertically beyond the image dimensions (TikTok safe zones). 
-
-Working directory: `C:\Users\admin\Downloads\Islamic Reels Studio`
+Working directory: c:\Users\admin\Downloads\Islamic Reels Studio
 Integrity mode: development
 
 ## Requirements
 
-### R1. Fix Vertical Text Overflow
-Update the auto-fitting and scaling logic in `src/lib/render-carousel.ts` to ensure that regardless of how many text segments (Ayah, Hadith, commentary) or intervals are present, the text correctly shrinks and fits within the vertical TikTok safe zone (`H_SAFE`).
+### R1. Prevent Text Overflow
+Ensure text remains strictly within its designated background containers (photos) without overflowing the visual boundaries.
 
-### R2. Maintain Readability
-Ensure the downscaling doesn't reduce the text to an unreadable size, and if there are multiple segments, balance the spacing (`gapBetweenSegments`) dynamically so it doesn't push the text out of bounds.
+### R2. Respect Safe Zones
+Ensure the UI layout accounts for TikTok/Reels UI elements (typically the right sidebar and bottom area) so that text is never obscured by these elements.
+
+### R3. Prevent Text Overlap
+Ensure that distinct text elements do not overlap with each other within the layout, maintaining proper spacing.
 
 ## Acceptance Criteria
 
-### Verification
-- [ ] Rendered text across all slides is strictly contained within the vertical TikTok safe bounds (`SAFE_TOP` to `SAFE_BOTTOM`).
-- [ ] Gaps between segments are scaled down correctly if the text height exceeds the safe zone.
-</USER_REQUEST>
+### Verification: Independent Agent-as-Judge
+An independent agent must review the changes and verify the following against an explicit rubric:
+- [ ] CSS or layout rules explicitly constrain text to not overflow its parent containers.
+- [ ] Padding, margins, or safe zone overlays are explicitly added to account for standard TikTok UI elements (e.g., bottom area for captions, right area for interaction buttons).
+- [ ] No distinct text elements overlap or intersect.
+- [ ] The layout adapts dynamically without relying on brittle hardcoded dimensions that break across different screen sizes.

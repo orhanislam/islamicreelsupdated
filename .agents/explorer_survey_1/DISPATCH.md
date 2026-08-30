@@ -1,26 +1,23 @@
-## 2026-08-26T19:37:13Z
-Read C:\Users\admin\Downloads\Islamic Reels Studio\.agents\ORIGINAL_REQUEST.md.
-Your working directory is C:\Users\admin\Downloads\Islamic Reels Studio\.agents\explorer_survey_1.
-Your task is to investigate the codebase at C:\Users\admin\Downloads\Islamic Reels Studio to map the full carousel generation pipeline:
-1. Locate where AI prompt generation, templates, API routes, edge functions, or client-side hooks/services for carousel creation reside.
-2. Trace how carousel topics, hooks, slides, and scripts are generated and structured.
-3. Identify exact files, functions, and prompt strings involved in carousel generation.
-4. Pinpoint why repetitive topics (e.g. Why are you here?) occur and what needs to change.
-Write your detailed analysis to C:\Users\admin\Downloads\Islamic Reels Studio\.agents\explorer_survey_1\analysis.md and a handoff report to C:\Users\admin\Downloads\Islamic Reels Studio\.agents\explorer_survey_1\handoff.md. Send a completion message back with your findings.
+## 2026-08-30T07:00:36Z
+You are Survey Explorer 1 (Codebase Structure & UI Component Analysis).
+Your working directory is: c:\Users\admin\Downloads\Islamic Reels Studio\.agents\explorer_survey_1
+The project workspace is: c:\Users\admin\Downloads\Islamic Reels Studio
 
-## 2026-08-29T14:45:49Z
-You are Explorer 1 on the Survey phase for Islamic Reels Studio TikTok Photo Carousel Generation Upgrade.
-Working directory: C:\Users\admin\Downloads\Islamic Reels Studio\.agents\explorer_survey_1
-Original Request: C:\Users\admin\Downloads\Islamic Reels Studio\.agents\ORIGINAL_REQUEST.md
-Project Root: C:\Users\admin\Downloads\Islamic Reels Studio
+Read ORIGINAL_REQUEST.md at:
+c:\Users\admin\Downloads\Islamic Reels Studio\.agents\ORIGINAL_REQUEST.md
 
-Your Mission:
-Investigate R1 (Ayah/Hadith text formatting & differentiation from human commentary) and related codebase architecture.
-1. Read ORIGINAL_REQUEST.md.
-2. Investigate all files related to carousel AI prompt generation, parsing, schema, and rendering:
-   - src/lib/assistant.functions.ts, src/lib/carousel.functions.ts, any type definitions, prompts, parser functions.
-   - Look at how slides are represented (title, hook, body, ayah/hadith quote vs commentary, citation, CTA).
-   - How can we structure or mark Quran/Hadith text versus human commentary in slide data?
-   - How does the rendering component (Canvas/HTML/SVG or CarouselRendererButton) render slide text? How can distinct styling (colors, intervals/line spacing, badges, quotes) be applied to Quran/Hadith vs commentary?
-3. Document exact file paths, interfaces, function signatures, dependencies, and recommended design.
-4. Write your comprehensive report to C:\Users\admin\Downloads\Islamic Reels Studio\.agents\explorer_survey_1\handoff.md and notify parent when done.
+Investigate the codebase thoroughly:
+1. Map out the full project structure, framework (e.g., React, Vite, Tailwind CSS, Lucide icons, etc.), dependencies, and entry points.
+2. Identify all components and files involved in Islamic Reels creation, layout, previewing, text rendering, background container display, safe zone guides, and video/image generation or export.
+3. Specifically find where text elements (e.g. Arabic verse, translation, transliteration, surah name, reciter info, title, subtitle) are positioned, styled, and rendered inside their parent background containers.
+4. Pinpoint exact files, lines, and CSS/layout rules causing or contributing to:
+   - Text overflowing background containers/photos.
+   - Text being obscured by TikTok/Reels UI elements (right sidebar, bottom caption area, top header).
+   - Text overlapping with other text elements.
+   - Brittle hardcoded dimensions vs responsive dynamic adaptation.
+5. Provide clear, actionable recommendations and a comprehensive inventory of components and features that need modification.
+
+Write your complete findings and handoff report to:
+c:\Users\admin\Downloads\Islamic Reels Studio\.agents\explorer_survey_1\handoff.md
+
+Send a message back when complete.

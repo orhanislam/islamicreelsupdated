@@ -1,46 +1,36 @@
-# BRIEFING — 2026-08-29T14:48:00Z
+# BRIEFING — 2026-08-30T07:05:00Z
 
 ## Mission
-Investigate R2 (TikTok Safe Zone & Intelligent Text Wrapping) and carousel rendering architecture for Islamic Reels Studio.
+Investigate 9:16 vertical video layout, TikTok / Reels / Shorts safe zones, dimensions, preview overlays, container padding, and export boundaries in Islamic Reels Studio to eliminate text overflow, UI collisions, and element overlap.
 
 ## 🔒 My Identity
-- Archetype: explorer
-- Roles: survey, investigation, code analysis
-- Working directory: C:\Users\admin\Downloads\Islamic Reels Studio\.agents\explorer_survey_2
-- Original parent: 8bfda9e9-5272-49ec-a6bd-62bd513c6b61
-- Milestone: survey
+- Archetype: Teamwork Specialist / Specification Miner (Survey Explorer 2)
+- Roles: Safe Zone & Social Media Layout Specs Investigator
+- Working directory: c:\Users\admin\Downloads\Islamic Reels Studio\.agents\explorer_survey_2
+- Original parent: 7bf2431e-525e-40db-859b-c45f88f2de9b
+- Milestone: Safe Zone & Social Media Layout Specification Discovery
 
 ## 🔒 Key Constraints
-- Read-only investigation — do NOT implement
-- Analyze R2 (TikTok Safe Zone & Intelligent Text Wrapping) and carousel rendering architecture
-- Document exact file paths, line numbers, calculations, layout margins, font sizes, line height, text measurement, text wrapping, dynamic scaling/chunking, safe zone specs.
+- Read-only analysis — do NOT modify application source code or tests during exploration.
+- Strictly adhere to authoritative specifications and codebase implementations.
+- Write findings to handoff.md and report to parent agent via send_message.
 
 ## Current Parent
-- Conversation ID: 8bfda9e9-5272-49ec-a6bd-62bd513c6b61
-- Updated: 2026-08-29T14:48:00Z
+- Conversation ID: 7bf2431e-525e-40db-859b-c45f88f2de9b
+- Updated: 2026-08-30T07:05:00Z
 
-## Investigation State
-- **Explored paths**:
-  - `src/lib/render-carousel.ts` (canvas 2D rendering pipeline, 1080x1920 layout)
-  - `src/components/CarouselRendererButton.tsx` (slide orchestrator, ZIP generation, Make webhook)
-  - `src/lib/render-photo.ts` & `src/lib/render-video.ts` (reference safe zone and autoFit implementations)
-  - `src/lib/assistant.functions.ts` & `src/lib/carousel.functions.ts` (slide prompt generation & taxonomy injection)
-  - `src/routes/_app/assistant.tsx` (UI proposal display and renderer mounting)
-- **Key findings**:
-  - `render-carousel.ts` has a right-side collision defect (`maxW = 820`, `centerX = 500`, right edge = `910px` colliding with TikTok action rail at `X = 870–1080px`).
-  - `render-carousel.ts` lacks vertical safe zone bounds (`SAFE_TOP = 300px`, `SAFE_BOTTOM = 400px`), causing long texts (>1100px total height) to bleed under the top status bar / header and bottom caption / music marquee.
-  - Naive `wrap()` splits only on `" "` and produces orphan words without word-break protection.
-  - Zero dynamic font auto-fitting exists for variable-length Ayah/Hadith texts.
-  - Multi-block parsing is required to enable R1 differentiation (sacred gold quote + interval + crisp white human commentary) inside the safe corridor (`W_SAFE = 760px`, `CENTER_X = 480px`, `H_SAFE = 1220px`).
-- **Unexplored areas**: None within R2 scope.
+## Task Summary
+- **What to build**: Specification report on 9:16 layout, standard safe zone dimensions/percentages (TikTok, Reels, Shorts), current implementation status across all renderers and preview components, gap analysis, and recommendations for fixes.
+- **Success criteria**: Comprehensive handoff report with exact file locations, standard dimensions/percentages, observed discrepancies, edge cases, and actionable remediation plan.
+- **Interface contracts**: PROJECT.md, render-carousel.ts, render-photo.ts, render-video.ts, render.functions.ts, create.tsx.
+- **Code layout**: src/lib/, src/routes/_app/, src/components/
 
 ## Key Decisions Made
-- Fully documented exact coordinate safe zone specifications, intelligent wrapping algorithm with orphan balancing, and dynamic auto-fit scaling engine.
-- Completed comprehensive `analysis.md` and 5-component `handoff.md`.
+- Analyzed all 4 rendering pipelines (render-carousel.ts, render-photo.ts, render-video.ts, render.functions.ts) and UI preview components (create.tsx, assistant.tsx, downloads.tsx).
+- Documented standardized 1080x1920 safe zones for TikTok (Top: 300px/15.6%, Bottom: 400px/20.8%, Left: 100px/9.3%, Right: 220px/20.4%), Instagram Reels, and YouTube Shorts.
+- Identified critical discrepancies in render-photo.ts, render-video.ts, render.functions.ts, and create.tsx preview.
 
 ## Artifact Index
-- `.agents/explorer_survey_2/DISPATCH.md` — Initial dispatch message
-- `.agents/explorer_survey_2/BRIEFING.md` — Agent briefing & working memory
-- `.agents/explorer_survey_2/progress.md` — Progress tracker
-- `.agents/explorer_survey_2/analysis.md` — In-depth architectural & mathematical analysis
-- `.agents/explorer_survey_2/handoff.md` — Final 5-component handoff report
+- `.agents/explorer_survey_2/DISPATCH.md` — Original dispatch assignment
+- `.agents/explorer_survey_2/progress.md` — Liveness & progress heartbeat
+- `.agents/explorer_survey_2/handoff.md` — Complete findings and handoff report

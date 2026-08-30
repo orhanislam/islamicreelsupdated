@@ -1,55 +1,70 @@
-# Orchestrator Final Handoff Report
+# Orchestrator Soft Handoff — Generation 1 to Generation 2
 
-## 1. Executive Summary
-
-All requested feature implementations, code reviews, empirical stress-testing, forensic integrity audits, state safety hardenings, pool cycle refinements, build verifications, and production auto-deployments have been successfully executed for **Islamic Reels Studio**.
-
----
-
-## 2. Completed Milestones & Requirements
-
-### Requirement 1: Non-Repetitive Quran Generation Logic
-- **Preset Pool**: 10 viral Quran verses added (`VIRAL_QURAN_PRESETS`) covering popular Surahs (Al-Ikhlas, Ayat al-Kursi, Ash-Sharh, Al-Asr, Al-Falaq, An-Nas, Al-Kawthar, Al-Mulk, Ar-Rahman, Az-Zumar).
-- **History Tracking & Cycling**: `usedQuranKeys` state and `localStorage` persistence (`islamic_used_quran_keys`) track previously generated verses across consecutive clicks. Handler `handleNextQuranQuickAction` filters unpicked pool items dynamically.
-- **Cycle Refinement & Safety**: State initializers validate array type via `Array.isArray(parsed) ? parsed : []`. Storage writes are wrapped in `try...catch` blocks to protect against quota exceptions. Condition `unpicked.length === 1` guarantees that all 10 items in the pool are selected per cycle before resetting.
-
-### Requirement 2: Viral Hadith Quick Action Button ("Вирални Хадиси")
-- **Preset Pool**: 6 authentic Sahih Hadith topics added (`VIRAL_HADITH_PRESETS`) covering Nawawi 40, Sahih Al-Bukhari, Sahih Muslim, and Sunan At-Tirmidhi.
-- **UI Placement & Aesthetics**: Added a dedicated glassmorphism quick action button titled **"📜 Вирални Хадиси"** positioned immediately adjacent to **"🕋 Вирален Коран"** in `src/routes/_app/assistant.tsx` (lines 715–736).
-- **Glassmorphism Styling**: Uses `glass` utility class (`bg-background/60 backdrop-blur-xl border border-border/60 shadow-xl`), `border-amber-500/40`, `text-amber-400` icon (`ScrollText`), and `rounded-full` shape. Condition `unpicked.length === 1` guarantees all 6 items in the pool are selected per cycle before resetting.
-
-### Requirement 3: Build Verification
-- **Command**: `npm run build`
-- **Verification**: Executed by Worker M1_1, Worker M1_2, Worker M1_3, Worker M3_1, Reviewer M2_1, Challenger M2_2, and Forensic Auditor M2_1.
-- **Result**: Exit code 0 (built cleanly in 14.88s).
-
-### Requirement 4: Production Auto-Deployment
-- **Command**: `node deploy-node.cjs`
-- **Result**: Production deployment executed cleanly with exit code 0. Deployment files written to production target directory.
+**Author**: Project Orchestrator (Gen 1)  
+**Date**: 2026-08-30T10:23:30+03:00  
+**Working Directory**: `c:\Users\admin\Downloads\Islamic Reels Studio\.agents\orchestrator`  
+**Parent Conversation ID**: `6c22862d-43d9-4832-b5b6-0ebb4aa80882` (Sentinel)
 
 ---
 
-## 3. Verification & Audit Summary
+## 1. Milestone State
 
-| Evaluator | Role | Verdict / Result | Key Findings |
-|---|---|---|---|
-| `teamwork_preview_explorer_m1_1` | Explorer | Completed | Traced prompt flow and formulated 5-part implementation plan for Quran history tracking and Hadith button. |
-| `teamwork_preview_worker_m1_1` | Worker | Completed | Implemented preset pools, state/localStorage cycling, and adjacent glassmorphism button in `assistant.tsx`. |
-| `teamwork_preview_reviewer_m2_1` | Reviewer | **APPROVE** | Verified UI aesthetics, glassmorphic styles, adjacent layout, and clean build (`npm run build`). |
-| `teamwork_preview_reviewer_m2_2` | Reviewer | Hardening Feedback | Suggested `Array.isArray` parsing safety and `try/catch` storage write exception handling. |
-| `teamwork_preview_challenger_m2_2` | Challenger | **PASS** | Confirmed button styling (`border-amber-500/40`), icon rendering (`ScrollText`), mobile responsiveness, and build speed. |
-| `teamwork_preview_auditor_m2_1` | Forensic Auditor | **CLEAN** | Confirmed zero integrity violations, no hardcoded test outputs, authentic code logic, and clean build. |
-| `teamwork_preview_worker_m1_2` | Worker | Completed | Applied state safety hardening (`Array.isArray` check & `try/catch` storage wrappers). |
-| `teamwork_preview_worker_m3_1` | Worker | Completed | Executed `npm run build` and `node deploy-node.cjs`. |
-| `teamwork_preview_worker_m1_3` | Worker | Completed | Refined pool reset condition to `unpicked.length === 1`, verified build, and redeployed to production. |
+| Milestone / Track | Status | Notes & Outputs |
+|-------------------|--------|-----------------|
+| **Survey Phase** | **DONE** | 3 Explorers analyzed codebase, specifications, and text engines. Published `PROJECT.md`. |
+| **E2E Testing Track** | **DONE** | `TEST_INFRA.md`, `TEST_READY.md`, and `src/lib/__tests__/e2e-safe-zones-and-layout.test.ts` (63/63 passing tests across Tiers 1-4). |
+| **Milestone 1 (M1: Unified Safe Zone Geometry Registry)** | **DONE** | Implemented `src/lib/safe-zone.ts`, updated `render-carousel.ts`, created `verify-safe-zone.test.ts` (53/53 tests). Passed Gate across Reviewers, Challengers, and Forensic Auditor. |
+| **Milestone 2 (M2: Single Photo & Viral Thumbnail Hardening)** | **IN-PROGRESS (Exploration Done)** | 3 M2 Explorers (`explorer_m2_1`, `explorer_m2_2`, `explorer_m2_3`) completed complete architectural designs for `render-photo.ts`, `thumbnail.functions.ts`, and `verify-photo-hardening.test.ts`. Ready for Worker M2 dispatch. |
+| **Milestone 3 (M3: Video Rendering Engines Hardening)** | **PLANNED** | Scope: `render-video.ts` and `render.functions.ts` (safe zone alignment, profile selection, ASS script margins, and dynamic wrapping). |
+| **Milestone 4 (M4: Live UI Preview & Safe Zone Guides)** | **PLANNED** | Scope: `create.tsx`, `assistant.tsx`, `assistant.functions.ts` (safe zone overlay guide toggle, responsive preview typography, audio player docking, citation bracket preservation). |
+| **Final Milestone (E2E 100% Pass & Tier 5 Hardening)** | **PLANNED** | Execute 100% E2E test verification, adversarial coverage hardening, and final forensic audit. |
 
 ---
 
-## 4. Key Artifacts
+## 2. Active Subagents
 
-- `C:\Users\admin\Downloads\Islamic Reels Studio\.agents\orchestrator\ORIGINAL_REQUEST.md`
-- `C:\Users\admin\Downloads\Islamic Reels Studio\.agents\orchestrator\BRIEFING.md`
-- `C:\Users\admin\Downloads\Islamic Reels Studio\.agents\orchestrator\plan.md`
-- `C:\Users\admin\Downloads\Islamic Reels Studio\.agents\orchestrator\progress.md`
-- `C:\Users\admin\Downloads\Islamic Reels Studio\PROJECT.md`
-- `C:\Users\admin\Downloads\Islamic Reels Studio\src\routes\_app\assistant.tsx`
+All 16 subagents spawned in Generation 1 have completed their tasks and delivered their handoffs. There are 0 pending tasks.
+
+---
+
+## 3. Pending Decisions & Architecture Continuity
+
+- **Unified Safe Zone Standard**: All rendering modules must import from `src/lib/safe-zone.ts` (`TIKTOK_SAFE_ZONE`, `SOCIAL_SAFE_ZONES`, `REFERENCE_PILL_STANDARDS`, `getSafeZone`, `isWithinSafeZone`, `clampToSafeZone`, `doBoxesCollide`, `getASSSubtitlePlacement`).
+- **Audit Rule**: Zero tolerance for integrity violations. Forensic Auditor verdict is a binary veto.
+
+---
+
+## 4. Concrete Next Steps for Successor (Gen 2)
+
+1. **Milestone 2 Execution**:
+   - Spawn **Worker M2** (`teamwork_preview_worker`) with exclusive write ownership of:
+     - `src/lib/render-photo.ts`
+     - `src/lib/thumbnail.functions.ts`
+     - `src/lib/__tests__/verify-photo-hardening.test.ts`
+   - Worker implements the drop-in photo layout and dynamic auto-fit (down to 24px, zero pill overlap, safe margins X:100-860, Y:300-1520), viral thumbnail SVG bounding, and executes `verify-photo-hardening.test.ts`.
+   - Run M2 Gate verification: 2 Reviewers (`teamwork_preview_reviewer`), 2 Challengers (`teamwork_preview_challenger`), 1 Forensic Auditor (`teamwork_preview_auditor`).
+   - Update `GATE_STATUS.md` and mark M2 as `DONE` in `PROJECT.md`.
+2. **Milestone 3 Execution**:
+   - Run Iteration Loop (Explorers -> Worker -> Reviewers/Challengers/Auditor) for `render-video.ts` and `render.functions.ts`.
+3. **Milestone 4 Execution**:
+   - Run Iteration Loop for `create.tsx`, `assistant.tsx`, and `assistant.functions.ts`.
+4. **Final Milestone Execution**:
+   - Run full E2E test suite (`npx jiti src/lib/__tests__/e2e-safe-zones-and-layout.test.ts`, `npm test`, `npm run build`).
+   - Phase 2: Adversarial Coverage Hardening (Tier 5).
+   - Final Forensic Audit and completion report to Sentinel (`6c22862d-43d9-4832-b5b6-0ebb4aa80882`).
+
+---
+
+## 5. Key Artifacts
+
+- User Request: `c:\Users\admin\Downloads\Islamic Reels Studio\.agents\ORIGINAL_REQUEST.md`
+- Scope & Milestones: `c:\Users\admin\Downloads\Islamic Reels Studio\PROJECT.md`
+- Test Infrastructure: `c:\Users\admin\Downloads\Islamic Reels Studio\TEST_INFRA.md`
+- Test Suite Signal: `c:\Users\admin\Downloads\Islamic Reels Studio\TEST_READY.md`
+- Safe Zone Registry: `c:\Users\admin\Downloads\Islamic Reels Studio\src\lib\safe-zone.ts`
+- E2E Tests: `c:\Users\admin\Downloads\Islamic Reels Studio\src\lib\__tests__\e2e-safe-zones-and-layout.test.ts`
+- M2 Photo Design: `.agents/explorer_m2_1/handoff.md`
+- M2 Thumbnail Design: `.agents/explorer_m2_2/handoff.md`
+- M2 Test Suite Spec: `.agents/explorer_m2_3/handoff.md`
+- Gate Status: `.agents/orchestrator/GATE_STATUS.md`
+- Working State: `.agents/orchestrator/BRIEFING.md` & `progress.md`

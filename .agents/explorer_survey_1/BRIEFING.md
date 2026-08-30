@@ -1,43 +1,43 @@
-# BRIEFING — 2026-08-29T14:48:40Z
+# BRIEFING — 2026-08-30T07:05:00Z
 
 ## Mission
-Investigate R1 (Ayah/Hadith text formatting & differentiation from human commentary) and related codebase architecture (prompts, schemas, parsing, rendering pipeline).
+Conduct a thorough codebase structure and UI component analysis for Islamic Reels Studio to pinpoint all layout, safe zone, container overflow, text overlap, and hardcoded dimension issues.
 
 ## 🔒 My Identity
-- Archetype: Explorer
-- Roles: Read-only investigation, codebase surveying, root cause analysis, architecture mapping
-- Working directory: C:\Users\admin\Downloads\Islamic Reels Studio\.agents\explorer_survey_1
-- Original parent: 8bfda9e9-5272-49ec-a6bd-62bd513c6b61
-- Milestone: explorer_survey_1
+- Archetype: explorer
+- Roles: codebase structure analysis, UI component & layout analysis, safe zone & rendering audit
+- Working directory: c:\Users\admin\Downloads\Islamic Reels Studio\.agents\explorer_survey_1
+- Original parent: 7bf2431e-525e-40db-859b-c45f88f2de9b
+- Milestone: Survey & Investigation
 
 ## 🔒 Key Constraints
-- Read-only investigation — do NOT implement changes in source code
-- Write all findings to analysis.md and handoff.md in working directory
-- Communicate completion via send_message to parent agent
+- Read-only investigation — do NOT modify source code files.
+- Deliver findings in handoff.md following 5-component report structure.
 
 ## Current Parent
-- Conversation ID: 8bfda9e9-5272-49ec-a6bd-62bd513c6b61
-- Updated: 2026-08-29T14:48:40Z
+- Conversation ID: 7bf2431e-525e-40db-859b-c45f88f2de9b
+- Updated: 2026-08-30T07:05:00Z
 
 ## Investigation State
 - **Explored paths**:
-  - `src/lib/carousel.functions.ts` (`CarouselSlideData`, `buildCarouselSystemPrompt`, `generateCarouselScriptDirect`)
-  - `src/lib/assistant.functions.ts` (`VideoProposal`, `injectAuthenticCarouselText`, `chatWithAssistant`, `suggestBatchViralProposals`)
-  - `src/lib/render-carousel.ts` (`renderCarouselSlide`, Canvas 1080x1920 layout, text wrapping, uniform color/font styling)
-  - `src/components/CarouselRendererButton.tsx` (slide iteration, background fetch, ZIP export, Make.com webhook)
-  - `src/routes/_app/assistant.tsx` (quick action generation trigger, chat proposals rendering, preview grid)
-  - `src/lib/memory.functions.ts` (`recordProposalUsagesDirect`, carousel history tracking)
-  - `src/lib/tawheed-taxonomy.ts` (Tawheed taxonomy registry, `dalilReference`, `dalilTextBg`)
+  - `package.json`, `PROJECT.md`, `styles.css`
+  - `src/routes/_app/create.tsx`, `src/routes/_app/assistant.tsx`, `src/routes/_app/downloads.tsx`, `src/routes/_app/route.tsx`, `src/routes/index.tsx`, `src/routes/internal/render.tsx`
+  - `src/components/CarouselRendererButton.tsx`, `src/components/ui/`
+  - `src/lib/render-photo.ts`, `src/lib/render-video.ts`, `src/lib/render-carousel.ts`, `src/lib/render.functions.ts`, `src/lib/thumbnail.functions.ts`, `src/lib/assistant.functions.ts`, `src/lib/caption.functions.ts`
+  - `src/lib/__tests__/` (17 automated test files)
 - **Key findings**:
-  1. Slide 3 (Dalil slide) currently concatenates the sacred quote and human transition sentence into a single `mainText` string.
-  2. `renderCarouselSlide` renders all `mainText` lines with identical font (`700 65px 'Montserrat'`), identical color (`#ffedb3`), and zero interval between sacred text and human commentary.
-  3. Formulated a 3-tier solution: optional schema extension (`quoteText`, `commentaryText`, `sourceBadge`), resilient Bulgarian quote delimiter parser (`parseSlideSegments`), and dual-color Canvas renderer (Gold `#FFD700` for quotes, 55px interval, Soft Crisp White `#FFFFFF` for commentary).
-- **Unexplored areas**: None. R1 architecture fully surveyed and designed.
+  - Full codebase mapped: React 19 + TanStack Start/Router + Vite 8 + Tailwind CSS v4.
+  - Pinpointed 5 distinct rendering and preview systems with disparate, conflicting safe zone models and hardcoded dimensions:
+    1. `render-photo.ts`: hardcoded `SAFE={top:320, bottom:280, side:180}`, `drawReferencePill` at `y=280` overlapping Arabic text (`y=320`), `autoFit` fallback overflow at `42px`, `Math.max(420, verticalForBg)` causing overflow, no collision detection in `lower-third` or `centered` modes.
+    2. `render-video.ts`: symmetrical `side:180` and `bottom:280` ignoring TikTok right sidebar (220px) and bottom caption (400px), `targetBottomY = 0.74*H` pushing scaled text into bottom UI, `drawReferencePill` at `y=280` in top UI obstruction zone, horizontal center at `540` instead of safe center `480`.
+    3. `render.functions.ts`: ASS subtitles centered at `540` (`\pos(540, 1350)`), naive word-count line wrapping (`wpl`) causing massive horizontal spill, 8-12 line Ayah texts expanding upward from `1350px` to collide with Reference badge at `y=380px`.
+    4. `src/routes/_app/create.tsx`: Live preview DOM uses fixed `fontSize: "24px"` and `fontSize: "16px"`, placed dead center (50%) instead of lower-third (74%), lacking safe zone boundaries and overlapping with audio controls.
+    5. `thumbnail.functions.ts`: SVG text hardcoded at `x=540`, `font-size="76"` with naive 22-char wrapping extending to `x=1005px` inside TikTok right sidebar.
+    6. `render-carousel.ts`: Features correct `TIKTOK_SAFE_ZONE` (`W_SAFE:760, H_SAFE:1220, CENTER_X:480, SAFE_TOP:300, SAFE_BOTTOM:400, SAFE_LEFT:100, SAFE_RIGHT:220`) but its logic is isolated and unshared.
+- **Unexplored areas**: None — full codebase survey complete.
 
 ## Key Decisions Made
-- Completed in-depth survey and documented in `analysis.md` and `handoff.md`.
+- Documented exhaustive inventory of all 6 components, exact line numbers, mathematical coordinates, and architectural recommendations in handoff.md.
 
 ## Artifact Index
-- C:\Users\admin\Downloads\Islamic Reels Studio\.agents\explorer_survey_1\analysis.md — Comprehensive pipeline analysis
-- C:\Users\admin\Downloads\Islamic Reels Studio\.agents\explorer_survey_1\handoff.md — 5-component handoff report
-- C:\Users\admin\Downloads\Islamic Reels Studio\.agents\explorer_survey_1\progress.md — Liveness & step progress
+- handoff.md — Comprehensive 5-component survey and diagnostic report.

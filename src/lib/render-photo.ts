@@ -3,6 +3,13 @@
 // returns a PNG blob. The Bulgarian block auto-fits to the safe area so the
 // translation never spills off-screen, regardless of length.
 
+import {
+  getSafeZone,
+  REFERENCE_PILL_STANDARDS,
+  clampToSafeZone,
+  type SafeZoneGeometry,
+} from "./safe-zone";
+
 export type RenderOptions = {
   backgroundUrl?: string | null;
   arabic?: string;
@@ -16,13 +23,6 @@ export type RenderOptions = {
   customKeywords?: string[];
 };
 
-const W = 1080;
-const H = 1920;
-
-// TikTok-safe layout. UI overlays sit in the top ~280 and bottom ~360px,
-// so we keep all critical text comfortably within these margins.
-const SAFE = { top: 320, bottom: 280, side: 180 };
-
 async function loadImage(src: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const img = new Image();
@@ -33,25 +33,51 @@ async function loadImage(src: string): Promise<HTMLImageElement> {
   });
 }
 
-function drawCover(ctx: CanvasRenderingContext2D, img: HTMLImageElement) {
+function drawCover(ctx: CanvasRenderingContext2D, img: HTMLImageElement, W: number, H: number) {
   const r = Math.max(W / img.width, H / img.height);
   const w = img.width * r;
   const h = img.height * r;
   ctx.drawImage(img, (W - w) / 2, (H - h) / 2, w, h);
 }
 
-function wrap(ctx: CanvasRenderingContext2D, text: string, maxWidth: number): string[] {
+export function wrap(ctx: CanvasRenderingContext2D, text: string, maxWidth: number): string[] {
   const words = text.split(/\s+/).filter(Boolean);
+  if (words.length === 0) return [];
+
   const lines: string[] = [];
   let line = "";
+
   for (const w of words) {
+    // If a single unbroken word exceeds maxWidth, break it into character chunks
+    if (ctx.measureText(w).width > maxWidth) {
+      if (line) {
+        lines.push(line);
+        line = "";
+      }
+      let chunk = "";
+      for (const char of w) {
+        if (ctx.measureText(chunk + char).width > maxWidth && chunk) {
+          lines.push(chunk);
+          chunk = char;
+        } else {
+          chunk += char;
+        }
+      }
+      if (chunk) line = chunk;
+      continue;
+    }
+
     const test = line ? `${line} ${w}` : w;
     if (ctx.measureText(test).width > maxWidth && line) {
       lines.push(line);
       line = w;
-    } else line = test;
+    } else {
+      line = test;
+    }
   }
+
   if (line) lines.push(line);
+
   // Avoid an orphan last line (<40% width of previous) — pull a word down.
   if (lines.length >= 2) {
     const last = lines[lines.length - 1];
@@ -60,19 +86,27 @@ function wrap(ctx: CanvasRenderingContext2D, text: string, maxWidth: number): st
       const prevWords = prev.split(" ");
       if (prevWords.length > 2) {
         const moved = prevWords.pop()!;
-        lines[lines.length - 2] = prevWords.join(" ");
-        lines[lines.length - 1] = `${moved} ${last}`;
+        const newPrev = prevWords.join(" ");
+        const newLast = `${moved} ${last}`;
+        if (
+          ctx.measureText(newPrev).width <= maxWidth &&
+          ctx.measureText(newLast).width <= maxWidth
+        ) {
+          lines[lines.length - 2] = newPrev;
+          lines[lines.length - 1] = newLast;
+        }
       }
     }
   }
+
   return lines;
 }
 
 /**
- * Find the largest font that fits `text` into the available box.
- * Returns the font size and resulting wrapped lines.
+ * Find the largest font that fits `text` into the available bounding box.
+ * Returns the font size, wrapped lines, lineHeight, and total block height.
  */
-function autoFit(
+export function autoFit(
   ctx: CanvasRenderingContext2D,
   text: string,
   family: string,
@@ -81,49 +115,66 @@ function autoFit(
   maxHeight: number,
   range: { min: number; max: number },
   lineHeightRatio = 1.32,
-): { fontSize: number; lines: string[]; lineHeight: number } {
+): { fontSize: number; lines: string[]; lineHeight: number; totalHeight: number } {
   for (let size = range.max; size >= range.min; size -= 2) {
     ctx.font = `${weight} ${size}px ${family}`;
     const lines = wrap(ctx, text, maxWidth);
     const lh = Math.round(size * lineHeightRatio);
-    if (lines.length * lh <= maxHeight) {
-      return { fontSize: size, lines, lineHeight: lh };
+    const totalHeight = lines.length * lh;
+    if (totalHeight <= maxHeight) {
+      return { fontSize: size, lines, lineHeight: lh, totalHeight };
     }
   }
-  // Fall through: even at min size — accept overflow but keep min legible size.
+  // Fallback at min size to guarantee readability and bounded layout
   const size = range.min;
   ctx.font = `${weight} ${size}px ${family}`;
   const lines = wrap(ctx, text, maxWidth);
-  return { fontSize: size, lines, lineHeight: Math.round(size * lineHeightRatio) };
+  const lh = Math.round(size * lineHeightRatio);
+  return { fontSize: size, lines, lineHeight: lh, totalHeight: lines.length * lh };
 }
 
-function drawReferencePill(ctx: CanvasRenderingContext2D, text: string) {
-  ctx.font = "500 28px 'Inter', system-ui, sans-serif";
+function drawReferencePill(ctx: CanvasRenderingContext2D, text: string, sz: SafeZoneGeometry) {
+  const fontSize = REFERENCE_PILL_STANDARDS.FONT_SIZE;
+  const padX = REFERENCE_PILL_STANDARDS.PAD_X;
+  const padY = REFERENCE_PILL_STANDARDS.PAD_Y;
+
+  ctx.font = `500 ${fontSize}px 'Inter', system-ui, sans-serif`;
   const tw = ctx.measureText(text).width;
-  const padX = 28;
-  const padY = 14;
-  const pillW = tw + padX * 2;
-  const pillH = 28 + padY * 2;
-  const x = (W - pillW) / 2;
-  const y = 280;
+  const pillW = Math.min(tw + padX * 2, sz.W_SAFE);
+  const pillH = fontSize + padY * 2; // 56px
+
+  const rawX = sz.CENTER_X - pillW / 2;
+  const rawY = sz.SAFE_TOP; // 300px
+
+  const clamped = clampToSafeZone({ x: rawX, y: rawY, width: pillW, height: pillH }, sz);
+
   // Glass-gold capsule
   ctx.save();
   ctx.shadowBlur = 0;
   ctx.fillStyle = "rgba(0, 0, 0, 0.55)";
-  roundRect(ctx, x, y, pillW, pillH, pillH / 2);
+  roundRect(ctx, clamped.x, clamped.y, clamped.width, clamped.height, clamped.height / 2);
   ctx.fill();
+
   ctx.strokeStyle = "rgba(212, 175, 55, 0.65)";
   ctx.lineWidth = 1.5;
-  roundRect(ctx, x, y, pillW, pillH, pillH / 2);
+  roundRect(ctx, clamped.x, clamped.y, clamped.width, clamped.height, clamped.height / 2);
   ctx.stroke();
+
   ctx.fillStyle = "#f4c95d";
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
-  ctx.fillText(text, W / 2, y + pillH / 2 + 1);
+  ctx.fillText(text, clamped.x + clamped.width / 2, clamped.y + clamped.height / 2 + 1);
   ctx.restore();
 }
 
-function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
+function roundRect(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  r: number,
+) {
   ctx.beginPath();
   ctx.moveTo(x + r, y);
   ctx.lineTo(x + w - r, y);
@@ -140,24 +191,27 @@ function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: numbe
 function drawText(
   ctx: CanvasRenderingContext2D,
   lines: string[],
-  yStart: number,
+  yTop: number,
   lineHeight: number,
   fill: string,
+  centerX: number,
 ) {
   ctx.textAlign = "center";
   ctx.textBaseline = "alphabetic";
-  // soft drop shadow + thin stroke for legibility on any background
   ctx.shadowColor = "rgba(0,0,0,0.55)";
   ctx.shadowBlur = 18;
   ctx.shadowOffsetY = 2;
   ctx.lineJoin = "round";
   ctx.strokeStyle = "rgba(0,0,0,0.45)";
   ctx.lineWidth = 2;
+
+  const baselineOffset = Math.round(lineHeight * 0.75);
+
   lines.forEach((ln, i) => {
-    const y = yStart + i * lineHeight;
-    ctx.strokeText(ln, W / 2, y);
+    const y = yTop + i * lineHeight + baselineOffset;
+    ctx.strokeText(ln, centerX, y);
     ctx.fillStyle = fill;
-    ctx.fillText(ln, W / 2, y);
+    ctx.fillText(ln, centerX, y);
   });
   ctx.shadowBlur = 0;
   ctx.shadowOffsetY = 0;
@@ -170,18 +224,26 @@ export async function renderPhoto(opts: RenderOptions): Promise<Blob> {
       document.fonts.load("700 72px 'Cormorant Garamond'"),
       document.fonts.load("500 28px 'Inter'"),
     ]);
-  } catch { /* best-effort */ }
+  } catch {
+    /* best-effort font loading */
+  }
+
+  const sz = getSafeZone(opts.subtitlePosition || "tiktok");
+  const W = sz.W;
+  const H = sz.H;
+  const maxW = sz.W_SAFE;
+  const centerX = sz.CENTER_X;
 
   const canvas = document.createElement("canvas");
   canvas.width = W;
   canvas.height = H;
   const ctx = canvas.getContext("2d")!;
 
-  // background
+  // Background
   if (opts.backgroundUrl) {
     try {
       const img = await loadImage(opts.backgroundUrl);
-      drawCover(ctx, img);
+      drawCover(ctx, img, W, H);
     } catch {
       ctx.fillStyle = "#0d2a24";
       ctx.fillRect(0, 0, W, H);
@@ -208,74 +270,119 @@ export async function renderPhoto(opts: RenderOptions): Promise<Blob> {
   ctx.fillStyle = vignette;
   ctx.fillRect(0, 0, W, H);
 
-  // Subtle corner accents (skipped on minimal)
+  // Corner accents (skipped on minimal style)
   if (opts.style !== "minimal") {
     ctx.strokeStyle = "rgba(212,175,55,0.55)";
     ctx.lineWidth = 2;
-    const m = 80, cl = 70;
+    const m = 80;
+    const cl = 70;
     ctx.beginPath();
-    ctx.moveTo(m, m + cl); ctx.lineTo(m, m); ctx.lineTo(m + cl, m);
-    ctx.moveTo(W - m - cl, m); ctx.lineTo(W - m, m); ctx.lineTo(W - m, m + cl);
-    ctx.moveTo(m, H - m - cl); ctx.lineTo(m, H - m); ctx.lineTo(m + cl, H - m);
-    ctx.moveTo(W - m - cl, H - m); ctx.lineTo(W - m, H - m); ctx.lineTo(W - m, H - m - cl);
+    ctx.moveTo(m, m + cl);
+    ctx.lineTo(m, m);
+    ctx.lineTo(m + cl, m);
+    ctx.moveTo(W - m - cl, m);
+    ctx.lineTo(W - m, m);
+    ctx.lineTo(W - m, m + cl);
+    ctx.moveTo(m, H - m - cl);
+    ctx.lineTo(m, H - m);
+    ctx.lineTo(m + cl, H - m);
+    ctx.moveTo(W - m - cl, H - m);
+    ctx.lineTo(W - m, H - m);
+    ctx.lineTo(W - m, H - m - cl);
     ctx.stroke();
   }
 
-  const maxW = W - SAFE.side * 2;
+  // Draw Reference Pill at safe top (Y = 300px, H = 56px)
+  if (opts.reference) {
+    drawReferencePill(ctx, opts.reference, sz);
+  }
 
-  // Compute Arabic block (if shown) — capped at ~28% of canvas height
-  let arabicBlock: { lines: string[]; lineHeight: number; fontSize: number } | null = null;
+  // Content start Y coordinate below Reference Pill
+  const contentTopMinY = opts.reference
+    ? sz.SAFE_TOP + 56 + REFERENCE_PILL_STANDARDS.MIN_VERTICAL_GAP
+    : sz.SAFE_TOP; // 380px if reference present
+
+  // Arabic Verse Anchoring
+  let arabicBlock: {
+    lines: string[];
+    lineHeight: number;
+    fontSize: number;
+    totalHeight: number;
+  } | null = null;
+
   if (opts.arabic && opts.style !== "minimal") {
+    const arabicMaxH = Math.min(H * 0.28, sz.H_SAFE * 0.35);
     arabicBlock = autoFit(
-      ctx, opts.arabic, "'Amiri', 'Scheherazade New', serif", 600,
-      maxW, H * 0.28,
-      { min: 36, max: 64 },
+      ctx,
+      opts.arabic,
+      "'Amiri', 'Scheherazade New', serif",
+      600,
+      maxW,
+      arabicMaxH,
+      { min: 32, max: 64 },
       1.4,
     );
   }
 
-  // Bulgarian block: fits in the remaining vertical area between safe top/bottom.
-  const verticalForBg =
-    H - SAFE.top - SAFE.bottom - (arabicBlock ? arabicBlock.lines.length * arabicBlock.lineHeight + 60 : 0);
+  const arabicBottomY = arabicBlock ? contentTopMinY + arabicBlock.totalHeight : contentTopMinY;
+
+  // Available vertical space for Bulgarian translation
+  const minGapBetweenArabicAndBg = 32;
+  const bgStartMinY = arabicBlock ? arabicBottomY + minGapBetweenArabicAndBg : contentTopMinY;
+  const availableBgHeight = Math.max(0, sz.BOTTOM_MAX_Y - bgStartMinY);
+
   const cleanBulgarian = opts.bulgarian.replace(/<[^>]+>/g, "").trim();
   const bg = autoFit(
-    ctx, cleanBulgarian, "'Cormorant Garamond', Georgia, serif", 700,
-    maxW, Math.max(420, verticalForBg),
-    { min: 42, max: 84 },
+    ctx,
+    cleanBulgarian,
+    "'Cormorant Garamond', Georgia, serif",
+    700,
+    maxW,
+    availableBgHeight,
+    { min: 24, max: 84 },
     1.32,
   );
 
-  // Layout
-  if (opts.style === "lower-third") {
+  // Layout Rendering
+  if (opts.style === "lower-third" || opts.style === "bottom") {
     if (arabicBlock) {
       ctx.font = `600 ${arabicBlock.fontSize}px 'Amiri', 'Scheherazade New', serif`;
       ctx.direction = "rtl";
-      drawText(ctx, arabicBlock.lines, SAFE.top, arabicBlock.lineHeight, "#fff");
+      drawText(ctx, arabicBlock.lines, contentTopMinY, arabicBlock.lineHeight, "#fff", centerX);
       ctx.direction = "ltr";
     }
+
     ctx.font = `700 ${bg.fontSize}px 'Cormorant Garamond', Georgia, serif`;
-    const block = bg.lines.length * bg.lineHeight;
-    drawText(ctx, bg.lines, H - SAFE.bottom - block + bg.lineHeight * 0.75, bg.lineHeight, "#fff");
+    let bgTopY = sz.BOTTOM_MAX_Y - bg.totalHeight;
+    if (arabicBlock && bgTopY < arabicBottomY + minGapBetweenArabicAndBg) {
+      bgTopY = arabicBottomY + minGapBetweenArabicAndBg;
+    }
+    drawText(ctx, bg.lines, bgTopY, bg.lineHeight, "#fff", centerX);
   } else if (opts.style === "minimal") {
     ctx.font = `700 ${bg.fontSize}px 'Cormorant Garamond', Georgia, serif`;
-    const block = bg.lines.length * bg.lineHeight;
-    drawText(ctx, bg.lines, (H - block) / 2 + bg.lineHeight * 0.75, bg.lineHeight, "#fff");
+    const bgTopY = bgStartMinY + Math.max(0, Math.round((availableBgHeight - bg.totalHeight) / 2));
+    drawText(ctx, bg.lines, bgTopY, bg.lineHeight, "#fff", centerX);
   } else {
-    // centered: arabic in upper third, Bulgarian middle/lower
+    // Centered style
     if (arabicBlock) {
       ctx.font = `600 ${arabicBlock.fontSize}px 'Amiri', 'Scheherazade New', serif`;
       ctx.direction = "rtl";
-      drawText(ctx, arabicBlock.lines, SAFE.top + arabicBlock.lineHeight * 0.75, arabicBlock.lineHeight, "#fff");
+      drawText(ctx, arabicBlock.lines, contentTopMinY, arabicBlock.lineHeight, "#fff", centerX);
       ctx.direction = "ltr";
-    }
-    ctx.font = `700 ${bg.fontSize}px 'Cormorant Garamond', Georgia, serif`;
-    const yStart = arabicBlock
-      ? SAFE.top + arabicBlock.lines.length * arabicBlock.lineHeight + 80 + bg.lineHeight * 0.75
-      : H / 2 - (bg.lines.length * bg.lineHeight) / 2 + bg.lineHeight * 0.75;
-    drawText(ctx, bg.lines, yStart, bg.lineHeight, "#fff");
-  }
 
-  drawReferencePill(ctx, opts.reference);
+      ctx.font = `700 ${bg.fontSize}px 'Cormorant Garamond', Georgia, serif`;
+      const remHeight = sz.BOTTOM_MAX_Y - arabicBottomY;
+      const idealGap = Math.round((remHeight - bg.totalHeight) / 2);
+      const extraGap = Math.max(minGapBetweenArabicAndBg, idealGap);
+      const bgTopY = Math.min(arabicBottomY + extraGap, sz.BOTTOM_MAX_Y - bg.totalHeight);
+      drawText(ctx, bg.lines, bgTopY, bg.lineHeight, "#fff", centerX);
+    } else {
+      ctx.font = `700 ${bg.fontSize}px 'Cormorant Garamond', Georgia, serif`;
+      const bgTopY =
+        bgStartMinY + Math.max(0, Math.round((availableBgHeight - bg.totalHeight) / 2));
+      drawText(ctx, bg.lines, bgTopY, bg.lineHeight, "#fff", centerX);
+    }
+  }
 
   return await new Promise<Blob>((resolve, reject) =>
     canvas.toBlob((b) => (b ? resolve(b) : reject(new Error("toBlob failed"))), "image/png"),

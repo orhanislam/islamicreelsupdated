@@ -1,314 +1,206 @@
-# Comprehensive Survey Report: R3 (Title Generation Cleanup) & R4 (Dynamic Background Images)
+# Comprehensive Survey Report: Text Rendering, Dynamic Sizing & Layout Engine Architecture
 
-**Author**: Explorer 3 (Survey Phase)  
-**Working Directory**: `C:\Users\admin\Downloads\Islamic Reels Studio\.agents\explorer_survey_3`  
-**Date**: 2026-08-29  
-**Focus Scope**: 
-- **R3**: Title Generation Cleanup (strip `[tiktok carousels]` and similar prefixes)
-- **R4**: Dynamic Background Images Selection from Asset Pool
+**Explorer**: Survey Explorer 3 (Text Rendering, Dynamic Sizing & Layout Engine Explorer)  
+**Working Directory**: `c:\Users\admin\Downloads\Islamic Reels Studio\.agents\explorer_survey_3`  
+**Workspace**: `c:\Users\admin\Downloads\Islamic Reels Studio`  
+**Timestamp**: 2026-08-30T07:05:00Z  
 
 ---
 
 ## 1. Observation
 
-### 1.1 R3: Title Generation & Prefix Contamination Analysis
+A systematic survey was conducted across all rendering engines, canvas pipelines, DOM preview layers, server-side FFmpeg subtitle generators, and automated test suites in the Islamic Reels Studio codebase.
 
-#### Exact Locations in Codebase
-1. **`src/lib/assistant.functions.ts`**:
-   - **Line 220** (`chatWithAssistant` system prompt):
-     ```ts
-     "title": "Точно заглавие на български (напр. [Коран] Аят ал-Курси или [TikTok] 3 неща, които отнемат спокойствието)",
-     ```
-   - **Lines 253-288** (`chatWithAssistant` response parser):
-     Gemini returns JSON. The parser parses `parsed.proposal` and `parsed.proposals`, but applies **no title sanitization or prefix stripping**.
-   - **Line 350** (`suggestViralProposal` prompt):
-     ```ts
-     "title": "ЗАДЪЛЖИТЕЛНО във формат [Коран {surah}:{ayah}] Заглавие ИЛИ [Сахих {collection} #{number}] Заглавие",
-     ```
-   - **Line 432 & Line 496** (`suggestBatchViralProposals` prompt and fallback):
-     ```ts
-     5. ВИНАГИ включвай точния източник в 'title' на български език във формат: [Коран {surah}:{ayah}] Заглавие или [Сахих {collection} #{number}] Заглавие.
-     // Fallback:
-     title: `[Коран / TikTok] ${p.ref}`,
-     ```
-   - **Lines 529-565** (`startServerRenderJob`):
-     ```ts
-     let reference = proposal.title;
-     let viralTitle = proposal.title || "";
-     ```
+### 1.1 Render Engine & Text Layout Inventory
 
-2. **`src/components/CarouselRendererButton.tsx`**:
-   - **Line 23**: `export function CarouselRendererButton({ slides, title }: { slides: Slide[]; title: string })`
-   - **Lines 59, 80, 92-116**:
-     - ZIP download filename: `${title}_Carousel.zip`
-     - Make.com webhook: `runMake({ data: { title, slides: base64Slides, webhookUrl } })`
-     - Clipboard copy button: `handleCopyTitle` directly copies `title` without cleaning.
+The project contains **5 distinct rendering/preview engines**:
 
-3. **`src/routes/_app/assistant.tsx`**:
-   - **Line 181**: `const carouselPrompt = ...` sends prompt requesting TikTok carousel.
-   - **Line 995**: `<span className="font-medium text-foreground">{m.proposal.title}</span>` renders title in UI.
-   - **Line 1011**: `<CarouselRendererButton slides={m.proposal.carouselSlides} title={m.proposal.title} />` passes raw title.
-   - **Lines 1116 & 1262**: `handleCopyTikTokCaption(m.proposal!.title, ...)` uses raw title for TikTok captions.
-
-#### Observed Root Cause
-When the user prompts the AI or clicks the *„Създай Таухид Карусел“* button (which sends `"Генерирай ми TikTok карусел..."`), Gemini frequently prefixes the generated title with strings such as `[tiktok carousels]`, `[TikTok Carousel]`, `[TikTok Carousels]`, `[tiktok]`, `[TikTok]`, `[карусел]`, or `[Коран / TikTok]`. Because neither the system prompt forbids this specific prefix nor the parser strips it, the contaminated title is propagated to the UI, the TikTok caption copier, and the ZIP filename.
+| Engine / File | Target Output | Dimension & Aspect | Safe Zone Definition | Text Layers & Hierarchy | Auto-Fitting & Wrapping Logic |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **Carousel Renderer**<br>`src/lib/render-carousel.ts` | 1080x1920 PNG Slides (ZIP / Make.com) | 1080x1920 (9:16) | `SAFE_TOP: 300`, `SAFE_BOTTOM: 400`, `SAFE_LEFT: 100`, `SAFE_RIGHT: 220`<br>`W_SAFE: 760px`, `H_SAFE: 1220px`, `CENTER_X: 480px` | 1. **Top Title** (Gold, 54px/lh 68)<br>2. **Body Segments** (Sacred Gold 60px/lh 76; Human White 46px/lh 62)<br>3. **Bottom CTA** (Gold 48px/lh 64) | `fitSlideLayout`: 4-phase iterative scale & gap compression (`scale: 1.0 -> 0.05`, `gapScale: 1.0 -> 0.01`).<br>`wrapIntelligent`: Orphan word elimination & oversized token splitting. |
+| **Photo Renderer**<br>`src/lib/render-photo.ts` | 1080x1920 PNG Single Photo Post | 1080x1920 (9:16) | `SAFE = { top: 320, bottom: 280, side: 180 }`<br>`maxW = 720px` (1080 - 180*2) | 1. **Reference Badge** (`drawReferencePill` at `y: 280`, 28px Inter)<br>2. **Arabic Block** (Amiri 600, 36-64px/lh 1.4x, max height 28% canvas)<br>3. **Bulgarian Block** (Cormorant Garamond 700, 42-84px/lh 1.32x) | `autoFit`: Decremental step search (step: -2px) from max down to min size until `lines * lh <= maxHeight`.<br>`wrap`: Word wrapping with orphan balancing (last line < 40% width pulls word from previous). |
+| **Client Video Renderer**<br>`src/lib/render-video.ts` | 1080x1920 MP4/WebM via MediaRecorder | 1080x1920 (1080p) or 720x1280 (720p) | `SAFE = { top: 320, bottom: 280, side: 180 }` (scaled for 720p)<br>`maxW = W - SAFE.side * 2` | 1. **Reference Badge** (`drawReferencePill` at `y: 280 * scale`)<br>2. **Bulgarian Subtitles** (Outfit/Inter 700, 36-112px, anchored at `targetBottomY = H * 0.74`)<br>*(Arabic omitted from video for clarity)* | `chooseFontSize`: Text length heuristic (wordCount > 40 -> 64px ... <= 10 -> 112px).<br>Phrase slicing (3-7 words per phrase).<br>Active word karaoke: 1.14 scale pop + theme glow (`#FFD700`, `#32CD32`, `#00FFFF`). |
+| **Server Video Renderer**<br>`src/lib/render.functions.ts` | 1080x1920 MP4 via Headless FFmpeg + ASS | 1080x1920 (PlayResX: 1080, PlayResY: 1920) | Top Reference: `\pos(540, 380)`<br>Subtitles: `MarginV: 1350` (TikTok/Reels) or `960` (Center) | 1. **Reference Header**: `Style: Reference, Fontsize: 70`<br>2. **Bulgarian Subtitles**: `Style: Bulgarian, Fontsize: 120` (Title 130px, Ayah 58-105px) | Dynamic Ayah wrapping (2-5 words/line).<br>Acoustic pause phrase slicing (>0.25s gap).<br>Active word karaoke via inline ASS tags: `\c&H0000B7FF&` (gold) vs `\c&H00FFFFFF&` (white), `\blur6`. |
+| **Live UI & DOM Previews**<br>`src/routes/_app/create.tsx`<br>`src/routes/_app/assistant.tsx` | Browser Interactive HTML/CSS Previews | Responsive `aspect-[9/16]` | Absolute/Flex containers in Tailwind CSS | 1. **Reference Overlay**: `top-[15%]`, `font-size: 16px`<br>2. **Live Subtitle Overlay**: Center `font-size: 24px`<br>3. **Audio Bar**: `bottom-4 left-4 right-4`<br>4. **Assistant Carousel**: 2x2 slide preview grid | Flex/Grid layout with text truncation (`truncate`, `whitespace-pre-line`). |
 
 ---
 
-### 1.2 R4: Background Image Asset Inventory & Current Rendering Pipeline
+### 1.2 Text Layers Interaction Analysis
 
-#### Local Asset Pool Inventory
-Search of the entire workspace revealed two dedicated asset directories containing vertical 9:16 background images:
+#### Layer Stacking & Coordinate Calculation
+1. **Carousel Renderer (`render-carousel.ts`)**:
+   - Uses a **single continuous vertical layout stack**.
+   - Top anchor: `currentY = SAFE_TOP + Math.max(0, (H_SAFE - layout.totalH) / 2)`.
+   - Flow:
+     $$\text{Top Title} \xrightarrow{+\text{gapTopToBody}} \text{Segment}_1 \xrightarrow{+\text{gapBetweenSegments}} \text{Segment}_2 \dots \xrightarrow{+\text{gapBodyToBottom}} \text{Bottom CTA}$$
+   - Because all items share one layout calculation, **zero vertical or horizontal collision occurs between text layers**.
+   - Safe zone margins guarantee spacing from TikTok's UI:
+     - Top UI (Search, Following tabs): protected by `SAFE_TOP = 300px`.
+     - Bottom UI (Captions, Sound bar, Comments): protected by `SAFE_BOTTOM = 400px` (limit at $Y = 1520\text{px}$).
+     - Right UI (Like, Comment, Bookmark, Share icons): protected by `SAFE_RIGHT = 220px` (limit at $X = 860\text{px}$, centering on $X = 480\text{px}$).
 
-| Path | Dimensions | Format | File Size | Ratio | Description / Visual Theme |
-|---|---|---|---|---|---|
-| `tiktok_images/img0.jpg` | 1318 × 2346 | JPEG | 453.7 KB | ~9:16 | Moody atmospheric dark landscape |
-| `tiktok_images/img1.jpg` | 1318 × 2346 | JPEG | 479.7 KB | ~9:16 | Dramatic misty nature with depth |
-| `tiktok_images/img2.jpg` | 1318 × 2346 | JPEG | 332.0 KB | ~9:16 | Deep mountain dawn / atmospheric light |
-| `tiktok_images/img3.jpg` | 1318 × 2346 | JPEG | 256.4 KB | ~9:16 | Golden warm light landscape |
-| `tiktok_output/bg1.jpg` | 768 × 1376 | JPEG | 855.9 KB | ~9:16 | Dark textured cinematic background |
-| `tiktok_output/bg2.jpg` | 768 × 1376 | JPEG | 872.3 KB | ~9:16 | Soft illuminated mist landscape |
-| `tiktok_output/bg3.jpg` | 768 × 1376 | JPEG | 971.2 KB | ~9:16 | Golden rays breaking through clouds |
-| `tiktok_output/bg4.jpg` | 768 × 1376 | JPEG | 740.6 KB | ~9:16 | Radiant warm golden sunrise scene |
+2. **Photo Renderer (`render-photo.ts`)**:
+   - Layers:
+     - Top Reference Capsule: fixed at $Y = 280\text{px}$ (`H = 56px`), sits in the upper safe region.
+     - Arabic Text: starts at `SAFE.top = 320px`, direction `rtl`, font size 36-64px, auto-capped at 28% of height ($537.6\text{px}$).
+     - Bulgarian Translation: dynamically positioned based on style:
+       - `centered`: begins at `SAFE.top + arabicBlock.height + 80px`.
+       - `lower-third`: anchored at bottom safe line: `H - SAFE.bottom - blockHeight`.
+       - `minimal`: centered at `(H - blockHeight) / 2`.
+   - Vertical collision between Arabic and Bulgarian is prevented because Bulgarian vertical start explicitly adds Arabic block height and an 80px margin.
 
-- **Total Assets in Pool**: **8 distinct vertical JPEG background images**.
-- **Public / Assets Directory**: No `public/` or `src/assets/` directory currently exists in the root directory.
+3. **Video Renderers (`render-video.ts` & `render.functions.ts`)**:
+   - Single-layer active subtitle stream: only 1 phrase/ayah is displayed at any timestamp $t$.
+   - Slicing modes:
+     - `phrase`: 2-4 words per phrase (Punchy / Hormozi mode).
+     - `ayah`: complete Ayah bounded between exact recitation start and end timestamps.
+   - Reference badge anchored at top ($Y = 280\text{px}$ in canvas, $Y = 380\text{px}$ in ASS).
+   - Subtitle block anchored at bottom ($Y = 1420\text{px}$ / $74\%$ down canvas; $Y = 1350\text{px}$ in ASS), well clear of top reference and bottom TikTok navigation.
 
-#### Current Referencing & Loading Pipeline
-1. **`src/components/CarouselRendererButton.tsx`** (lines 26-45):
-   ```tsx
-   const runGenerate = useServerFn(generateBackground);
-   const _renderAllSlides = async () => {
-     setProgress("Генериране на фонове и текст...");
-     return await Promise.all(slides.map(async (slide, i) => {
-       const currentPrompt = slide?.imagePrompt || "cinematic dark background islamic theme";
-       const bgRes = await runGenerate({ data: { prompt: currentPrompt } });
-       const bgUrl = `data:${bgRes.mimeType};base64,${bgRes.base64}`;
-       
-       const blob = await renderCarouselSlide({
-         backgroundUrl: bgUrl,
-         topTitle: slide.topTitle || "",
-         mainText: slide.mainText || "",
-         bottomText: slide.bottomText || "",
-         footerText: slide.footerText || ""
-       });
-       return { blob, name: `Slide_${i + 1}.png` };
-     }));
-   };
-   ```
-2. **`src/lib/backgrounds.functions.ts`** (lines 44-51):
-   - Calls `geminiGenerateImage(safePrompt)` in `src/lib/gemini.ts` using the Google Imagen `gemini-3.1-flash-image` model.
-3. **`src/lib/render-carousel.ts`** (lines 69-108):
-   - Takes `opts.backgroundUrl` (Data URL or HTTP URL), loads via HTML `new Image()`, computes cover crop aspect ratio, and draws to 1080x1920 canvas context (`ctx.drawImage`) with dark vertical gradient overlay.
+---
 
-#### Identified Issues with Current Approach
-1. **Slow & High Latency**: Calling `geminiGenerateImage` 4 times concurrently takes 8–20 seconds per carousel and often hits rate limits (429 ResourceExhausted).
-2. **Ignored Local Assets**: The 8 curated high-res local images in `tiktok_images/` and `tiktok_output/` are never utilized by `CarouselRendererButton.tsx`.
-3. **No Dynamic Rotation**: There is zero state-tracking or rotation between consecutive carousel generations or across slides.
+### 1.3 Long Text Handling & Auto-Shrink Mechanisms
+
+1. **Carousel Auto-Fit (`fitSlideLayout`)**:
+   - Implements a **4-stage progressive compression**:
+     1. **Stage 1 (Multi-Segment Gap Compression)**: If total height $> 1220\text{px}$, compress `gapBetweenSegments` down to 35% before reducing font size.
+     2. **Stage 2 (Proactive Ratio Estimation)**: Calculate estimated scale: $\text{scale} = \min(1.0, \max(0.20, \frac{1220}{\text{totalH}} \times 0.96))$.
+     3. **Stage 3 (Fine-tuning Loop)**: Iteratively step down `scale` (-0.03) and `gapScale` (-0.05) until $\text{totalH} \le 1220\text{px}$.
+     4. **Stage 4 (Extreme Safety Fallback)**: For extreme inputs (1000+ characters / 10+ segments), allows scale down to $0.05$.
+   - **Empirical verification**: 100% of test cases (from 1-line quote to 1100-character 10-segment slides) successfully fit within $1220\text{px}$.
+
+2. **Photo Auto-Fit (`autoFit`)**:
+   - Step search from `max` (84px Bulgarian / 64px Arabic) down to `min` (42px Bulgarian / 36px Arabic) by 2px decrements.
+   - If even `min` exceeds height, preserves minimum readable font size.
+
+3. **Video Subtitle Sizing (`chooseFontSize` & ASS Generation)**:
+   - Word count based clamping:
+     - $>40\text{ words}$: font size $58\text{px} - 64\text{px}$, 5 words/line.
+     - $28 - 40\text{ words}$: font size $68\text{px} - 75\text{px}$, 4 words/line.
+     - $18 - 28\text{ words}$: font size $80\text{px} - 88\text{px}$, 4 words/line.
+     - $10 - 18\text{ words}$: font size $92\text{px} - 98\text{px}$, 3 words/line.
+     - $<10\text{ words}$: font size $105\text{px} - 112\text{px}$, 2 words/line.
+
+---
+
+### 1.4 Build & Test Verification Results
+
+| Command | Execution Result | Details |
+| :--- | :--- | :--- |
+| `npm run build` | **SUCCESS** (Exit Code: 0, 11.51s) | Full Vite / Rolldown / Nitro client + SSR server bundle generated with zero syntax/type errors. |
+| `npm run test` | **SUCCESS** (Exit Code: 0) | `verify-tawheed-carousel.test.ts` (5/5 passed, 30 simulation cycles) + `verify-sync.test.ts` (passed). |
+| `npx jiti .../verify-vertical-autofit-segments.test.ts` | **SUCCESS** (Exit Code: 0) | 4/4 test suites passed (Multi-Segment Parsing, Dynamic Gap Balancing, Strict Safe Zone Bounds, Edge Cases). |
+| `npx jiti .../adversarial-r1-r2-challenger.test.ts` | **SUCCESS** (Exit Code: 0) | 5/5 test suites passed (Quotation Syntax, Orphan Balancer, Safe Zone Geometry, Dual-Color Hierarchy, Edge Cases). |
+| `npx jiti .../adversarial-r2-reviewer-stress.test.ts` | **SUCCESS** (Exit Code: 0) | 6/6 test suites passed (Quotation Nesting, Quote Extraction, Dalil Detection, 4-Slide Framework, Stroke Scaling, 30-Segment Stress). |
+| `npx jiti .../verify-photo-carousel-upgrade.test.ts` | **NOTICED BEHAVIOR** | Failed assert in Test 1: `cleanProposalTitle` stripped brackets (`[Коран 2:255]` $\rightarrow$ `Коран 2:255`) because of `title.replace(/\[|\]/g, "")` added on lines 66-68 of `assistant.functions.ts`. (Noted for implementation harmonization). |
 
 ---
 
 ## 2. Logic Chain
 
 ```
-[Observation 1.1: Gemini outputs [tiktok carousels] in title]
-         │
-         ├──► Prompt lacks explicit negative constraint against '[tiktok carousels]'
-         │
-         └──► Parser lacks sanitization regex before storing proposal.title
-                   │
-                   ▼
-     [Solution R3: Prompt constraint + cleanProposalTitle() sanitizer applied at all parse boundaries]
+[Observation 1: Layout Engine Geometry]
+TIKTOK_SAFE_ZONE defines:
+- W: 1080, H: 1920
+- Safe Bounds: Top 300px, Bottom 1520px (Margin: 400px), Left 100px, Right 860px (Margin: 220px)
+- Center X: 480px, Safe Width: 760px, Safe Height: 1220px
+  │
+  ▼
+[Observation 2: Flow Calculation]
+All text elements in Carousel & Photo are laid out sequentially with measured line heights & gaps.
+- totalH = topH + gapTopToBody + sum(segH) + sum(gapSegments) + gapBodyToBottom + bottomH
+- startY = SAFE_TOP + (H_SAFE - totalH)/2
+  │
+  ▼
+[Deduction 1: Zero Overlap Guarantee]
+Because currentY is incremented strictly by (lh + gap) for each line and segment, vertical collision is mathematically impossible within the flow.
+  │
+  ▼
+[Observation 3: Auto-Fit Convergence]
+fitSlideLayout checks totalH <= 1220. If not, it compresses segment gaps (down to 35%) first, then scales down font size (down to 0.05).
+  │
+  ▼
+[Deduction 2: Guaranteed Bounding Box Containment]
+Even for 1000+ character texts, fitSlideLayout guarantees that:
+1. startY >= 300px
+2. (startY + totalH) <= 1520px
+3. Line width <= 760px (centered at 480px -> Left >= 100px, Right <= 860px)
+4. No text ever collides with TikTok's right sidebar icons (220px margin) or bottom caption UI (400px margin).
 ```
-
-```
-[Observation 1.2: 8 vertical background images exist in tiktok_images/ and tiktok_output/]
-         │
-         ├──► CarouselRendererButton currently generates AI images via Gemini API (slow, rate-limited)
-         │
-         ├──► No server function currently serves the local background assets
-         │
-         └──► No cycle index / rotation mechanism exists across successive generations
-                   │
-                   ▼
-     [Solution R4: Server function getCarouselBackgroundPool + dynamic rotation algorithm across slides & cycles]
-```
-
-### Step-by-Step Reasoning:
-1. **For R3 (Title Cleanup)**:
-   - A single canonical sanitization function `cleanProposalTitle` should be introduced.
-   - It must strip variations like `[tiktok carousels]`, `[tiktok carousel]`, `[tiktok]`, `[карусел]`, `[карусели]`, `tiktok carousels:`, while strictly preserving legitimate Quran/Hadith citations (e.g. `[Коран 2:255]`, `[Сахих ал-Бухари #6424]`).
-   - The sanitizer must be applied at:
-     - `chatWithAssistant` (both single `proposal` and array `proposals`)
-     - `suggestViralProposal`
-     - `suggestBatchViralProposals`
-     - `injectAuthenticCarouselText`
-     - `CarouselRendererButton` (on copy, ZIP generation, and webhook export)
-   - The prompt in `src/lib/assistant.functions.ts` must also state: `В полето 'title' НИКОГА не слагай префикси като '[tiktok carousels]', '[tiktok carousel]' или '[tiktok]'.`
-
-2. **For R4 (Dynamic Background Pool & Rotation)**:
-   - Create a server function `getCarouselBackgroundPool` (or `getCarouselBackgroundImages`) in `src/lib/backgrounds.functions.ts`.
-   - The server function loads all 8 images from `tiktok_images/` and `tiktok_output/`, returning them as base64 Data URLs with metadata.
-   - Implement dynamic selection:
-     - For a 4-slide carousel in generation cycle $N$:
-       $$\text{Slide } i \text{ image index} = (N \times 4 + i) \bmod 8 \quad \text{for } i \in \{0, 1, 2, 3\}$$
-     - Generation 1 ($N=0$): uses indices `[0, 1, 2, 3]` (`img0.jpg`, `img1.jpg`, `img2.jpg`, `img3.jpg`)
-     - Generation 2 ($N=1$): uses indices `[4, 5, 6, 7]` (`bg1.jpg`, `bg2.jpg`, `bg3.jpg`, `bg4.jpg`)
-     - Generation 3 ($N=2$): uses a rotated permutation ensuring slides within the same carousel are visually distinct and different from the immediately preceding carousel.
-   - Track generation index via client `localStorage` (`islamic_carousel_bg_cycle`) and server memory (`memory.functions.ts`).
-   - In `CarouselRendererButton.tsx`, fetch the dynamic background array and pass each background to `renderCarouselSlide`. This achieves instant (<100ms) rendering and guaranteed variety.
 
 ---
 
 ## 3. Caveats
 
-1. **AI Generation Option**: While local assets provide instant, 100% reliable 9:16 backgrounds, some users might still want on-demand AI Imagen generation. The recommended design allows local asset rotation as default/fast mode with fallback or toggle.
-2. **Image Scaling in Canvas**: `tiktok_images` are 1318×2346 and `tiktok_output` are 768×1376. `renderCarouselSlide` already performs aspect-ratio cover crop (`drawCover` / `ctx.drawImage` with `imgRatio` vs `canvasRatio`), but we must ensure both image sizes scale seamlessly to 1080×1920 without distortion.
-3. **No Caveats on Feasibility**: Both R3 and R4 require zero external infrastructure changes and can be verified entirely with local automated test suites and component rendering.
+1. **Browser Canvas Font Rendering Differences**:
+   - `CanvasRenderingContext2D.measureText()` in client browsers uses local system font rasterizers (DirectWrite on Windows, CoreText on macOS/iOS, FreeType on Linux).
+   - In Node.js / unit tests without native canvas, test mocks use character-width metrics calibrated to Montserrat/Outfit. The auto-fit algorithm includes a $4\%$ safety margin (`0.96` ratio) to absorb cross-browser font metric variances.
+2. **Web Font Loading Pre-flight**:
+   - If `document.fonts.load()` fails (e.g. offline/network glitch), canvas falls back to system sans-serif. Line heights remain bounded by layout rules, but visual font weight may vary slightly.
+3. **Live DOM Preview vs Final Canvas/FFmpeg**:
+   - The DOM preview in `create.tsx` is an interactive approximation using CSS (`aspect-[9/16]`), whereas final rendering occurs via 1080x1920 HTML5 Canvas or server FFmpeg.
 
 ---
 
-## 4. Conclusion & Actionable Implementation Plan
+## 4. Conclusion & Recommendations
 
-### 4.1 Implementation for R3 (Title Cleanup)
+### 4.1 Key Conclusions
+1. The layout and text rendering engine has robust mathematical auto-fitting and safe-zone containment algorithms in `render-carousel.ts` and `render-photo.ts`.
+2. Safe zones (`SAFE_TOP = 300px`, `SAFE_BOTTOM = 400px`, `SAFE_RIGHT = 220px`, `SAFE_LEFT = 100px`) successfully keep all text clear of social media overlay elements (TikTok right icons, bottom description/sound bar, top tabs).
+3. Dynamic gap scaling (compressing inter-segment gaps before reducing font size) preserves font readability for medium-to-long Hadiths and Ayat.
 
-#### A. Title Sanitizer Utility (`src/lib/assistant.functions.ts` & `src/lib/utils.ts`):
-```ts
-export function cleanProposalTitle(rawTitle: string): string {
-  if (!rawTitle || typeof rawTitle !== "string") return "";
-  return rawTitle
-    .replace(/^\[?\s*tiktok\s*(?:carousels?|карусел(?:и)?)?\s*\]?\s*[:-]?\s*/gi, "")
-    .replace(/^\[?\s*карусел(?:и)?\s*\]?\s*[:-]?\s*/gi, "")
-    .replace(/^\[?\s*tiktok\s*\]\s*[:-]?\s*/gi, "")
-    .replace(/^\[?\s*коран\s*\/\s*tiktok\s*\]\s*[:-]?\s*/gi, "[Коран] ")
-    .trim();
-}
-```
+### 4.2 Concrete Implementation Recommendations
 
-#### B. Integration Points in `src/lib/assistant.functions.ts`:
-1. In `chatWithAssistant`:
-   ```ts
-   if (parsed.proposal && parsed.proposal.title) {
-     parsed.proposal.title = cleanProposalTitle(parsed.proposal.title);
-   }
-   if (Array.isArray(parsed.proposals)) {
-     parsed.proposals.forEach(p => {
-       if (p.title) p.title = cleanProposalTitle(p.title);
-     });
-   }
-   ```
-2. In `suggestViralProposal` & `suggestBatchViralProposals`: apply `cleanProposalTitle` to all generated proposals before returning.
-3. In `systemPrompt` (line 220):
-   ```ts
-   "title": "Точно заглавие на български (напр. [Коран] Аят ал-Курси или 3 неща, които отнемат спокойствието). НИКОГА не слагай префикс [tiktok carousels] или [TikTok].",
-   ```
-
-#### C. Integration in `src/components/CarouselRendererButton.tsx`:
-```ts
-const cleanTitle = cleanProposalTitle(title);
-// Use cleanTitle in handleCopyTitle, handleGenerate (ZIP name), and handleSendToMake
-```
-
----
-
-### 4.2 Implementation for R4 (Dynamic Background Images)
-
-#### A. Background Pool Service (`src/lib/backgrounds.functions.ts`):
-```ts
-import fs from "node:fs/promises";
-import path from "node:path";
-
-export const LOCAL_BACKGROUND_POOL = [
-  "tiktok_images/img0.jpg",
-  "tiktok_images/img1.jpg",
-  "tiktok_images/img2.jpg",
-  "tiktok_images/img3.jpg",
-  "tiktok_output/bg1.jpg",
-  "tiktok_output/bg2.jpg",
-  "tiktok_output/bg3.jpg",
-  "tiktok_output/bg4.jpg",
-];
-
-export const getCarouselBackgrounds = createServerFn({ method: "POST" })
-  .validator((input: { count?: number; cycleIndex?: number } | undefined) => input || {})
-  .handler(async ({ data }) => {
-    const count = data.count || 4;
-    const cycle = data.cycleIndex || 0;
-    const total = LOCAL_BACKGROUND_POOL.length;
-    
-    const selectedUrls: string[] = [];
-    for (let i = 0; i < count; i++) {
-      const idx = (cycle * count + i) % total;
-      const relPath = LOCAL_BACKGROUND_POOL[idx];
-      const absPath = path.resolve(process.cwd(), relPath);
-      
-      try {
-        const buf = await fs.readFile(absPath);
-        const base64 = buf.toString("base64");
-        selectedUrls.push(`data:image/jpeg;base64,${base64}`);
-      } catch (err) {
-        console.warn(`Could not read background asset ${relPath}:`, err);
-      }
-    }
-    return { backgrounds: selectedUrls };
-  });
-```
-
-#### B. Integration in `src/components/CarouselRendererButton.tsx`:
-```tsx
-const runGetBackgrounds = useServerFn(getCarouselBackgrounds);
-
-const _renderAllSlides = async () => {
-  setProgress("Подготовка на фонове...");
-  
-  // Read and increment local cycle index
-  let cycle = 0;
-  if (typeof window !== "undefined" && window.localStorage) {
-    cycle = parseInt(localStorage.getItem("islamic_carousel_bg_cycle") || "0", 10);
-    localStorage.setItem("islamic_carousel_bg_cycle", String(cycle + 1));
-  }
-  
-  const bgRes = await runGetBackgrounds({ data: { count: slides.length, cycleIndex: cycle } });
-  const poolUrls = bgRes.backgrounds || [];
-
-  setProgress("Рендериране на слайдовете...");
-  return await Promise.all(slides.map(async (slide, i) => {
-    const bgUrl = poolUrls[i % poolUrls.length];
-    const blob = await renderCarouselSlide({
-      backgroundUrl: bgUrl,
-      topTitle: slide.topTitle || "",
-      mainText: slide.mainText || "",
-      bottomText: slide.bottomText || "",
-      footerText: slide.footerText || ""
-    });
-    return { blob, name: `Slide_${i + 1}.png` };
-  }));
-};
-```
+1. **Unified Safe Zone Constant Registry**:
+   - Standardize `SAFE_ZONE` across all modules (`render-carousel.ts`, `render-photo.ts`, `render-video.ts`, and `render.functions.ts`) to use consistent 9:16 safe margins:
+     - `Top: 300px` (protects status bar and top tabs).
+     - `Bottom: 400px` (protects TikTok captions, username, sound disc).
+     - `Right: 220px` (protects profile avatar, like, comment, bookmark, share buttons).
+     - `Left: 100px` (clean visual breathing margin).
+2. **2-Stage Dynamic Auto-Fit Architecture**:
+   - Maintain the standard 2-stage fit approach:
+     - Stage 1: Compress spacing gaps (between segments, titles, and CTA) down to $35\%-50\%$ to keep fonts large and legible.
+     - Stage 2: Scale font sizes down gracefully with line-height proportional scaling ($1.25\times - 1.35\times$).
+3. **Orphan Word & Citation Non-Breaking Spacing**:
+   - Ensure citations (e.g., `[2:255]`, `№ 1`, `(112:1-4)`) and single-syllable prepositions (`в`, `с`, `за`, `и`, `от`) use non-breaking rules so they do not wrap alone to a new line.
+4. **DOM Preview UI Alignment**:
+   - In `create.tsx` and `assistant.tsx`, update preview container CSS overlays to reflect exact safe zone padding (`pt-[15.6%] pb-[20.8%] pr-[20.4%] pl-[9.3%]`), ensuring the interactive browser preview is 1:1 pixel-aligned with final rendered images/videos.
+5. **Harmonize `cleanProposalTitle`**:
+   - In `assistant.functions.ts`, ensure `cleanProposalTitle` strips only unwanted meta prefixes (`[tiktok carousels]`, `[карусел]`, etc.) while keeping authentic theological brackets intact (e.g., `[Коран 2:255]`, `[Сахих ал-Бухари #6424]`).
 
 ---
 
 ## 5. Verification Method
 
-### 5.1 Automated Unit & Integration Tests
-1. **Title Cleanup Verification**:
-   - Create/Update a test asserting `cleanProposalTitle` strips all prefixes:
-     - `"[tiktok carousels] 3 признака на искреност"` $\rightarrow$ `"3 признака на искреност"`
-     - `"[TikTok Carousel] Тайната на Ризка"` $\rightarrow$ `"Тайната на Ризка"`
-     - `"[tiktok] Дуа при трудност"` $\rightarrow$ `"Дуа при трудност"`
-     - `"[Коран 2:255] Аят ал-Курси"` $\rightarrow$ `"[Коран 2:255] Аят ал-Курси"` (preserved!)
-     - `"[Сахих ал-Бухари #6424] Изпитанията"` $\rightarrow$ `"[Сахих ал-Бухари #6424] Изпитанията"` (preserved!)
+### 5.1 Independent Verification Commands
+To independently verify the text rendering, safe zone containment, and layout engine:
 
-2. **Dynamic Background Pool Verification**:
-   - Call `getCarouselBackgrounds({ count: 4, cycleIndex: 0 })` $\rightarrow$ returns 4 valid base64 image strings from `tiktok_images/`.
-   - Call `getCarouselBackgrounds({ count: 4, cycleIndex: 1 })` $\rightarrow$ returns 4 different valid base64 image strings from `tiktok_output/`.
-   - Assert `backgrounds[0]` in Cycle 0 $\neq$ `backgrounds[0]` in Cycle 1.
-   - Assert all 4 slides in a single cycle receive distinct background images.
+1. **Full Build Check**:
+   ```powershell
+   npm run build
+   ```
+   *Expected: Exits with code 0 in ~11-15s, bundling both client and SSR server targets.*
 
-3. **End-to-End Test Execution**:
-   - Run project test runner: `npm test` or `bun test:viral` or `jiti src/lib/__tests__/verify-viral-carousel.test.ts`.
+2. **Core Test Suite**:
+   ```powershell
+   npm run test
+   ```
+   *Expected: Exits with code 0, validating Tawheed taxonomy diversity and subtitle synchronization.*
+
+3. **Multi-Segment & Safe Zone Auto-Fit Suite**:
+   ```powershell
+   npx jiti src/lib/__tests__/verify-vertical-autofit-segments.test.ts
+   ```
+   *Expected: Exits with code 0 across all 4 suites (1-10 segments, dynamic gap balancing, boundary checks).*
+
+4. **Adversarial Challenger & Reviewer Suites**:
+   ```powershell
+   npx jiti src/lib/__tests__/adversarial-r1-r2-challenger.test.ts
+   npx jiti src/lib/__tests__/adversarial-r2-reviewer-stress.test.ts
+   ```
+   *Expected: Exits with code 0 across all 11 suites.*
 
 ### 5.2 Invalidation Conditions
-- Any occurrence of `[tiktok carousels]` or `[tiktok carousel]` in generated titles, UI output, or ZIP filenames.
-- Two consecutive carousel generations using the identical background image set when multiple pool assets exist.
-- Slides within a single 4-slide carousel all using the exact same static background image.
+- Any rendered text line rendering with $X > 860\text{px}$ (breaching the 220px TikTok right sidebar margin).
+- Any rendered text line rendering with $Y > 1520\text{px}$ (breaching the 400px TikTok bottom margin).
+- Any text clipping, truncation, or overlapping between distinct text layers (title, quote, commentary, CTA, reference).

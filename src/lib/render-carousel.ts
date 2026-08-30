@@ -1,20 +1,5 @@
-export const TIKTOK_SAFE_ZONE = {
-  W: 1080,
-  H: 1920,
-  SAFE_TOP: 300,
-  SAFE_BOTTOM: 400,
-  SAFE_LEFT: 100,
-  SAFE_RIGHT: 220,
-  get W_SAFE() {
-    return this.W - this.SAFE_LEFT - this.SAFE_RIGHT; // 760px
-  },
-  get H_SAFE() {
-    return this.H - this.SAFE_TOP - this.SAFE_BOTTOM; // 1220px
-  },
-  get CENTER_X() {
-    return this.SAFE_LEFT + this.W_SAFE / 2; // 480px
-  },
-};
+import { TIKTOK_SAFE_ZONE, type SafeZoneGeometry } from "./safe-zone";
+export { TIKTOK_SAFE_ZONE, type SafeZoneGeometry };
 
 export type CarouselSlideOptions = {
   backgroundUrl: string;

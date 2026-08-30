@@ -37,15 +37,29 @@ export async function geminiChat(
 
   // Convert OpenAI messages to Gemini format
   let systemInstruction: any = undefined;
-  const contents = messages
+  let contents = messages
     .filter((m) => {
       if (m.role === "system") { systemInstruction = { parts: [{ text: m.content }] }; return false; }
       return true;
     })
-    .map((m) => ({
-      role: m.role === "assistant" ? "model" : "user",
-      parts: [{ text: m.content }],
-    }));
+    .map((m) => {
+      const textContent = (m.content && m.content.trim().length > 0) ? m.content : " ";
+      return {
+        role: m.role === "assistant" ? "model" : "user",
+        parts: [{ text: textContent }],
+      };
+    });
+
+  // Gemini requires strictly alternating roles. Collapse consecutive same-role messages.
+  const collapsedContents: any[] = [];
+  for (const msg of contents) {
+    if (collapsedContents.length > 0 && collapsedContents[collapsedContents.length - 1].role === msg.role) {
+      collapsedContents[collapsedContents.length - 1].parts[0].text += "\n\n" + msg.parts[0].text;
+    } else {
+      collapsedContents.push(msg);
+    }
+  }
+  contents = collapsedContents;
 
   if (contents.length === 0) {
     // Google Gemini API rejects generateContent if contents array is empty (INVALID_ARGUMENT 400).
