@@ -32,3 +32,9 @@ Write your review report to:
 c:\Users\admin\Downloads\Islamic Reels Studio\.agents\reviewer_m2_2\handoff.md
 
 Send a message back with your verdict.
+
+## 2026-08-30T07:50:10Z
+**Context**: Milestone 2 Review
+**Content**: Please provide your review status and handoff report for Milestone 2.
+**Action**: Complete your evaluation and send your verdict.
+

@@ -118,13 +118,7 @@ async function runAdversarialChallengerSuite() {
     "bottom",
   ];
 
-  const profiles: PlatformSafeZoneProfile[] = [
-    "tiktok",
-    "reels",
-    "shorts",
-    "universal",
-    "center",
-  ];
+  const profiles: PlatformSafeZoneProfile[] = ["tiktok", "reels", "shorts", "universal", "center"];
 
   const references = [
     undefined,
@@ -144,9 +138,7 @@ async function runAdversarialChallengerSuite() {
     "Мир и благодат.",
     "Аллах е Светлината на небесата и на земята. Неговата светлина има пример като ниша, в която има светилник.",
     "О, вие, които повярвахте, търсете помощ чрез търпението и молитвата! Наистина Аллах е с търпеливите. И не казвайте за онези, които са убити по пътя на Аллах: Мъртви са! Не, живи са, ала вие не съзнавате.",
-    Array(12)
-      .fill("Поискайте опрощение от вашия Господ, защото Той е Многоопрощаващ.")
-      .join(" "),
+    Array(12).fill("Поискайте опрощение от вашия Господ, защото Той е Многоопрощаващ.").join(" "),
     "Думи с <special> & 'кавички' \"quote\" и много-дълго-изречение-без-прекъсване-за-проверка-на-пренасянето.",
   ];
 
@@ -189,9 +181,15 @@ async function runAdversarialChallengerSuite() {
               }
 
               const hasZeroCollisions =
-                (ref && layout.arabic ? !doBoxesCollide(layout.pill, layout.arabic.box, 24) : true) &&
-                (ref && !layout.arabic ? !doBoxesCollide(layout.pill, layout.bulgarian.box, 24) : true) &&
-                (layout.arabic ? !doBoxesCollide(layout.arabic.box, layout.bulgarian.box, 32) : true);
+                (ref && layout.arabic
+                  ? !doBoxesCollide(layout.pill, layout.arabic.box, 24)
+                  : true) &&
+                (ref && !layout.arabic
+                  ? !doBoxesCollide(layout.pill, layout.bulgarian.box, 24)
+                  : true) &&
+                (layout.arabic
+                  ? !doBoxesCollide(layout.arabic.box, layout.bulgarian.box, 32)
+                  : true);
 
               if (!hasZeroCollisions) {
                 collisionFailures++;
@@ -206,7 +204,11 @@ async function runAdversarialChallengerSuite() {
     }
 
     assertEq(testedCombos, 1600, "Must test exactly 1,600 combinations");
-    assertEq(containmentFailures, 0, `Containment failures must be 0, found ${containmentFailures}`);
+    assertEq(
+      containmentFailures,
+      0,
+      `Containment failures must be 0, found ${containmentFailures}`,
+    );
     assertEq(collisionFailures, 0, `Collision failures must be 0, found ${collisionFailures}`);
   });
 
@@ -250,9 +252,36 @@ async function runAdversarialChallengerSuite() {
   test("S2.4: autoFit decremental search monotonically chooses fitting size", () => {
     const ctx = createMockCanvasContext(60);
     const text = "Търпението е ключът към всяка благодат и напътствие в живота.";
-    const fit1 = photoAutoFit(ctx, text, "'Cormorant Garamond'", 700, 760, 400, { min: 24, max: 84 }, 1.32);
-    const fit2 = photoAutoFit(ctx, text, "'Cormorant Garamond'", 700, 760, 200, { min: 24, max: 84 }, 1.32);
-    const fit3 = photoAutoFit(ctx, text, "'Cormorant Garamond'", 700, 760, 100, { min: 24, max: 84 }, 1.32);
+    const fit1 = photoAutoFit(
+      ctx,
+      text,
+      "'Cormorant Garamond'",
+      700,
+      760,
+      400,
+      { min: 24, max: 84 },
+      1.32,
+    );
+    const fit2 = photoAutoFit(
+      ctx,
+      text,
+      "'Cormorant Garamond'",
+      700,
+      760,
+      200,
+      { min: 24, max: 84 },
+      1.32,
+    );
+    const fit3 = photoAutoFit(
+      ctx,
+      text,
+      "'Cormorant Garamond'",
+      700,
+      760,
+      100,
+      { min: 24, max: 84 },
+      1.32,
+    );
 
     assert(fit1.fontSize >= fit2.fontSize, "Larger height budget must yield >= fontSize");
     assert(fit2.fontSize >= fit3.fontSize, "Medium height budget must yield >= fontSize");
@@ -293,7 +322,10 @@ async function runAdversarialChallengerSuite() {
       });
 
       assertEq(res.centerX, exp.centerX, `Profile ${prof} optical centerX must be ${exp.centerX}`);
-      assert(res.svg.includes(`x="${exp.centerX}"`), `SVG must include x="${exp.centerX}" for ${prof}`);
+      assert(
+        res.svg.includes(`x="${exp.centerX}"`),
+        `SVG must include x="${exp.centerX}" for ${prof}`,
+      );
       assert(res.svg.includes(`text-anchor="middle"`), "SVG must have text-anchor=middle");
 
       // Verify right edge does not exceed W - SAFE_RIGHT
@@ -356,16 +388,48 @@ async function runAdversarialChallengerSuite() {
 
   test("S4.1: 2,000 Randomized Photo Canvas Layout Invariant Stress Runs", () => {
     const sampleWords = [
-      "Аллах", "Коран", "Хадис", "търпение", "молитва", "душа", "светлина",
-      "небеса", "земя", "прошка", "милост", "спасение", "Рай", "знание",
-      "мъдрост", "благодат", "напътствие", "добро", "сърце", "истина",
-      "ALLAH", "QURAN", "12345", "СУРА:АЯТ", "„Цитат“", "съединение-слово",
+      "Аллах",
+      "Коран",
+      "Хадис",
+      "търпение",
+      "молитва",
+      "душа",
+      "светлина",
+      "небеса",
+      "земя",
+      "прошка",
+      "милост",
+      "спасение",
+      "Рай",
+      "знание",
+      "мъдрост",
+      "благодат",
+      "напътствие",
+      "добро",
+      "сърце",
+      "истина",
+      "ALLAH",
+      "QURAN",
+      "12345",
+      "СУРА:АЯТ",
+      "„Цитат“",
+      "съединение-слово",
       "СВРЪХДЪЛГАДУМАБЕЗПРЕКЪСВАНЕЗАПРОВЕРКАНАПРЕНАСЯНЕТО",
     ];
 
     const arWords = [
-      "اللَّهُ", "الرَّحْمَٰنُ", "الرَّحِيمُ", "الْحَمْدُ", "رَبِّ", "الْعَالَمِينَ",
-      "مَالِكِ", "يَوْمِ", "الدِّينِ", "إِيَّاكَ", "نَعْبُدُ", "الصِّرَاطَ",
+      "اللَّهُ",
+      "الرَّحْمَٰنُ",
+      "الرَّحِيمُ",
+      "الْحَمْدُ",
+      "رَبِّ",
+      "الْعَالَمِينَ",
+      "مَالِكِ",
+      "يَوْمِ",
+      "الدِّينِ",
+      "إِيَّاكَ",
+      "نَعْبُدُ",
+      "الصِّرَاطَ",
     ];
 
     let passedRuns = 0;
@@ -373,8 +437,9 @@ async function runAdversarialChallengerSuite() {
     for (let i = 0; i < 2000; i++) {
       // 1 to 65 words (encompassing full Ayat al-Kursi)
       const numBgWords = 1 + Math.floor(Math.random() * 65);
-      const bgWords = Array.from({ length: numBgWords }, () =>
-        sampleWords[Math.floor(Math.random() * sampleWords.length)],
+      const bgWords = Array.from(
+        { length: numBgWords },
+        () => sampleWords[Math.floor(Math.random() * sampleWords.length)],
       );
       const bgText = bgWords.join(" ");
 
@@ -386,8 +451,9 @@ async function runAdversarialChallengerSuite() {
       const hasAr = Math.random() > 0.3;
       const numArWords = 1 + Math.floor(Math.random() * 20);
       const arText = hasAr
-        ? Array.from({ length: numArWords }, () =>
-            arWords[Math.floor(Math.random() * arWords.length)],
+        ? Array.from(
+            { length: numArWords },
+            () => arWords[Math.floor(Math.random() * arWords.length)],
           ).join(" ")
         : undefined;
 
@@ -404,7 +470,9 @@ async function runAdversarialChallengerSuite() {
 
       const zeroCollision =
         (refText && layout.arabic ? !doBoxesCollide(layout.pill, layout.arabic.box, 24) : true) &&
-        (refText && !layout.arabic ? !doBoxesCollide(layout.pill, layout.bulgarian.box, 24) : true) &&
+        (refText && !layout.arabic
+          ? !doBoxesCollide(layout.pill, layout.bulgarian.box, 24)
+          : true) &&
         (layout.arabic ? !doBoxesCollide(layout.arabic.box, layout.bulgarian.box, 32) : true);
 
       if (!layout.isContained || !zeroCollision) {
@@ -420,18 +488,41 @@ async function runAdversarialChallengerSuite() {
 
   test("S4.2: 1,000 Randomized Viral Thumbnail SVG Invariant Stress Runs", () => {
     const vocab = [
-      "АЛЛАХ", "КОРАН", "РАЙ", "МОЛИТВА", "СМЪРТ", "ВЪЗКРЕСЕНИЕ", "СЪДЕН ДЕН",
-      "ТАЙНАТА", "НА", "УСПЕХА", "В", "ИСЛЯМА", "И", "ДУАТА", "СПАСЕНИЕ",
-      "СВРЪХДЪЛГАЗАГЛАВНАЧАСТБЕЗСПАЦИИ", "<ТАГ>", "\"КАВИЧКИ\"", "&АМПЕРСАНД",
-      "ALLAH", "QURAN", "VIRAL", "TIKTOK", "100%", "СВЕТЛИНА", "МЪДРОСТ",
+      "АЛЛАХ",
+      "КОРАН",
+      "РАЙ",
+      "МОЛИТВА",
+      "СМЪРТ",
+      "ВЪЗКРЕСЕНИЕ",
+      "СЪДЕН ДЕН",
+      "ТАЙНАТА",
+      "НА",
+      "УСПЕХА",
+      "В",
+      "ИСЛЯМА",
+      "И",
+      "ДУАТА",
+      "СПАСЕНИЕ",
+      "СВРЪХДЪЛГАЗАГЛАВНАЧАСТБЕЗСПАЦИИ",
+      "<ТАГ>",
+      '"КАВИЧКИ"',
+      "&АМПЕРСАНД",
+      "ALLAH",
+      "QURAN",
+      "VIRAL",
+      "TIKTOK",
+      "100%",
+      "СВЕТЛИНА",
+      "МЪДРОСТ",
     ];
 
     let passedSvgRuns = 0;
 
     for (let i = 0; i < 1000; i++) {
       const numWords = 1 + Math.floor(Math.random() * 20);
-      const titleWords = Array.from({ length: numWords }, () =>
-        vocab[Math.floor(Math.random() * vocab.length)],
+      const titleWords = Array.from(
+        { length: numWords },
+        () => vocab[Math.floor(Math.random() * vocab.length)],
       );
       const rawTitle = titleWords.join(" ");
       const pr = profiles[Math.floor(Math.random() * profiles.length)];

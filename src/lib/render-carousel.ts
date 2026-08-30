@@ -373,8 +373,8 @@ export function computeSlideLayout(
   const fontQuote = `800 ${Math.max(8, Math.round(84 * scale))}px 'Montserrat', sans-serif`;
   const lhQuote = Math.max(10, Math.round(102 * scale));
 
-  const fontCommentary = `500 ${Math.max(8, Math.round(66 * scale))}px 'Montserrat', sans-serif`;
-  const lhCommentary = Math.max(10, Math.round(84 * scale));
+  const fontCommentary = `500 ${Math.max(8, Math.round(78 * scale))}px 'Montserrat', sans-serif`;
+  const lhCommentary = Math.max(10, Math.round(96 * scale));
 
   const fontBottom = `700 ${Math.max(8, Math.round(68 * scale))}px 'Montserrat', sans-serif`;
   const lhBottom = Math.max(10, Math.round(86 * scale));
