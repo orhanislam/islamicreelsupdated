@@ -1,5 +1,23 @@
-import { TIKTOK_SAFE_ZONE, type SafeZoneGeometry } from "./safe-zone";
+import { TIKTOK_SAFE_ZONE, createSafeZone, type SafeZoneGeometry } from "./safe-zone";
 export { TIKTOK_SAFE_ZONE, type SafeZoneGeometry };
+
+/**
+ * Carousel-specific safe zone — less aggressive than the video safe zone.
+ * TikTok carousel images have smaller UI overlays than full-screen videos:
+ * - Top: 150px (just the status bar + minimal header)
+ * - Bottom: 260px (caption + handle — no audio disk or progress bar)
+ * - Left: 80px
+ * - Right: 140px (action buttons are smaller on carousel)
+ * Gives H_SAFE ~1510px vs the video's 1220px → much more room for text.
+ */
+const CAROUSEL_SAFE_ZONE: SafeZoneGeometry = createSafeZone({
+  W: 1080,
+  H: 1920,
+  SAFE_TOP: 120,
+  SAFE_BOTTOM: 220,
+  SAFE_LEFT: 60,
+  SAFE_RIGHT: 120,
+});
 
 export type CarouselSlideOptions = {
   backgroundUrl: string;
@@ -364,20 +382,20 @@ export function computeSlideLayout(
   gapScale?: number,
 ): SlideLayoutResult {
   const actualGapScale = typeof gapScale === "number" ? gapScale : scale;
-  const maxWidth = TIKTOK_SAFE_ZONE.W_SAFE;
+  const maxWidth = CAROUSEL_SAFE_ZONE.W_SAFE;
   const parsed = parseSlideSegments(opts);
 
-  const fontTop = `800 ${Math.max(8, Math.round(76 * scale))}px 'Montserrat', sans-serif`;
-  const lhTop = Math.max(10, Math.round(92 * scale));
+  const fontTop = `800 ${Math.max(8, Math.round(104 * scale))}px 'Montserrat', sans-serif`;
+  const lhTop = Math.max(10, Math.round(124 * scale));
 
-  const fontQuote = `800 ${Math.max(8, Math.round(84 * scale))}px 'Montserrat', sans-serif`;
-  const lhQuote = Math.max(10, Math.round(102 * scale));
+  const fontQuote = `800 ${Math.max(8, Math.round(112 * scale))}px 'Montserrat', sans-serif`;
+  const lhQuote = Math.max(10, Math.round(132 * scale));
 
-  const fontCommentary = `500 ${Math.max(8, Math.round(84 * scale))}px 'Montserrat', sans-serif`;
-  const lhCommentary = Math.max(10, Math.round(102 * scale));
+  const fontCommentary = `500 ${Math.max(8, Math.round(112 * scale))}px 'Montserrat', sans-serif`;
+  const lhCommentary = Math.max(10, Math.round(132 * scale));
 
-  const fontBottom = `700 ${Math.max(8, Math.round(68 * scale))}px 'Montserrat', sans-serif`;
-  const lhBottom = Math.max(10, Math.round(86 * scale));
+  const fontBottom = `700 ${Math.max(8, Math.round(86 * scale))}px 'Montserrat', sans-serif`;
+  const lhBottom = Math.max(10, Math.round(108 * scale));
 
   const gapTopToBody = Math.max(0, Math.round(52 * actualGapScale));
   const gapBetweenSegments = Math.max(0, Math.round(64 * actualGapScale));
@@ -478,9 +496,9 @@ export function fitSlideLayout(
   ctx: CanvasRenderingContext2D,
   opts: CarouselSlideOptions,
 ): SlideLayoutResult {
-  // Reserve space at bottom for the pinned CTA (bottomText ~86px) + footerText (~56px) + gaps.
-  const BOTTOM_RESERVED = 200;
-  const safeH = TIKTOK_SAFE_ZONE.H_SAFE - BOTTOM_RESERVED;
+  // Reserve space at bottom for the pinned CTA (bottomText ~96px) + footerText (~56px) + gap.
+  const BOTTOM_RESERVED = 150;
+  const safeH = CAROUSEL_SAFE_ZONE.H_SAFE - BOTTOM_RESERVED;
   let scale = 1.0;
   let gapScale = 1.0;
   let layout = computeSlideLayout(ctx, opts, scale, gapScale);
@@ -542,8 +560,8 @@ export async function renderCarouselSlide(opts: CarouselSlideOptions): Promise<B
     }
   }
 
-  const W = TIKTOK_SAFE_ZONE.W;
-  const H = TIKTOK_SAFE_ZONE.H;
+  const W = CAROUSEL_SAFE_ZONE.W;
+  const H = CAROUSEL_SAFE_ZONE.H;
 
   const canvas = document.createElement("canvas");
   canvas.width = W;
@@ -582,19 +600,19 @@ export async function renderCarouselSlide(opts: CarouselSlideOptions): Promise<B
   // Dynamic auto-fit font scaling & gap balancing (body content only, bottomText excluded)
   const layout = fitSlideLayout(ctx, opts);
 
-  const centerX = TIKTOK_SAFE_ZONE.CENTER_X;
+  const centerX = CAROUSEL_SAFE_ZONE.CENTER_X;
 
   // ── FIXED-POSITION BOTTOM ELEMENTS ───────────────────────────────────────
   // These are anchored absolutely to the bottom of the TikTok safe zone so they
   // never overflow the canvas or get hidden by TikTok UI elements.
 
   // footerText: swipe indicator (e.g. "← Плъзнете наляво") — pinned at very bottom
-  const FOOTER_FONT_SIZE = 44;
-  const FOOTER_LH = 56;
+  const FOOTER_FONT_SIZE = 52;
+  const FOOTER_LH = 64;
   const FOOTER_FONT = `500 ${FOOTER_FONT_SIZE}px 'Montserrat', sans-serif`;
   const footerClean = stripEmojis((opts.footerText || "").trim());
   // Anchor baseline to 10px above BOTTOM_MAX_Y so nothing bleeds into TikTok UI
-  const footerBaselineY = TIKTOK_SAFE_ZONE.BOTTOM_MAX_Y - 10;
+  const footerBaselineY = CAROUSEL_SAFE_ZONE.BOTTOM_MAX_Y - 10;
 
   if (footerClean) {
     ctx.font = FOOTER_FONT;
@@ -618,7 +636,7 @@ export async function renderCarouselSlide(opts: CarouselSlideOptions): Promise<B
   const GAP_FOOTER_TO_BOTTOM = 20;
   const bottomAnchorBaselineY = footerClean
     ? footerBaselineY - FOOTER_LH - GAP_FOOTER_TO_BOTTOM
-    : TIKTOK_SAFE_ZONE.BOTTOM_MAX_Y - 10;
+    : CAROUSEL_SAFE_ZONE.BOTTOM_MAX_Y - 10;
 
   if (layout.bottomLines.length > 0) {
     // Draw lines bottom-up: last line sits at bottomAnchorBaselineY
@@ -642,12 +660,12 @@ export async function renderCarouselSlide(opts: CarouselSlideOptions): Promise<B
   // Compute available vertical space for body (everything above the bottom elements)
   const bottomBlockTop = layout.bottomLines.length > 0
     ? (bottomAnchorBaselineY - layout.bottomH - GAP_FOOTER_TO_BOTTOM)
-    : (footerClean ? footerBaselineY - FOOTER_LH - GAP_FOOTER_TO_BOTTOM : TIKTOK_SAFE_ZONE.BOTTOM_MAX_Y);
+    : (footerClean ? footerBaselineY - FOOTER_LH - GAP_FOOTER_TO_BOTTOM : CAROUSEL_SAFE_ZONE.BOTTOM_MAX_Y);
 
   // Vertically center the body block within the available space
-  const bodyAreaHeight = bottomBlockTop - TIKTOK_SAFE_ZONE.SAFE_TOP;
+  const bodyAreaHeight = bottomBlockTop - CAROUSEL_SAFE_ZONE.SAFE_TOP;
   let currentY =
-    TIKTOK_SAFE_ZONE.SAFE_TOP +
+    CAROUSEL_SAFE_ZONE.SAFE_TOP +
     Math.max(0, Math.round((bodyAreaHeight - layout.totalH) / 2));
 
   // 1. Draw Top Title (Gold)
