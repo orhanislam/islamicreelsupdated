@@ -30,7 +30,9 @@ function blobToBase64(blob: Blob): Promise<string> {
   });
 }
 
-export function CarouselRendererButton({ slides, title }: { slides: Slide[]; title: string }) {
+import { autoSplitSlides } from "@/lib/split-slides";
+
+export function CarouselRendererButton({ slides: initialSlides, title }: { slides: Slide[]; title: string }) {
   const [loading, setLoading] = useState(false);
   const [progress, setProgress] = useState("");
   const runGenerate = useServerFn(generateBackground);
@@ -40,6 +42,9 @@ export function CarouselRendererButton({ slides, title }: { slides: Slide[]; tit
   const cleanTitle = cleanProposalTitle(title) || "Ислямски_Карусел";
 
   const _renderAllSlides = async () => {
+    setProgress("Обработка на текстовете...");
+    const slides = autoSplitSlides(initialSlides);
+
     setProgress("Извличане на фонови изображения...");
     let cycleIndex = 0;
     if (typeof window !== "undefined" && window.localStorage) {
@@ -123,7 +128,7 @@ export function CarouselRendererButton({ slides, title }: { slides: Slide[]; tit
   };
 
   const handleGenerate = async () => {
-    if (!slides || slides.length === 0) return;
+    if (!initialSlides || initialSlides.length === 0) return;
     setLoading(true);
     try {
       const zip = new JSZip();
@@ -147,7 +152,7 @@ export function CarouselRendererButton({ slides, title }: { slides: Slide[]; tit
   };
 
   const handleSendToMake = async () => {
-    if (!slides || slides.length === 0) return;
+    if (!initialSlides || initialSlides.length === 0) return;
     setLoading(true);
     try {
       const renderedSlides = await _renderAllSlides();
