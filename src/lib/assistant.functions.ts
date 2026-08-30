@@ -1,6 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { geminiChat, type ChatMessage } from "./gemini";
-import { fetchSunnahHadith } from "./sunnah.functions";
+import { fetchSunnahHadith, type SunnahCollection } from "./sunnah.functions";
 import { fetchAyah } from "./quran.functions";
 import { translateToBulgarian } from "./translate.functions";
 import { searchPexelsVideos } from "./pexels.functions";
@@ -8,7 +8,11 @@ import { synthesizeHadithNarration } from "./tts.functions";
 import { startServerRenderJob, getJobsDir } from "./render.functions";
 import { getAiMemory, updateAiMemory, recordProposalUsages } from "./memory.functions";
 import { createTask, updateTask, listTasks, clearAllTasks } from "./tasks-engine";
-import { getNextTawheedTopic, formatNegativeExclusionPrompt, getTawheedTaxonomy } from "./tawheed-taxonomy";
+import {
+  getNextTawheedTopic,
+  formatNegativeExclusionPrompt,
+  getTawheedTaxonomy,
+} from "./tawheed-taxonomy";
 
 export type VideoProposal = {
   title: string;
@@ -23,8 +27,8 @@ export type VideoProposal = {
   searchQuery: string;
   tiktokTheme?: "hormozi" | "emerald" | "neon" | "classic";
   // CapCut-like editing controls
-  bRollInterval?: number;        // seconds between B-Roll scene switches (e.g. 3)
-  useBRoll?: boolean;            // enable multi-scene B-Roll
+  bRollInterval?: number; // seconds between B-Roll scene switches (e.g. 3)
+  useBRoll?: boolean; // enable multi-scene B-Roll
   subtitlePosition?: "bottom" | "middle" | "lower-third";
   quality?: "high" | "720p";
   carouselSlides?: {
@@ -43,90 +47,132 @@ export function cleanProposalTitle(rawTitle: string): string {
   if (!rawTitle || typeof rawTitle !== "string") return "";
   let title = rawTitle.trim();
 
-  // Strip meta tags/prefixes like [tiktok carousels], [tiktok carousel], [tiktok], [карусел], [карусели], [коран / tiktok], [tiktok / коран]
-  // while strictly preserving authentic citations like [Коран 2:255], [Сахих ал-Бухари #6424], [Сура Ал-Фатиха (1:1-2)], [Сунан Ат-Тирмизи #1987], etc.
-  const metaPrefixRegex = /^\s*\[\s*(?:tiktok\s*carousels?|tiktok|карусели?|коран\s*\/\s*tiktok|tiktok\s*\/\s*коран)\s*\]\s*[:-]?\s*/i;
+  // Pattern matching unwanted metadata tags (platforms, formats, slide indicators, viral tags)
+  // while strictly preserving authentic citations like [Коран 2:255], [Сахих ал-Бухари #6424], [Сура Ал-Фатиха (1:1-2)], [Сунан Ат-Тирмизи #1987], (112:1-4), etc.
+  const metaPattern =
+    /(?:tiktok\s*carousels?|tiktok|карусели?|carousel|carousels|коран\s*\/\s*tiktok|tiktok\s*\/\s*коран|коран\s*\/\s*reels|reels\s*\/\s*коран|instagram\s*reels?|reels?|youtube\s*shorts?|shorts?|слайд\s*\d+|slide\s*\d+|viral|вайръл)/i;
+  const metaBracketRegex = new RegExp(`\\[\\s*${metaPattern.source}\\s*\\]\\s*[:-]?\\s*`, "gi");
+  const metaPrefixRegex = new RegExp(`^\\s*\\[\\s*${metaPattern.source}\\s*\\]\\s*[:-]?\\s*`, "i");
+  const unbracketedPrefixRegex = new RegExp(`^\\s*${metaPattern.source}\\s*[:-]\\s*`, "i");
 
+  // 1. Repeatedly strip leading bracketed meta prefixes
   while (metaPrefixRegex.test(title)) {
     title = title.replace(metaPrefixRegex, "").trim();
   }
 
-  // Handle cases where [Коран / TikTok] or similar is anywhere
-  title = title.replace(/\[\s*коран\s*\/\s*tiktok\s*\]\s*/gi, "").trim();
-  title = title.replace(/\[\s*tiktok\s*\/\s*коран\s*\]\s*/gi, "").trim();
-  title = title.replace(/\[\s*tiktok\s*carousels?\s*\]\s*/gi, "").trim();
-  title = title.replace(/\[\s*карусели?\s*\]\s*/gi, "").trim();
+  // 2. Strip metadata tags embedded anywhere in the title or trailing
+  title = title.replace(metaBracketRegex, " ").trim();
 
-  // Strip unbracketed leading "tiktok carousels:" or "tiktok:"
-  title = title.replace(/^(?:tiktok\s*carousels?|tiktok|карусели?)\s*[:-]\s*/i, "").trim();
+  // 3. Strip unbracketed leading prefixes (e.g. "tiktok: ...", "карусел: ...", "reels - ...")
+  while (unbracketedPrefixRegex.test(title)) {
+    title = title.replace(unbracketedPrefixRegex, "").trim();
+  }
 
-  // Clean extra spaces
+  // 4. Clean empty brackets leftover if nested brackets existed (e.g. "[[tiktok carousels]]" -> "[]")
+  title = title.replace(/\[\s*\]/g, "").trim();
+
+  // 5. Clean extra outer brackets around valid bracketed citations (e.g. "[[Коран 2:255]]" -> "[Коран 2:255]")
+  title = title
+    .replace(/\[\s*(\[[^\]]+\])/g, "$1")
+    .replace(/(\[[^\]]+\])\s*\]/g, "$1")
+    .trim();
+
+  // 6. Clean dangling leading or trailing punctuation
+  title = title
+    .replace(/^[:-]\s*/, "")
+    .replace(/\s*[:-]$/, "")
+    .trim();
+
+  // 7. Normalize multi-spaces
   title = title.replace(/\s{2,}/g, " ").trim();
-
-  // Strip ALL square brackets from the title as requested by the user
-  title = title.replace(/\[|\]/g, "").trim();
-  title = title.replace(/\s{2,}/g, " ").trim(); // re-clean double spaces
 
   return title;
 }
 
 async function injectAuthenticCarouselText(proposals: VideoProposal[]) {
   if (!proposals) return;
-  const rx = /[\p{Extended_Pictographic}\p{Emoji_Presentation}\u2728\u2B50\u2600-\u26FF\u2700-\u27BF]/gu;
+  const rx =
+    /[\p{Extended_Pictographic}\p{Emoji_Presentation}\u2728\u2B50\u2600-\u26FF\u2700-\u27BF]/gu;
 
   for (const prop of proposals) {
     if (!prop) continue;
     if (prop.title) {
       prop.title = cleanProposalTitle(prop.title);
     }
-    if (prop.type !== 'carousel' || !prop.carouselSlides || prop.carouselSlides.length < 2) continue;
-    
-    let bulgarian = '';
-    let reference = '';
-    
+    if (prop.type !== "carousel" || !prop.carouselSlides || prop.carouselSlides.length < 2)
+      continue;
+
+    let bulgarian = "";
+    let reference = "";
+
     try {
       if (prop.surah && prop.ayah) {
-        const a = await fetchAyah({ data: { surah: Number(prop.surah), ayah: Number(prop.ayah) }});
+        const a = await fetchAyah({ data: { surah: Number(prop.surah), ayah: Number(prop.ayah) } });
         reference = `Сура ${a.surahName} (${a.surah}:${a.ayah})`;
-        const t = await translateToBulgarian({ data: { english: a.english, sourceRef: reference, arabic: a.arabic, ayahBounds: a.ayahBounds }});
+        const t = await translateToBulgarian({
+          data: {
+            english: a.english,
+            sourceRef: reference,
+            arabic: a.arabic,
+            ayahBounds: a.ayahBounds,
+          },
+        });
         bulgarian = t.bulgarian;
       } else if (prop.collection && prop.number) {
-        const h = await fetchSunnahHadith({ data: { collection: prop.collection as any, number: Number(prop.number) }});
-        const t = await translateToBulgarian({ data: { english: h.english, sourceRef: h.reference, arabic: h.arabic }});
+        const h = await fetchSunnahHadith({
+          data: { collection: prop.collection as SunnahCollection, number: Number(prop.number) },
+        });
+        const t = await translateToBulgarian({
+          data: { english: h.english, sourceRef: h.reference, arabic: h.arabic },
+        });
         bulgarian = t.bulgarian;
         reference = h.reference;
       }
     } catch (e) {
-      console.warn('Failed to fetch authentic text for carousel:', e);
+      console.warn("Failed to fetch authentic text for carousel:", e);
     }
-    
+
     if (bulgarian) {
       const originalSlides = prop.carouselSlides;
       const hookSlide = { ...originalSlides[0] };
       const ctaSlide = { ...originalSlides[originalSlides.length - 1] };
-      const defaultPrompt = originalSlides[1]?.imagePrompt || originalSlides[0]?.imagePrompt || 'cinematic, dark landscape, 8k, vertical 9:16, no people';
-      
+      const defaultPrompt =
+        originalSlides[1]?.imagePrompt ||
+        originalSlides[0]?.imagePrompt ||
+        "cinematic, dark landscape, 8k, vertical 9:16, no people";
+
       // Build exactly 4 slides adhering strictly to the Viral Framework
       // Slide 1: Hook
-      hookSlide.footerText = '1/4 • Плъзнете наляво';
-      if (!hookSlide.bottomText) hookSlide.bottomText = 'Плъзни наляво за тайната 👉';
+      hookSlide.footerText = "1/4 • Плъзнете наляво";
+      if (!hookSlide.bottomText) hookSlide.bottomText = "Плъзни наляво за тайната 👉";
 
       // Slide 2: Body Context & Cliffhanger
-      let contextSlide: { topTitle: string; mainText: string; bottomText: string; footerText: string; imagePrompt: string; quoteText?: string; commentaryText?: string; sourceBadge?: string };
+      let contextSlide: {
+        topTitle: string;
+        mainText: string;
+        bottomText: string;
+        footerText: string;
+        imagePrompt: string;
+        quoteText?: string;
+        commentaryText?: string;
+        sourceBadge?: string;
+      };
       if (originalSlides.length >= 4) {
         contextSlide = { ...originalSlides[1] };
       } else {
-        const baseContext = prop.summaryBg || 'Всеки един от нас търси мир, но истинското спасение лежи в правилното разбиране на вярата.';
+        const baseContext =
+          prop.summaryBg ||
+          "Всеки един от нас търси мир, но истинското спасение лежи в правилното разбиране на вярата.";
         contextSlide = {
-          topTitle: 'БОЖЕСТВЕНИЯТ ЗАКОН',
+          topTitle: "БОЖЕСТВЕНИЯТ ЗАКОН",
           mainText: `${baseContext} Но ето какво разкрива свещеното слово на следващия слайд...`,
-          bottomText: 'Плъзни наляво за далила 👉',
-          footerText: '2/4 • Плъзнете наляво',
+          bottomText: "Плъзни наляво за далила 👉",
+          footerText: "2/4 • Плъзнете наляво",
           imagePrompt: originalSlides[1]?.imagePrompt || defaultPrompt,
         };
       }
-      contextSlide.footerText = '2/4 • Плъзнете наляво';
-      if (!contextSlide.bottomText) contextSlide.bottomText = 'Плъзни наляво за далила 👉';
+      contextSlide.footerText = "2/4 • Плъзнете наляво";
+      if (!contextSlide.bottomText) contextSlide.bottomText = "Плъзни наляво за далила 👉";
 
       // Slide 3: Authentic Dalil with Transition
       const dalilPrompt = originalSlides[2]?.imagePrompt || defaultPrompt;
@@ -136,8 +182,8 @@ async function injectAuthenticCarouselText(proposals: VideoProposal[]) {
       const dalilSlide = {
         topTitle: `${reference}`,
         mainText: `„${cleanDalil}“\n\n${transitionText}`,
-        bottomText: 'Плъзни за духовното решение 👉',
-        footerText: '3/4 • Плъзнете наляво',
+        bottomText: "Плъзни за духовното решение 👉",
+        footerText: "3/4 • Плъзнете наляво",
         imagePrompt: dalilPrompt,
         quoteText: cleanDalil,
         commentaryText: transitionText,
@@ -145,15 +191,21 @@ async function injectAuthenticCarouselText(proposals: VideoProposal[]) {
       };
 
       // Slide 4: Value-Driven CTA
-      if (ctaSlide.footerText) ctaSlide.footerText = ctaSlide.footerText.replace(rx, '').trim();
-      if (ctaSlide.bottomText) ctaSlide.bottomText = ctaSlide.bottomText.replace(rx, '').trim();
-      if (ctaSlide.mainText) ctaSlide.mainText = ctaSlide.mainText.replace(rx, '').trim();
-      if (ctaSlide.topTitle) ctaSlide.topTitle = ctaSlide.topTitle.replace(rx, '').trim();
-      if (!ctaSlide.bottomText || (!ctaSlide.bottomText.includes("Запази") && !ctaSlide.bottomText.includes("Сподели") && !ctaSlide.bottomText.includes("Коментирай"))) {
-        ctaSlide.bottomText = "Запази това напомняне за моменти на трудност и сподели за садака джария!";
+      if (ctaSlide.footerText) ctaSlide.footerText = ctaSlide.footerText.replace(rx, "").trim();
+      if (ctaSlide.bottomText) ctaSlide.bottomText = ctaSlide.bottomText.replace(rx, "").trim();
+      if (ctaSlide.mainText) ctaSlide.mainText = ctaSlide.mainText.replace(rx, "").trim();
+      if (ctaSlide.topTitle) ctaSlide.topTitle = ctaSlide.topTitle.replace(rx, "").trim();
+      if (
+        !ctaSlide.bottomText ||
+        (!ctaSlide.bottomText.includes("Запази") &&
+          !ctaSlide.bottomText.includes("Сподели") &&
+          !ctaSlide.bottomText.includes("Коментирай"))
+      ) {
+        ctaSlide.bottomText =
+          "Запази това напомняне за моменти на трудност и сподели за садака джария!";
       }
-      ctaSlide.footerText = '4/4 • Запази & Сподели';
-      if (!ctaSlide.topTitle) ctaSlide.topTitle = 'ДЕЙСТВИЕ И ДУА';
+      ctaSlide.footerText = "4/4 • Запази & Сподели";
+      if (!ctaSlide.topTitle) ctaSlide.topTitle = "ДЕЙСТВИЕ И ДУА";
 
       prop.carouselSlides = [hookSlide, contextSlide, dalilSlide, ctaSlide];
     }
@@ -164,12 +216,14 @@ export const chatWithAssistant = createServerFn({ method: "POST" })
   .validator((input: { prompt: string; history: { role: string; content: string }[] }) => input)
   .handler(async ({ data }) => {
     const memory = await getAiMemory();
-    const historyList = (memory.usageHistory || []).map(x => `- ${x.identifier}`).join("\n");
+    const historyList = (memory.usageHistory || []).map((x) => `- ${x.identifier}`).join("\n");
     const recentCarousels = (memory.carouselHistory || []).slice(-15);
-    const nextTawheed = getNextTawheedTopic(recentCarousels.map(c => c.subtopicId || c.title));
+    const nextTawheed = getNextTawheedTopic(recentCarousels.map((c) => c.subtopicId || c.title));
     const carouselExclusionPrompt = formatNegativeExclusionPrompt(recentCarousels);
 
-    const historyContext = historyList ? `\n\nСКОРОШНО ИЗПОЛЗВАНИ ТЕМИ (СТРИКТНО ЗАБРАНЕНО Е ДА ГИ ПРЕДЛАГАШ ОТНОВО):\n${historyList}` : "";
+    const historyContext = historyList
+      ? `\n\nСКОРОШНО ИЗПОЛЗВАНИ ТЕМИ (СТРИКТНО ЗАБРАНЕНО Е ДА ГИ ПРЕДЛАГАШ ОТНОВО):\n${historyList}`
+      : "";
 
     const memoryContext = `
 === ПАМЕТ НА АСИСТЕНТА ЗА ПОТРЕБИТЕЛЯ ===
@@ -203,7 +257,7 @@ SALAFI HALAL ПРИНЦИПИ (СТРИКТНО ЗАДЪЛЖИТЕЛНО):
 
 КАРУСЕЛИ (CAROUSEL) — РАМКА ЗА ВИРУСНИ КАРУСЕЛИ (VIRAL RETENTION FRAMEWORK):
 Ако потребителят иска "карусел" (слайдове със снимки за TikTok/Reels): 
-Върни proposal с type: "carousel", title, summaryBg, и задължително включи "carouselSlides": масив от ТОЧНО 4 обекта, всеки с { topTitle, mainText, bottomText, footerText, imagePrompt }. 
+Върни proposal с type: "carousel", title, summaryBg, и задължително включи "carouselSlides": масив от 4 ДО 7 обекта (колкото са необходими за да остане текстът ГОЛЯМ и ЧЕТИМ), всеки с { topTitle, mainText, bottomText, footerText, imagePrompt }. 
 
 ${carouselExclusionPrompt}
 
@@ -215,40 +269,46 @@ ${carouselExclusionPrompt}
 - Текст на далила: ${nextTawheed.dalilTextBg}
 - Визуална атмосфера: ${nextTawheed.suggestedVisualMood}
 
-СПАЗВАЙ СТРИКТНАТА РАМКА ЗА ВИРУСНИ КАРУСЕЛИ ЗА 4 ИЛИ 5 СЛАЙДА (Ако далилът съдържа и Аят, и Хадис, ЗАДЪЛЖИТЕЛНО ги раздели на 2 отделни слайда):
+СПАЗВАЙ СТРИКТНАТА РАМКА ЗА ВИРУСНИ КАРУСЕЛИ ЗА 4 ДО 7 СЛАЙДА:
+
+КРИТИЧНО ВАЖНО ПРАВИЛО ЗА ДЪЛЖИНА НА ТЕКСТА:
+- mainText на ВСЕКИ слайд трябва да е КРАТЪК — МАКСИМУМ 3 КРАТКИ изречения (около 80-120 символа общо).
+- Ако Аятът или Хадисът е дълъг и НЕ се побира в 3 кратки изречения, ЗАДЪЛЖИТЕЛНО го раздели на 2 отделни слайда (напр. Слайд 3а и Слайд 3б), за да остане текстът ГОЛЯМ и ЧЕТИМ.
+- НИКОГА не пиши повече от 120 символа в mainText на един слайд. По-добре направи 6-7 слайда с голям текст, отколкото 4 с малък.
+- Между Аята/Хадиса и коментарните думи на даието (salafi commentary) ВИНАГИ оставяй ЯСНО разделение — те трябва да бъдат на ОТДЕЛНИ слайдове, не смесени в един mainText.
+
+РАМКА ЗА СЛАЙДОВЕТЕ:
 1. Слайд 1 (Куката / Viral Hook):
    - Моментално грабване на вниманието с curiosity gap (любопитна празнина), контраинтуитивно твърдение или силен провокативен въпрос по темата (напр. "${nextTawheed.hookAngleBg}").
    - СТРИКТНО ЗАБРАНЕНИ са общи/генерични заглавия и клишета като 'Защо си тук?', 'Какъв е смисълът на живота?'.
    - topTitle: кратък драматичен етикет (макс 2-3 думи, напр. "ТАЙНАТА НА РИЗКА", "БОЖЕСТВЕНИЯТ ЗАКОН"). Без скоби.
+   - mainText: МАКС 2-3 КРАТКИ изречения (кука + контекст).
    - bottomText: "Плъзни наляво за тайната 👉"
-   - footerText: "1/4 • Плъзнете наляво"
+   - footerText: "1/X • Плъзнете наляво"
    - imagePrompt: тъмен, кинематографичен природен пейзаж на английски (dark, atmospheric, dramatic cinematic landscape, vertical 9:16, 8k, no people).
-2. Слайд 2 (Тяло 1 / Обяснение, Контекст и Клифхенгър):
+2. Слайд 2 (Тяло / Обяснение и Клифхенгър):
    - Сбит, стегнат текст (макс 2-3 кратки изречения) за бързо и лесно четене.
-   - ЗАДЪЛЖИТЕЛЕН КЛИФХЕНГЪР: Завършва с интригуващ клифхенгър или отворен преход към следващия слайд (напр. "Но най-поразяващото доказателство за това е скрито в думите на Аллах...", "Виж какво разкрива автентичното предание на следващия слайд 👉").
-   - topTitle: подзаглавие по темата (напр. "БОЖЕСТВЕНИЯТ ЗАКОН").
+   - ЗАДЪЛЖИТЕЛЕН КЛИФХЕНГЪР: Завършва с интригуващ клифхенгър или отворен преход към следващия слайд.
+   - topTitle: подзаглавие по темата.
    - bottomText: "Плъзни наляво за далила 👉"
-   - footerText: "2/4 • Плъзнете наляво"
-   - imagePrompt: същият пейзаж с постепенно изгряваща светлина (gradually emerging light, misty dawn, vertical 9:16, 8k, no people).
-3. Слайд 3 (Тяло 2 / Автентичен Далил - Коран):
+   - imagePrompt: същият пейзаж с постепенно изгряваща светлина.
+3. Слайд 3+ (Автентичен Далил - Коран):
    - Точен Аят от Корана с цитат и номер в topTitle (напр. "Сура Ал-Баййина (98:5)").
-   - mainText съдържа самия Аят в кавички. Ако има и Хадис в заданието, НЕ ГО ПИШИ ТУК, а завърши с преход към него (напр. "А ето какво казва и Пратеникът на Аллах ﷺ..."). Ако няма Хадис, завърши с преход към действието.
+   - mainText съдържа самия Аят В КАВИЧКИ. АКО АЯТЪТ Е ДЪЛЪГ (повече от 80 символа), РАЗДЕЛИ ГО НА 2 СЛАЙДА — първата част на Слайд 3, втората на Слайд 4. 
    - bottomText: "Плъзни наляво 👉"
-   - footerText: "3/4 • Плъзнете наляво" (или 3/5)
-   - imagePrompt: сияйна божествена светлина (golden divine light rays breaking through clouds, vertical 9:16, 8k, no people).
-4. Слайд 4 (Тяло 3 / Автентичен Далил - Хадис) -- САМО АКО ИМА И ХАДИС:
+   - imagePrompt: сияйна божествена светлина.
+4. Слайд за Хадис (САМО АКО ИМА ХАДИС — на ОТДЕЛЕН слайд от Аята):
    - Точен Хадис с цитат в topTitle (напр. "Сахих ал-Бухари (#1)").
-   - mainText съдържа самия Хадис в кавички, с кратък преход към действието.
+   - mainText съдържа самия Хадис В КАВИЧКИ. АКО ХАДИСЪТ Е ДЪЛЪГ, РАЗДЕЛИ ГО НА 2 СЛАЙДА.
    - bottomText: "Плъзни за духовното решение 👉"
-   - footerText: "4/5 • Плъзнете наляво"
-   - imagePrompt: сияйна божествена светлина (golden divine light, vertical 9:16, 8k, no people).
-5. Последен Слайд (Слайд 4 или 5 / Кулминация и Стойностен Призив / Value-Driven CTA):
+   - imagePrompt: сияйна божествена светлина.
+5. Последен Слайд (Кулминация и Стойностен Призив / Value-Driven CTA):
    - Кратка искрена дуа или духовно практическо решение (1-2 изречения).
-   - ЗАДЪЛЖИТЕЛНИ КЛЮЧОВИ ДУМИ В CTA: Трябва да съдържа конкретно стойностно действие с български глаголи като "Запази", "Сподели" или "Коментирай".
+   - ЗАДЪЛЖИТЕЛНИ КЛЮЧОВИ ДУМИ В CTA: "Запази", "Сподели" или "Коментирай".
    - topTitle: "ДЕЙСТВИЕ И ДУА" или "ТВОЯТ ПЛАН ЗА ДЕЙСТВИЕ".
    - bottomText: конкретен призив за действие със "Запази" или "Сподели".
    - footerText: Последният слайд винаги завършва с "Запази & Сподели"
-   - imagePrompt: изцяло окъпан в топла, сияйна златна светлина (bathed in warm divine golden light, magnificent nature, vertical 9:16, 8k, no people).
+   - imagePrompt: изцяло окъпан в топла, сияйна златна светлина.
 
 SALAFI HALAL ПРАВИЛА ЗА КАРУСЕЛ ИЗОБРАЖЕНИЯТА (СТРИКТНО):
 imagePrompt във ВСИЧКИ слайдове ТРЯБВА ДА СЪДЪРЖА САМО ПРИРОДА, КОСМОС ИЛИ АБСТРАКТНИ ФОНОВЕ.
@@ -300,12 +360,20 @@ CAPCUT-ПОДОБНИ ИНСТРУКЦИИ ЗА РЕДАКТИРАНЕ:
 
     const msgs: ChatMessage[] = [
       { role: "system", content: systemPrompt },
-      ...data.history.map((m) => ({ role: m.role as "system" | "user" | "assistant", content: m.content })),
+      ...data.history.map((m) => ({
+        role: m.role as "system" | "user" | "assistant",
+        content: m.content,
+      })),
       { role: "user", content: data.prompt },
     ];
 
     const raw = await geminiChat("gemini-3.6-flash", msgs, true, true);
-    let parsed: any;
+    let parsed: {
+      reply?: string;
+      proposal?: VideoProposal | null;
+      proposals?: VideoProposal[] | null;
+      newLearnedFact?: string | null;
+    };
     try {
       let clean = raw.replace(/```json\s*|\s*```/g, "").trim();
       const firstBrace = clean.indexOf("{");
@@ -315,7 +383,10 @@ CAPCUT-ПОДОБНИ ИНСТРУКЦИИ ЗА РЕДАКТИРАНЕ:
       }
       parsed = JSON.parse(clean);
     } catch {
-      let cleanText = raw.replace(/```json[\s\S]*?```/g, "").replace(/[{}"_]/g, " ").trim();
+      let cleanText = raw
+        .replace(/```json[\s\S]*?```/g, "")
+        .replace(/[{}"_]/g, " ")
+        .trim();
       if (!cleanText || cleanText.length < 5) cleanText = raw;
       parsed = { reply: cleanText, proposal: null };
     }
@@ -324,19 +395,23 @@ CAPCUT-ПОДОБНИ ИНСТРУКЦИИ ЗА РЕДАКТИРАНЕ:
       parsed.proposal.title = cleanProposalTitle(parsed.proposal.title);
     }
     if (Array.isArray(parsed.proposals)) {
-      parsed.proposals.forEach((p: any) => {
+      parsed.proposals.forEach((p: VideoProposal) => {
         if (p && p.title) p.title = cleanProposalTitle(p.title);
       });
     }
 
-    if (parsed.newLearnedFact && typeof parsed.newLearnedFact === "string" && parsed.newLearnedFact.trim().length > 2) {
+    if (
+      parsed.newLearnedFact &&
+      typeof parsed.newLearnedFact === "string" &&
+      parsed.newLearnedFact.trim().length > 2
+    ) {
       if (!memory.learnedFacts.includes(parsed.newLearnedFact.trim())) {
         memory.learnedFacts.push(parsed.newLearnedFact.trim());
         await updateAiMemory({ data: { memory } }).catch(() => {});
       }
     }
 
-    const proposalsToRecord = [];
+    const proposalsToRecord: VideoProposal[] = [];
     if (parsed.proposal) proposalsToRecord.push(parsed.proposal);
     if (Array.isArray(parsed.proposals)) proposalsToRecord.push(...parsed.proposals);
     await injectAuthenticCarouselText(proposalsToRecord);
@@ -347,7 +422,10 @@ CAPCUT-ПОДОБНИ ИНСТРУКЦИИ ЗА РЕДАКТИРАНЕ:
     const replyObj = {
       reply: parsed.reply || "С какво мога да ти помогна днес?",
       proposal: (parsed.proposal as VideoProposal) || null,
-      proposals: Array.isArray(parsed.proposals) && parsed.proposals.length > 0 ? (parsed.proposals as VideoProposal[]) : null,
+      proposals:
+        Array.isArray(parsed.proposals) && parsed.proposals.length > 0
+          ? (parsed.proposals as VideoProposal[])
+          : null,
       memory,
     };
 
@@ -355,22 +433,29 @@ CAPCUT-ПОДОБНИ ИНСТРУКЦИИ ЗА РЕДАКТИРАНЕ:
     try {
       const fs = (await import("fs")).promises;
       const file = await getHistoryFilePath();
-      let currentHistory: any[] = [];
+      let currentHistory: Array<{
+        role: string;
+        text: string;
+        proposal?: unknown;
+        proposals?: unknown;
+      }> = [];
       try {
         const content = await fs.readFile(file, "utf-8");
         if (content) currentHistory = JSON.parse(content);
-      } catch {}
-      
+      } catch {
+        // Ignore read history failure
+      }
+
       const lastMsg = currentHistory[currentHistory.length - 1];
       if (!lastMsg || lastMsg.role !== "user" || lastMsg.text !== data.prompt) {
-         currentHistory.push({ role: "user", text: data.prompt });
+        currentHistory.push({ role: "user", text: data.prompt });
       }
-      
+
       currentHistory.push({
         role: "assistant",
         text: replyObj.reply,
         proposal: replyObj.proposal,
-        proposals: replyObj.proposals
+        proposals: replyObj.proposals,
       });
       await fs.writeFile(file, JSON.stringify(currentHistory, null, 2), "utf-8");
     } catch (e) {
@@ -380,19 +465,36 @@ CAPCUT-ПОДОБНИ ИНСТРУКЦИИ ЗА РЕДАКТИРАНЕ:
     return replyObj;
   });
 
-export const suggestViralProposal = createServerFn({ method: "POST" })
-  .handler(async () => {
-    const memory = await getAiMemory();
-    const historyList = (memory.usageHistory || []).map(x => `- ${x.identifier}`).join("\n");
-    const historyContext = historyList ? `\n\nСКОРОШНО ИЗПОЛЗВАНИ ТЕМИ (СТРИКТНО ЗАБРАНЕНО Е ДА ГИ ПРЕДЛАГАШ ОТНОВО):\n${historyList}` : "";
+export const suggestViralProposal = createServerFn({ method: "POST" }).handler(async () => {
+  const memory = await getAiMemory();
+  const historyList = (memory.usageHistory || []).map((x) => `- ${x.identifier}`).join("\n");
+  const historyContext = historyList
+    ? `\n\nСКОРОШНО ИЗПОЛЗВАНИ ТЕМИ (СТРИКТНО ЗАБРАНЕНО Е ДА ГИ ПРЕДЛАГАШ ОТНОВО):\n${historyList}`
+    : "";
 
-    const THEMES = ["Таухид (Единобожие) и силата му", "Търпение (Сабр)", "Упование в Аллах", "Прошка и милост", "Скрита мъдрост в трудности", "Мълчание", "Изобилие и благодарност", "Силата на Дуата", "Преходността на Дуня", "Сърдечно покаяние", "Защита от зло", "Как да задържим вниманието си върху Ахирета"];
-    const randomTheme = THEMES[Math.floor(Math.random() * THEMES.length)];
-    const VIRAL_SURAHS = [3, 4, 8, 14, 18, 19, 20, 21, 24, 25, 29, 31, 36, 39, 40, 50, 51, 55, 56, 59, 67, 68, 73, 75, 76, 78, 89, 94, 99, 103];
-    const randomSurah1 = VIRAL_SURAHS[Math.floor(Math.random() * VIRAL_SURAHS.length)];
-    const randomSurah2 = VIRAL_SURAHS[Math.floor(Math.random() * VIRAL_SURAHS.length)];
-    
-    const prompt = `Ти си топ продуцент на вирусни Ислямски видеа (Reels & TikTok) на български език.
+  const THEMES = [
+    "Таухид (Единобожие) и силата му",
+    "Търпение (Сабр)",
+    "Упование в Аллах",
+    "Прошка и милост",
+    "Скрита мъдрост в трудности",
+    "Мълчание",
+    "Изобилие и благодарност",
+    "Силата на Дуата",
+    "Преходността на Дуня",
+    "Сърдечно покаяние",
+    "Защита от зло",
+    "Как да задържим вниманието си върху Ахирета",
+  ];
+  const randomTheme = THEMES[Math.floor(Math.random() * THEMES.length)];
+  const VIRAL_SURAHS = [
+    3, 4, 8, 14, 18, 19, 20, 21, 24, 25, 29, 31, 36, 39, 40, 50, 51, 55, 56, 59, 67, 68, 73, 75, 76,
+    78, 89, 94, 99, 103,
+  ];
+  const randomSurah1 = VIRAL_SURAHS[Math.floor(Math.random() * VIRAL_SURAHS.length)];
+  const randomSurah2 = VIRAL_SURAHS[Math.floor(Math.random() * VIRAL_SURAHS.length)];
+
+  const prompt = `Ти си топ продуцент на вирусни Ислямски видеа (Reels & TikTok) на български език.
 ИЗКЛЮЧИТЕЛНО ВАЖНО ПРАВИЛО: ТРЯБВА ДА ГЕНЕРИРАШ АБСОЛЮТНО УНИКАЛНО ПРЕДЛОЖЕНИЕ, КОЕТО НИКОГА НЕ Е БИЛО ПРЕДЛАГАНО ПРЕДИ!
 Измисли и предложи ЕДНА изключително силна, НЕБАНАЛНА и психологически поразяваща тема/урок от Корана или Сахих Хадис за видео.${historyContext}
 
@@ -422,70 +524,107 @@ SALAFI HALAL ПРИНЦИПИ (СТРИКТНО ЗАДЪЛЖИТЕЛНО):
 }
 Върни САМО валиден JSON.`;
 
-    const msgs = [
-      { role: "system", content: prompt },
-      { role: "user", content: "Предложи 1 вирусна Ислямска тема сега според системните инструкции и върни валиден JSON." }
-    ] as any;
-    const raw = await geminiChat("gemini-3.6-flash", msgs, true);
-    let parsed: any;
-    try {
-      let clean = raw.replace(/```json\s*|\s*```/g, "").trim();
-      const firstBrace = clean.indexOf("{");
-      const lastBrace = clean.lastIndexOf("}");
-      if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
-        clean = clean.substring(firstBrace, lastBrace + 1);
-      }
-      parsed = JSON.parse(clean);
-    } catch {
-      parsed = {
-        reply: "Предлагам ти дълбок, рядко цитиран урок от Сахих ал-Бухари за вътрешната сила при изпитания.",
-        proposal: {
-          title: "[Сахих ал-Бухари #6424] Скритата милост в изпитанията",
-          type: "hadith",
-          collection: "bukhari",
-          number: 6424,
-          summaryBg: "Когото Аллах желае да дари с добро, Той го подлага на изпитания за пречистване.",
-          themeBg: "Буря, която утихва в златна светлина",
-          searchQuery: "storm sunlight dramatic sky nature cinematic",
-          tiktokTheme: "hormozi"
-        }
-      };
+  const msgs: ChatMessage[] = [
+    { role: "system", content: prompt },
+    {
+      role: "user",
+      content:
+        "Предложи 1 вирусна Ислямска тема сега според системните инструкции и върни валиден JSON.",
+    },
+  ];
+  const raw = await geminiChat("gemini-3.6-flash", msgs, true);
+  let parsed: { reply?: string; proposal?: VideoProposal | null };
+  try {
+    let clean = raw.replace(/```json\s*|\s*```/g, "").trim();
+    const firstBrace = clean.indexOf("{");
+    const lastBrace = clean.lastIndexOf("}");
+    if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+      clean = clean.substring(firstBrace, lastBrace + 1);
     }
-    
-    if (parsed.proposal && parsed.proposal.title) {
-      parsed.proposal.title = cleanProposalTitle(parsed.proposal.title);
-    }
-
-    if (parsed.proposal) {
-      await recordProposalUsages({ data: { proposals: [parsed.proposal] } }).catch(() => {});
-    }
-
-    return {
-      reply: parsed.reply,
-      proposal: parsed.proposal as VideoProposal,
+    parsed = JSON.parse(clean);
+  } catch {
+    parsed = {
+      reply:
+        "Предлагам ти дълбок, рядко цитиран урок от Сахих ал-Бухари за вътрешната сила при изпитания.",
+      proposal: {
+        title: "[Сахих ал-Бухари #6424] Скритата милост в изпитанията",
+        type: "hadith",
+        collection: "bukhari",
+        number: 6424,
+        summaryBg:
+          "Когото Аллах желае да дари с добро, Той го подлага на изпитания за пречистване.",
+        themeBg: "Буря, която утихва в златна светлина",
+        searchQuery: "storm sunlight dramatic sky nature cinematic",
+        tiktokTheme: "hormozi",
+      },
     };
-  });
+  }
+
+  if (parsed.proposal && parsed.proposal.title) {
+    parsed.proposal.title = cleanProposalTitle(parsed.proposal.title);
+  }
+
+  if (parsed.proposal) {
+    await recordProposalUsages({ data: { proposals: [parsed.proposal] } }).catch(() => {});
+  }
+
+  return {
+    reply: parsed.reply,
+    proposal: parsed.proposal as VideoProposal,
+  };
+});
 
 export const suggestBatchViralProposals = createServerFn({ method: "POST" })
-  .validator((input: { count?: number; topic?: string; targetType?: "carousel" | "video" | "mixed" } | undefined) => input || {})
-  .handler(async ({ data }: { data: { count?: number; topic?: string; targetType?: "carousel" | "video" | "mixed" } }) => {
-    const countNum = data.count || 5;
-    const topicStr = data.topic || "САМО Коран и Сахих Хадиси (БЕЗ TikTok психология и измислени цитати)";
-    const targetType = data.targetType || "mixed";
-    
-    const memory = await getAiMemory();
-    const historyList = (memory.usageHistory || []).map(x => `- ${x.identifier}`).join("\n");
-    const historyContext = historyList ? `\n\nСКОРОШНО ИЗПОЛЗВАНИ ТЕМИ (СТРИКТНО ЗАБРАНЕНО Е ДА ГИ ПРЕДЛАГАШ ОТНОВО):\n${historyList}` : "";
+  .validator(
+    (
+      input:
+        { count?: number; topic?: string; targetType?: "carousel" | "video" | "mixed" } | undefined,
+    ) => input || {},
+  )
+  .handler(
+    async ({
+      data,
+    }: {
+      data: { count?: number; topic?: string; targetType?: "carousel" | "video" | "mixed" };
+    }) => {
+      const countNum = data.count || 5;
+      const topicStr =
+        data.topic || "САМО Коран и Сахих Хадиси (БЕЗ TikTok психология и измислени цитати)";
+      const targetType = data.targetType || "mixed";
 
-    const THEMES = ["Таухид (Единобожие) и силата му", "Как да задържим вниманието си върху Ахирета", "Търпение (Сабр)", "Упование в Аллах", "Прошка и милост", "Скрита мъдрост в трудности", "Мълчание", "Изобилие и благодарност", "Силата на Дуата", "Преходността на Дуня", "Сърдечно покаяние", "Защита от зло", "Справедливост", "Доброта към родители"];
-    const shuffledThemes = [...THEMES].sort(() => Math.random() - 0.5);
-    const selectedThemes = shuffledThemes.slice(0, 3).join(", ");
-    
-    const VIRAL_SURAHS = [3, 4, 8, 14, 18, 19, 20, 21, 24, 25, 29, 31, 36, 39, 40, 50, 51, 55, 56, 59, 67, 68, 73, 75, 76, 78, 89, 94, 99, 103];
-    const shuffledSurahs = [...VIRAL_SURAHS].sort(() => Math.random() - 0.5);
-    const randomSurahs = shuffledSurahs.slice(0, 5).join(", ");
-    
-    const prompt = `Ти си ПРОФЕСИОНАЛЕН ПРОДУЦЕНТ И РЕЖИСЬОР на вирусни Ислямски видеа (Reels & TikTok) на български език.
+      const memory = await getAiMemory();
+      const historyList = (memory.usageHistory || []).map((x) => `- ${x.identifier}`).join("\n");
+      const historyContext = historyList
+        ? `\n\nСКОРОШНО ИЗПОЛЗВАНИ ТЕМИ (СТРИКТНО ЗАБРАНЕНО Е ДА ГИ ПРЕДЛАГАШ ОТНОВО):\n${historyList}`
+        : "";
+
+      const THEMES = [
+        "Таухид (Единобожие) и силата му",
+        "Как да задържим вниманието си върху Ахирета",
+        "Търпение (Сабр)",
+        "Упование в Аллах",
+        "Прошка и милост",
+        "Скрита мъдрост в трудности",
+        "Мълчание",
+        "Изобилие и благодарност",
+        "Силата на Дуата",
+        "Преходността на Дуня",
+        "Сърдечно покаяние",
+        "Защита от зло",
+        "Справедливост",
+        "Доброта към родители",
+      ];
+      const shuffledThemes = [...THEMES].sort(() => Math.random() - 0.5);
+      const selectedThemes = shuffledThemes.slice(0, 3).join(", ");
+
+      const VIRAL_SURAHS = [
+        3, 4, 8, 14, 18, 19, 20, 21, 24, 25, 29, 31, 36, 39, 40, 50, 51, 55, 56, 59, 67, 68, 73, 75,
+        76, 78, 89, 94, 99, 103,
+      ];
+      const shuffledSurahs = [...VIRAL_SURAHS].sort(() => Math.random() - 0.5);
+      const randomSurahs = shuffledSurahs.slice(0, 5).join(", ");
+
+      const prompt = `Ти си ПРОФЕСИОНАЛЕН ПРОДУЦЕНТ И РЕЖИСЬОР на вирусни Ислямски видеа (Reels & TikTok) на български език.
 ИЗКЛЮЧИТЕЛНО ВАЖНО ПРАВИЛО: ТРЯБВА ДА ГЕНЕРИРАШ АБСОЛЮТНО УНИКАЛНИ ПРЕДЛОЖЕНИЯ, КОИТО НИКОГА НЕ СА БИЛИ ПРЕДЛАГАНИ ПРЕДИ!
 Измисли и предложи ПАКЕТ ОТ ТОЧНО ${countNum} изключително силни, НЕБАНАЛНИ и психологически поразяващи теми/уроци за къси видеа в категория: "${topicStr}".${historyContext}
 
@@ -535,60 +674,64 @@ export const suggestBatchViralProposals = createServerFn({ method: "POST" })
 }
 ВАЖНО: Ако предложението е от тип "quran", ЗАДЪЛЖИТЕЛНО попълни точни цели числа за "surah" (1-114), "ayah" (>0) и "count" (1-7)! НИКОГА не оставяй "surah" и "ayah" празни! Върни САМО валиден JSON без маркдаун кавички.`;
 
-    const msgs = [
-      { role: "system", content: prompt },
-      { role: "user", content: `Предложи пакет от ${countNum} вирусни идеи сега според инструкциите и върни валиден JSON с масив proposals от точно ${countNum} елемента.` }
-    ] as any;
+      const msgs: ChatMessage[] = [
+        { role: "system", content: prompt },
+        {
+          role: "user",
+          content: `Предложи пакет от ${countNum} вирусни идеи сега според инструкциите и върни валиден JSON с масив proposals от точно ${countNum} елемента.`,
+        },
+      ];
 
-    const raw = await geminiChat("gemini-3.6-flash", msgs, true);
-    let parsed: any;
-    try {
-      let clean = raw.replace(/```json\s*|\s*```/g, "").trim();
-      const firstBrace = clean.indexOf("{");
-      const lastBrace = clean.lastIndexOf("}");
-      if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
-        clean = clean.substring(firstBrace, lastBrace + 1);
+      const raw = await geminiChat("gemini-3.6-flash", msgs, true);
+      let parsed: { reply?: string; proposals?: VideoProposal[] | null };
+      try {
+        let clean = raw.replace(/```json\s*|\s*```/g, "").trim();
+        const firstBrace = clean.indexOf("{");
+        const lastBrace = clean.lastIndexOf("}");
+        if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+          clean = clean.substring(firstBrace, lastBrace + 1);
+        }
+        parsed = JSON.parse(clean);
+      } catch (err) {
+        console.error("[suggestBatchViralProposals] Gemini parsing or network error:", err);
+        const fallbackShuffled = [...VIRAL_SERIES_PRESETS];
+        for (let i = fallbackShuffled.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [fallbackShuffled[i], fallbackShuffled[j]] = [fallbackShuffled[j], fallbackShuffled[i]];
+        }
+        parsed = {
+          reply: `Ето специално подбран пакет от ${countNum} топ вирусни идеи от Корана, Хадисите и TikTok трендовете! Избери кои от тях да одобрим и генерираме:`,
+          proposals: fallbackShuffled.slice(0, countNum).map((p) => ({
+            title: `[Коран] ${p.ref}`,
+            type: "quran",
+            surah: p.surah,
+            ayah: p.ayah,
+            count: p.ayahEnd - p.ayah + 1,
+            summaryBg: p.summary,
+            themeBg: "Кинематографична атмосфера",
+            searchQuery: p.query,
+            tiktokTheme: "hormozi",
+            useBRoll: true,
+            bRollInterval: 5,
+            quality: "high",
+          })),
+        };
       }
-      parsed = JSON.parse(clean);
-    } catch (err) {
-      console.error("[suggestBatchViralProposals] Gemini parsing or network error:", err);
-      const fallbackShuffled = [...VIRAL_SERIES_PRESETS];
-      for (let i = fallbackShuffled.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [fallbackShuffled[i], fallbackShuffled[j]] = [fallbackShuffled[j], fallbackShuffled[i]];
+
+      if (Array.isArray(parsed.proposals) && parsed.proposals.length > 0) {
+        parsed.proposals.forEach((p: VideoProposal) => {
+          if (p && p.title) p.title = cleanProposalTitle(p.title);
+        });
+        await injectAuthenticCarouselText(parsed.proposals);
+        await recordProposalUsages({ data: { proposals: parsed.proposals } }).catch(() => {});
       }
-      parsed = {
-        reply: `Ето специално подбран пакет от ${countNum} топ вирусни идеи от Корана, Хадисите и TikTok трендовете! Избери кои от тях да одобрим и генерираме:`,
-        proposals: fallbackShuffled.slice(0, countNum).map(p => ({
-          title: `[Коран] ${p.ref}`,
-          type: "quran",
-          surah: p.surah,
-          ayah: p.ayah,
-          count: p.ayahEnd - p.ayah + 1,
-          summaryBg: p.summary,
-          themeBg: "Кинематографична атмосфера",
-          searchQuery: p.query,
-          tiktokTheme: "hormozi",
-          useBRoll: true,
-          bRollInterval: 5,
-          quality: "high"
-        }))
+
+      return {
+        reply: parsed.reply,
+        proposals: (parsed.proposals || []).slice(0, countNum) as VideoProposal[],
       };
-    }
-
-    if (Array.isArray(parsed.proposals) && parsed.proposals.length > 0) {
-      parsed.proposals.forEach((p: any) => {
-        if (p && p.title) p.title = cleanProposalTitle(p.title);
-      });
-      await injectAuthenticCarouselText(parsed.proposals);
-      await recordProposalUsages({ data: { proposals: parsed.proposals } }).catch(() => {});
-    }
-
-    return {
-      reply: parsed.reply,
-      proposals: (parsed.proposals || []).slice(0, countNum) as VideoProposal[],
-    };
-  });
+    },
+  );
 
 export const confirmAndGenerateVideo = createServerFn({ method: "POST" })
   .validator((input: { proposal: VideoProposal }) => input)
@@ -601,9 +744,12 @@ export const confirmAndGenerateVideo = createServerFn({ method: "POST" })
     let bulgarian = "";
     let reference = proposal.title;
     let audioUrl: string | null = null;
-    let wordSegments: any[] | undefined = undefined;
-    let ayahBounds: any[] | undefined = undefined;
-    let bulgarianWordTimings: any[] | undefined = undefined;
+    let wordSegments: Array<{ start: number; end: number }> | undefined = undefined;
+    let ayahBounds:
+      | Array<{ ayah: number; start: number; end: number; arabic: string; english: string }>
+      | undefined = undefined;
+    let bulgarianWordTimings: Array<{ start: number; end: number; word: string }> | undefined =
+      undefined;
     let arabicWordCount: number | undefined = undefined;
 
     let viralTitle = proposal.title || "";
@@ -613,14 +759,20 @@ export const confirmAndGenerateVideo = createServerFn({ method: "POST" })
       viralTitle = viralTitle.split("•")[1].trim();
     }
 
-    if (proposal.type === "hadith" || (!proposal.surah && !proposal.ayah && proposal.collection && proposal.number)) {
-      const coll = (proposal.collection || "nawawi40") as "bukhari" | "muslim" | "tirmidhi" | "nawawi40";
+    if (
+      proposal.type === "hadith" ||
+      (!proposal.surah && !proposal.ayah && proposal.collection && proposal.number)
+    ) {
+      const coll = (proposal.collection || "nawawi40") as
+        "bukhari" | "muslim" | "tirmidhi" | "nawawi40";
       const num = Number(proposal.number) || 1;
       const h = await fetchSunnahHadith({ data: { collection: coll, number: num } });
       arabic = h.arabic;
       english = h.english;
       reference = h.reference;
-      const t = await translateToBulgarian({ data: { english: h.english, sourceRef: h.reference } });
+      const t = await translateToBulgarian({
+        data: { english: h.english, sourceRef: h.reference },
+      });
       bulgarian = t.bulgarian;
 
       try {
@@ -633,7 +785,15 @@ export const confirmAndGenerateVideo = createServerFn({ method: "POST" })
       } catch (e) {
         console.warn("Could not narrate hadith:", e);
       }
-    } else if (proposal.type === "tiktok" || proposal.type === "general" || (proposal.type !== "quran" && !proposal.surah && !proposal.ayah && !proposal.number && proposal.summaryBg)) {
+    } else if (
+      proposal.type === "tiktok" ||
+      proposal.type === "general" ||
+      (proposal.type !== "quran" &&
+        !proposal.surah &&
+        !proposal.ayah &&
+        !proposal.number &&
+        proposal.summaryBg)
+    ) {
       bulgarian = proposal.summaryBg || proposal.title;
       reference = proposal.title;
       arabic = "";
@@ -641,7 +801,7 @@ export const confirmAndGenerateVideo = createServerFn({ method: "POST" })
 
       try {
         if (viralTitle && !bulgarian.includes(viralTitle)) {
-           bulgarian = `${viralTitle} <break time="1.0s" />\n\n${bulgarian}`;
+          bulgarian = `${viralTitle} <break time="1.0s" />\n\n${bulgarian}`;
         }
         const narr = await synthesizeHadithNarration({ data: { text: bulgarian } });
         audioUrl = `data:${narr.mimeType || "audio/mp3"};base64,${narr.base64}`;
@@ -656,7 +816,9 @@ export const confirmAndGenerateVideo = createServerFn({ method: "POST" })
 
       // ALWAYS trust the title first (WYSIWYG) if it contains [Коран X:Y] format
       // IMPORTANT: ONLY search the title! Do not search summaryBg, as it might contain random numbers like 39:53.
-      const colonMatch = proposal.title.match(/\b(\d{1,3})\s*[:.]\s*(\d{1,3})(?:\s*-\s*(\d{1,3}))?\b/);
+      const colonMatch = proposal.title.match(
+        /\b(\d{1,3})\s*[:.]\s*(\d{1,3})(?:\s*-\s*(\d{1,3}))?\b/,
+      );
       if (colonMatch) {
         surah = parseInt(colonMatch[1], 10);
         ayah = parseInt(colonMatch[2], 10);
@@ -669,21 +831,37 @@ export const confirmAndGenerateVideo = createServerFn({ method: "POST" })
       } else if (isNaN(surah) || surah <= 0 || isNaN(ayah) || ayah <= 0) {
         const lower = proposal.title.toLowerCase();
         if (lower.includes("ихлас") || lower.includes("ikhlas")) {
-          surah = 112; ayah = 1; count = 4;
+          surah = 112;
+          ayah = 1;
+          count = 4;
         } else if (lower.includes("аср") || lower.includes("asr")) {
-          surah = 103; ayah = 1; count = 3;
+          surah = 103;
+          ayah = 1;
+          count = 3;
         } else if (lower.includes("курси") || lower.includes("kursi")) {
-          surah = 2; ayah = 255; count = 1;
+          surah = 2;
+          ayah = 255;
+          count = 1;
         } else if (lower.includes("шарх") || lower.includes("облекчение")) {
-          surah = 94; ayah = 5; count = 2;
+          surah = 94;
+          ayah = 5;
+          count = 2;
         } else if (lower.includes("фаляк") || lower.includes("фалак")) {
-          surah = 113; ayah = 1; count = 5;
+          surah = 113;
+          ayah = 1;
+          count = 5;
         } else if (lower.includes("наср") || lower.includes("победа")) {
-          surah = 110; ayah = 1; count = 3;
+          surah = 110;
+          ayah = 1;
+          count = 3;
         } else if (lower.includes("каусар") || lower.includes("изобилие")) {
-          surah = 108; ayah = 1; count = 3;
+          surah = 108;
+          ayah = 1;
+          count = 3;
         } else if (lower.includes("нас") || lower.includes("убежище")) {
-          surah = 114; ayah = 1; count = 6;
+          surah = 114;
+          ayah = 1;
+          count = 6;
         } else {
           surah = isNaN(surah) || surah <= 0 ? 1 : surah;
           ayah = isNaN(ayah) || ayah <= 0 ? 1 : ayah;
@@ -722,7 +900,10 @@ export const confirmAndGenerateVideo = createServerFn({ method: "POST" })
           console.warn("Could not narrate Quran:", e);
         }
       } catch (err) {
-        console.error(`[assistant] Error fetching Quran data or translating for ${surah}:${ayah}:`, err);
+        console.error(
+          `[assistant] Error fetching Quran data or translating for ${surah}:${ayah}:`,
+          err,
+        );
         throw new Error(`Failed to load or translate Quran text: ${err}`);
       }
     }
@@ -747,9 +928,9 @@ export const confirmAndGenerateVideo = createServerFn({ method: "POST" })
     try {
       const { fetchMultiSceneBRoll } = await import("./pexels.functions");
       const bRollResult = await fetchMultiSceneBRoll({
-        data: { 
+        data: {
           query: proposal.searchQuery || "islamic nature cinematic",
-          text: bulgarian
+          text: bulgarian,
         },
       });
       if (bRollResult.clips && bRollResult.clips.length > 1) {
@@ -760,8 +941,6 @@ export const confirmAndGenerateVideo = createServerFn({ method: "POST" })
     }
 
     const subtitleStyle = proposal.subtitlePosition || "middle";
-
-
 
     const { jobId } = await startServerRenderJob({
       data: {
@@ -802,46 +981,189 @@ export const confirmAndGenerateVideo = createServerFn({ method: "POST" })
 export const approveAndRenderAssistantIdea = confirmAndGenerateVideo;
 
 export const VIRAL_SERIES_PRESETS = [
-  { surah: 1, ayah: 1, ayahEnd: 2, ref: "Сура Ал-Фатиха (1:1-2)", summary: "Откриването и благословията на Корана", query: "islamic calm mosque sunset nature" },
-  { surah: 112, ayah: 1, ayahEnd: 4, ref: "Сура Ал-Ихлас (112:1-4)", summary: "Единобожието и чистотата на вярата", query: "mountain light rays dramatic nature" },
-  { surah: 103, ayah: 1, ayahEnd: 3, ref: "Сура Ал-Аср (103:1-3)", summary: "Времето и спасението на човека", query: "hourglass time cinematic nature sunset" },
-  { surah: 94, ayah: 5, ayahEnd: 6, ref: "Сура Аш-Шарх (94:5-6)", summary: "С всяка трудност идва облекчение", query: "sunlight breaking through clouds hope" },
-  { surah: 2, ayah: 255, ayahEnd: 255, ref: "Аят ал-Курси (2:255)", summary: "Тронът на Аллах и великата защита", query: "stars night sky universe galaxy cinematic" },
-  { surah: 113, ayah: 1, ayahEnd: 5, ref: "Сура Ал-Фаляк (113:1-5)", summary: "Защита от всяко зло на пукнатината на зората", query: "sunrise golden hour fog cinematic nature" },
-  { surah: 114, ayah: 1, ayahEnd: 6, ref: "Сура Ан-Нас (114:1-6)", summary: "Убежище при Господаря на хората", query: "peaceful ocean waves calm nature" },
-  { surah: 108, ayah: 1, ayahEnd: 3, ref: "Сура Ал-Каусар (108:1-3)", summary: "Изобилието и реката в Рая", query: "waterfall crystal clear water river nature" },
-  { surah: 110, ayah: 1, ayahEnd: 3, ref: "Сура Ан-Наср (110:1-3)", summary: "Победата и прошката на Аллах", query: "triumph golden sunlight birds flying" },
-  { surah: 109, ayah: 1, ayahEnd: 6, ref: "Сура Ал-Кафирун (109:1-6)", summary: "За вас е вашата религия, а за мен е моята", query: "desert dunes peaceful horizon sunset" },
+  {
+    surah: 1,
+    ayah: 1,
+    ayahEnd: 2,
+    ref: "Сура Ал-Фатиха (1:1-2)",
+    summary: "Откриването и благословията на Корана",
+    query: "islamic calm mosque sunset nature",
+  },
+  {
+    surah: 112,
+    ayah: 1,
+    ayahEnd: 4,
+    ref: "Сура Ал-Ихлас (112:1-4)",
+    summary: "Единобожието и чистотата на вярата",
+    query: "mountain light rays dramatic nature",
+  },
+  {
+    surah: 103,
+    ayah: 1,
+    ayahEnd: 3,
+    ref: "Сура Ал-Аср (103:1-3)",
+    summary: "Времето и спасението на човека",
+    query: "hourglass time cinematic nature sunset",
+  },
+  {
+    surah: 94,
+    ayah: 5,
+    ayahEnd: 6,
+    ref: "Сура Аш-Шарх (94:5-6)",
+    summary: "С всяка трудност идва облекчение",
+    query: "sunlight breaking through clouds hope",
+  },
+  {
+    surah: 2,
+    ayah: 255,
+    ayahEnd: 255,
+    ref: "Аят ал-Курси (2:255)",
+    summary: "Тронът на Аллах и великата защита",
+    query: "stars night sky universe galaxy cinematic",
+  },
+  {
+    surah: 113,
+    ayah: 1,
+    ayahEnd: 5,
+    ref: "Сура Ал-Фаляк (113:1-5)",
+    summary: "Защита от всяко зло на пукнатината на зората",
+    query: "sunrise golden hour fog cinematic nature",
+  },
+  {
+    surah: 114,
+    ayah: 1,
+    ayahEnd: 6,
+    ref: "Сура Ан-Нас (114:1-6)",
+    summary: "Убежище при Господаря на хората",
+    query: "peaceful ocean waves calm nature",
+  },
+  {
+    surah: 108,
+    ayah: 1,
+    ayahEnd: 3,
+    ref: "Сура Ал-Каусар (108:1-3)",
+    summary: "Изобилието и реката в Рая",
+    query: "waterfall crystal clear water river nature",
+  },
+  {
+    surah: 110,
+    ayah: 1,
+    ayahEnd: 3,
+    ref: "Сура Ан-Наср (110:1-3)",
+    summary: "Победата и прошката на Аллах",
+    query: "triumph golden sunlight birds flying",
+  },
+  {
+    surah: 109,
+    ayah: 1,
+    ayahEnd: 6,
+    ref: "Сура Ал-Кафирун (109:1-6)",
+    summary: "За вас е вашата религия, а за мен е моята",
+    query: "desert dunes peaceful horizon sunset",
+  },
 ];
 
 export const startBatchViralSeries = createServerFn({ method: "POST" })
   .validator((input: { count?: number; selectedIndices?: number[] } | undefined) => input || {})
-  .handler(async ({ data }: { data: { count?: number; selectedIndices?: number[] } }): Promise<{ success: boolean; count: number; message: string }> => {
-    let chosenProposals: VideoProposal[] = [];
-
-    throw new Error("⚠️ НАЛИЧНА Е НОВА ВЕРСИЯ! Моля, презаредете страницата (Refresh/F5), за да видите плана в чата преди генериране.");
-  });
+  .handler(
+    async ({
+      data: _data,
+    }: {
+      data: { count?: number; selectedIndices?: number[] };
+    }): Promise<{ success: boolean; count: number; message: string }> => {
+      throw new Error(
+        "⚠️ НАЛИЧНА Е НОВА ВЕРСИЯ! Моля, презаредете страницата (Refresh/F5), за да видите плана в чата преди генериране.",
+      );
+    },
+  );
 
 export const VIRAL_HADITH_SERIES_PRESETS = [
-  { collection: "nawawi40", number: 1, title: "Хадис № 1 на Навауи (Намеренията)", summaryBg: "Делата се ценят според намеренията", query: "sunrise golden hour cinematic nature" },
-  { collection: "bukhari", number: 6424, title: "Сахих ал-Бухари #6424 (Изпитанията)", summaryBg: "Когото Аллах желае да дари с добро, Той го подлага на изпитания за пречистване.", query: "storm sunlight dramatic cinematic nature" },
-  { collection: "nawawi40", number: 5, title: "Хадис № 5 на Навауи (Чистота на вярата)", summaryBg: "Искреността в религията и отхвърлянето на нововъведенията.", query: "pure water crystal clear cinematic" },
-  { collection: "muslim", number: 2564, title: "Сахих Муслим #2564 (Добротата)", summaryBg: "Силата на благородните обръщения и милостта.", query: "peaceful garden flowers cinematic" },
-  { collection: "tirmidhi", number: 1987, title: "Сунан Ат-Тирмизи #1987 (Търпението)", summaryBg: "Вътрешният мир и сабр в трудни моменти.", query: "mountains calm fog cinematic" },
-  { collection: "nawawi40", number: 13, title: "Хадис № 13 на Навауи (Братска обич)", summaryBg: "Никога не си истински вярващ, докато не пожелаеш за брата си това, което желаеш за себе си.", query: "two birds flying together cinematic nature" },
-  { collection: "nawawi40", number: 9, title: "Хадис № 9 на Навауи (Задълженията)", summaryBg: "Изпълнявайте заповедите според възможностите си.", query: "walking path nature forest cinematic" },
-  { collection: "bukhari", number: 6065, title: "Сахих ал-Бухари #6065 (Мълчанието)", summaryBg: "Който вярва в Аллах и в Сетния ден, нека говори добро или да мълчи.", query: "calm lake reflection cinematic nature" },
-  { collection: "muslim", number: 2699, title: "Сахих Муслим #2699 (Пътят към знанието)", summaryBg: "Който поеме по път да търси знание, Аллах ще му улесни пътя към Рая.", query: "stars night sky universe galaxy cinematic" },
-  { collection: "nawawi40", number: 27, title: "Хадис № 27 на Навауи (Праведността)", summaryBg: "Праведността е добрият нрав, а грехът е това, което тревожи сърцето.", query: "peaceful ocean waves calm nature" },
+  {
+    collection: "nawawi40",
+    number: 1,
+    title: "Хадис № 1 на Навауи (Намеренията)",
+    summaryBg: "Делата се ценят според намеренията",
+    query: "sunrise golden hour cinematic nature",
+  },
+  {
+    collection: "bukhari",
+    number: 6424,
+    title: "Сахих ал-Бухари #6424 (Изпитанията)",
+    summaryBg: "Когото Аллах желае да дари с добро, Той го подлага на изпитания за пречистване.",
+    query: "storm sunlight dramatic cinematic nature",
+  },
+  {
+    collection: "nawawi40",
+    number: 5,
+    title: "Хадис № 5 на Навауи (Чистота на вярата)",
+    summaryBg: "Искреността в религията и отхвърлянето на нововъведенията.",
+    query: "pure water crystal clear cinematic",
+  },
+  {
+    collection: "muslim",
+    number: 2564,
+    title: "Сахих Муслим #2564 (Добротата)",
+    summaryBg: "Силата на благородните обръщения и милостта.",
+    query: "peaceful garden flowers cinematic",
+  },
+  {
+    collection: "tirmidhi",
+    number: 1987,
+    title: "Сунан Ат-Тирмизи #1987 (Търпението)",
+    summaryBg: "Вътрешният мир и сабр в трудни моменти.",
+    query: "mountains calm fog cinematic",
+  },
+  {
+    collection: "nawawi40",
+    number: 13,
+    title: "Хадис № 13 на Навауи (Братска обич)",
+    summaryBg:
+      "Никога не си истински вярващ, докато не пожелаеш за брата си това, което желаеш за себе си.",
+    query: "two birds flying together cinematic nature",
+  },
+  {
+    collection: "nawawi40",
+    number: 9,
+    title: "Хадис № 9 на Навауи (Задълженията)",
+    summaryBg: "Изпълнявайте заповедите според възможностите си.",
+    query: "walking path nature forest cinematic",
+  },
+  {
+    collection: "bukhari",
+    number: 6065,
+    title: "Сахих ал-Бухари #6065 (Мълчанието)",
+    summaryBg: "Който вярва в Аллах и в Сетния ден, нека говори добро или да мълчи.",
+    query: "calm lake reflection cinematic nature",
+  },
+  {
+    collection: "muslim",
+    number: 2699,
+    title: "Сахих Муслим #2699 (Пътят към знанието)",
+    summaryBg: "Който поеме по път да търси знание, Аллах ще му улесни пътя към Рая.",
+    query: "stars night sky universe galaxy cinematic",
+  },
+  {
+    collection: "nawawi40",
+    number: 27,
+    title: "Хадис № 27 на Навауи (Праведността)",
+    summaryBg: "Праведността е добрият нрав, а грехът е това, което тревожи сърцето.",
+    query: "peaceful ocean waves calm nature",
+  },
 ];
 
 export const startBatchViralHadithSeries = createServerFn({ method: "POST" })
   .validator((input: { count?: number; selectedIndices?: number[] } | undefined) => input || {})
-  .handler(async ({ data }: { data: { count?: number; selectedIndices?: number[] } }): Promise<{ success: boolean; count: number; message: string }> => {
-    let chosenProposals: VideoProposal[] = [];
-
-    throw new Error("⚠️ НАЛИЧНА Е НОВА ВЕРСИЯ! Моля, презаредете страницата (Refresh/F5), за да видите плана в чата преди генериране.");
-  });
+  .handler(
+    async ({
+      data: _data,
+    }: {
+      data: { count?: number; selectedIndices?: number[] };
+    }): Promise<{ success: boolean; count: number; message: string }> => {
+      throw new Error(
+        "⚠️ НАЛИЧНА Е НОВА ВЕРСИЯ! Моля, презаредете страницата (Refresh/F5), за да видите плана в чата преди генериране.",
+      );
+    },
+  );
 
 async function getHistoryFilePath() {
   const path = await import("path");
@@ -849,20 +1171,19 @@ async function getHistoryFilePath() {
   return path.join(dir, "assistant_chat_history.json");
 }
 
-export const getAssistantHistory = createServerFn({ method: "POST" })
-  .handler(async () => {
-    const fs = (await import("fs")).promises;
-    const file = await getHistoryFilePath();
-    try {
-      const txt = await fs.readFile(file, "utf-8");
-      return JSON.parse(txt);
-    } catch {
-      return [];
-    }
-  });
+export const getAssistantHistory = createServerFn({ method: "POST" }).handler(async () => {
+  const fs = (await import("fs")).promises;
+  const file = await getHistoryFilePath();
+  try {
+    const txt = await fs.readFile(file, "utf-8");
+    return JSON.parse(txt);
+  } catch {
+    return [];
+  }
+});
 
 export const saveAssistantHistory = createServerFn({ method: "POST" })
-  .validator((input: { messages: any[] }) => input)
+  .validator((input: { messages: unknown[] }) => input)
   .handler(async ({ data: { messages } }) => {
     const fs = (await import("fs")).promises;
     const file = await getHistoryFilePath();
@@ -870,13 +1191,12 @@ export const saveAssistantHistory = createServerFn({ method: "POST" })
     return { success: true };
   });
 
-export const clearAssistantHistory = createServerFn({ method: "POST" })
-  .handler(async () => {
-    const fs = (await import("fs")).promises;
-    const file = await getHistoryFilePath();
-    await fs.unlink(file).catch(() => {});
-    return { success: true };
-  });
+export const clearAssistantHistory = createServerFn({ method: "POST" }).handler(async () => {
+  const fs = (await import("fs")).promises;
+  const file = await getHistoryFilePath();
+  await fs.unlink(file).catch(() => {});
+  return { success: true };
+});
 
 let isBackgroundWorkerRunning = false;
 
@@ -892,7 +1212,11 @@ export async function triggerBackgroundTaskWorker() {
         return;
       }
 
-      await updateTask(nextTask.id, { status: "processing", progress: 10, message: "Обработка на задачата..." });
+      await updateTask(nextTask.id, {
+        status: "processing",
+        progress: 10,
+        message: "Обработка на задачата...",
+      });
       const fs = (await import("fs")).promises;
       const file = await getHistoryFilePath();
 
@@ -903,13 +1227,26 @@ export async function triggerBackgroundTaskWorker() {
             data: { count: nextTask.payload.count, topic: nextTask.payload.topic },
           });
 
-          await updateTask(nextTask.id, { progress: 80, message: "Записване в историята на чата..." });
-          let curHist: any[] = [];
+          await updateTask(nextTask.id, {
+            progress: 80,
+            message: "Записване в историята на чата...",
+          });
+          let curHist: Array<{
+            role: string;
+            text: string;
+            planId?: string;
+            isPlanning?: boolean;
+            proposals?: VideoProposal[];
+            selectedProposalIndices?: number[];
+            jobId?: string;
+          }> = [];
           try {
             curHist = JSON.parse(await fs.readFile(file, "utf-8"));
-          } catch {}
+          } catch {
+            // Ignore parse failure
+          }
 
-          const idx = curHist.findIndex((m: any) => m.planId === nextTask.id || m.isPlanning);
+          const idx = curHist.findIndex((m) => m.planId === nextTask.id || m.isPlanning);
           if (idx !== -1) {
             curHist[idx] = {
               role: "assistant",
@@ -928,22 +1265,38 @@ export async function triggerBackgroundTaskWorker() {
             });
           }
           await fs.writeFile(file, JSON.stringify(curHist, null, 2), "utf-8");
-          await updateTask(nextTask.id, { status: "completed", progress: 100, message: "Планът е готов за одобрение!", result: res });
-        } catch (err: any) {
+          await updateTask(nextTask.id, {
+            status: "completed",
+            progress: 100,
+            message: "Планът е готов за одобрение!",
+            result: res,
+          });
+        } catch (err: unknown) {
           console.error(`[task-engine] Plan generation error:`, err);
-          let curHist: any[] = [];
+          let curHist: Array<{
+            role: string;
+            text: string;
+            planId?: string;
+            isPlanning?: boolean;
+          }> = [];
           try {
             curHist = JSON.parse(await fs.readFile(file, "utf-8"));
-          } catch {}
-          const idx = curHist.findIndex((m: any) => m.planId === nextTask.id || m.isPlanning);
+          } catch {
+            // Ignore parse failure
+          }
+          const idx = curHist.findIndex((m) => m.planId === nextTask.id || m.isPlanning);
           if (idx !== -1) {
             curHist[idx] = {
               role: "assistant",
-              text: `❌ Грешка при изготвяне на плана: ${err?.message || "Неуспешна връзка с AI"}. Моля, опитайте отново.`,
+              text: `❌ Грешка при изготвяне на плана: ${err instanceof Error ? err.message : "Неуспешна връзка с AI"}. Моля, опитайте отново.`,
             };
             await fs.writeFile(file, JSON.stringify(curHist, null, 2), "utf-8");
           }
-          await updateTask(nextTask.id, { status: "failed", progress: 100, error: err?.message || "Грешка при генериране" });
+          await updateTask(nextTask.id, {
+            status: "failed",
+            progress: 100,
+            error: err instanceof Error ? err.message : "Грешка при генериране",
+          });
         }
       } else if (nextTask.type === "batch_generation") {
         try {
@@ -962,9 +1315,13 @@ export async function triggerBackgroundTaskWorker() {
             progress: 100,
             message: `Успешно стартирани всички ${proposals.length} видеа в облачната опашка!`,
           });
-        } catch (err: any) {
+        } catch (err: unknown) {
           console.error(`[task-engine] Batch generation error:`, err);
-          await updateTask(nextTask.id, { status: "failed", progress: 100, error: err?.message || "Грешка в пакетното рендиране" });
+          await updateTask(nextTask.id, {
+            status: "failed",
+            progress: 100,
+            error: err instanceof Error ? err.message : "Грешка в пакетното рендиране",
+          });
         }
       }
     } catch (err) {
@@ -978,47 +1335,61 @@ export async function triggerBackgroundTaskWorker() {
   }, 10);
 }
 
-export const clearAllBackgroundTasks = createServerFn({ method: "POST" })
-  .handler(async () => {
-    await clearAllTasks();
-    return { success: true };
-  });
+export const clearAllBackgroundTasks = createServerFn({ method: "POST" }).handler(async () => {
+  await clearAllTasks();
+  return { success: true };
+});
 
-export const checkActiveBackgroundTasks = createServerFn({ method: "POST" })
-  .handler(async () => {
-    const tasks = await listTasks();
-    const activeTasks = tasks.filter((t) => t.status === "queued" || t.status === "processing");
-    if (activeTasks.length > 0) {
-      triggerBackgroundTaskWorker();
-    }
-    const fs = (await import("fs")).promises;
-    const file = await getHistoryFilePath();
-    let history = [];
-    try {
-      history = JSON.parse(await fs.readFile(file, "utf-8"));
-    } catch {}
-    return {
-      activeTasks,
-      hasActive: activeTasks.length > 0,
-      history,
-    };
-  });
+export const checkActiveBackgroundTasks = createServerFn({ method: "POST" }).handler(async () => {
+  const tasks = await listTasks();
+  const activeTasks = tasks.filter((t) => t.status === "queued" || t.status === "processing");
+  if (activeTasks.length > 0) {
+    triggerBackgroundTaskWorker();
+  }
+  const fs = (await import("fs")).promises;
+  const file = await getHistoryFilePath();
+  let history = [];
+  try {
+    history = JSON.parse(await fs.readFile(file, "utf-8"));
+  } catch {
+    // Ignore read failure
+  }
+  return {
+    activeTasks,
+    hasActive: activeTasks.length > 0,
+    history,
+  };
+});
 
 export const startBackgroundPlanGeneration = createServerFn({ method: "POST" })
-  .validator((input: { count?: number; topic?: string; userMsgText?: string; targetType?: "carousel" | "video" | "mixed" }) => input)
+  .validator(
+    (input: {
+      count?: number;
+      topic?: string;
+      userMsgText?: string;
+      targetType?: "carousel" | "video" | "mixed";
+    }) => input,
+  )
   .handler(async ({ data }) => {
     const fs = (await import("fs")).promises;
     const file = await getHistoryFilePath();
-    let history: any[] = [];
+    let history: Array<{ role: string; text?: string; planId?: string; isPlanning?: boolean }> = [];
     try {
       history = JSON.parse(await fs.readFile(file, "utf-8"));
-    } catch {}
+    } catch {
+      // Ignore read failure
+    }
 
     const task = await createTask(
       "plan_generation",
       `План с ${data.count || 5} идеи`,
       "Изготвяне на вайръл план...",
-      { count: data.count, topic: data.topic, userMsgText: data.userMsgText, targetType: data.targetType }
+      {
+        count: data.count,
+        topic: data.topic,
+        userMsgText: data.userMsgText,
+        targetType: data.targetType,
+      },
     );
 
     const userMsg = { role: "user", text: data.userMsgText };
@@ -1041,16 +1412,18 @@ export const startBackgroundBatchGeneration = createServerFn({ method: "POST" })
   .handler(async ({ data: { proposals } }) => {
     const fs = (await import("fs")).promises;
     const file = await getHistoryFilePath();
-    let history: any[] = [];
+    let history: Array<{ role: string; text?: string }> = [];
     try {
       history = JSON.parse(await fs.readFile(file, "utf-8"));
-    } catch {}
+    } catch {
+      // Ignore read failure
+    }
 
     const task = await createTask(
       "batch_generation",
       `Пакет от ${proposals.length} видеа`,
       "Изпращане към облачната опашка за рендиране...",
-      { proposals }
+      { proposals },
     );
 
     const batchMsg = {
@@ -1068,23 +1441,31 @@ if (typeof process !== "undefined" && typeof window === "undefined") {
   const globalForCron = globalThis as unknown as { __cronStarted: boolean };
   if (!globalForCron.__cronStarted) {
     globalForCron.__cronStarted = true;
-    import("node-cron").then((cron) => {
-      cron.default.schedule('0 9 * * *', async () => {
-        try {
-          console.log('Running daily automatic viral TikTok trend analysis...');
-          const { geminiChat } = await import('./gemini');
-          const prompt = 'Ти си AI TikTok продуцент. Направи бързо търсене в интернет и ми кажи: какви ислямски теми за таухид, мотивация или трудности задържат най-много вниманието на зрителите в TikTok в момента? Анализирай какво се търси и какво се гледа най-много. Избери САМО една тема, която е най-вирална. Върни само името на темата в 3 до 5 думи, без обяснения.';
-          const res = await geminiChat("gemini-3.6-flash", [{ role: 'user', content: prompt }], false, true);
-          const chosenTopic = res ? res.trim() : 'Таухид и успех в живота';
-          
-          console.log('Daily auto-topic chosen:', chosenTopic);
-          await startBackgroundPlanGeneration({ data: { count: 3, topic: chosenTopic, targetType: 'carousel' } });
-        } catch (e) {
-          console.error('Daily cron error:', e);
-        }
-      });
-    }).catch(e => console.error("Failed to load node-cron", e));
+    import("node-cron")
+      .then((cron) => {
+        cron.default.schedule("0 9 * * *", async () => {
+          try {
+            console.log("Running daily automatic viral TikTok trend analysis...");
+            const { geminiChat } = await import("./gemini");
+            const prompt =
+              "Ти си AI TikTok продуцент. Направи бързо търсене в интернет и ми кажи: какви ислямски теми за таухид, мотивация или трудности задържат най-много вниманието на зрителите в TikTok в момента? Анализирай какво се търси и какво се гледа най-много. Избери САМО една тема, която е най-вирална. Върни само името на темата в 3 до 5 думи, без обяснения.";
+            const res = await geminiChat(
+              "gemini-3.6-flash",
+              [{ role: "user", content: prompt }],
+              false,
+              true,
+            );
+            const chosenTopic = res ? res.trim() : "Таухид и успех в живота";
+
+            console.log("Daily auto-topic chosen:", chosenTopic);
+            await startBackgroundPlanGeneration({
+              data: { count: 3, topic: chosenTopic, targetType: "carousel" },
+            });
+          } catch (e) {
+            console.error("Daily cron error:", e);
+          }
+        });
+      })
+      .catch((e) => console.error("Failed to load node-cron", e));
   }
 }
-
-

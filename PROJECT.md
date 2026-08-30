@@ -39,7 +39,7 @@
 |---|------|-------|-------------|--------|
 | M1 | Unified Safe Zone Geometry Registry | Create `src/lib/safe-zone.ts` with typed geometries for TikTok, Reels, Shorts, and Universal | none | DONE |
 | M2 | Single Photo & Thumbnail Layout Hardening | Implement safe zone margins, dynamic auto-fit, reference pill collision fix in `render-photo.ts` and `thumbnail.functions.ts` | M1 | DONE |
-| M3 | Video Rendering Engines Hardening | Update `render-video.ts` and `render.functions.ts` for safe zone alignment, profile selection, ASS script margins, and dynamic wrapping | M1 | PLANNED |
+| M3 | Video Rendering Engines Hardening | Update `render-video.ts` and `render.functions.ts` for safe zone alignment, profile selection, ASS script margins, and dynamic wrapping | M1 | DONE |
 | M4 | Live UI Preview, Safe Zone Guides & Title Sanitizer | Implement safe zone visual guide toggle, responsive preview typography, audio player docking in `create.tsx`, and fix `assistant.functions.ts` | M1 | PLANNED |
 | M_Final | 100% E2E Test Pass & Adversarial Hardening | Pass all Tiers 1-4 E2E tests, then run Tier 5 adversarial challenger hardening | M2, M3, M4, E2E | PLANNED |
 | E2E | E2E Testing Track | Design test runner and test cases across Tiers 1-4 published via `TEST_READY.md` | none | IN_PROGRESS |

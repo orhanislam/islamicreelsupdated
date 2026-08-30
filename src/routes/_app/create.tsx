@@ -3,12 +3,28 @@ import { useServerFn } from "@tanstack/react-start";
 import { useState, useRef, useEffect } from "react";
 import { fetchAyah, type AyahData } from "@/lib/quran.functions";
 import { fetchHadith, listHadiths, type HadithData } from "@/lib/hadith.functions";
-import { fetchSunnahHadith, randomSahihHadith, type SunnahCollection } from "@/lib/sunnah.functions";
+import {
+  fetchSunnahHadith,
+  randomSahihHadith,
+  type SunnahCollection,
+} from "@/lib/sunnah.functions";
 import { translateToBulgarian } from "@/lib/translate.functions";
 import { suggestBackgrounds, generateBackground } from "@/lib/backgrounds.functions";
-import { searchPexelsPhotos, searchPexelsVideos, fetchMultiSceneBRoll } from "@/lib/pexels.functions";
+import {
+  searchPexelsPhotos,
+  searchPexelsVideos,
+  fetchMultiSceneBRoll,
+} from "@/lib/pexels.functions";
 import { suggestViral } from "@/lib/suggestions.functions";
-import { createSameOriginDownloadUrl, createSameOriginMediaUrl, cleanMediaMimeType, isIOSMediaDevice, sanitizeFilename, saveMediaBlob, saveMediaFromUrl } from "@/lib/download-media";
+import {
+  createSameOriginDownloadUrl,
+  createSameOriginMediaUrl,
+  cleanMediaMimeType,
+  isIOSMediaDevice,
+  sanitizeFilename,
+  saveMediaBlob,
+  saveMediaFromUrl,
+} from "@/lib/download-media";
 import { renderPhoto, blobToBase64, type RenderOptions } from "@/lib/render-photo";
 import { renderVideo } from "@/lib/render-video";
 import { enqueueDownload } from "@/lib/downloads-queue";
@@ -18,6 +34,7 @@ import { formatViralSocialCaption } from "@/lib/caption.functions";
 import { generateViralThumbnail } from "@/lib/thumbnail.functions";
 import { alignAudioTimestamps } from "@/lib/audio-align.functions";
 import { verifyAndCorrectSubtitleSync } from "@/lib/subtitle-sync.functions";
+import { SafeZoneOverlayGuide } from "@/components/SafeZoneOverlayGuide";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -25,11 +42,33 @@ import { Textarea } from "@/components/ui/textarea";
 import { copyToClipboardFallback } from "@/lib/utils";
 import { Card } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { Loader2, Sparkles, Image as ImageIcon, Wand2, Upload, Download, Flame, BookOpen, ScrollText, Film, Mic, Copy } from "lucide-react";
+import {
+  Loader2,
+  Sparkles,
+  Image as ImageIcon,
+  Wand2,
+  Upload,
+  Download,
+  Flame,
+  BookOpen,
+  ScrollText,
+  Film,
+  Mic,
+  Copy,
+  Shield,
+  RotateCcw,
+  Volume2,
+} from "lucide-react";
 
 type BgSuggestion = { label: string; prompt: string };
 type ViralItem = { kind: string; ref: string; title_bg: string; reason_bg: string; score: number };
@@ -92,8 +131,12 @@ function CreatePage() {
   const [bgUrl, setBgUrl] = useState<string | null>(null);
   const [bgPrompt, setBgPrompt] = useState<string>("");
   const [bgVideoUrl, setBgVideoUrl] = useState<string | null>(null);
-  const [pexelsPhotos, setPexelsPhotos] = useState<{ id: number; url: string; full: string; photographer: string }[]>([]);
-  const [pexelsVideos, setPexelsVideos] = useState<{ id: number; link: string; poster: string; photographer: string; duration: number }[]>([]);
+  const [pexelsPhotos, setPexelsPhotos] = useState<
+    { id: number; url: string; full: string; photographer: string }[]
+  >([]);
+  const [pexelsVideos, setPexelsVideos] = useState<
+    { id: number; link: string; poster: string; photographer: string; duration: number }[]
+  >([]);
   const [pexelsQuery, setPexelsQuery] = useState<string>("");
   const [pexelsTheme, setPexelsTheme] = useState<string>("");
   const [pexelsTried, setPexelsTried] = useState<string[]>([]);
@@ -107,9 +150,14 @@ function CreatePage() {
 
   // caption style + output format
   const [captionStyle, setCaptionStyle] = useState<RenderOptions["style"]>("lower-third");
-  const [tiktokTheme, setTiktokTheme] = useState<"hormozi" | "gold" | "emerald" | "neon" | "classic" | "fire" | "box">("hormozi");
+  const [tiktokTheme, setTiktokTheme] = useState<
+    "hormozi" | "gold" | "emerald" | "neon" | "classic" | "fire" | "box"
+  >("hormozi");
   const [pacingMode, setPacingMode] = useState<"punchy" | "ayah">("punchy");
-  const [subtitlePosition, setSubtitlePosition] = useState<"tiktok" | "reels" | "shorts" | "center">("tiktok");
+  const [subtitlePosition, setSubtitlePosition] = useState<
+    "tiktok" | "reels" | "shorts" | "center"
+  >("tiktok");
+  const [showSafeZones, setShowSafeZones] = useState<boolean>(false);
   const [subtitleSlicingMode, setSubtitleSlicingMode] = useState<"phrase" | "single">("phrase");
   const [aligningSync, setAligningSync] = useState(false);
   const [showTimingEditor, setShowTimingEditor] = useState(false);
@@ -119,7 +167,9 @@ function CreatePage() {
   // Bulgarian male narration (hadiths)
   const [useBgNarration, setUseBgNarration] = useState(true);
   const [narrationUrl, setNarrationUrl] = useState<string | null>(null);
-  const [narrationTimings, setNarrationTimings] = useState<{ start: number; end: number; word?: string }[] | null>(null);
+  const [narrationTimings, setNarrationTimings] = useState<
+    { start: number; end: number; word?: string }[] | null
+  >(null);
   const [narrating, setNarrating] = useState(false);
   const [multiSceneUrls, setMultiSceneUrls] = useState<string[]>([]);
   const [multiSceneLoading, setMultiSceneLoading] = useState(false);
@@ -153,7 +203,7 @@ function CreatePage() {
         if (proposal.subtitlePosition) setSubtitlePosition(proposal.subtitlePosition);
         if (proposal.searchQuery) setPexelsQuery(proposal.searchQuery);
         if (proposal.autoGenerate) setPendingAutoGenerate(true);
-        
+
         let pType = proposal.type || "general";
         let surah = Number(proposal.surah);
         let ayah = Number(proposal.ayah);
@@ -200,14 +250,14 @@ function CreatePage() {
           const end = count > 1 ? ayah + count - 1 : undefined;
           if (end) setAyahEnd(end);
           setTimeout(() => {
-             loadAyah(surah, ayah, end, cleanTitle);
+            loadAyah(surah, ayah, end, cleanTitle);
           }, 100);
         } else if (pType === "hadith" && collection && number) {
           setTab("hadith");
           setHadithSource(collection as SunnahCollection);
           setSunnahNum(number);
           setTimeout(() => {
-             loadSunnah(collection as SunnahCollection, number, true, cleanTitle);
+            loadSunnah(collection as SunnahCollection, number, true, cleanTitle);
           }, 100);
         } else {
           toast.error(`Непознат формат на предложението: липсват Сура/Аят или Хадис номер.`);
@@ -227,30 +277,51 @@ function CreatePage() {
   };
 
   const reset = () => {
-    setContent(null); setBulgarian(""); setSuggestions([]); setBgUrl(null);
-    setBgVideoUrl(null); setBgPrompt(""); clearRendered(); setCustomAudioUrl(null);
-    setNarrationUrl(null); setNarrationTimings(null);
-    setPexelsPhotos([]); setPexelsVideos([]); setPexelsTheme(""); setPexelsTried([]); setPexelsAvoid([]);
+    setContent(null);
+    setBulgarian("");
+    setSuggestions([]);
+    setBgUrl(null);
+    setBgVideoUrl(null);
+    setBgPrompt("");
+    clearRendered();
+    setCustomAudioUrl(null);
+    setNarrationUrl(null);
+    setNarrationTimings(null);
+    setPexelsPhotos([]);
+    setPexelsVideos([]);
+    setPexelsTheme("");
+    setPexelsTried([]);
+    setPexelsAvoid([]);
   };
 
   const loadAyah = async (s: number, a: number, aEnd?: number, prependTheme?: string) => {
-    setLoading(true); reset();
+    setLoading(true);
+    reset();
     try {
       const d: AyahData = await runFetchAyah({ data: { surah: s, ayah: a, ayahEnd: aEnd } });
-      const refStr = d.ayahEnd && d.ayahEnd > d.ayah
-        ? `Сура ${d.surah} (${d.surahName}) • Аяти ${d.ayah}–${d.ayahEnd}`
-        : `Сура ${d.surah} (${d.surahName}) • Аят ${d.ayah}`;
+      const refStr =
+        d.ayahEnd && d.ayahEnd > d.ayah
+          ? `Сура ${d.surah} (${d.surahName}) • Аяти ${d.ayah}–${d.ayahEnd}`
+          : `Сура ${d.surah} (${d.surahName}) • Аят ${d.ayah}`;
       const c: Content = {
         source_type: "ayah",
         source_ref: refStr,
-        arabic: d.arabic, english: d.english, audioUrl: d.audioUrl,
-        wordSegments: d.wordSegments, ayahBounds: d.ayahBounds, arabicWordCount: d.arabicWordCount,
+        arabic: d.arabic,
+        english: d.english,
+        audioUrl: d.audioUrl,
+        wordSegments: d.wordSegments,
+        ayahBounds: d.ayahBounds,
+        arabicWordCount: d.arabicWordCount,
       };
       setContent(c);
       setTranslating(true);
-      const t = await runTranslate({ data: { english: d.english, sourceRef: c.source_ref, ayahBounds: d.ayahBounds } });
+      const t = await runTranslate({
+        data: { english: d.english, sourceRef: c.source_ref, ayahBounds: d.ayahBounds },
+      });
       const stripped = t.bulgarian.replace(/(^|\n)\s*(?:\(\d+\)|\[\d+\]|\d+\.)\s*/g, "$1").trim();
-      const finalBulgarian = prependTheme ? `${prependTheme} <break time="1.0s" />\n\n${stripped}` : stripped;
+      const finalBulgarian = prependTheme
+        ? `${prependTheme} <break time="1.0s" />\n\n${stripped}`
+        : stripped;
       setBulgarian(finalBulgarian);
       if (t.ayahBounds) {
         c.ayahBounds = t.ayahBounds;
@@ -261,70 +332,102 @@ function CreatePage() {
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : "Грешка");
       return false;
-    } finally { setLoading(false); setTranslating(false); }
+    } finally {
+      setLoading(false);
+      setTranslating(false);
+    }
   };
 
   const loadHadith = async (n: number) => {
-    setLoading(true); reset();
+    setLoading(true);
+    reset();
     try {
       const h = await runFetchHadith({ data: { number: n } });
       const c: Content = {
         source_type: "hadith",
         source_ref: `${h.reference}`,
-        arabic: h.arabic, english: h.english,
+        arabic: h.arabic,
+        english: h.english,
       };
       setContent(c);
       setTranslating(true);
-      const t = await runTranslate({ data: { arabic: h.arabic, english: h.english, sourceRef: h.reference } });
+      const t = await runTranslate({
+        data: { arabic: h.arabic, english: h.english, sourceRef: h.reference },
+      });
       const stripped = t.bulgarian.replace(/(^|\n)\s*(?:\(\d+\)|\[\d+\]|\d+\.)\s*/g, "$1").trim();
       setBulgarian(stripped);
       toast.success(t.cached ? "От кеша" : "Преведено");
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : "Грешка");
-    } finally { setLoading(false); setTranslating(false); }
+    } finally {
+      setLoading(false);
+      setTranslating(false);
+    }
   };
 
   const loadHadithIndex = async () => {
     if (hadithList.length) return;
-    try { setHadithList(await runListHadiths()); } catch { /* ignore */ }
+    try {
+      setHadithList(await runListHadiths());
+    } catch {
+      /* ignore */
+    }
   };
 
-  const loadSunnah = async (collection: SunnahCollection, number: number, requireSahih = true, prependTheme?: string) => {
-    setLoading(true); reset();
+  const loadSunnah = async (
+    collection: SunnahCollection,
+    number: number,
+    requireSahih = true,
+    prependTheme?: string,
+  ) => {
+    setLoading(true);
+    reset();
     try {
       const h = await runFetchSunnah({ data: { collection, number, requireSahih } });
       const c: Content = {
         source_type: "hadith",
         source_ref: `${h.reference}`,
-        arabic: h.arabic, english: h.english,
+        arabic: h.arabic,
+        english: h.english,
       };
       setContent(c);
       setTranslating(true);
-      const t = await runTranslate({ data: { arabic: h.arabic, english: h.english, sourceRef: h.reference } });
+      const t = await runTranslate({
+        data: { arabic: h.arabic, english: h.english, sourceRef: h.reference },
+      });
       const stripped = t.bulgarian.replace(/(^|\n)\s*(?:\(\d+\)|\[\d+\]|\d+\.)\s*/g, "$1").trim();
-      const finalBulgarian = prependTheme ? `${prependTheme} <break time="1.0s" />\n\n${stripped}` : stripped;
+      const finalBulgarian = prependTheme
+        ? `${prependTheme} <break time="1.0s" />\n\n${stripped}`
+        : stripped;
       setBulgarian(finalBulgarian);
       toast.success(`${h.reference} · ${h.grade ?? "Sahih"}`);
       return true;
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : "Грешка");
       return false;
-    } finally { setLoading(false); setTranslating(false); }
+    } finally {
+      setLoading(false);
+      setTranslating(false);
+    }
   };
 
   const loadRandomSahih = async (collection: SunnahCollection) => {
-    setLoading(true); reset();
+    setLoading(true);
+    reset();
     try {
       const h = await runRandomSahih({ data: { collection } });
       setSunnahNum(h.number);
       const c: Content = {
         source_type: "hadith",
         source_ref: `${h.reference}`,
-        arabic: h.arabic, english: h.english,
+        arabic: h.arabic,
+        english: h.english,
       };
       setContent(c);
       setTranslating(true);
-      const t = await runTranslate({ data: { arabic: h.arabic, english: h.english, sourceRef: h.reference } });
+      const t = await runTranslate({
+        data: { arabic: h.arabic, english: h.english, sourceRef: h.reference },
+      });
       const stripped = t.bulgarian.replace(/(^|\n)\s*(?:\(\d+\)|\[\d+\]|\d+\.)\s*/g, "$1").trim();
       setBulgarian(stripped);
       toast.success(`${h.reference} · ${h.grade ?? "Sahih"}`);
@@ -332,7 +435,10 @@ function CreatePage() {
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : "Грешка");
       return false;
-    } finally { setLoading(false); setTranslating(false); }
+    } finally {
+      setLoading(false);
+      setTranslating(false);
+    }
   };
 
   const runViral = async () => {
@@ -342,7 +448,9 @@ function CreatePage() {
       setViral(r.items);
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : "Грешка");
-    } finally { setSuggestingViral(false); }
+    } finally {
+      setSuggestingViral(false);
+    }
   };
 
   const [approvingId, setApprovingId] = useState<number | null>(null);
@@ -353,41 +461,46 @@ function CreatePage() {
       if (item.kind === "ayah") {
         const m = item.ref.match(/(\d+)\s*[:.\s-]\s*(\d+)/);
         if (!m) {
-          toast.error(`Невалидна препратка към Коран: ${item.ref}. Очаква се формат СУРА:АЯТ (напр. 2:255)`);
+          toast.error(
+            `Невалидна препратка към Коран: ${item.ref}. Очаква се формат СУРА:АЯТ (напр. 2:255)`,
+          );
           return;
         }
-        setSurah(+m[1]); setAyah(+m[2]);
+        setSurah(+m[1]);
+        setAyah(+m[2]);
         const success = await loadAyah(+m[1], +m[2]);
         if (success !== false) setTab("ayah");
       } else {
-        const collMatch = item.ref.toLowerCase().match(/(bukhari|muslim|dawud|tirmidhi|nasai|majah|nawawi)/);
+        const collMatch = item.ref
+          .toLowerCase()
+          .match(/(bukhari|muslim|dawud|tirmidhi|nasai|majah|nawawi)/);
         const m = item.ref.match(/(\d+)/);
         const n = m ? +m[1] : 1;
-        
+
         if (collMatch) {
-           let coll = collMatch[1] as string;
-           if (coll === 'dawud') coll = 'abudawud';
-           
-           if (coll === 'nawawi') {
-             setHadithSource("nawawi40");
-             setHadithNum(n);
-             const success = await loadHadith(n);
-             if (success !== false) setTab("hadith");
-           } else {
-             setHadithSource(coll as SunnahCollection);
-             setSunnahNum(n);
-             const success = await loadSunnah(coll as SunnahCollection, n, false);
-             if (success !== false) setTab("hadith");
-           }
+          let coll = collMatch[1] as string;
+          if (coll === "dawud") coll = "abudawud";
+
+          if (coll === "nawawi") {
+            setHadithSource("nawawi40");
+            setHadithNum(n);
+            const success = await loadHadith(n);
+            if (success !== false) setTab("hadith");
+          } else {
+            setHadithSource(coll as SunnahCollection);
+            setSunnahNum(n);
+            const success = await loadSunnah(coll as SunnahCollection, n, false);
+            if (success !== false) setTab("hadith");
+          }
         } else {
-           setHadithSource("bukhari");
-           setSunnahNum(n);
-           const success = await loadSunnah("bukhari", n, false);
-           if (success !== false) setTab("hadith");
+          setHadithSource("bukhari");
+          setSunnahNum(n);
+          const success = await loadSunnah("bukhari", n, false);
+          if (success !== false) setTab("hadith");
         }
       }
-    } catch (e: any) {
-      toast.error(e.message || "Грешка при одобряване");
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : "Грешка при одобряване");
     } finally {
       setApprovingId(null);
     }
@@ -395,33 +508,50 @@ function CreatePage() {
 
   const onSuggest = async () => {
     if (!content) return;
-    setSuggesting(true); setSuggestions([]);
+    setSuggesting(true);
+    setSuggestions([]);
     try {
       const r = await runSuggest({
-        data: { text: `${content.english}\n\nБългарски: ${bulgarian}`, sourceRef: content.source_ref },
+        data: {
+          text: `${content.english}\n\nБългарски: ${bulgarian}`,
+          sourceRef: content.source_ref,
+        },
       });
       setSuggestions(r.suggestions);
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : "Грешка");
-    } finally { setSuggesting(false); }
+    } finally {
+      setSuggesting(false);
+    }
   };
 
   const onGenerateBg = async (idx: number, prompt: string) => {
     setGeneratingIdx(idx);
     try {
       const r = await runGenerate({ data: { prompt } });
-      setBgUrl(`data:${r.mimeType};base64,${r.base64}`); setBgVideoUrl(null); setBgPrompt(prompt); clearRendered();
+      setBgUrl(`data:${r.mimeType};base64,${r.base64}`);
+      setBgVideoUrl(null);
+      setBgPrompt(prompt);
+      clearRendered();
       toast.success("Фонът е готов");
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : "Грешка");
-    } finally { setGeneratingIdx(null); }
+    } finally {
+      setGeneratingIdx(null);
+    }
   };
 
   const onPexelsSearch = async (overrideQuery?: string) => {
     if (!content) return;
     setPexelsLoading(true);
     try {
-      const r = await runPexels({ data: { text: `${content.english}\n${bulgarian}`, query: overrideQuery ?? pexelsQuery, avoid: pexelsAvoid } });
+      const r = await runPexels({
+        data: {
+          text: `${content.english}\n${bulgarian}`,
+          query: overrideQuery ?? pexelsQuery,
+          avoid: pexelsAvoid,
+        },
+      });
       setPexelsPhotos(r.photos);
       setPexelsQuery(r.query);
       setPexelsTheme(r.theme ?? "");
@@ -429,7 +559,9 @@ function CreatePage() {
       if (!r.photos.length) toast.message("Няма резултати — опитай друга тема");
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : "Грешка");
-    } finally { setPexelsLoading(false); }
+    } finally {
+      setPexelsLoading(false);
+    }
   };
 
   const onPexelsVideoSearch = async (overrideQuery?: string) => {
@@ -437,7 +569,14 @@ function CreatePage() {
     const textToSearch = `${content.english}${bulgarian ? `\n${bulgarian}` : ""}`;
     setPexelsVideosLoading(true);
     try {
-      const r = await runPexelsVideos({ data: { text: textToSearch, query: overrideQuery ?? pexelsQuery, avoid: pexelsAvoid, minDuration: minPexelsDuration } });
+      const r = await runPexelsVideos({
+        data: {
+          text: textToSearch,
+          query: overrideQuery ?? pexelsQuery,
+          avoid: pexelsAvoid,
+          minDuration: minPexelsDuration,
+        },
+      });
       setPexelsVideos(r.videos);
       setPexelsQuery(r.query);
       setPexelsTheme(r.theme ?? "");
@@ -445,7 +584,9 @@ function CreatePage() {
       if (!r.videos.length) toast.message("Няма видеа — опитай друга тема");
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : "Грешка");
-    } finally { setPexelsVideosLoading(false); }
+    } finally {
+      setPexelsVideosLoading(false);
+    }
   };
 
   const onAutoPickPexelsVideo = async () => {
@@ -453,7 +594,9 @@ function CreatePage() {
     const textToSearch = `${content.english}${bulgarian ? `\n${bulgarian}` : ""}`;
     setPexelsVideosLoading(true);
     try {
-      const r = await runPexelsVideos({ data: { text: textToSearch, avoid: pexelsAvoid, minDuration: minPexelsDuration } });
+      const r = await runPexelsVideos({
+        data: { text: textToSearch, avoid: pexelsAvoid, minDuration: minPexelsDuration },
+      });
       setPexelsVideos(r.videos);
       setPexelsQuery(r.query);
       setPexelsTheme(r.theme ?? "");
@@ -471,20 +614,26 @@ function CreatePage() {
       }
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : "Грешка");
-    } finally { setPexelsVideosLoading(false); }
+    } finally {
+      setPexelsVideosLoading(false);
+    }
   };
 
   const onRotateTheme = () => {
     const next = pexelsTheme ? [...new Set([...pexelsAvoid, pexelsTheme])].slice(-5) : pexelsAvoid;
     setPexelsAvoid(next);
-    setTimeout(() => { onPexelsVideoSearch(); }, 0);
+    setTimeout(() => {
+      onPexelsVideoSearch();
+    }, 0);
   };
 
   const handleFetchMultiScene = async () => {
     try {
       setMultiSceneLoading(true);
       toast.message("Избирам кинематографични B-Roll сцени за динамичен монтаж...");
-      const r = await runFetchMultiScene({ data: { query: pexelsQuery || content?.source_ref || "islamic nature", text: bulgarian } });
+      const r = await runFetchMultiScene({
+        data: { query: pexelsQuery || content?.source_ref || "islamic nature", text: bulgarian },
+      });
       if (r.clips && r.clips.length > 1) {
         setMultiSceneUrls(r.clips);
         setBgVideoUrl(r.clips[0]);
@@ -494,8 +643,8 @@ function CreatePage() {
       } else {
         toast.message("Не бяха намерени достатъчно клипове, използва се един фон");
       }
-    } catch (e: any) {
-      toast.error(e?.message || "Грешка при избор на B-Roll");
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : "Грешка при избор на B-Roll");
     } finally {
       setMultiSceneLoading(false);
     }
@@ -514,7 +663,9 @@ function CreatePage() {
       toast.success("Гласът е готов — пусни плейъра по-долу.");
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : "Не успях да генерирам глас");
-    } finally { setNarrating(false); }
+    } finally {
+      setNarrating(false);
+    }
   };
 
   useEffect(() => {
@@ -532,7 +683,8 @@ function CreatePage() {
   }, [content?.english]);
 
   const onPickPexels = (photo: { url: string; full: string; photographer: string }) => {
-    setBgUrl(photo.full); setBgVideoUrl(null);
+    setBgUrl(photo.full);
+    setBgVideoUrl(null);
     setBgPrompt(`Pexels stock photo by ${photo.photographer}`);
     clearRendered();
     toast.success("Стоковият фон е избран");
@@ -579,16 +731,22 @@ function CreatePage() {
     try {
       toast.message("Акустичен AI анализ на аудиото за синхронизация...");
       const words = bulgarian.split(/\s+/).filter(Boolean);
-      const existingItems = narrationTimings && narrationTimings.length > 0 ? narrationTimings : words.map((w, idx) => ({ word: w, start: idx * 0.4, end: (idx + 1) * 0.4 }));
+      const existingItems =
+        narrationTimings && narrationTimings.length > 0
+          ? narrationTimings
+          : words.map((w, idx) => ({ word: w, start: idx * 0.4, end: (idx + 1) * 0.4 }));
       const res = await runAlignTimestamps({
         data: {
           audioUrl: audio,
           items: existingItems,
           text: bulgarian,
-        }
+        },
       });
       if (res.alignedItems && res.alignedItems.length > 0) {
-        const verified = verifyAndCorrectSubtitleSync(res.alignedItems, res.intervals?.length ? res.intervals[res.intervals.length - 1].end : 15);
+        const verified = verifyAndCorrectSubtitleSync(
+          res.alignedItems,
+          res.intervals?.length ? res.intervals[res.intervals.length - 1].end : 15,
+        );
         setNarrationTimings(verified.correctedTimings);
         toast.success("Субтитрите са синхронизирани с милисекундна точност!");
       } else {
@@ -637,23 +795,29 @@ function CreatePage() {
           setNarrating(true);
           try {
             toast.message("Генерирам български глас…");
-            const r = await runNarrate({ data: { text: bulgarian, reference: content.source_ref } });
+            const r = await runNarrate({
+              data: { text: bulgarian, reference: content.source_ref },
+            });
             narration = `data:${r.mimeType};base64,${r.base64}`;
             timings = r.wordTimings ?? null;
             setNarrationUrl(narration);
             setNarrationTimings(timings);
           } catch (e: unknown) {
             throw new Error(e instanceof Error ? e.message : "Не успях да генерирам глас");
-          } finally { setNarrating(false); }
+          } finally {
+            setNarrating(false);
+          }
         }
         const audio = customAudioUrl ?? narration ?? content.audioUrl ?? null;
         if (content.source_type === "hadith" && useBgNarration && !audio) {
-          throw new Error("Първо генерирай гласа с „Чуй гласа“, за да не стане нямо или отрязано видео.");
+          throw new Error(
+            "Първо генерирай гласа с „Чуй гласа“, за да не стане нямо или отрязано видео.",
+          );
         } else if (!audio) {
           toast.message("Без аудио — ще се рендира 8s видео.");
         }
         toast.message("Рендирам видео в реално време — изчакай края на аудиото.");
-        
+
         const activeTimings = timings && timings.length > 0 ? timings : undefined;
         const opts = {
           backgroundUrl: bgUrl,
@@ -670,7 +834,12 @@ function CreatePage() {
           requireAudio: Boolean(audio),
           fallbackDuration: 8,
           wordSegments: customAudioUrl || narration ? undefined : content.wordSegments,
-          ayahBounds: pacingMode === "ayah" && content.ayahBounds ? content.ayahBounds : (customAudioUrl || narration ? undefined : content.ayahBounds),
+          ayahBounds:
+            pacingMode === "ayah" && content.ayahBounds
+              ? content.ayahBounds
+              : customAudioUrl || narration
+                ? undefined
+                : content.ayahBounds,
           arabicWordCount: customAudioUrl || narration ? undefined : content.arabicWordCount,
           bulgarianWordTimings: activeTimings,
           quality: videoQuality,
@@ -688,7 +857,9 @@ function CreatePage() {
               title: content.source_ref || "Ислямско видео",
             },
           });
-          toast.success("Видео се рендира във фонов режим на сървъра! Можеш да затвориш Safari и да го свалиш по-късно от Изтегляния.");
+          toast.success(
+            "Видео се рендира във фонов режим на сървъра! Можеш да затвориш Safari и да го свалиш по-късно от Изтегляния.",
+          );
           setRendering(false);
           navigate({ to: "/downloads" });
           return;
@@ -718,7 +889,9 @@ function CreatePage() {
       }, 80);
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : "Грешка при рендиране");
-    } finally { setRendering(false); }
+    } finally {
+      setRendering(false);
+    }
   };
 
   const onOneClickAutoViralStudio = async () => {
@@ -757,21 +930,31 @@ function CreatePage() {
           setBgVideoUrl(activeBgVideoUrl);
           setBgUrl(null);
         } else {
-          const r = await runPexelsVideos({ data: { text: `${content.english}\n${currentBulgarian}`, avoid: pexelsAvoid, minDuration: minPexelsDuration } });
+          const r = await runPexelsVideos({
+            data: {
+              text: `${content.english}\n${currentBulgarian}`,
+              avoid: pexelsAvoid,
+              minDuration: minPexelsDuration,
+            },
+          });
           if (r.videos && r.videos[0]) {
             activeBgVideoUrl = r.videos[0].link;
             setBgVideoUrl(activeBgVideoUrl);
             setBgUrl(r.videos[0].poster || null);
           }
         }
-      } catch {}
+      } catch {
+        // Ignore fallback video fetch failure
+      }
 
       let activeAudioUrl = customAudioUrl ?? narrationUrl ?? content.audioUrl ?? null;
       let activeTimings = narrationTimings;
       if (!activeAudioUrl && currentBulgarian.trim().length > 0) {
         setAutoViralStep("3/4: Генериране на глас и акустично караоке...");
         toast.message("⚡ 1-Click: Синхронизиране на българска навигация...");
-        const r = await runNarrate({ data: { text: currentBulgarian, reference: content.source_ref } });
+        const r = await runNarrate({
+          data: { text: currentBulgarian, reference: content.source_ref },
+        });
         activeAudioUrl = `data:${r.mimeType};base64,${r.base64}`;
         activeTimings = r.wordTimings ?? null;
         setNarrationUrl(activeAudioUrl);
@@ -787,7 +970,8 @@ function CreatePage() {
       setUseBgNarration(true);
       setRenderMode("server");
 
-      const activeTimingsFinal = activeTimings && activeTimings.length > 0 ? activeTimings : undefined;
+      const activeTimingsFinal =
+        activeTimings && activeTimings.length > 0 ? activeTimings : undefined;
       const opts = {
         backgroundUrl: bgUrl,
         backgroundVideoUrl: activeBgVideoUrl,
@@ -813,7 +997,9 @@ function CreatePage() {
           title: content.source_ref || "Ислямско видео",
         },
       });
-      toast.success("🎯 1-Click Автоматизация завърши успешно! Видеото се рендира на сървъра. Прехвърляне към Изтегляния...");
+      toast.success(
+        "🎯 1-Click Автоматизация завърши успешно! Видеото се рендира на сървъра. Прехвърляне към Изтегляния...",
+      );
       navigate({ to: "/downloads" });
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : "Грешка в 1-Click автоматизацията");
@@ -827,12 +1013,13 @@ function CreatePage() {
     if (!renderedUrl) return;
     const filename = sanitizeFilename(`${content?.source_ref ?? "post"}.${renderedExt}`);
     try {
-      let result: Awaited<ReturnType<typeof saveMediaBlob>>;
-      result = renderedBlob
+      const result: Awaited<ReturnType<typeof saveMediaBlob>> = renderedBlob
         ? await saveMediaBlob(renderedBlob, filename, renderedMime)
         : await saveMediaFromUrl(renderedUrl, filename, renderedMime);
-      if (result === "shared") toast.success("Избери 'Save Video' (Запази видео), за да го запазиш в Снимки/Photos");
-      else if (result === "opened") toast.message("Отворено е като файл — избери Share/Сподели → Save to Files.");
+      if (result === "shared")
+        toast.success("Избери 'Save Video' (Запази видео), за да го запазиш в Снимки/Photos");
+      else if (result === "opened")
+        toast.message("Отворено е като файл — избери Share/Сподели → Save to Files.");
       else toast.success("Свалянето започна");
     } catch (e) {
       toast.error(e instanceof Error ? `Сваляне: ${e.message}` : "Грешка при сваляне");
@@ -842,13 +1029,21 @@ function CreatePage() {
   return (
     <div className="mx-auto max-w-5xl px-4 py-8">
       <h1 className="text-4xl">Създай пост</h1>
-      <p className="font-ui text-sm text-muted-foreground">Избери източник, преведи, добави фон и каптион, рендирай.</p>
+      <p className="font-ui text-sm text-muted-foreground">
+        Избери източник, преведи, добави фон и каптион, рендирай.
+      </p>
 
       <Tabs value={tab} onValueChange={(v) => setTab(v as typeof tab)} className="mt-6">
         <TabsList>
-          <TabsTrigger value="ayah"><BookOpen className="size-4 mr-1" /> Аят</TabsTrigger>
-          <TabsTrigger value="hadith" onClick={loadHadithIndex}><ScrollText className="size-4 mr-1" /> Хадис</TabsTrigger>
-          <TabsTrigger value="viral"><Flame className="size-4 mr-1" /> AI вирални</TabsTrigger>
+          <TabsTrigger value="ayah">
+            <BookOpen className="size-4 mr-1" /> Аят
+          </TabsTrigger>
+          <TabsTrigger value="hadith" onClick={loadHadithIndex}>
+            <ScrollText className="size-4 mr-1" /> Хадис
+          </TabsTrigger>
+          <TabsTrigger value="viral">
+            <Flame className="size-4 mr-1" /> AI вирални
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="ayah">
@@ -856,18 +1051,56 @@ function CreatePage() {
             <div className="font-ui flex flex-wrap items-end gap-3">
               <div className="space-y-1.5">
                 <Label htmlFor="surah">Сура</Label>
-                <Input id="surah" type="number" min={1} max={114} placeholder="Напр. 2" value={surah} onChange={(e) => setSurah(e.target.value ? +e.target.value : "")} className="w-24" />
+                <Input
+                  id="surah"
+                  type="number"
+                  min={1}
+                  max={114}
+                  placeholder="Напр. 2"
+                  value={surah}
+                  onChange={(e) => setSurah(e.target.value ? +e.target.value : "")}
+                  className="w-24"
+                />
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="ayah">От Аят</Label>
-                <Input id="ayah" type="number" min={1} placeholder="Напр. 255" value={ayah} onChange={(e) => setAyah(e.target.value ? +e.target.value : "")} className="w-24" />
+                <Input
+                  id="ayah"
+                  type="number"
+                  min={1}
+                  placeholder="Напр. 255"
+                  value={ayah}
+                  onChange={(e) => setAyah(e.target.value ? +e.target.value : "")}
+                  className="w-24"
+                />
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="ayahEnd">До Аят (по избор)</Label>
-                <Input id="ayahEnd" type="number" min={1} placeholder="Напр. 257" value={ayahEnd} onChange={(e) => setAyahEnd(e.target.value ? +e.target.value : "")} className="w-28" />
+                <Input
+                  id="ayahEnd"
+                  type="number"
+                  min={1}
+                  placeholder="Напр. 257"
+                  value={ayahEnd}
+                  onChange={(e) => setAyahEnd(e.target.value ? +e.target.value : "")}
+                  className="w-28"
+                />
               </div>
-              <Button onClick={() => loadAyah(surah as number, ayah as number, ayahEnd ? ayahEnd as number : undefined)} disabled={loading || !surah || !ayah}>
-                {loading ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4 mr-1" />}
+              <Button
+                onClick={() =>
+                  loadAyah(
+                    surah as number,
+                    ayah as number,
+                    ayahEnd ? (ayahEnd as number) : undefined,
+                  )
+                }
+                disabled={loading || !surah || !ayah}
+              >
+                {loading ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : (
+                  <Sparkles className="size-4 mr-1" />
+                )}
                 Извлечи и преведи
               </Button>
             </div>
@@ -876,12 +1109,19 @@ function CreatePage() {
 
         <TabsContent value="hadith">
           <Card className="glass-card p-6 space-y-4 animate-fade-up">
-            <p className="font-ui text-sm text-muted-foreground">Сахих хадиси директно от sunnah.com.</p>
+            <p className="font-ui text-sm text-muted-foreground">
+              Сахих хадиси директно от sunnah.com.
+            </p>
             <div className="font-ui flex flex-wrap items-end gap-3">
               <div className="space-y-1.5">
                 <Label>Колекция</Label>
-                <Select value={hadithSource} onValueChange={(v) => setHadithSource(v as typeof hadithSource)}>
-                  <SelectTrigger className="w-64"><SelectValue /></SelectTrigger>
+                <Select
+                  value={hadithSource}
+                  onValueChange={(v) => setHadithSource(v as typeof hadithSource)}
+                >
+                  <SelectTrigger className="w-64">
+                    <SelectValue />
+                  </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="bukhari">Сахих ал-Бухари (1–7563)</SelectItem>
                     <SelectItem value="muslim">Сахих Муслим (1–3033)</SelectItem>
@@ -896,16 +1136,30 @@ function CreatePage() {
                   <div className="space-y-1.5">
                     <Label>Номер (1–40)</Label>
                     <Select value={String(hadithNum || "")} onValueChange={(v) => setHadithNum(+v)}>
-                      <SelectTrigger className="w-64"><SelectValue placeholder="Избери хадис" /></SelectTrigger>
+                      <SelectTrigger className="w-64">
+                        <SelectValue placeholder="Избери хадис" />
+                      </SelectTrigger>
                       <SelectContent className="max-h-72">
-                        {(hadithList.length ? hadithList : [{ number: 1, reference: "40 Хадиса на ан-Навауи • Хадис № 1" }]).map((h) => (
-                          <SelectItem key={h.number} value={String(h.number)}>{h.reference}</SelectItem>
+                        {(hadithList.length
+                          ? hadithList
+                          : [{ number: 1, reference: "40 Хадиса на ан-Навауи • Хадис № 1" }]
+                        ).map((h) => (
+                          <SelectItem key={h.number} value={String(h.number)}>
+                            {h.reference}
+                          </SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
                   </div>
-                  <Button onClick={() => loadHadith(hadithNum as number)} disabled={loading || !hadithNum}>
-                    {loading ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4 mr-1" />}
+                  <Button
+                    onClick={() => loadHadith(hadithNum as number)}
+                    disabled={loading || !hadithNum}
+                  >
+                    {loading ? (
+                      <Loader2 className="size-4 animate-spin" />
+                    ) : (
+                      <Sparkles className="size-4 mr-1" />
+                    )}
                     Извлечи и преведи
                   </Button>
                 </>
@@ -918,15 +1172,32 @@ function CreatePage() {
                       min={1}
                       placeholder="Напр. 1"
                       value={sunnahNum}
-                      onChange={(e) => setSunnahNum(e.target.value ? Math.max(1, parseInt(e.target.value, 10)) : "")}
+                      onChange={(e) =>
+                        setSunnahNum(
+                          e.target.value ? Math.max(1, parseInt(e.target.value, 10)) : "",
+                        )
+                      }
                       className="w-32"
                     />
                   </div>
-                  <Button onClick={() => loadSunnah(hadithSource as SunnahCollection, sunnahNum as number)} disabled={loading || !sunnahNum}>
-                    {loading ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4 mr-1" />}
+                  <Button
+                    onClick={() =>
+                      loadSunnah(hadithSource as SunnahCollection, sunnahNum as number)
+                    }
+                    disabled={loading || !sunnahNum}
+                  >
+                    {loading ? (
+                      <Loader2 className="size-4 animate-spin" />
+                    ) : (
+                      <Sparkles className="size-4 mr-1" />
+                    )}
                     Извлечи и преведи
                   </Button>
-                  <Button variant="outline" onClick={() => loadRandomSahih(hadithSource as SunnahCollection)} disabled={loading}>
+                  <Button
+                    variant="outline"
+                    onClick={() => loadRandomSahih(hadithSource as SunnahCollection)}
+                    disabled={loading}
+                  >
                     <Wand2 className="size-4 mr-1" /> Случаен сахих
                   </Button>
                 </>
@@ -939,9 +1210,17 @@ function CreatePage() {
           <Card className="glass-card p-6 space-y-3 animate-fade-up">
             <Label className="font-ui">Тема или настроение</Label>
             <div className="flex gap-2">
-              <Input value={theme} onChange={(e) => setTheme(e.target.value)} placeholder="напр. търпение в труден момент" />
+              <Input
+                value={theme}
+                onChange={(e) => setTheme(e.target.value)}
+                placeholder="напр. търпение в труден момент"
+              />
               <Button onClick={runViral} disabled={suggestingViral}>
-                {suggestingViral ? <Loader2 className="size-4 animate-spin" /> : <Flame className="size-4 mr-1" />}
+                {suggestingViral ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : (
+                  <Flame className="size-4 mr-1" />
+                )}
                 AI вирални
               </Button>
             </div>
@@ -949,13 +1228,22 @@ function CreatePage() {
               <div className="grid gap-3 mt-3">
                 {viral.map((v, i) => (
                   <Card key={i} className="p-4 flex items-start gap-3">
-                    <div className="grid place-items-center size-12 rounded-full bg-accent text-accent-foreground font-bold">{v.score}</div>
+                    <div className="grid place-items-center size-12 rounded-full bg-accent text-accent-foreground font-bold">
+                      {v.score}
+                    </div>
                     <div className="flex-1 font-ui">
-                      <div className="flex items-center gap-2"><Badge variant="secondary">{v.kind}</Badge><Badge>{v.ref}</Badge></div>
+                      <div className="flex items-center gap-2">
+                        <Badge variant="secondary">{v.kind}</Badge>
+                        <Badge>{v.ref}</Badge>
+                      </div>
                       <p className="font-semibold mt-1">{v.title_bg}</p>
                       <p className="text-sm text-muted-foreground">{v.reason_bg}</p>
                     </div>
-                    <Button size="sm" onClick={() => approveViral(v, i)} disabled={approvingId === i}>
+                    <Button
+                      size="sm"
+                      onClick={() => approveViral(v, i)}
+                      disabled={approvingId === i}
+                    >
                       {approvingId === i ? <Loader2 className="size-4 animate-spin mr-1" /> : null}
                       Одобри
                     </Button>
@@ -977,7 +1265,10 @@ function CreatePage() {
                   <span>⚡ 1-Click Auto-Viral Studio (Пълна Автоматизация)</span>
                 </div>
                 <p className="text-sm text-muted-foreground max-w-2xl font-ui">
-                  С едно кликване системата автоматично изпълнява всичко за <strong>„{content.source_ref}“</strong>: превежда на български, избира най-подходящи вертикални видео кадри от Pexels без хора, генерира глас, прави милисекундно караоке и стартира рендиране във формат Hormozi!
+                  С едно кликване системата автоматично изпълнява всичко за{" "}
+                  <strong>„{content.source_ref}“</strong>: превежда на български, избира
+                  най-подходящи вертикални видео кадри от Pexels без хора, генерира глас, прави
+                  милисекундно караоке и стартира рендиране във формат Hormozi!
                 </p>
               </div>
               <Button
@@ -1009,271 +1300,415 @@ function CreatePage() {
 
           <div className="mt-6 grid gap-6 md:grid-cols-2">
             <Card className="glass-card p-6 space-y-4 animate-fade-up">
-            <div>
-              <p className="font-ui text-xs uppercase tracking-wider text-muted-foreground">{content.source_ref}</p>
-              <p className="font-arabic text-3xl leading-loose mt-2 text-right" dir="rtl">{content.arabic}</p>
-            </div>
-            <div>
-              <p className="font-ui text-xs uppercase tracking-wider text-muted-foreground">Английски (оригинал)</p>
-              <p className="font-ui text-sm mt-1 text-muted-foreground">{content.english}</p>
-            </div>
-            {content.source_type === "ayah" && content.audioUrl && (
               <div>
-                <p className="font-ui text-xs uppercase tracking-wider text-muted-foreground">Рецитация — Ясер ал-Досари (синхронизирани думи)</p>
-                <audio controls src={customAudioUrl ?? content.audioUrl} className="mt-2 w-full" />
+                <p className="font-ui text-xs uppercase tracking-wider text-muted-foreground">
+                  {content.source_ref}
+                </p>
+                <p className="font-arabic text-3xl leading-loose mt-2 text-right" dir="rtl">
+                  {content.arabic}
+                </p>
               </div>
-            )}
-            <div className="rounded-lg border p-3 space-y-2">
-              <div className="flex items-center justify-between gap-3">
-                <div className="flex items-center gap-2">
-                  <Mic className="size-4 text-primary" />
-                  <Label htmlFor="bg-narr" className="font-ui cursor-pointer">
-                    {content.source_type === "hadith" ? "Български глас (мъжки) при видео" : "Български глас за превода (по избор при видео)"}
-                  </Label>
+              <div>
+                <p className="font-ui text-xs uppercase tracking-wider text-muted-foreground">
+                  Английски (оригинал)
+                </p>
+                <p className="font-ui text-sm mt-1 text-muted-foreground">{content.english}</p>
+              </div>
+              {content.source_type === "ayah" && content.audioUrl && (
+                <div>
+                  <p className="font-ui text-xs uppercase tracking-wider text-muted-foreground">
+                    Рецитация — Ясер ал-Досари (синхронизирани думи)
+                  </p>
+                  <audio
+                    controls
+                    src={customAudioUrl ?? content.audioUrl}
+                    className="mt-2 w-full"
+                  />
                 </div>
-                <Switch id="bg-narr" checked={useBgNarration} onCheckedChange={(v) => { setUseBgNarration(v); setNarrationUrl(null); clearRendered(); }} />
-              </div>
-              <p className="font-ui text-xs text-muted-foreground">
-                Естествен мъжки глас на български (ElevenLabs · George). Натисни „Чуй гласа", за да го генерираш и прослушаш преди рендиране.
-              </p>
-              <div className="flex items-center gap-2">
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="secondary"
-                  disabled={narrating || !bulgarian.trim()}
-                  onClick={async () => {
-                    if (!content) return;
-                    setNarrating(true);
-                    clearRendered();
-                    try {
-                      toast.message("Генерирам български глас…");
-                      const r = await runNarrate({ data: { text: bulgarian, reference: content.source_ref } });
-                      setNarrationUrl(`data:${r.mimeType};base64,${r.base64}`);
-                      setNarrationTimings(r.wordTimings ?? null);
-                      if (!useBgNarration) setUseBgNarration(true);
-                      toast.success("Гласът е готов — пусни плейъра по-долу.");
-                    } catch (e: unknown) {
-                      toast.error(e instanceof Error ? e.message : "Не успях да генерирам глас");
-                    } finally { setNarrating(false); }
-                  }}
-                >
-                  {narrating ? <><Loader2 className="size-3 animate-spin mr-1" /> Генерирам…</> : <><Mic className="size-3 mr-1" /> Чуй гласа</>}
-                </Button>
-              </div>
-              {narrationUrl && !narrating && (
-                <audio controls src={narrationUrl} className="w-full" />
               )}
-            </div>
-
-            <div className="space-y-2">
-              <Label className="font-ui">Собствено аудио (по избор)</Label>
-              <div className="flex gap-2 items-center">
-                <Input ref={fileRef} type="file" accept="audio/*" onChange={onAudioUpload} />
-              </div>
-              {customAudioUrl && content.source_type === "hadith" && (
-                <audio controls src={customAudioUrl} className="w-full" />
-              )}
-            </div>
-          </Card>
-
-          <Card className="glass-card p-6 space-y-4 animate-fade-up">
-            <div className="flex items-center justify-between">
-              <Label className="font-ui" htmlFor="bg">Български превод (можеш да редактираш)</Label>
-              <Button
-                size="sm"
-                variant="outline"
-                disabled={translating || !content}
-                onClick={async () => {
-                  if (!content) return;
-                  setTranslating(true);
-                  try {
-                    const t = await runTranslate({
-                      data: { arabic: content.arabic, english: content.english, sourceRef: content.source_ref, ayahBounds: content.ayahBounds },
-                    });
-                    setBulgarian(t.bulgarian);
-                    if (t.ayahBounds) {
-                      content.ayahBounds = t.ayahBounds;
-                      setContent({ ...content, ayahBounds: t.ayahBounds });
-                    }
-                    toast.success("Преведено на български");
-                  } catch (err: unknown) {
-                    toast.error(err instanceof Error ? err.message : "Грешка при превод");
-                  } finally {
-                    setTranslating(false);
-                  }
-                }}
-              >
-                Преведи отново
-              </Button>
-            </div>
-            {translating ? (
-              <div className="flex items-center gap-2 text-muted-foreground"><Loader2 className="size-4 animate-spin" /> Превеждам…</div>
-            ) : (
-              <Textarea 
-                id="bg" 
-                rows={10} 
-                value={bulgarian} 
-                onChange={(e) => {
-                  setBulgarian(e.target.value);
-                  setNarrationUrl(null);
-                  clearRendered();
-                }} 
-                className="text-base leading-relaxed" 
-              />
-            )}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-3 border-t border-border/40">
-              <div className="space-y-2">
-                <Label className="font-ui text-xs font-semibold uppercase tracking-wider text-muted-foreground">Метод на рендиране</Label>
-                <Select value={renderMode} onValueChange={(v) => { setRenderMode(v as "client" | "server"); clearRendered(); }}>
-                  <SelectTrigger className="font-ui bg-background/60"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="server">🚀 Сървърно рендиране (Препоръчано 1080p, Фонов режим за всички устройства)</SelectItem>
-                    <SelectItem value="client">⚡ Клиентско в браузъра (Чернова / Бърз преглед за PC/Mac)</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label className="font-ui text-xs font-semibold uppercase tracking-wider text-muted-foreground">Позиция на субтитрите</Label>
-                <Select value={captionStyle} onValueChange={(v) => { setCaptionStyle(v as RenderOptions["style"]); clearRendered(); }}>
-                  <SelectTrigger className="font-ui bg-background/60"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="lower-third">📍 Долна трета (TikTok / Reels Safe Area)</SelectItem>
-                    <SelectItem value="centered">🎯 Центриран (В центъра на екрана)</SelectItem>
-                    <SelectItem value="minimal">👁️ Минималистичен (Без караоке)</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label className="font-ui text-xs font-semibold uppercase tracking-wider text-muted-foreground">Вирусен цвят / Тема (Active Karaoke Glow)</Label>
-                <Select value={tiktokTheme} onValueChange={(v) => { setTiktokTheme(v as any); clearRendered(); }}>
-                  <SelectTrigger className="font-ui bg-background/60"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="hormozi">🥇 Hormozi / Злато (#FFD700) — Висок контраст</SelectItem>
-                    <SelectItem value="emerald">💎 Изумруд (#32CD32) — Ислямско зелено + Златен акцент</SelectItem>
-                    <SelectItem value="neon">⚡ Неон (#00FFFF) — Модерен кибер-циан</SelectItem>
-                    <SelectItem value="classic">❄️ Класически бял — Минималистичен стил</SelectItem>
-                    <SelectItem value="fire">🔥 Огнен Оранжев (#FF6600) — Енергичен акцент</SelectItem>
-                    <SelectItem value="box">📦 Box Style (Тъмна подложка за 100% четливост)</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label className="font-ui text-xs font-semibold uppercase tracking-wider text-muted-foreground">Динамика и темп (Pacing Mode)</Label>
-                <Select value={pacingMode} onValueChange={(v) => { setPacingMode(v as any); clearRendered(); }}>
-                  <SelectTrigger className="font-ui bg-background/60"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="punchy">🚀 Ударен темп (2-4 думи на ред — TikTok/Reels)</SelectItem>
-                    <SelectItem value="ayah">📖 Пълен аят / дълга фраза — класическо четене</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label className="font-ui text-xs font-semibold uppercase tracking-wider text-muted-foreground">Позиция (Safe Area Profile)</Label>
-                <Select value={subtitlePosition} onValueChange={(v) => { setSubtitlePosition(v as any); clearRendered(); }}>
-                  <SelectTrigger className="font-ui bg-background/60"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="tiktok">📱 TikTok (Горна над долни икони)</SelectItem>
-                    <SelectItem value="reels">🎬 Instagram Reels (Оптимизирано)</SelectItem>
-                    <SelectItem value="shorts">▶️ YouTube Shorts (Оптимизирано)</SelectItem>
-                    <SelectItem value="center">🎯 Център (В средата на екрана)</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label className="font-ui text-xs font-semibold uppercase tracking-wider text-muted-foreground">Караоке анимация</Label>
-                <Select value={subtitleSlicingMode} onValueChange={(v) => { setSubtitleSlicingMode(v as any); clearRendered(); }}>
-                  <SelectTrigger className="font-ui bg-background/60"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="phrase">⚡ Фразово (2-4 думи с микро-скок на активната)</SelectItem>
-                    <SelectItem value="single">💥 Дума по дума (1 дума на екран - Viral Pop)</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-
-            <div className="pt-3 border-t border-border/40 flex flex-wrap items-center justify-between gap-3">
-              <div className="flex items-center gap-2 flex-wrap">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleAutoAlignSync}
-                  disabled={aligningSync || (!customAudioUrl && !narrationUrl && !content?.audioUrl)}
-                  className="font-ui border-amber-500/30 text-amber-500 hover:bg-amber-500/10 transition-all shadow-sm"
-                >
-                  {aligningSync ? <Loader2 className="size-3.5 animate-spin mr-1.5" /> : <Wand2 className="size-3.5 mr-1.5 text-amber-500" />}
-                  ⚡ Авто-синхронизация на таймингите
-                </Button>
-                {narrationTimings && narrationTimings.length > 0 && (
+              <div className="rounded-lg border p-3 space-y-2">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2">
+                    <Mic className="size-4 text-primary" />
+                    <Label htmlFor="bg-narr" className="font-ui cursor-pointer">
+                      {content.source_type === "hadith"
+                        ? "Български глас (мъжки) при видео"
+                        : "Български глас за превода (по избор при видео)"}
+                    </Label>
+                  </div>
+                  <Switch
+                    id="bg-narr"
+                    checked={useBgNarration}
+                    onCheckedChange={(v) => {
+                      setUseBgNarration(v);
+                      setNarrationUrl(null);
+                      clearRendered();
+                    }}
+                  />
+                </div>
+                <p className="font-ui text-xs text-muted-foreground">
+                  Естествен мъжки глас на български (ElevenLabs · George). Натисни „Чуй гласа", за
+                  да го генерираш и прослушаш преди рендиране.
+                </p>
+                <div className="flex items-center gap-2">
                   <Button
-                    variant="ghost"
+                    type="button"
                     size="sm"
-                    onClick={() => setShowTimingEditor(!showTimingEditor)}
-                    className="font-ui text-xs text-muted-foreground hover:text-foreground"
+                    variant="secondary"
+                    disabled={narrating || !bulgarian.trim()}
+                    onClick={async () => {
+                      if (!content) return;
+                      setNarrating(true);
+                      clearRendered();
+                      try {
+                        toast.message("Генерирам български глас…");
+                        const r = await runNarrate({
+                          data: { text: bulgarian, reference: content.source_ref },
+                        });
+                        setNarrationUrl(`data:${r.mimeType};base64,${r.base64}`);
+                        setNarrationTimings(r.wordTimings ?? null);
+                        if (!useBgNarration) setUseBgNarration(true);
+                        toast.success("Гласът е готов — пусни плейъра по-долу.");
+                      } catch (e: unknown) {
+                        toast.error(e instanceof Error ? e.message : "Не успях да генерирам глас");
+                      } finally {
+                        setNarrating(false);
+                      }
+                    }}
                   >
-                    <ScrollText className="size-3.5 mr-1.5" />
-                    {showTimingEditor ? "Скрий редактора на думи" : `📝 Редактор на тайминги (${narrationTimings.length} думи)`}
+                    {narrating ? (
+                      <>
+                        <Loader2 className="size-3 animate-spin mr-1" /> Генерирам…
+                      </>
+                    ) : (
+                      <>
+                        <Mic className="size-3 mr-1" /> Чуй гласа
+                      </>
+                    )}
                   </Button>
+                </div>
+                {narrationUrl && !narrating && (
+                  <audio controls src={narrationUrl} className="w-full" />
                 )}
               </div>
-              <div className="flex items-center gap-2 text-xs text-muted-foreground font-ui">
-                <Badge variant="outline" className="font-mono bg-primary/5 text-primary border-primary/20">
-                  1080p • 30 FPS • Pro Karaoke
-                </Badge>
-                <span>Active Word Glow + Pro Outlines</span>
-              </div>
-            </div>
 
-            {showTimingEditor && narrationTimings && narrationTimings.length > 0 && (
-              <div className="mt-3 p-3 rounded-lg bg-background/80 border border-border/50 max-h-56 overflow-y-auto space-y-1.5 font-mono text-xs animate-fade-in">
-                <div className="flex items-center justify-between text-muted-foreground pb-1 border-b border-border/40 font-ui text-[11px]">
-                  <span>Дума</span>
-                  <span>Начало (s) → Край (s)</span>
+              <div className="space-y-2">
+                <Label className="font-ui">Собствено аудио (по избор)</Label>
+                <div className="flex gap-2 items-center">
+                  <Input ref={fileRef} type="file" accept="audio/*" onChange={onAudioUpload} />
                 </div>
-                {narrationTimings.map((t, i) => (
-                  <div key={i} className="flex items-center justify-between gap-2 py-0.5 hover:bg-muted/30 px-1 rounded transition-colors">
-                    <input
-                      type="text"
-                      value={t.word || ""}
-                      onChange={(e) => {
-                        const next = [...narrationTimings];
-                        next[i] = { ...next[i], word: e.target.value };
-                        setNarrationTimings(next);
-                      }}
-                      className="bg-transparent border-none font-medium text-foreground focus:outline-none focus:ring-1 focus:ring-primary rounded px-1 w-32"
-                    />
-                    <div className="flex items-center gap-1.5">
-                      <input
-                        type="number"
-                        step="0.05"
-                        value={t.start}
-                        onChange={(e) => {
-                          const next = [...narrationTimings];
-                          next[i] = { ...next[i], start: parseFloat(e.target.value) || 0 };
-                          setNarrationTimings(next);
-                        }}
-                        className="bg-muted/40 text-right w-16 px-1 rounded border border-border/30 focus:outline-none focus:border-primary"
-                      />
-                      <span className="text-muted-foreground">→</span>
-                      <input
-                        type="number"
-                        step="0.05"
-                        value={t.end}
-                        onChange={(e) => {
-                          const next = [...narrationTimings];
-                          next[i] = { ...next[i], end: parseFloat(e.target.value) || 0 };
-                          setNarrationTimings(next);
-                        }}
-                        className="bg-muted/40 text-right w-16 px-1 rounded border border-border/30 focus:outline-none focus:border-primary"
-                      />
-                    </div>
-                  </div>
-                ))}
+                {customAudioUrl && content.source_type === "hadith" && (
+                  <audio controls src={customAudioUrl} className="w-full" />
+                )}
               </div>
-            )}
-          </Card>
-        </div>
-      </>
+            </Card>
+
+            <Card className="glass-card p-6 space-y-4 animate-fade-up">
+              <div className="flex items-center justify-between">
+                <Label className="font-ui" htmlFor="bg">
+                  Български превод (можеш да редактираш)
+                </Label>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={translating || !content}
+                  onClick={async () => {
+                    if (!content) return;
+                    setTranslating(true);
+                    try {
+                      const t = await runTranslate({
+                        data: {
+                          arabic: content.arabic,
+                          english: content.english,
+                          sourceRef: content.source_ref,
+                          ayahBounds: content.ayahBounds,
+                        },
+                      });
+                      setBulgarian(t.bulgarian);
+                      if (t.ayahBounds) {
+                        content.ayahBounds = t.ayahBounds;
+                        setContent({ ...content, ayahBounds: t.ayahBounds });
+                      }
+                      toast.success("Преведено на български");
+                    } catch (err: unknown) {
+                      toast.error(err instanceof Error ? err.message : "Грешка при превод");
+                    } finally {
+                      setTranslating(false);
+                    }
+                  }}
+                >
+                  Преведи отново
+                </Button>
+              </div>
+              {translating ? (
+                <div className="flex items-center gap-2 text-muted-foreground">
+                  <Loader2 className="size-4 animate-spin" /> Превеждам…
+                </div>
+              ) : (
+                <Textarea
+                  id="bg"
+                  rows={10}
+                  value={bulgarian}
+                  onChange={(e) => {
+                    setBulgarian(e.target.value);
+                    setNarrationUrl(null);
+                    clearRendered();
+                  }}
+                  className="text-base leading-relaxed"
+                />
+              )}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-3 border-t border-border/40">
+                <div className="space-y-2">
+                  <Label className="font-ui text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    Метод на рендиране
+                  </Label>
+                  <Select
+                    value={renderMode}
+                    onValueChange={(v) => {
+                      setRenderMode(v as "client" | "server");
+                      clearRendered();
+                    }}
+                  >
+                    <SelectTrigger className="font-ui bg-background/60">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="server">
+                        🚀 Сървърно рендиране (Препоръчано 1080p, Фонов режим за всички устройства)
+                      </SelectItem>
+                      <SelectItem value="client">
+                        ⚡ Клиентско в браузъра (Чернова / Бърз преглед за PC/Mac)
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label className="font-ui text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    Позиция на субтитрите
+                  </Label>
+                  <Select
+                    value={captionStyle}
+                    onValueChange={(v) => {
+                      setCaptionStyle(v as RenderOptions["style"]);
+                      clearRendered();
+                    }}
+                  >
+                    <SelectTrigger className="font-ui bg-background/60">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="lower-third">
+                        📍 Долна трета (TikTok / Reels Safe Area)
+                      </SelectItem>
+                      <SelectItem value="centered">🎯 Центриран (В центъра на екрана)</SelectItem>
+                      <SelectItem value="minimal">👁️ Минималистичен (Без караоке)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label className="font-ui text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    Вирусен цвят / Тема (Active Karaoke Glow)
+                  </Label>
+                  <Select
+                    value={tiktokTheme}
+                    onValueChange={(v) => {
+                      setTiktokTheme(
+                        v as "hormozi" | "gold" | "emerald" | "neon" | "classic" | "fire" | "box",
+                      );
+                      clearRendered();
+                    }}
+                  >
+                    <SelectTrigger className="font-ui bg-background/60">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="hormozi">
+                        🥇 Hormozi / Злато (#FFD700) — Висок контраст
+                      </SelectItem>
+                      <SelectItem value="emerald">
+                        💎 Изумруд (#32CD32) — Ислямско зелено + Златен акцент
+                      </SelectItem>
+                      <SelectItem value="neon">⚡ Неон (#00FFFF) — Модерен кибер-циан</SelectItem>
+                      <SelectItem value="classic">
+                        ❄️ Класически бял — Минималистичен стил
+                      </SelectItem>
+                      <SelectItem value="fire">
+                        🔥 Огнен Оранжев (#FF6600) — Енергичен акцент
+                      </SelectItem>
+                      <SelectItem value="box">
+                        📦 Box Style (Тъмна подложка за 100% четливост)
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label className="font-ui text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    Динамика и темп (Pacing Mode)
+                  </Label>
+                  <Select
+                    value={pacingMode}
+                    onValueChange={(v) => {
+                      setPacingMode(v as "punchy" | "ayah");
+                      clearRendered();
+                    }}
+                  >
+                    <SelectTrigger className="font-ui bg-background/60">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="punchy">
+                        🚀 Ударен темп (2-4 думи на ред — TikTok/Reels)
+                      </SelectItem>
+                      <SelectItem value="ayah">
+                        📖 Пълен аят / дълга фраза — класическо четене
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label className="font-ui text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    Позиция (Safe Area Profile)
+                  </Label>
+                  <Select
+                    value={subtitlePosition}
+                    onValueChange={(v) => {
+                      setSubtitlePosition(v as "tiktok" | "reels" | "shorts" | "center");
+                      clearRendered();
+                    }}
+                  >
+                    <SelectTrigger className="font-ui bg-background/60">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="tiktok">📱 TikTok (Горна над долни икони)</SelectItem>
+                      <SelectItem value="reels">🎬 Instagram Reels (Оптимизирано)</SelectItem>
+                      <SelectItem value="shorts">▶️ YouTube Shorts (Оптимизирано)</SelectItem>
+                      <SelectItem value="center">🎯 Център (В средата на екрана)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label className="font-ui text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    Караоке анимация
+                  </Label>
+                  <Select
+                    value={subtitleSlicingMode}
+                    onValueChange={(v) => {
+                      setSubtitleSlicingMode(v as "phrase" | "single");
+                      clearRendered();
+                    }}
+                  >
+                    <SelectTrigger className="font-ui bg-background/60">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="phrase">
+                        ⚡ Фразово (2-4 думи с микро-скок на активната)
+                      </SelectItem>
+                      <SelectItem value="single">
+                        💥 Дума по дума (1 дума на екран - Viral Pop)
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <div className="pt-3 border-t border-border/40 flex flex-wrap items-center justify-between gap-3">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleAutoAlignSync}
+                    disabled={
+                      aligningSync || (!customAudioUrl && !narrationUrl && !content?.audioUrl)
+                    }
+                    className="font-ui border-amber-500/30 text-amber-500 hover:bg-amber-500/10 transition-all shadow-sm"
+                  >
+                    {aligningSync ? (
+                      <Loader2 className="size-3.5 animate-spin mr-1.5" />
+                    ) : (
+                      <Wand2 className="size-3.5 mr-1.5 text-amber-500" />
+                    )}
+                    ⚡ Авто-синхронизация на таймингите
+                  </Button>
+                  {narrationTimings && narrationTimings.length > 0 && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setShowTimingEditor(!showTimingEditor)}
+                      className="font-ui text-xs text-muted-foreground hover:text-foreground"
+                    >
+                      <ScrollText className="size-3.5 mr-1.5" />
+                      {showTimingEditor
+                        ? "Скрий редактора на думи"
+                        : `📝 Редактор на тайминги (${narrationTimings.length} думи)`}
+                    </Button>
+                  )}
+                </div>
+                <div className="flex items-center gap-2 text-xs text-muted-foreground font-ui">
+                  <Badge
+                    variant="outline"
+                    className="font-mono bg-primary/5 text-primary border-primary/20"
+                  >
+                    1080p • 30 FPS • Pro Karaoke
+                  </Badge>
+                  <span>Active Word Glow + Pro Outlines</span>
+                </div>
+              </div>
+
+              {showTimingEditor && narrationTimings && narrationTimings.length > 0 && (
+                <div className="mt-3 p-3 rounded-lg bg-background/80 border border-border/50 max-h-56 overflow-y-auto space-y-1.5 font-mono text-xs animate-fade-in">
+                  <div className="flex items-center justify-between text-muted-foreground pb-1 border-b border-border/40 font-ui text-[11px]">
+                    <span>Дума</span>
+                    <span>Начало (s) → Край (s)</span>
+                  </div>
+                  {narrationTimings.map((t, i) => (
+                    <div
+                      key={i}
+                      className="flex items-center justify-between gap-2 py-0.5 hover:bg-muted/30 px-1 rounded transition-colors"
+                    >
+                      <input
+                        type="text"
+                        value={t.word || ""}
+                        onChange={(e) => {
+                          const next = [...narrationTimings];
+                          next[i] = { ...next[i], word: e.target.value };
+                          setNarrationTimings(next);
+                        }}
+                        className="bg-transparent border-none font-medium text-foreground focus:outline-none focus:ring-1 focus:ring-primary rounded px-1 w-32"
+                      />
+                      <div className="flex items-center gap-1.5">
+                        <input
+                          type="number"
+                          step="0.05"
+                          value={t.start}
+                          onChange={(e) => {
+                            const next = [...narrationTimings];
+                            next[i] = { ...next[i], start: parseFloat(e.target.value) || 0 };
+                            setNarrationTimings(next);
+                          }}
+                          className="bg-muted/40 text-right w-16 px-1 rounded border border-border/30 focus:outline-none focus:border-primary"
+                        />
+                        <span className="text-muted-foreground">→</span>
+                        <input
+                          type="number"
+                          step="0.05"
+                          value={t.end}
+                          onChange={(e) => {
+                            const next = [...narrationTimings];
+                            next[i] = { ...next[i], end: parseFloat(e.target.value) || 0 };
+                            setNarrationTimings(next);
+                          }}
+                          className="bg-muted/40 text-right w-16 px-1 rounded border border-border/30 focus:outline-none focus:border-primary"
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </Card>
+          </div>
+        </>
       )}
 
       {content && (
@@ -1281,7 +1716,10 @@ function CreatePage() {
           <div className="flex items-center justify-between gap-3 flex-wrap">
             <div>
               <h2 className="text-2xl">Стокови видеа от Pexels (1080p / 30 FPS)</h2>
-              <p className="font-ui text-sm text-muted-foreground">AI чете текста и подбира визуално подходящи вертикални видео кадри. Без хора, животни или религиозни символи.</p>
+              <p className="font-ui text-sm text-muted-foreground">
+                AI чете текста и подбира визуално подходящи вертикални видео кадри. Без хора,
+                животни или религиозни символи.
+              </p>
             </div>
             <div className="flex gap-2 items-center flex-wrap">
               <Input
@@ -1290,8 +1728,13 @@ function CreatePage() {
                 placeholder="напр. mountain sunset"
                 className="w-48 font-ui"
               />
-              <Select value={String(minPexelsDuration)} onValueChange={(v) => setMinPexelsDuration(Number(v))}>
-                <SelectTrigger className="w-[140px] font-ui"><SelectValue /></SelectTrigger>
+              <Select
+                value={String(minPexelsDuration)}
+                onValueChange={(v) => setMinPexelsDuration(Number(v))}
+              >
+                <SelectTrigger className="w-[140px] font-ui">
+                  <SelectValue />
+                </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="15">Мин. 15 сек.</SelectItem>
                   <SelectItem value="30">Мин. 30 сек.</SelectItem>
@@ -1299,12 +1742,24 @@ function CreatePage() {
                   <SelectItem value="60">Мин. 60 сек.</SelectItem>
                 </SelectContent>
               </Select>
-              <Button variant="secondary" onClick={() => onPexelsVideoSearch()} disabled={pexelsVideosLoading}>
-                {pexelsVideosLoading ? <Loader2 className="size-4 animate-spin mr-1" /> : <Film className="size-4 mr-1" />}
+              <Button
+                variant="secondary"
+                onClick={() => onPexelsVideoSearch()}
+                disabled={pexelsVideosLoading}
+              >
+                {pexelsVideosLoading ? (
+                  <Loader2 className="size-4 animate-spin mr-1" />
+                ) : (
+                  <Film className="size-4 mr-1" />
+                )}
                 {pexelsVideos.length ? "Видеа отново" : "Търси видеа"}
               </Button>
               <Button onClick={onAutoPickPexelsVideo} disabled={pexelsVideosLoading}>
-                {pexelsVideosLoading ? <Loader2 className="size-4 animate-spin mr-1" /> : <Sparkles className="size-4 mr-1" />}
+                {pexelsVideosLoading ? (
+                  <Loader2 className="size-4 animate-spin mr-1" />
+                ) : (
+                  <Sparkles className="size-4 mr-1" />
+                )}
                 Авто-избор
               </Button>
               <Button
@@ -1313,7 +1768,11 @@ function CreatePage() {
                 onClick={handleFetchMultiScene}
                 disabled={multiSceneLoading || pexelsVideosLoading}
               >
-                {multiSceneLoading ? <Loader2 className="size-4 animate-spin mr-1" /> : <Film className="size-4 mr-1" />}
+                {multiSceneLoading ? (
+                  <Loader2 className="size-4 animate-spin mr-1" />
+                ) : (
+                  <Film className="size-4 mr-1" />
+                )}
                 🎬 3 Сменящи се B-Roll сцени
               </Button>
             </div>
@@ -1323,10 +1782,22 @@ function CreatePage() {
             <div className="flex items-center gap-2 flex-wrap text-xs font-ui">
               {pexelsTheme && <Badge variant="secondary">Тема: {pexelsTheme}</Badge>}
               {pexelsTried.map((q) => (
-                <Badge key={q} variant={q === pexelsQuery ? "default" : "outline"} className="font-mono">{q}</Badge>
+                <Badge
+                  key={q}
+                  variant={q === pexelsQuery ? "default" : "outline"}
+                  className="font-mono"
+                >
+                  {q}
+                </Badge>
               ))}
               {pexelsTheme && (
-                <Button size="sm" variant="ghost" onClick={onRotateTheme} disabled={pexelsVideosLoading} className="h-6">
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={onRotateTheme}
+                  disabled={pexelsVideosLoading}
+                  className="h-6"
+                >
                   Друга тема
                 </Button>
               )}
@@ -1344,9 +1815,23 @@ function CreatePage() {
                     onClick={() => onPickPexelsVideo(v)}
                     className={`relative aspect-[9/16] overflow-hidden rounded-md border transition ${isActive ? "ring-2 ring-primary border-primary" : "hover:border-primary/60"}`}
                   >
-                    {v.poster ? <img src={v.poster} alt="" className="size-full object-cover" loading="lazy" /> : <div className="size-full bg-muted" />}
-                    <span className="absolute top-1 left-1 bg-black/70 text-white text-[10px] px-1.5 py-0.5 rounded flex items-center gap-1"><Film className="size-3" />{v.duration}s</span>
-                    <span className="absolute bottom-0 inset-x-0 bg-black/60 text-white text-[10px] px-1 py-0.5 truncate text-left">{v.photographer}</span>
+                    {v.poster ? (
+                      <img
+                        src={v.poster}
+                        alt=""
+                        className="size-full object-cover"
+                        loading="lazy"
+                      />
+                    ) : (
+                      <div className="size-full bg-muted" />
+                    )}
+                    <span className="absolute top-1 left-1 bg-black/70 text-white text-[10px] px-1.5 py-0.5 rounded flex items-center gap-1">
+                      <Film className="size-3" />
+                      {v.duration}s
+                    </span>
+                    <span className="absolute bottom-0 inset-x-0 bg-black/60 text-white text-[10px] px-1 py-0.5 truncate text-left">
+                      {v.photographer}
+                    </span>
                   </button>
                 );
               })}
@@ -1360,11 +1845,52 @@ function CreatePage() {
           <div className="flex items-center justify-between gap-3 flex-wrap">
             <div>
               <h2 className="text-2xl">Преглед и рендиране</h2>
-              <p className="font-ui text-sm text-muted-foreground">TikTok / Reels формат 1080×1920 (30 FPS) — видео със синхронизиран караоке превод.</p>
+              <p className="font-ui text-sm text-muted-foreground">
+                TikTok / Reels формат 1080×1920 (30 FPS) — видео със синхронизиран караоке превод.
+              </p>
             </div>
-            <div className="flex gap-2 flex-wrap">
+            <div className="flex gap-2 flex-wrap items-center">
+              {/* Safe Zone Overlay Toggle & Platform Switcher */}
+              <Button
+                variant={showSafeZones ? "default" : "outline"}
+                size="sm"
+                onClick={() => setShowSafeZones(!showSafeZones)}
+                className={
+                  showSafeZones
+                    ? "bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs cursor-pointer"
+                    : "border-border/60 text-muted-foreground hover:text-foreground cursor-pointer"
+                }
+                title="Превключи Safe Zone водачи (TikTok / Reels / Shorts)"
+              >
+                <Shield className="size-3.5 mr-1.5" />
+                {showSafeZones ? "Скрий Safe Zone" : "Safe Zone водачи"}
+              </Button>
+
+              {showSafeZones && (
+                <div className="flex items-center gap-1 bg-muted/60 p-0.5 rounded-lg border border-border/40 text-xs">
+                  {(["tiktok", "reels", "shorts"] as const).map((p) => (
+                    <button
+                      key={p}
+                      type="button"
+                      onClick={() => setSubtitlePosition(p)}
+                      className={`px-2 py-1 rounded-md text-xs font-medium transition-all cursor-pointer ${
+                        subtitlePosition === p
+                          ? "bg-primary text-primary-foreground shadow-xs font-bold"
+                          : "text-muted-foreground hover:text-foreground hover:bg-background/40"
+                      }`}
+                    >
+                      {p === "tiktok" ? "TikTok" : p === "reels" ? "Reels" : "Shorts"}
+                    </button>
+                  ))}
+                </div>
+              )}
+
               <Button variant="secondary" onClick={onRender} disabled={rendering}>
-                {rendering ? <Loader2 className="size-4 animate-spin mr-1" /> : <Film className="size-4 mr-1" />}
+                {rendering ? (
+                  <Loader2 className="size-4 animate-spin mr-1" />
+                ) : (
+                  <Film className="size-4 mr-1" />
+                )}
                 {renderedUrl ? "Рендирай отново" : "Рендирай видео"}
               </Button>
               {renderedUrl ? (
@@ -1409,7 +1935,11 @@ function CreatePage() {
                     disabled={generatingThumb}
                     className="border-amber-500/40 text-amber-400 hover:bg-amber-500/10 cursor-pointer"
                   >
-                    {generatingThumb ? <Loader2 className="size-4 mr-1 animate-spin" /> : <ImageIcon className="size-4 mr-1" />}
+                    {generatingThumb ? (
+                      <Loader2 className="size-4 mr-1 animate-spin" />
+                    ) : (
+                      <ImageIcon className="size-4 mr-1" />
+                    )}
                     Корица
                   </Button>
                 </>
@@ -1417,149 +1947,243 @@ function CreatePage() {
             </div>
           </div>
           {(renderedUrl || bgVideoUrl || bgUrl) && (
-            <div ref={previewRef} className="grid gap-4 md:grid-cols-[360px_1fr] items-start scroll-mt-24">
-              <div 
-                id="video-preview-container"
-                className="relative bg-black rounded-lg border group [&:fullscreen]:flex [&:fullscreen]:items-center [&:fullscreen]:justify-center [&:fullscreen]:border-none"
-              >
-                <style>{`
-                  #video-preview-container:fullscreen .preview-inner {
-                    height: 100vh !important;
-                    width: calc(100vh * 9 / 16) !important;
-                    max-width: 100vw !important;
-                  }
-                `}</style>
-                <div className="preview-inner relative w-full aspect-[9/16] overflow-hidden">
-                {/* Fullscreen Button */}
-                <button
-                  type="button"
-                  onClick={() => {
-                    const el = document.getElementById("video-preview-container");
-                    if (el) {
-                      if (document.fullscreenElement) document.exitFullscreen();
-                      else el.requestFullscreen();
-                    }
-                  }}
-                  className="absolute top-2 right-2 z-50 p-2 bg-black/50 hover:bg-black/80 rounded-full text-white opacity-0 group-hover:opacity-100 transition-opacity backdrop-blur-sm"
-                  title="Цял екран"
+            <div
+              ref={previewRef}
+              className="grid gap-4 md:grid-cols-[360px_1fr] items-start scroll-mt-24"
+            >
+              <div className="flex flex-col">
+                <div
+                  id="video-preview-container"
+                  className="relative bg-black rounded-lg border group [&:fullscreen]:flex [&:fullscreen]:items-center [&:fullscreen]:justify-center [&:fullscreen]:border-none"
                 >
-                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
-                </button>
-                
-                {renderedUrl && renderedKind === "video" ? (
-                  <video
-                    key={renderedUrl}
-                    src={renderedUrl}
-                    controls
-                    playsInline
-                    preload="metadata"
-                    className="size-full object-contain"
-                  />
-                ) : renderedUrl ? (
-                  <img key={renderedUrl} src={renderedUrl} alt="Готова снимка" className="size-full object-contain" />
-                ) : (
-                  <>
-                    {(() => {
-                      if (multiSceneUrls && multiSceneUrls.length > 1) {
-                        const activeIdx = Math.floor(previewTime / 3) % multiSceneUrls.length;
-                        return multiSceneUrls.map((url, idx) => (
-                          <video
-                            key={url}
-                            id={`bg-preview-video-${idx}`}
-                            className={`bg-preview-video absolute inset-0 size-full object-cover transition-opacity duration-500 ${activeIdx === idx ? "opacity-100 z-10" : "opacity-0 z-0"}`}
-                            src={url}
-                            controls={false}
-                            playsInline
-                            loop
-                            autoPlay
-                            muted
-                          />
-                        ));
-                      } else if (bgVideoUrl) {
-                        return (
-                          <video
-                            key={bgVideoUrl}
-                            id="bg-preview-video"
-                            className="bg-preview-video absolute inset-0 size-full object-cover z-10"
-                            src={bgVideoUrl}
-                            controls={false}
-                            playsInline
-                            loop
-                            autoPlay
-                            muted
-                          />
-                        );
-                      } else if (bgUrl) {
-                        return (
-                          <img src={bgUrl} alt="Избран фон" className="absolute inset-0 size-full object-cover z-10" />
-                        );
-                      }
-                      return null;
-                    })()}
-                    
-                    {/* Live Preview Overlay */}
-                    <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none p-4 z-20">
-                      {/* Dark overlay for readability */}
-                      <div className="absolute inset-0 bg-black/20" />
-                      
-                      {/* Reference Text Overlay (Surah/Ayah) */}
-                      {content?.source_ref && (
-                        <div className="absolute top-[15%] w-full text-center px-4">
-                          <p className="text-white font-bold" style={{ fontSize: "16px", textShadow: "1px 1px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 0px 4px 6px rgba(0,0,0,0.8)" }}>
-                            {content.source_ref}
-                          </p>
-                        </div>
-                      )}
-                      
-                      {/* Subtitle text */}
-                      <div className="relative z-10 text-center">
-                        <p className="text-white font-bold" style={{ fontSize: "24px", textShadow: "0px 2px 10px rgba(0,0,0,0.8)" }}>
-                          {(() => {
-                            const activeTimings = narrationTimings || (content?.wordSegments && bulgarian ? [{ start: 0, end: 10, word: bulgarian.substring(0, 50) + "..." }] : null);
-                            if (activeTimings && activeTimings.length > 0) {
-                              const currentWord = activeTimings.find(t => previewTime >= t.start && previewTime <= t.end);
-                              if (currentWord && currentWord.word) {
-                                const titleWordCount = bulgarian ? bulgarian.split("\n\n")[0].split(/\s+/).filter(Boolean).length : 0;
-                                const currentWordIndex = activeTimings.indexOf(currentWord);
-                                const isTitle = currentWordIndex !== -1 && currentWordIndex < titleWordCount;
-                                const wordColor = isTitle ? "#FFFFFF" : "#FFB700";
-                                return <span style={{ color: wordColor }}>{currentWord.word}</span>;
-                              }
-                              // If audio has started but we are in a gap, show nothing
-                              if (narrationTimings && previewTime > 0) {
-                                return "";
-                              }
-                              // Fallback phrase if not exactly on a word
-                              return bulgarian ? bulgarian.substring(0, 40) + "..." : "";
-                            }
-                            return bulgarian ? bulgarian.substring(0, 40) + "..." : "";
-                          })()}
-                        </p>
-                      </div>
-                    </div>
+                  <style>{`
+                    #video-preview-container:fullscreen .preview-inner {
+                      height: 100vh !important;
+                      width: calc(100vh * 9 / 16) !important;
+                      max-width: 100vw !important;
+                    }
+                  `}</style>
+                  <div className="preview-inner @container relative w-full aspect-[9/16] overflow-hidden [container-type:inline-size]">
+                    {/* Fullscreen Button */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const el = document.getElementById("video-preview-container");
+                        if (el) {
+                          if (document.fullscreenElement) document.exitFullscreen();
+                          else el.requestFullscreen();
+                        }
+                      }}
+                      className="absolute top-2 right-2 z-50 p-2 bg-black/50 hover:bg-black/80 rounded-full text-white opacity-0 group-hover:opacity-100 transition-opacity backdrop-blur-sm"
+                      title="Цял екран"
+                    >
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        width="16"
+                        height="16"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
+                        <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3" />
+                      </svg>
+                    </button>
 
-                    {/* Audio Player that drives the preview */}
-                    {(customAudioUrl || narrationUrl || content?.audioUrl) && (
-                      <div className="absolute bottom-4 left-4 right-4 z-20 pointer-events-auto bg-black/50 backdrop-blur-md rounded-xl p-2 flex items-center justify-center border border-white/10">
-                        <audio
-                          ref={audioPreviewRef}
-                          src={customAudioUrl || narrationUrl || content?.audioUrl || undefined}
-                          controls
-                          controlsList="nodownload noplaybackrate"
-                          onTimeUpdate={(e) => setPreviewTime(e.currentTarget.currentTime)}
-                          onPlay={() => {
-                            document.querySelectorAll<HTMLVideoElement>(".bg-preview-video").forEach(v => v.play().catch(() => {}));
-                          }}
-                          onPause={() => {
-                            document.querySelectorAll<HTMLVideoElement>(".bg-preview-video").forEach(v => v.pause());
-                          }}
-                          className="w-full h-8 [&::-webkit-media-controls-panel]:bg-transparent [&::-webkit-media-controls-panel]:text-white"
-                        />
-                      </div>
+                    {renderedUrl && renderedKind === "video" ? (
+                      <video
+                        key={renderedUrl}
+                        src={renderedUrl}
+                        controls
+                        playsInline
+                        preload="metadata"
+                        className="size-full object-contain"
+                      />
+                    ) : renderedUrl ? (
+                      <img
+                        key={renderedUrl}
+                        src={renderedUrl}
+                        alt="Готова снимка"
+                        className="size-full object-contain"
+                      />
+                    ) : (
+                      <>
+                        {(() => {
+                          if (multiSceneUrls && multiSceneUrls.length > 1) {
+                            const activeIdx = Math.floor(previewTime / 3) % multiSceneUrls.length;
+                            return multiSceneUrls.map((url, idx) => (
+                              <video
+                                key={url}
+                                id={`bg-preview-video-${idx}`}
+                                className={`bg-preview-video absolute inset-0 size-full object-cover transition-opacity duration-500 ${activeIdx === idx ? "opacity-100 z-10" : "opacity-0 z-0"}`}
+                                src={url}
+                                controls={false}
+                                playsInline
+                                loop
+                                autoPlay
+                                muted
+                              />
+                            ));
+                          } else if (bgVideoUrl) {
+                            return (
+                              <video
+                                key={bgVideoUrl}
+                                id="bg-preview-video"
+                                className="bg-preview-video absolute inset-0 size-full object-cover z-10"
+                                src={bgVideoUrl}
+                                controls={false}
+                                playsInline
+                                loop
+                                autoPlay
+                                muted
+                              />
+                            );
+                          } else if (bgUrl) {
+                            return (
+                              <img
+                                src={bgUrl}
+                                alt="Избран фон"
+                                className="absolute inset-0 size-full object-cover z-10"
+                              />
+                            );
+                          }
+                          return null;
+                        })()}
+
+                        {/* Safe Zone Visual Overlay Guide */}
+                        <SafeZoneOverlayGuide profile={subtitlePosition} visible={showSafeZones} />
+
+                        {/* Live Preview Overlay */}
+                        <div className="absolute inset-0 pointer-events-none z-20">
+                          {/* Dark overlay for readability */}
+                          <div className="absolute inset-0 bg-black/20" />
+
+                          {/* Reference Text Overlay (Surah/Ayah) positioned at SAFE_TOP (15.6%) */}
+                          {content?.source_ref && (
+                            <div className="absolute top-[15.6%] inset-x-0 text-center px-4 z-10">
+                              <p
+                                className="text-white font-bold tracking-wide break-words"
+                                style={{
+                                  fontSize: "clamp(10px, 3.5cqi, 18px)",
+                                  textShadow:
+                                    "1px 1px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 0px 4px 6px rgba(0,0,0,0.8)",
+                                }}
+                              >
+                                {content.source_ref}
+                              </p>
+                            </div>
+                          )}
+
+                          {/* Subtitle text: dynamically positioned (Center 50% vs Lower-Third 72%) */}
+                          <div
+                            className={`absolute inset-x-0 -translate-y-1/2 text-center pointer-events-none px-6 z-10 transition-all duration-300 ${
+                              subtitlePosition === "center" ? "top-[50%]" : "top-[72%]"
+                            }`}
+                          >
+                            <p
+                              className="text-white font-bold leading-snug break-words"
+                              style={{
+                                fontSize: "clamp(14px, 5.5cqi, 30px)",
+                                textShadow: "0px 2px 10px rgba(0,0,0,0.8)",
+                              }}
+                            >
+                              {(() => {
+                                const activeTimings =
+                                  narrationTimings ||
+                                  (content?.wordSegments && bulgarian
+                                    ? [
+                                        {
+                                          start: 0,
+                                          end: 10,
+                                          word: bulgarian.substring(0, 50) + "...",
+                                        },
+                                      ]
+                                    : null);
+                                if (activeTimings && activeTimings.length > 0) {
+                                  const currentWord = activeTimings.find(
+                                    (t) => previewTime >= t.start && previewTime <= t.end,
+                                  );
+                                  if (currentWord && currentWord.word) {
+                                    const titleWordCount = bulgarian
+                                      ? bulgarian.split("\n\n")[0].split(/\s+/).filter(Boolean)
+                                          .length
+                                      : 0;
+                                    const currentWordIndex = activeTimings.indexOf(currentWord);
+                                    const isTitle =
+                                      currentWordIndex !== -1 && currentWordIndex < titleWordCount;
+                                    const wordColor = isTitle ? "#FFFFFF" : "#FFB700";
+                                    return (
+                                      <span style={{ color: wordColor }}>{currentWord.word}</span>
+                                    );
+                                  }
+                                  // If audio has started but we are in a gap, show nothing
+                                  if (narrationTimings && previewTime > 0) {
+                                    return "";
+                                  }
+                                  // Fallback phrase if not exactly on a word
+                                  return bulgarian ? bulgarian.substring(0, 40) + "..." : "";
+                                }
+                                return bulgarian ? bulgarian.substring(0, 40) + "..." : "";
+                              })()}
+                            </p>
+                          </div>
+                        </div>
+                      </>
                     )}
-                  </>
-                )}
+                  </div>
                 </div>
+
+                {/* DOCKED AUDIO CONTROLLER: Dedicated transport bar positioned below the 9:16 frame */}
+                {(customAudioUrl || narrationUrl || content?.audioUrl) && (
+                  <div className="mt-3 p-3.5 bg-card/90 backdrop-blur border border-border/50 rounded-xl shadow-xs space-y-2 font-ui">
+                    <div className="flex items-center justify-between text-xs">
+                      <div className="flex items-center gap-1.5 font-medium text-foreground">
+                        <Volume2 className="size-3.5 text-primary" />
+                        <span>Аудио възпроизвеждане & Караоке синхрон</span>
+                      </div>
+                      <span className="font-mono text-[11px] bg-muted/80 text-muted-foreground px-2 py-0.5 rounded border border-border/40">
+                        {previewTime.toFixed(1)}s
+                      </span>
+                    </div>
+                    <audio
+                      ref={audioPreviewRef}
+                      src={customAudioUrl || narrationUrl || content?.audioUrl || undefined}
+                      controls
+                      controlsList="nodownload noplaybackrate"
+                      onTimeUpdate={(e) => setPreviewTime(e.currentTarget.currentTime)}
+                      onPlay={() => {
+                        document
+                          .querySelectorAll<HTMLVideoElement>(".bg-preview-video")
+                          .forEach((v) => v.play().catch(() => {}));
+                      }}
+                      onPause={() => {
+                        document
+                          .querySelectorAll<HTMLVideoElement>(".bg-preview-video")
+                          .forEach((v) => v.pause());
+                      }}
+                      className="w-full h-8 [&::-webkit-media-controls-panel]:bg-transparent"
+                    />
+                    <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+                      <span>⚡ Управлява караоке анимацията и смяната на сцените</span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (audioPreviewRef.current) {
+                            audioPreviewRef.current.currentTime = 0;
+                            setPreviewTime(0);
+                            audioPreviewRef.current.play().catch(() => {});
+                          }
+                        }}
+                        className="text-primary hover:underline flex items-center gap-1 cursor-pointer font-medium"
+                      >
+                        <RotateCcw className="size-3" />
+                        Отначало
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
               <div className="font-ui text-sm space-y-2">
                 <p className="text-xs uppercase tracking-wider text-muted-foreground">
@@ -1573,7 +2197,10 @@ function CreatePage() {
             </div>
           )}
           {!bgVideoUrl && !bgUrl && !renderedUrl && (
-            <p className="font-ui text-sm text-muted-foreground flex items-center gap-2"><Upload className="size-4" /> Избери стоково видео от Pexels по-горе, преди да рендираш.</p>
+            <p className="font-ui text-sm text-muted-foreground flex items-center gap-2">
+              <Upload className="size-4" /> Избери стоково видео от Pexels по-горе, преди да
+              рендираш.
+            </p>
           )}
         </Card>
       )}

@@ -397,9 +397,9 @@ export function computeSlideLayout(
   const fontBottom = `700 ${Math.max(8, Math.round(86 * scale))}px 'Montserrat', sans-serif`;
   const lhBottom = Math.max(10, Math.round(108 * scale));
 
-  const gapTopToBody = Math.max(0, Math.round(52 * actualGapScale));
-  const gapBetweenSegments = Math.max(0, Math.round(64 * actualGapScale));
-  const gapBodyToBottom = Math.max(0, Math.round(52 * actualGapScale));
+  const gapTopToBody = Math.max(0, Math.round(70 * actualGapScale));
+  const gapBetweenSegments = Math.max(0, Math.round(90 * actualGapScale));
+  const gapBodyToBottom = Math.max(0, Math.round(70 * actualGapScale));
 
   ctx.font = fontTop;
   const topLines = wrapIntelligent((t) => ctx.measureText(t).width, opts.topTitle || "", maxWidth);

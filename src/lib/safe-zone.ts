@@ -144,19 +144,19 @@ export function createSafeZone(options: {
 
 /**
  * TikTok 9:16 Safe Zone (1080x1920)
- * Top: 180px (header, tabs — relaxed for photo carousels which have less UI)
- * Bottom: 280px (caption area — relaxed for carousels)
- * Left: 80px
- * Right: 100px (sidebar buttons are narrower on carousels)
- * W_SAFE: 900px, H_SAFE: 1460px, CENTER_X: 490px
+ * Top: 300px (header, tabs, search)
+ * Bottom: 400px (captions, handle, audio disk)
+ * Left: 100px
+ * Right: 220px (action sidebar: like, comment, bookmark, share)
+ * W_SAFE: 760px, H_SAFE: 1220px, CENTER_X: 480px, BOTTOM_MAX_Y: 1520px, TOP_MIN_Y: 300px
  */
 export const TIKTOK_SAFE_ZONE: SafeZoneGeometry = createSafeZone({
   W: 1080,
   H: 1920,
-  SAFE_TOP: 180,
-  SAFE_BOTTOM: 280,
-  SAFE_LEFT: 80,
-  SAFE_RIGHT: 100,
+  SAFE_TOP: 300,
+  SAFE_BOTTOM: 400,
+  SAFE_LEFT: 100,
+  SAFE_RIGHT: 220,
 });
 
 /**

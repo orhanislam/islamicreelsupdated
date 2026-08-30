@@ -2,6 +2,464 @@
 import { createServerFn } from "@tanstack/react-start";
 import type { Buffer } from "node:buffer";
 import { verifyAndCorrectSubtitleSync } from "./subtitle-sync.functions";
+import {
+  getSafeZone,
+  getASSSubtitlePlacement,
+  getSafeAssStyles,
+  TIKTOK_SAFE_ZONE,
+} from "./safe-zone";
+
+/**
+ * Calibrated text measurement for Cyrillic/Bulgarian & Latin Outfit font.
+ */
+export function estimateTextWidth(text: string, fontSize: number): number {
+  let width = 0;
+  for (const char of text) {
+    if (char === " ") {
+      width += fontSize * 0.28;
+    } else if (/[.,!?:;'"„“”«»`()[\]-]/.test(char)) {
+      width += fontSize * 0.3;
+    } else if (/[ЖШЩЮЫжшщюыWMwm%@]/.test(char)) {
+      width += fontSize * 0.82;
+    } else if (/[iljt1I|]/.test(char)) {
+      width += fontSize * 0.3;
+    } else if (/[A-ZА-Я]/.test(char)) {
+      width += fontSize * 0.68;
+    } else {
+      width += fontSize * 0.56;
+    }
+  }
+  return Math.round(width);
+}
+
+/**
+ * Dynamic word wrapper strictly guaranteeing line width <= maxLineWidth (760px for TikTok).
+ */
+export function wrapTextToSafeWidth(
+  words: string[],
+  fontSize: number,
+  maxLineWidth: number,
+): string[] {
+  const lines: string[] = [];
+  let curLine: string[] = [];
+  let curWidth = 0;
+  const spaceWidth = fontSize * 0.28;
+
+  for (const word of words) {
+    const wWidth = estimateTextWidth(word, fontSize);
+    if (curLine.length === 0) {
+      curLine.push(word);
+      curWidth = wWidth;
+    } else if (curWidth + spaceWidth + wWidth <= maxLineWidth) {
+      curLine.push(word);
+      curWidth += spaceWidth + wWidth;
+    } else {
+      lines.push(curLine.join(" "));
+      curLine = [word];
+      curWidth = wWidth;
+    }
+  }
+  if (curLine.length > 0) {
+    lines.push(curLine.join(" "));
+  }
+  return lines;
+}
+
+/**
+ * Generate full ASS subtitle script compliant with Safe Zone geometry and dynamic line wrapping.
+ */
+export function generateAssSubtitles(data: any, audioDur: number): string {
+  const formatTime = (secs: number) => {
+    const totalCs = Math.max(0, Math.round(secs * 100));
+    const cs = totalCs % 100;
+    const totalS = Math.floor(totalCs / 100);
+    const s = totalS % 60;
+    const totalM = Math.floor(totalS / 60);
+    const m = totalM % 60;
+    const h = Math.floor(totalM / 60);
+    return `${h}:${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}.${cs.toString().padStart(2, "0")}`;
+  };
+
+  const subPos = data.subtitlePosition || "tiktok";
+  const sz = getSafeZone(subPos);
+  const placement = getASSSubtitlePlacement(subPos, data.style);
+
+  const tiktokTheme = data.tiktokTheme || "hormozi";
+  const outlineColor = "&H00000000";
+  const outlineWidth = "2";
+  const shadowSize = "6.5";
+  let highlightColor = "&H32CD32&";
+  const borderStyle = "1";
+  const backColor = "&H99000000";
+
+  if (tiktokTheme === "emerald") {
+    highlightColor = "&H32CD32&";
+  } else if (tiktokTheme === "neon") {
+    highlightColor = "&HFFFF00&";
+  } else if (tiktokTheme === "classic") {
+    highlightColor = "&H00FFFFFF&";
+  } else if (tiktokTheme === "fire") {
+    highlightColor = "&H0066FF&";
+  } else if (tiktokTheme === "box") {
+    highlightColor = "&H00D7FF&";
+  }
+
+  let ass = `[Script Info]
+ScriptType: v4.00+
+PlayResX: ${sz.W}
+PlayResY: ${sz.H}
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Arabic,Scheherazade New,100,&H00FFFFFF,&H000000FF,&H00000000,&H80000000,-1,0,0,0,100,100,0,0,1,3,0,8,${placement.marginL},${placement.marginR},${sz.SAFE_TOP},1
+Style: Bulgarian,Outfit,120,&H00FFFFFF,&H0000D7FF,${outlineColor},${backColor},-1,0,0,0,100,100,0,0,${borderStyle},${outlineWidth},${shadowSize},${placement.alignment},${placement.marginL},${placement.marginR},${placement.marginV},1
+Style: Reference,Outfit,70,&H00FFFFFF,&H000000FF,&H00000000,&H99000000,-1,0,0,0,100,100,0,0,1,3,4,8,${placement.marginL},${placement.marginR},${sz.SAFE_TOP + 40},1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+`;
+
+  if (data.reference) {
+    ass += `Dialogue: 0,0:00:00.00,${formatTime(audioDur)},Reference,,0,0,0,,{\\an8\\pos(${placement.posX},${sz.SAFE_TOP + 40})}${data.reference}\n`;
+  }
+
+  if (data.bulgarian) {
+    data.bulgarian = data.bulgarian.replace(/<[^>]+>/g, "").trim();
+    let words = data.bulgarian.split(/\s+/).filter(Boolean);
+    let timings = data.bulgarianWordTimings;
+    if (timings && timings.length > 0) {
+      const syncRes = verifyAndCorrectSubtitleSync(timings, audioDur);
+      timings = syncRes.correctedTimings;
+      if (timings.length > 0 && timings[0].word && timings[0].word !== "...") {
+        timings = timings.filter((t: any) => {
+          if (!t.word) return true;
+          const w = t.word.toLowerCase();
+          return (
+            !w.includes("<") && !w.includes(">") && !w.includes("time=") && !w.includes("1.0s")
+          );
+        });
+        words = timings.map((t: any) => t.word);
+      }
+      if (timings.length !== words.length) {
+        const ratio = audioDur / Math.max(1, words.length);
+        timings = words.map((_w: string, i: number) => ({
+          word: _w,
+          start: Number((i * ratio).toFixed(3)),
+          end: Number(((i + 1) * ratio).toFixed(3)),
+        }));
+      }
+    } else {
+      timings = [];
+      const bounds = data.ayahBounds;
+      if (Array.isArray(bounds) && bounds.length > 0) {
+        const totalEngLen =
+          bounds.reduce((acc: number, b: any) => acc + (b.english ? b.english.length : 10), 0) || 1;
+        let wordIdx = 0;
+        for (let bIdx = 0; bIdx < bounds.length; bIdx++) {
+          const b = bounds[bIdx];
+          const isLast = bIdx === bounds.length - 1;
+          let ayahWords: string[];
+          if (b.bulgarian && typeof b.bulgarian === "string" && b.bulgarian.trim().length > 0) {
+            ayahWords = b.bulgarian.split(/\s+/).filter(Boolean);
+          } else {
+            const ratio = (b.english ? b.english.length : 10) / totalEngLen;
+            const count = isLast
+              ? words.length - wordIdx
+              : Math.max(1, Math.round(words.length * ratio));
+            ayahWords = words.slice(wordIdx, Math.min(words.length, wordIdx + count));
+          }
+          wordIdx += ayahWords.length;
+
+          const bStart = Number(b.start) || 0;
+          const bEnd = Number(b.end) || bStart + 5;
+          const bDur = Math.max(0.5, bEnd - bStart);
+
+          const ayahCosts = ayahWords.map(
+            (w: string) => 1 + w.replace(/[^\p{L}\p{N}]/gu, "").length * 0.55,
+          );
+          const ayahTotalCost = ayahCosts.reduce((sum: number, c: number) => sum + c, 0) || 1;
+          let ayahCumCost = 0;
+
+          const interpolateSegTime = (frac: number, segs?: any[]) => {
+            if (frac <= 0) return bStart;
+            if (frac >= 1) return bEnd;
+            if (!Array.isArray(segs) || segs.length === 0) {
+              return bStart + frac * bDur;
+            }
+            const x = frac * segs.length;
+            const k = Math.min(segs.length - 1, Math.floor(x));
+            const r = x - k;
+            const sStart = Number(segs[k].start) || bStart;
+            const sEnd = Number(segs[k].end) || bEnd;
+            return sStart + r * (sEnd - sStart);
+          };
+
+          for (let w = 0; w < ayahWords.length; w++) {
+            const fracS = ayahCumCost / ayahTotalCost;
+            ayahCumCost += ayahCosts[w];
+            const fracE = ayahCumCost / ayahTotalCost;
+            timings.push({
+              start: Math.round(interpolateSegTime(fracS, b.segments) * 1000) / 1000,
+              end: Math.round(interpolateSegTime(fracE, b.segments) * 1000) / 1000,
+            });
+          }
+        }
+      } else {
+        const segs = data.wordSegments;
+        if (Array.isArray(segs) && segs.length > 0) {
+          const scale = 1;
+          const speechCost = (w: string) => {
+            let cost = 1 + w.replace(/[^\p{L}\p{N}]/gu, "").length * 0.55;
+            if (/[.!?…]$/.test(w)) cost += 3.5;
+            else if (/[,;:—]$/.test(w)) cost += 1.8;
+            return cost;
+          };
+          const costs = words.map(speechCost);
+          const cumCost = [0];
+          for (let i = 0; i < costs.length; i++) cumCost.push(cumCost[i] + costs[i]);
+          const totalCost = cumCost[cumCost.length - 1] || 1;
+
+          const segDurs = segs.map((s: any) => Math.max(0.1, (s.end - s.start) * scale));
+          const cumAudio = [0];
+          for (let i = 0; i < segDurs.length; i++) cumAudio.push(cumAudio[i] + segDurs[i]);
+          const totalAudio = cumAudio[cumAudio.length - 1] || audioDur;
+
+          for (let i = 0; i < words.length; i++) {
+            const fracS = cumCost[i] / totalCost;
+            const fracE = cumCost[i + 1] / totalCost;
+            const targetAudioS = fracS * totalAudio;
+            const targetAudioE = fracE * totalAudio;
+
+            let sIdx = 0;
+            while (sIdx < segs.length - 1 && cumAudio[sIdx + 1] < targetAudioS) sIdx++;
+            const remAudioS = (targetAudioS - cumAudio[sIdx]) / segDurs[sIdx];
+            const start =
+              (segs[sIdx].start + remAudioS * (segs[sIdx].end - segs[sIdx].start)) * scale;
+
+            let eIdx = 0;
+            while (eIdx < segs.length - 1 && cumAudio[eIdx + 1] < targetAudioE) eIdx++;
+            const remAudioE = (targetAudioE - cumAudio[eIdx]) / segDurs[eIdx];
+            const end =
+              (segs[eIdx].start + remAudioE * (segs[eIdx].end - segs[eIdx].start)) * scale;
+
+            timings.push({ start, end });
+          }
+        } else {
+          const speechCost = (w: string) => {
+            let cost = 1 + w.replace(/[^\p{L}\p{N}]/gu, "").length * 0.55;
+            if (/[.!?…]$/.test(w)) cost += 3.5;
+            else if (/[,;:—]$/.test(w)) cost += 1.8;
+            return cost;
+          };
+          const costs = words.map(speechCost);
+          const cumCost = [0];
+          for (let i = 0; i < costs.length; i++) cumCost.push(cumCost[i] + costs[i]);
+          const totalCost = cumCost[cumCost.length - 1] || 1;
+          for (let i = 0; i < words.length; i++) {
+            const s = (cumCost[i] / totalCost) * audioDur;
+            const e = (cumCost[i + 1] / totalCost) * audioDur;
+            timings.push({ start: s, end: e });
+          }
+        }
+      }
+    }
+
+    if (timings && timings.length > 0) {
+      const syncRes = verifyAndCorrectSubtitleSync(
+        timings.map((t: any, idx: number) => ({
+          word: t.word || words[idx] || "...",
+          start: t.start,
+          end: t.end,
+        })),
+        audioDur,
+      );
+      timings = syncRes.correctedTimings;
+    }
+
+    const bounds = data.ayahBounds;
+    if (Array.isArray(bounds) && bounds.length > 0) {
+      const totalEngLen =
+        bounds.reduce((acc: number, b: any) => acc + (b.english ? b.english.length : 10), 0) || 1;
+      let wordIdx = 0;
+      for (let bIdx = 0; bIdx < bounds.length; bIdx++) {
+        const b = bounds[bIdx];
+        const isLast = bIdx === bounds.length - 1;
+        let ayahWords: string[];
+        if (b.bulgarian && typeof b.bulgarian === "string" && b.bulgarian.trim().length > 0) {
+          ayahWords = b.bulgarian.split(/\s+/).filter(Boolean);
+        } else {
+          const ratio = (b.english ? b.english.length : 10) / totalEngLen;
+          const count = isLast
+            ? words.length - wordIdx
+            : Math.max(1, Math.round(words.length * ratio));
+          ayahWords = words.slice(wordIdx, Math.min(words.length, wordIdx + count));
+        }
+
+        if (ayahWords.length > 0) {
+          wordIdx += ayahWords.length;
+
+          const start = Number(b.start) || 0;
+          const nextStart = !isLast && bounds[bIdx + 1] ? Number(bounds[bIdx + 1].start) : null;
+          const rawEnd = Number(b.end) || start + 5;
+          let end = nextStart !== null ? Math.min(rawEnd, nextStart) : rawEnd;
+          if (end <= start) end = start + 0.5;
+
+          const wordCount = ayahWords.length;
+          const maxLineWidth = sz.W_SAFE;
+          const refBottomY = sz.SAFE_TOP + 40 + 70 + 20; // ~430px
+          const minSubtitleTopY = refBottomY + 30; // 460px
+          const maxAllowedHeight =
+            placement.alignment === 5
+              ? (placement.posY - minSubtitleTopY) * 2
+              : placement.posY - minSubtitleTopY;
+
+          let fs =
+            wordCount > 50
+              ? 44
+              : wordCount > 35
+                ? 54
+                : wordCount > 22
+                  ? 68
+                  : wordCount > 12
+                    ? 82
+                    : 98;
+          let lines: string[] = [];
+          const minFs = 28;
+
+          while (fs >= minFs) {
+            lines = wrapTextToSafeWidth(ayahWords, fs, maxLineWidth);
+            const estimatedLineHeight = fs * 1.25;
+            const totalHeight = lines.length * estimatedLineHeight;
+            const maxSingleWordWidth = Math.max(...ayahWords.map((w) => estimateTextWidth(w, fs)));
+
+            if (maxSingleWordWidth <= maxLineWidth && totalHeight <= maxAllowedHeight) {
+              break;
+            }
+            fs -= 2;
+          }
+
+          const formattedText = lines.join("\\N");
+          const useAnim = isLast ? `\\fad(0,120)` : ``;
+          const posTag = `\\an${placement.alignment}\\pos(${placement.posX},${placement.posY})`;
+          const ayahStyleTag = `{${posTag}\\blur6\\fs${fs}\\1c&H00FFFFFF&${useAnim}}`;
+
+          ass += `Dialogue: 0,${formatTime(start)},${formatTime(end)},Bulgarian,,0,0,0,,${ayahStyleTag}${formattedText}\n`;
+        }
+      }
+    } else {
+      const isSingleWordMode = data.subtitleSlicingMode === "single";
+      const MAX_WORDS = isSingleWordMode ? 1 : 4;
+      const MIN_WORDS = isSingleWordMode ? 1 : 2;
+
+      const cleanBulgarian = (data.bulgarian || "").replace(/<[^>]+>/g, "").trim();
+      const textParts = cleanBulgarian.split(/\n\n+/);
+      const hasTitle = textParts.length > 1;
+      const titleWordCount = hasTitle
+        ? textParts[0]
+            .replace(/[^\p{L}\p{N}\s]/gu, " ")
+            .trim()
+            .split(/\s+/)
+            .filter(Boolean).length
+        : 0;
+
+      type Phrase = { words: string[]; startIdx: number; endIdx: number; isTitle: boolean };
+      const phrases: Phrase[] = [];
+      let cur: string[] = [];
+      let curStart = 0;
+      const flush = () => {
+        if (!cur.length) return;
+        const isTitle = curStart < titleWordCount;
+        phrases.push({ words: cur, startIdx: curStart, endIdx: curStart + cur.length, isTitle });
+        curStart += cur.length;
+        cur = [];
+      };
+
+      for (let i = 0; i < words.length; i++) {
+        const w = words[i];
+        if (!isSingleWordMode && cur.length > 0 && timings[i] && timings[i - 1]) {
+          const gap = timings[i].start - timings[i - 1].end;
+          if (gap > 0.25) {
+            flush();
+          }
+        }
+        cur.push(w);
+        const endsPunct = /[.!?…]$/.test(w) || (/[,;:—]$/.test(w) && cur.length >= MIN_WORDS);
+        const isLastTitleWord = hasTitle && curStart + cur.length === titleWordCount;
+
+        if ((endsPunct && cur.length >= MIN_WORDS) || cur.length >= MAX_WORDS || isLastTitleWord) {
+          flush();
+        }
+      }
+      flush();
+
+      let prevEnd = 0;
+      for (let idx = 0; idx < phrases.length; idx++) {
+        const p = phrases[idx];
+        const isFirstPhrase = idx === 0;
+        const isLastPhrase = idx === phrases.length - 1;
+
+        let start = timings[p.startIdx]?.start ?? prevEnd;
+        if (start < prevEnd) {
+          start = prevEnd;
+        }
+
+        const nextPhraseStart =
+          idx + 1 < phrases.length
+            ? (timings[phrases[idx + 1].startIdx]?.start ?? audioDur)
+            : audioDur;
+
+        const lastWordEnd = timings[p.endIdx - 1]?.end ?? start + 1.5;
+        const end = Math.min(
+          nextPhraseStart,
+          Math.max(start + 0.2, lastWordEnd + (isSingleWordMode ? 0.06 : 0.12)),
+        );
+
+        const posTag = `\\an${placement.alignment}\\pos(${placement.posX},${placement.posY})`;
+        const phraseFs = p.isTitle ? 110 : 96;
+        const linesOfWords = wrapTextToSafeWidth(p.words, phraseFs, sz.W_SAFE);
+
+        for (let wIdx = 0; wIdx < p.words.length; wIdx++) {
+          const globalIdx = p.startIdx + wIdx;
+          const wordStart = timings[globalIdx]?.start ?? start;
+          const nextWordStart =
+            wIdx + 1 < p.words.length ? (timings[globalIdx + 1]?.start ?? end) : end;
+
+          const sliceStart = Math.max(start, wIdx === 0 ? start : wordStart);
+          const sliceEnd = Math.min(end, wIdx === p.words.length - 1 ? end : nextWordStart);
+          if (sliceEnd <= sliceStart) continue;
+
+          const useAnim = isLastPhrase && wIdx === p.words.length - 1 ? `\\fad(0,100)` : ``;
+          const titleTag = p.isTitle ? "\\fs110" : "";
+          const phraseStyleTag = `{${posTag}\\blur6${useAnim}${titleTag}}`;
+
+          let wordCounter = 0;
+          const formattedLineStrings = linesOfWords.map((lineStr) => {
+            const lineTokens = lineStr.split(/\s+/).filter(Boolean);
+            return lineTokens
+              .map((w) => {
+                const currentWordIdx = wordCounter;
+                const gIdx = p.startIdx + currentWordIdx;
+                const isActive = currentWordIdx === wIdx;
+                wordCounter++;
+                const isWordInTitle = gIdx < titleWordCount;
+                if (isWordInTitle) {
+                  return `{\\c&H00FFFFFF&}${w}`;
+                } else {
+                  return isActive ? `{\\c&H0000B7FF&}${w}` : `{\\c&H00FFFFFF&}${w}`;
+                }
+              })
+              .join(" ");
+          });
+
+          const scaledTextLine = formattedLineStrings.join("\\N");
+          ass += `Dialogue: 0,${formatTime(sliceStart)},${formatTime(sliceEnd)},Bulgarian,,0,0,0,,${phraseStyleTag}${scaledTextLine}\n`;
+        }
+        prevEnd = end;
+      }
+    }
+  }
+  return ass;
+}
 
 // Polyfill __dirname and __filename for bundled CommonJS modules in ESM environments
 try {
@@ -9,7 +467,9 @@ try {
     (globalThis as any).__dirname = process.cwd();
     (globalThis as any).__filename = process.cwd() + "/index.mjs";
   }
-} catch { /* ignore */ }
+} catch {
+  /* ignore */
+}
 
 class SimpleQueue {
   private queue: (() => Promise<void>)[] = [];
@@ -17,7 +477,12 @@ class SimpleQueue {
   add(task: () => Promise<void>) {
     return new Promise<void>((resolve, reject) => {
       this.queue.push(async () => {
-        try { await task(); resolve(); } catch(e) { reject(e); }
+        try {
+          await task();
+          resolve();
+        } catch (e) {
+          reject(e);
+        }
       });
       this.runNext();
     });
@@ -45,11 +510,11 @@ export async function executeRenderTask(opts: any): Promise<any> {
   const data = opts.data || opts;
   const queue = await getRenderQueue();
   return await queue.add(async () => {
-      const fs = (await import("fs")).promises;
+    const fs = (await import("fs")).promises;
     const os = await import("os");
     const path = await import("path");
     const BufferMod = (await import("node:buffer")).Buffer;
-    
+
     const ffmpegMod = await import("fluent-ffmpeg");
     const ffmpeg = ffmpegMod.default || ffmpegMod;
     let ffmpegPath = "ffmpeg";
@@ -77,7 +542,13 @@ export async function executeRenderTask(opts: any): Promise<any> {
     const audioPath = path.join(tempDir, `audio_${sessionId}.mp3`);
     const assPath = path.join(tempDir, `subs_${sessionId}.ass`);
     const outPath = path.join(tempDir, `out_${sessionId}.mp4`);
-    const sessionTempFiles = new Set<string>([audioPath, assPath, outPath, bgPath + ".mp4", bgPath + ".jpg"]);
+    const sessionTempFiles = new Set<string>([
+      audioPath,
+      assPath,
+      outPath,
+      bgPath + ".mp4",
+      bgPath + ".jpg",
+    ]);
     for (const p of sessionTempFiles) activeRenderSessionFiles.add(p);
 
     try {
@@ -93,7 +564,9 @@ export async function executeRenderTask(opts: any): Promise<any> {
             hasValidAudio = true;
           } else {
             const res = await fetch(data.audioUrl, {
-              headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" }
+              headers: {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+              },
             });
             if (res.ok) {
               const arrayBuf = await res.arrayBuffer();
@@ -102,12 +575,17 @@ export async function executeRenderTask(opts: any): Promise<any> {
             }
           }
         } catch (err) {
-          console.warn("[server-render] Could not load audioUrl, generating silent audio track:", err);
+          console.warn(
+            "[server-render] Could not load audioUrl, generating silent audio track:",
+            err,
+          );
         }
       }
 
       if (!hasValidAudio) {
-        console.log("[server-render] No audio provided or fetch failed, creating 15s silent audio track...");
+        console.log(
+          "[server-render] No audio provided or fetch failed, creating 15s silent audio track...",
+        );
         await new Promise<void>((resolve, reject) => {
           ffmpeg()
             .input("anullsrc=r=44100:cl=mono")
@@ -159,7 +637,10 @@ export async function executeRenderTask(opts: any): Promise<any> {
         }
         console.log(`[server-render] Exact audio duration probed: ${audioDur} seconds`);
       } catch (err) {
-        console.warn("[server-render] Could not probe exact audio duration, falling back to 20s", err);
+        console.warn(
+          "[server-render] Could not probe exact audio duration, falling back to 20s",
+          err,
+        );
         audioDur = 20;
       }
 
@@ -183,7 +664,9 @@ export async function executeRenderTask(opts: any): Promise<any> {
       } else {
         try {
           const res = await fetch(bgUrl, {
-            headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" }
+            headers: {
+              "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+            },
           });
           if (!res.ok) throw new Error(`Status ${res.status}`);
           const contentType = res.headers.get("content-type") || "";
@@ -197,17 +680,23 @@ export async function executeRenderTask(opts: any): Promise<any> {
           await fs.writeFile(finalBgPath, BufferMod.from(arrayBuf));
           sessionTempFiles.add(finalBgPath);
         } catch (fetchErr) {
-          console.warn("[server-render] Primary background fetch failed, using reliable fallback video:", fetchErr);
-          const fallbackUrl = "https://videos.pexels.com/video-files/30054113/12891205_1080_1920_30fps.mp4";
+          console.warn(
+            "[server-render] Primary background fetch failed, using reliable fallback video:",
+            fetchErr,
+          );
+          const fallbackUrl =
+            "https://videos.pexels.com/video-files/30054113/12891205_1080_1920_30fps.mp4";
           const fbRes = await fetch(fallbackUrl, {
-            headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" }
+            headers: {
+              "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+            },
           });
           isVideoBg = true;
           if (!finalBgPath.endsWith(".mp4")) finalBgPath += ".mp4";
-          
+
           if (!fbRes.ok) {
-             console.error(`[server-render] Fallback video also failed with status ${fbRes.status}`);
-             throw new Error(`Background video fetch failed! Primary err: ${fetchErr}`);
+            console.error(`[server-render] Fallback video also failed with status ${fbRes.status}`);
+            throw new Error(`Background video fetch failed! Primary err: ${fetchErr}`);
           }
           const arrayBuf = await fbRes.arrayBuffer();
           await fs.writeFile(finalBgPath, BufferMod.from(arrayBuf));
@@ -218,7 +707,9 @@ export async function executeRenderTask(opts: any): Promise<any> {
       // 2.5 Multi-Scene B-Roll sequence (if multiple bRollUrls provided)
       if (Array.isArray(data.bRollUrls) && data.bRollUrls.length > 1) {
         try {
-          console.log(`[server-render] Creating multi-scene B-Roll sequence from ${data.bRollUrls.length} clips...`);
+          console.log(
+            `[server-render] Creating multi-scene B-Roll sequence from ${data.bRollUrls.length} clips...`,
+          );
           const bRollFiles: string[] = [];
           for (let i = 0; i < data.bRollUrls.length; i++) {
             const url = data.bRollUrls[i];
@@ -260,7 +751,9 @@ export async function executeRenderTask(opts: any): Promise<any> {
               sessionTempFiles.add(normPath);
             }
 
-            const concatContent = normalizedPaths.map((p) => `file '${p.replace(/\\/g, "/")}'`).join("\n");
+            const concatContent = normalizedPaths
+              .map((p) => `file '${p.replace(/\\/g, "/")}'`)
+              .join("\n");
             await fs.writeFile(concatListPath, concatContent);
 
             const multiSceneBg = path.join(tmpDir, `multiscene_${Date.now()}.mp4`);
@@ -289,405 +782,20 @@ export async function executeRenderTask(opts: any): Promise<any> {
             }
           }
         } catch (bRollErr) {
-          console.warn("[server-render] Multi-scene B-Roll failed, falling back to primary bg:", bRollErr);
+          console.warn(
+            "[server-render] Multi-scene B-Roll failed, falling back to primary bg:",
+            bRollErr,
+          );
         }
       }
 
       // 3. Generate ASS Subtitles
-      const formatTime = (secs: number) => {
-        const totalCs = Math.max(0, Math.round(secs * 100));
-        const cs = totalCs % 100;
-        const totalS = Math.floor(totalCs / 100);
-        const s = totalS % 60;
-        const totalM = Math.floor(totalS / 60);
-        const m = totalM % 60;
-        const h = Math.floor(totalM / 60);
-        return `${h}:${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}.${cs.toString().padStart(2, "0")}`;
-      };
-
-      const isLowerThird = data.style === "lower-third";
-      const subPos = data.subtitlePosition || "tiktok";
-      let bulgarianAlign = 2; // Bottom-Center alignment
-      let bulgarianMarginV = 1350; // Maximally down without hitting TikTok title
-
-      if (subPos === "reels") {
-        bulgarianMarginV = 1350;
-      } else if (subPos === "shorts") {
-        bulgarianMarginV = 1350;
-      } else if (subPos === "center") {
-        bulgarianAlign = 5;
-        bulgarianMarginV = 960;
-      } else if (data.style === "bottom" || isLowerThird) {
-        bulgarianAlign = 2;
-        bulgarianMarginV = 1350; 
-      }
-
-      const tiktokTheme = data.tiktokTheme || "hormozi";
-      // Minimalistic modern style: white text, blurred shadow, no harsh outline
-      let outlineColor = "&H00000000"; 
-      // Setting outline > 0 ensures that \blur only blurs the shadow/outline, leaving the text sharp!
-      let outlineWidth = "2"; 
-      let shadowSize = "6.5"; // Large shadow (will be blurred via inline tag)
-      let highlightColor = "&H32CD32&"; 
-      let borderStyle = "1"; 
-      let backColor = "&H99000000"; // Black shadow, slightly more opaque
-
-      if (tiktokTheme === "emerald") {
-        highlightColor = "&H32CD32&"; // Lime Green
-      } else if (tiktokTheme === "neon") {
-        highlightColor = "&HFFFF00&"; // Neon Cyan/Gold
-      } else if (tiktokTheme === "classic") {
-        highlightColor = "&H00FFFFFF&"; // Pure White
-      } else if (tiktokTheme === "fire") {
-        highlightColor = "&H0066FF&"; // Flaming Orange Gold
-      } else if (tiktokTheme === "box") {
-        highlightColor = "&H00D7FF&";
-      }
-
-      let ass = `[Script Info]
-ScriptType: v4.00+
-PlayResX: 1080
-PlayResY: 1920
-
-[V4+ Styles]
-Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Arabic,Scheherazade New,100,&H00FFFFFF,&H000000FF,&H00000000,&H80000000,-1,0,0,0,100,100,0,0,1,3,0,8,50,50,300,1
-Style: Bulgarian,Outfit,120,&H00FFFFFF,&H0000D7FF,${outlineColor},${backColor},-1,0,0,0,100,100,0,0,${borderStyle},${outlineWidth},${shadowSize},${bulgarianAlign},100,100,${bulgarianMarginV},1
-Style: Reference,Outfit,70,&H00FFFFFF,&H000000FF,&H00000000,&H99000000,-1,0,0,0,100,100,0,0,1,3,4,8,50,50,380,1
-
-[Events]
-Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
-`;
-
-      if (data.reference) {
-        ass += `Dialogue: 0,0:00:00.00,${formatTime(audioDur)},Reference,,0,0,0,,{\\an8\\pos(540,380)}${data.reference}\n`;
-      }
-
-      // Arabic is intentionally omitted from video output so the Bulgarian text fits nicely without clutter.
-
-      if (data.bulgarian) {
-        // Strip SSML tags immediately so they NEVER leak into text arrays or rendering logic
-        data.bulgarian = data.bulgarian.replace(/<[^>]+>/g, "").trim();
-        let words = data.bulgarian.split(/\s+/).filter(Boolean);
-        let timings = data.bulgarianWordTimings;
-        if (timings && timings.length > 0) {
-          const syncRes = verifyAndCorrectSubtitleSync(timings, audioDur);
-          timings = syncRes.correctedTimings;
-          // Use TTS words as truth when available, to guarantee 1:1 word-timing alignment
-          if (timings.length > 0 && timings[0].word && timings[0].word !== "...") {
-            // Filter out SSML/XML tags like <break time="1.0s" /> that some TTS engines return as spoken words
-            timings = timings.filter((t: any) => {
-              if (!t.word) return true;
-              const w = t.word.toLowerCase();
-              return !w.includes("<") && !w.includes(">") && !w.includes("time=") && !w.includes("1.0s");
-            });
-            words = timings.map((t: any) => t.word);
-          }
-          // If word counts still differ, re-distribute timings to match words
-          if (timings.length !== words.length) {
-            const ratio = audioDur / Math.max(1, words.length);
-            timings = words.map((_w: string, i: number) => ({
-              word: _w,
-              start: Number((i * ratio).toFixed(3)),
-              end: Number(((i + 1) * ratio).toFixed(3)),
-            }));
-          }
-        } else {
-          timings = [];
-          const bounds = data.ayahBounds;
-          if (Array.isArray(bounds) && bounds.length > 0) {
-            // AYAH-BOUNDED ACOUSTIC ANCHORING
-            // Distribute Bulgarian words across the Ayahs and strictly bound each word inside its Ayah's exact start and end time.
-            const totalEngLen = bounds.reduce((acc: number, b: any) => acc + (b.english ? b.english.length : 10), 0) || 1;
-            let wordIdx = 0;
-            for (let bIdx = 0; bIdx < bounds.length; bIdx++) {
-              const b = bounds[bIdx];
-              const isLast = bIdx === bounds.length - 1;
-              let ayahWords: string[];
-              if (b.bulgarian && typeof b.bulgarian === "string" && b.bulgarian.trim().length > 0) {
-                ayahWords = b.bulgarian.split(/\s+/).filter(Boolean);
-              } else {
-                const ratio = (b.english ? b.english.length : 10) / totalEngLen;
-                const count = isLast ? (words.length - wordIdx) : Math.max(1, Math.round(words.length * ratio));
-                ayahWords = words.slice(wordIdx, Math.min(words.length, wordIdx + count));
-              }
-              wordIdx += ayahWords.length;
-
-              const bStart = Number(b.start) || 0;
-              const bEnd = Number(b.end) || (bStart + 5);
-              const bDur = Math.max(0.5, bEnd - bStart);
-
-              const ayahCosts = ayahWords.map((w: string) => 1 + w.replace(/[^\p{L}\p{N}]/gu, "").length * 0.55);
-              const ayahTotalCost = ayahCosts.reduce((sum: number, c: number) => sum + c, 0) || 1;
-              let ayahCumCost = 0;
-
-              const interpolateSegTime = (frac: number, segs?: any[]) => {
-                if (frac <= 0) return bStart;
-                if (frac >= 1) return bEnd;
-                if (!Array.isArray(segs) || segs.length === 0) {
-                  return bStart + frac * bDur;
-                }
-                const x = frac * segs.length;
-                const k = Math.min(segs.length - 1, Math.floor(x));
-                const r = x - k;
-                const sStart = Number(segs[k].start) || bStart;
-                const sEnd = Number(segs[k].end) || bEnd;
-                return sStart + r * (sEnd - sStart);
-              };
-
-              for (let w = 0; w < ayahWords.length; w++) {
-                const fracS = ayahCumCost / ayahTotalCost;
-                ayahCumCost += ayahCosts[w];
-                const fracE = ayahCumCost / ayahTotalCost;
-                timings.push({
-                  start: Math.round(interpolateSegTime(fracS, b.segments) * 1000) / 1000,
-                  end: Math.round(interpolateSegTime(fracE, b.segments) * 1000) / 1000
-                });
-              }
-            }
-          } else {
-            const segs = data.wordSegments;
-            if (Array.isArray(segs) && segs.length > 0) {
-              const scale = 1;
-              const speechCost = (w: string) => {
-                let cost = 1 + w.replace(/[^\p{L}\p{N}]/gu, "").length * 0.55;
-                if (/[.!?…]$/.test(w)) cost += 3.5;
-                else if (/[,;:—]$/.test(w)) cost += 1.8;
-                return cost;
-              };
-              const costs = words.map(speechCost);
-              const cumCost = [0];
-              for (let i = 0; i < costs.length; i++) cumCost.push(cumCost[i] + costs[i]);
-              const totalCost = cumCost[cumCost.length - 1] || 1;
-
-              const segDurs = segs.map((s: any) => Math.max(0.1, (s.end - s.start) * scale));
-              const cumAudio = [0];
-              for (let i = 0; i < segDurs.length; i++) cumAudio.push(cumAudio[i] + segDurs[i]);
-              const totalAudio = cumAudio[cumAudio.length - 1] || audioDur;
-
-              for (let i = 0; i < words.length; i++) {
-                const fracS = cumCost[i] / totalCost;
-                const fracE = cumCost[i + 1] / totalCost;
-                const targetAudioS = fracS * totalAudio;
-                const targetAudioE = fracE * totalAudio;
-
-                let sIdx = 0;
-                while (sIdx < segs.length - 1 && cumAudio[sIdx + 1] < targetAudioS) sIdx++;
-                const remAudioS = (targetAudioS - cumAudio[sIdx]) / segDurs[sIdx];
-                const start = (segs[sIdx].start + remAudioS * (segs[sIdx].end - segs[sIdx].start)) * scale;
-
-                let eIdx = 0;
-                while (eIdx < segs.length - 1 && cumAudio[eIdx + 1] < targetAudioE) eIdx++;
-                const remAudioE = (targetAudioE - cumAudio[eIdx]) / segDurs[eIdx];
-                const end = (segs[eIdx].start + remAudioE * (segs[eIdx].end - segs[eIdx].start)) * scale;
-
-                timings.push({ start, end });
-              }
-            } else {
-              const speechCost = (w: string) => {
-                let cost = 1 + w.replace(/[^\p{L}\p{N}]/gu, "").length * 0.55;
-                if (/[.!?…]$/.test(w)) cost += 3.5;
-                else if (/[,;:—]$/.test(w)) cost += 1.8;
-                return cost;
-              };
-              const costs = words.map(speechCost);
-              const cumCost = [0];
-              for (let i = 0; i < costs.length; i++) cumCost.push(cumCost[i] + costs[i]);
-              const totalCost = cumCost[cumCost.length - 1] || 1;
-              for (let i = 0; i < words.length; i++) {
-                const s = (cumCost[i] / totalCost) * audioDur;
-                const e = (cumCost[i + 1] / totalCost) * audioDur;
-                timings.push({ start: s, end: e });
-              }
-            }
-          }
-        }
-
-        if (timings && timings.length > 0) {
-          const syncRes = verifyAndCorrectSubtitleSync(
-            timings.map((t: any, idx: number) => ({
-              word: t.word || words[idx] || "...",
-              start: t.start,
-              end: t.end,
-            })),
-            audioDur
-          );
-          timings = syncRes.correctedTimings;
-        }
-
-        // Crisp stable subtitle style: 100% scale at all times with no word-shifting zoom distortion
-        const bounds = data.ayahBounds;
-        if (Array.isArray(bounds) && bounds.length > 0) {
-          // FULL-AYAH BLOCK ACTIVE KARAOKE: One complete Ayah per subtitle block from ayah.start to ayah.end,
-          // dynamically sliced so the currently spoken word pops and glows in real time!
-          const totalEngLen = bounds.reduce((acc: number, b: any) => acc + (b.english ? b.english.length : 10), 0) || 1;
-          let wordIdx = 0;
-          for (let bIdx = 0; bIdx < bounds.length; bIdx++) {
-            const b = bounds[bIdx];
-            const isLast = bIdx === bounds.length - 1;
-            const isFirst = bIdx === 0;
-            let ayahWords: string[];
-            if (b.bulgarian && typeof b.bulgarian === "string" && b.bulgarian.trim().length > 0) {
-              ayahWords = b.bulgarian.split(/\s+/).filter(Boolean);
-            } else {
-              const ratio = (b.english ? b.english.length : 10) / totalEngLen;
-              const count = isLast ? (words.length - wordIdx) : Math.max(1, Math.round(words.length * ratio));
-              ayahWords = words.slice(wordIdx, Math.min(words.length, wordIdx + count));
-            }
-
-            if (ayahWords.length > 0) {
-              const startWordIdx = wordIdx;
-              wordIdx += ayahWords.length;
-
-              const start = Number(b.start) || 0;
-              const nextStart = !isLast && bounds[bIdx + 1] ? Number(bounds[bIdx + 1].start) : null;
-              const rawEnd = Number(b.end) || (start + 5);
-              let end = nextStart !== null ? Math.min(rawEnd, nextStart) : rawEnd;
-              if (end <= start) end = start + 0.5; // Prevent ASS inverted timestamp crash
-              const wordCount = ayahWords.length;
-              const fs = wordCount > 40 ? 58 : wordCount > 28 ? 68 : wordCount > 18 ? 80 : wordCount > 10 ? 92 : 105;
-              // Narrower wrapping so text doesn't overlap the TikTok right-side buttons
-              const wpl = wordCount > 40 ? 5 : wordCount > 28 ? 4 : wordCount > 18 ? 4 : wordCount > 10 ? 3 : 2;
-              const highlightKeywords = /^(Аллах|Коран|Корана|Пророк|Пророкът|Хадис|Сура|Аят|Рай|Дженнет|Дженнета|Дуа|Иман|Благословение|Милост|Търпение|Надежда|Успех|Мухаммад|Господ|Господар|Победа|Спокойствие|Защита|Сърце|Сърцето|Живот|Време|Времето|Истина|Истината|Светлина|Зло|Добро|Вяра|Вярата)[.,!?…]?$/i;
-              const isCustomOrKeyword = (wordStr: string) => {
-                const cleanW = wordStr.replace(/[^\p{L}\p{N}]/gu, "");
-                return (Array.isArray(data.customKeywords) && data.customKeywords.includes(cleanW)) || highlightKeywords.test(wordStr);
-              };
-
-              // 100% PERFECT AYAH-LEVEL SYNC: No karaoke guesswork for Quran. 
-              // Display the entire translation for the exact duration of the audio.
-              let formattedText = ayahWords.join(" ");
-              // Break into lines for readability
-              const lines = [];
-              for (let i = 0; i < ayahWords.length; i += wpl) {
-                lines.push(ayahWords.slice(i, i + wpl).join(" "));
-              }
-              formattedText = lines.join("\\N");
-              
-              // Removed microPop to fix timing bug and ensure consistency
-              const useAnim = isLast ? `\\fad(0,120)` : ``;
-              // Added \blur6 for a beautiful blurred shadow effect
-              const posTag = subPos === "center" ? `\\an5\\pos(540,960)` : `\\an${bulgarianAlign}\\pos(540,${bulgarianMarginV})`;
-              
-              // Quran always uses plain static text, no karaoke wiping, solid white color
-              const ayahStyleTag = `{${posTag}\\blur6\\fs${fs}\\1c&H00FFFFFF&${useAnim}}`;
-              
-              ass += `Dialogue: 0,${formatTime(start)},${formatTime(end)},Bulgarian,,0,0,0,,${ayahStyleTag}${formattedText}\n`;
-            }
-          }
-        } else {
-          const isSingleWordMode = data.subtitleSlicingMode === "single";
-          const MAX_WORDS = isSingleWordMode ? 1 : 4;
-          const MIN_WORDS = isSingleWordMode ? 1 : 2;
-
-          const cleanBulgarian = (data.bulgarian || "").replace(/<[^>]+>/g, "").trim();
-          const textParts = cleanBulgarian.split(/\n\n+/);
-          const hasTitle = textParts.length > 1;
-          const titleWordCount = hasTitle ? textParts[0].replace(/[^\p{L}\p{N}\s]/gu, " ").trim().split(/\s+/).filter(Boolean).length : 0;
-          
-          type Phrase = { words: string[]; startIdx: number; endIdx: number; isTitle: boolean };
-          const phrases: Phrase[] = [];
-          let cur: string[] = [];
-          let curStart = 0;
-          const flush = () => {
-            if (!cur.length) return;
-            const isTitle = curStart < titleWordCount;
-            phrases.push({ words: cur, startIdx: curStart, endIdx: curStart + cur.length, isTitle });
-            curStart += cur.length;
-            cur = [];
-          };
-
-          for (let i = 0; i < words.length; i++) {
-            const w = words[i];
-            // Acoustic Pause Slicing: if natural breathing gap (> 0.25s) exists right before this word, flush preceding phrase immediately
-            if (!isSingleWordMode && cur.length > 0 && timings[i] && timings[i - 1]) {
-              const gap = timings[i].start - timings[i - 1].end;
-              if (gap > 0.25) {
-                flush();
-              }
-            }
-            cur.push(w);
-            const endsPunct = /[.!?…]$/.test(w) || (/[,;:—]$/.test(w) && cur.length >= MIN_WORDS);
-            const isLastTitleWord = hasTitle && (curStart + cur.length === titleWordCount);
-            
-            if ((endsPunct && cur.length >= MIN_WORDS) || cur.length >= MAX_WORDS || isLastTitleWord) {
-              flush();
-            }
-          }
-          flush();
-
-          let prevEnd = 0;
-          for (let idx = 0; idx < phrases.length; idx++) {
-            const p = phrases[idx];
-            const isFirstPhrase = idx === 0;
-            const isLastPhrase = idx === phrases.length - 1;
-            
-            // Ensure exact synchronization with the start of the first word in the phrase
-            let start = timings[p.startIdx]?.start ?? prevEnd;
-            if (start < prevEnd) {
-              start = prevEnd;
-            }
-
-            const nextPhraseStart = idx + 1 < phrases.length
-              ? (timings[phrases[idx + 1].startIdx]?.start ?? audioDur)
-              : audioDur;
-
-            // End when the last word in the phrase finishes, plus a slight tail (0.12s) for natural reading
-            const lastWordEnd = timings[p.endIdx - 1]?.end ?? (start + 1.5);
-            let end = Math.min(nextPhraseStart, Math.max(start + 0.2, lastWordEnd + (isSingleWordMode ? 0.06 : 0.12)));
-
-            // MASTERCLASS ACTIVE WORD KARAOKE SLICING:
-            // Slice the phrase interval [start, end] into distinct ASS events for each active word so that
-            // every single word pops and glows exactly at the millisecond the narrator speaks it!
-            for (let wIdx = 0; wIdx < p.words.length; wIdx++) {
-              const globalIdx = p.startIdx + wIdx;
-              const wordStart = timings[globalIdx]?.start ?? start;
-              const nextWordStart = wIdx + 1 < p.words.length
-                ? (timings[globalIdx + 1]?.start ?? end)
-                : end;
-
-              const sliceStart = Math.max(start, wIdx === 0 ? start : wordStart);
-              const sliceEnd = Math.min(end, wIdx === p.words.length - 1 ? end : nextWordStart);
-              if (sliceEnd <= sliceStart) continue;
-
-              // Removed microPop to ensure consistency
-              const useAnim = (isLastPhrase && wIdx === p.words.length - 1) ? `\\fad(0,100)` : ``;
-              
-              // Fixed word scale: keep scale static so the phrase width doesn't change 
-              // dynamically and cause jarring line-wrap jumps mid-phrase!
-              const activeScale = ``;
-              const inactiveScale = ``;
-              
-              // Added \blur6 for a beautiful blurred shadow effect
-              const posTag = subPos === "center" ? `\\an5\\pos(540,960)` : `\\an${bulgarianAlign}\\pos(540,${bulgarianMarginV})`;
-              const titleTag = p.isTitle ? "\\fs130" : "";
-              const phraseStyleTag = `{${posTag}\\blur6${useAnim}${titleTag}}`;
-              
-              // Apply active scale only to the active word
-              const scaledTextLine = p.words
-                .map((w, i) => {
-                  const globalIdx = p.startIdx + i;
-                  const isActive = i === wIdx;
-                  const isWordInTitle = globalIdx < titleWordCount;
-                  if (isWordInTitle) {
-                    return `{\\c&H00FFFFFF&}${w}`; // Title is pure white
-                  } else {
-                    return isActive ? `{\\c&H0000B7FF&}${w}` : `{\\c&H00FFFFFF&}${w}`; // Body inactive white, active gold
-                  }
-                })
-                .join(" ");
-
-              ass += `Dialogue: 0,${formatTime(sliceStart)},${formatTime(sliceEnd)},Bulgarian,,0,0,0,,${phraseStyleTag}${scaledTextLine}\n`;
-            }
-            prevEnd = end;
-          }
-        }
-      }
+      const ass = generateAssSubtitles(data, audioDur);
 
       await fs.writeFile(assPath, "\uFEFF" + ass); // UTF-8 BOM helps some parsers
 
       // Escape ASS path for FFmpeg filter on Windows
-      const escapedAssPath = assPath.replace(/\\/g, '/').replace(/:/g, '\\:');
+      const escapedAssPath = assPath.replace(/\\/g, "/").replace(/:/g, "\\:");
 
       // 4. Run FFmpeg
       console.log(`[server-render] Generating MP4 with FFmpeg...`);
@@ -696,17 +804,17 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         console.log(`[server-render] Temp files currently in dir:`, _files);
         const _fs = await import("fs");
         console.log(`[server-render] Does ${finalBgPath} exist?`, _fs.existsSync(finalBgPath));
-      } catch(e){}
+      } catch (e) {}
 
       return new Promise<string>((resolve, reject) => {
         let cmd = ffmpeg();
-        
+
         if (isVideoBg) {
           cmd = cmd.input(finalBgPath).inputOptions(["-stream_loop -1"]);
         } else {
           cmd = cmd.input(finalBgPath).inputOptions(["-loop 1"]);
         }
-        
+
         cmd = cmd.input(audioPath);
 
         const is1080p = data.quality !== "720p";
@@ -715,101 +823,114 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 
         let ffmpegStderr = "";
 
-        cmd.complexFilter([
-          // Video background remains fully visible. Light contrast bump for vibrancy, no black box overlay!
-          `[0:v]crop='min(iw,ih*9/16)':'min(iw*16/9,ih)',scale=${width}:${height}:flags=bicubic,eq=contrast=1.05:saturation=1.1,subtitles='${escapedAssPath}'[v]`,
-          `[1:a]highpass=f=45,treble=g=2:f=3500:w=0.7,acompressor=threshold=-18dB:ratio=2.5:attack=5:release=50,bass=g=3:f=110:w=0.6,loudnorm=I=-14:LRA=9:TP=-1.0[a]`
-        ])
-        .outputOptions([
-          "-map [v]",
-          "-map [a]",
-          "-c:v libx264",
-          "-profile:v main",
-          "-level 4.0",
-          "-pix_fmt yuv420p",
-          "-colorspace bt709",
-          "-color_trc bt709",
-          "-color_primaries bt709",
-          "-movflags +faststart",
-          "-preset ultrafast",
-          "-crf 26",
-          "-r 30",
-          "-g 60",
-          "-c:a aac",
-          "-profile:a aac_low",
-          "-b:a 192k",
-          "-ar 48000",
-          "-ac 2",
-          `-t ${Number(audioDur).toFixed(2)}`,
-          "-threads 0"
-        ])
-        .outputFormat("mp4")
-        .on("start", (commandLine: string) => {
-          console.log(`[server-render] FFmpeg started with command: ${commandLine}`);
-        })
-        .on("stderr", (line: string) => {
-          ffmpegStderr += line + "\n";
-        })
-        .on("progress", (progress: any) => {
-          if (progress.percent) {
-            console.log(`[server-render] Rendering progress: ${progress.percent.toFixed(1)}% (time: ${progress.timemark})`);
-          } else {
-            console.log(`[server-render] Rendering progress: ${progress.timemark}`);
-          }
-        })
-        .save(outPath)
-        .on("end", async () => {
-          try {
-            const stat = await fs.stat(outPath);
-            console.log(`[server-render] FFmpeg finished successfully. MP4 size: ${stat.size} bytes`);
-            if (data && data.targetOutputPath && typeof data.targetOutputPath === "string") {
-              const dest = data.targetOutputPath;
-              console.log(`[server-render] Direct move to targetOutputPath: ${dest} (Zero-RAM Base64 elimination)`);
-              await fs.mkdir(path.dirname(dest), { recursive: true }).catch(() => {});
-              await fs.rename(outPath, dest).catch(async () => {
-                await fs.copyFile(outPath, dest);
-                await fs.unlink(outPath).catch(() => {});
-              });
-              resolve(JSON.stringify({ directWrite: true, filePath: dest, size: stat.size }));
+        cmd
+          .complexFilter([
+            // Video background remains fully visible. Light contrast bump for vibrancy, no black box overlay!
+            `[0:v]crop='min(iw,ih*9/16)':'min(iw*16/9,ih)',scale=${width}:${height}:flags=bicubic,eq=contrast=1.05:saturation=1.1,subtitles='${escapedAssPath}'[v]`,
+            `[1:a]highpass=f=45,treble=g=2:f=3500:w=0.7,acompressor=threshold=-18dB:ratio=2.5:attack=5:release=50,bass=g=3:f=110:w=0.6,loudnorm=I=-14:LRA=9:TP=-1.0[a]`,
+          ])
+          .outputOptions([
+            "-map [v]",
+            "-map [a]",
+            "-c:v libx264",
+            "-profile:v main",
+            "-level 4.0",
+            "-pix_fmt yuv420p",
+            "-colorspace bt709",
+            "-color_trc bt709",
+            "-color_primaries bt709",
+            "-movflags +faststart",
+            "-preset ultrafast",
+            "-crf 26",
+            "-r 30",
+            "-g 60",
+            "-c:a aac",
+            "-profile:a aac_low",
+            "-b:a 192k",
+            "-ar 48000",
+            "-ac 2",
+            `-t ${Number(audioDur).toFixed(2)}`,
+            "-threads 0",
+          ])
+          .outputFormat("mp4")
+          .on("start", (commandLine: string) => {
+            console.log(`[server-render] FFmpeg started with command: ${commandLine}`);
+          })
+          .on("stderr", (line: string) => {
+            ffmpegStderr += line + "\n";
+          })
+          .on("progress", (progress: any) => {
+            if (progress.percent) {
+              console.log(
+                `[server-render] Rendering progress: ${progress.percent.toFixed(1)}% (time: ${progress.timemark})`,
+              );
             } else {
-              const buf = await fs.readFile(outPath);
-              resolve(buf.toString("base64"));
+              console.log(`[server-render] Rendering progress: ${progress.timemark}`);
             }
-          } catch (e) {
-            reject(e);
-          } finally {
+          })
+          .save(outPath)
+          .on("end", async () => {
+            try {
+              const stat = await fs.stat(outPath);
+              console.log(
+                `[server-render] FFmpeg finished successfully. MP4 size: ${stat.size} bytes`,
+              );
+              if (data && data.targetOutputPath && typeof data.targetOutputPath === "string") {
+                const dest = data.targetOutputPath;
+                console.log(
+                  `[server-render] Direct move to targetOutputPath: ${dest} (Zero-RAM Base64 elimination)`,
+                );
+                await fs.mkdir(path.dirname(dest), { recursive: true }).catch(() => {});
+                await fs.rename(outPath, dest).catch(async () => {
+                  await fs.copyFile(outPath, dest);
+                  await fs.unlink(outPath).catch(() => {});
+                });
+                resolve(JSON.stringify({ directWrite: true, filePath: dest, size: stat.size }));
+              } else {
+                const buf = await fs.readFile(outPath);
+                resolve(buf.toString("base64"));
+              }
+            } catch (e) {
+              reject(e);
+            } finally {
+              // Cleanup all temporary files created during this render session
+              for (const fp of sessionTempFiles) {
+                await fs.unlink(fp).catch(() => {});
+              }
+              await fs.unlink(finalBgPath).catch(() => {});
+            }
+          })
+          .on("error", async (err: any) => {
+            console.error("[server-render] FFmpeg Error:", err.message);
+            if (ffmpegStderr) console.error("[server-render] FFmpeg stderr log:\n", ffmpegStderr);
             // Cleanup all temporary files created during this render session
             for (const fp of sessionTempFiles) {
               await fs.unlink(fp).catch(() => {});
             }
             await fs.unlink(finalBgPath).catch(() => {});
-          }
-        })
-        .on("error", async (err: any) => {
-          console.error("[server-render] FFmpeg Error:", err.message);
-          if (ffmpegStderr) console.error("[server-render] FFmpeg stderr log:\n", ffmpegStderr);
-          // Cleanup all temporary files created during this render session
-          for (const fp of sessionTempFiles) {
-            await fs.unlink(fp).catch(() => {});
-          }
-          await fs.unlink(finalBgPath).catch(() => {});
-          const errLines = ffmpegStderr
-            .split("\n")
-            .filter(l => l.trim() && !l.includes("libx264 @") && !l.includes("aac @") && !l.includes("frame=") && !l.includes("size="))
-            .slice(-10)
-            .join(" | ");
-          reject(new Error(err.message + (errLines ? ` [FFmpeg log: ${errLines}]` : "")));
-        });
+            const errLines = ffmpegStderr
+              .split("\n")
+              .filter(
+                (l) =>
+                  l.trim() &&
+                  !l.includes("libx264 @") &&
+                  !l.includes("aac @") &&
+                  !l.includes("frame=") &&
+                  !l.includes("size="),
+              )
+              .slice(-10)
+              .join(" | ");
+            reject(new Error(err.message + (errLines ? ` [FFmpeg log: ${errLines}]` : "")));
+          });
       });
-
     } catch (err: unknown) {
       console.error("[server-render] Critical failure:", err);
       throw new Error(String(err));
     } finally {
       for (const p of sessionTempFiles) activeRenderSessionFiles.delete(p);
     }
-    });
-  }
+  });
+}
 
 export const runServerRender = createServerFn({ method: "POST" })
   .validator((opts: any) => opts)
@@ -840,14 +961,20 @@ async function aggressivelyCleanServerDisk(forceAll = false) {
           "journalctl --vacuum-time=1d 2>/dev/null",
           "apt-get clean 2>/dev/null",
           "npm cache clean --force 2>/dev/null",
-          "rm -rf /var/cache/* ~/.cache/* /root/.cache/* /home/*/.cache/* ~/.npm/* /root/.npm/* /home/*/.npm/* ~/.pm2/logs/* /root/.pm2/logs/* /home/*/.pm2/logs/* /var/log/*.gz /var/log/*/*/*.gz 2>/dev/null"
+          "rm -rf /var/cache/* ~/.cache/* /root/.cache/* /home/*/.cache/* ~/.npm/* /root/.npm/* /home/*/.npm/* ~/.pm2/logs/* /root/.pm2/logs/* /home/*/.pm2/logs/* /var/log/*.gz /var/log/*/*/*.gz 2>/dev/null",
         ].join("; ");
         exec(cmd, { timeout: 15000 }, () => resolve());
       });
     }
 
     // 1. Clean OS temp directory (/tmp) and explicit /tmp, /var/tmp
-    const tmpDirs = [os.tmpdir(), "/tmp", "/var/tmp", path.join(process.cwd(), "tmp"), path.join(process.cwd(), ".output", "tmp")];
+    const tmpDirs = [
+      os.tmpdir(),
+      "/tmp",
+      "/var/tmp",
+      path.join(process.cwd(), "tmp"),
+      path.join(process.cwd(), ".output", "tmp"),
+    ];
     for (const tmpDir of tmpDirs) {
       try {
         const tmpFiles = await fs.readdir(tmpDir).catch(() => []);
@@ -868,7 +995,11 @@ async function aggressivelyCleanServerDisk(forceAll = false) {
     }
 
     // 2. Truncate PM2 log files (~/.pm2/logs and /root/.pm2/logs) to reclaim disk space immediately without closing open file descriptors
-    const logDirs = [path.join(os.homedir(), ".pm2", "logs"), "/root/.pm2/logs", "/home/admin/.pm2/logs"];
+    const logDirs = [
+      path.join(os.homedir(), ".pm2", "logs"),
+      "/root/.pm2/logs",
+      "/home/admin/.pm2/logs",
+    ];
     for (const lDir of logDirs) {
       try {
         const lFiles = await fs.readdir(lDir).catch(() => []);
@@ -888,16 +1019,19 @@ async function aggressivelyCleanServerDisk(forceAll = false) {
     try {
       const jobsDir = path.join(os.homedir(), ".islamicreels_jobs");
       const jFiles = await fs.readdir(jobsDir).catch(() => []);
-      
-      let activeIds = new Set<string>();
-      let completedIds = new Set<string>();
+
+      const activeIds = new Set<string>();
+      const completedIds = new Set<string>();
       try {
         const jobsFile = path.join(jobsDir, "jobs.json");
         const raw = await fs.readFile(jobsFile, "utf-8");
         const jobsList = JSON.parse(raw);
         if (Array.isArray(jobsList)) {
           jobsList.forEach((j: any) => {
-            if (j && (j.status === "processing" || j.status === "rendering" || j.status === "queued")) {
+            if (
+              j &&
+              (j.status === "processing" || j.status === "rendering" || j.status === "queued")
+            ) {
               activeIds.add(j.id);
             } else if (j && j.status === "completed") {
               completedIds.add(j.id);
@@ -923,7 +1057,13 @@ async function aggressivelyCleanServerDisk(forceAll = false) {
       } catch {}
 
       // Collect stats for all completed or orphan files in jobs directory to sort by age
-      const fileStats: { name: string; path: string; mtimeMs: number; isActive: boolean; isCompleted: boolean }[] = [];
+      const fileStats: {
+        name: string;
+        path: string;
+        mtimeMs: number;
+        isActive: boolean;
+        isCompleted: boolean;
+      }[] = [];
       for (const jf of jFiles) {
         if (jf === "jobs.json") continue;
         const jp = path.join(jobsDir, jf);
@@ -931,7 +1071,13 @@ async function aggressivelyCleanServerDisk(forceAll = false) {
         if (!st) continue;
         const isActivelyRendering = Array.from(activeIds).some((id) => jf.startsWith(id));
         const isCompletedJob = Array.from(completedIds).some((id) => jf.startsWith(id));
-        fileStats.push({ name: jf, path: jp, mtimeMs: st.mtimeMs, isActive: isActivelyRendering, isCompleted: isCompletedJob });
+        fileStats.push({
+          name: jf,
+          path: jp,
+          mtimeMs: st.mtimeMs,
+          isActive: isActivelyRendering,
+          isCompleted: isCompletedJob,
+        });
       }
 
       // Sort newest to oldest
@@ -991,7 +1137,10 @@ export type ServerJobRecord = {
 let jobsWriteLock: Promise<any> = Promise.resolve();
 
 export function withJobsLock<T>(fn: () => Promise<T>): Promise<T> {
-  const next = jobsWriteLock.then(() => fn(), () => fn());
+  const next = jobsWriteLock.then(
+    () => fn(),
+    () => fn(),
+  );
   jobsWriteLock = next.catch(() => {});
   return next;
 }
@@ -1014,7 +1163,10 @@ async function writeJobsFile(jobs: any[]) {
   const path = await import("path");
   const dir = await getJobsDir();
   const file = path.join(dir, "jobs.json");
-  const tmpPath = path.join(dir, `jobs.json.tmp.${Date.now()}.${Math.random().toString(36).slice(2)}`);
+  const tmpPath = path.join(
+    dir,
+    `jobs.json.tmp.${Date.now()}.${Math.random().toString(36).slice(2)}`,
+  );
   let success = false;
   try {
     await fs.writeFile(tmpPath, JSON.stringify(jobs, null, 2), "utf-8");
@@ -1052,12 +1204,18 @@ async function recoverInterruptedJobs() {
       for (const j of jobs) {
         if (j && (j.status === "rendering" || j.status === "queued") && j.data) {
           if (j.status === "rendering") {
-            console.log(`[server-recovery] Recovering interrupted job ${j.id} (${j.title}) -> setting back to queued.`);
+            console.log(
+              `[server-recovery] Recovering interrupted job ${j.id} (${j.title}) -> setting back to queued.`,
+            );
             j.status = "queued";
             modified = true;
           }
           if (!backgroundRenderQueue.some((item) => item.id === j.id)) {
-            backgroundRenderQueue.push({ id: j.id, data: j.data, title: j.title || "Ислямско видео" });
+            backgroundRenderQueue.push({
+              id: j.id,
+              data: j.data,
+              title: j.title || "Ислямско видео",
+            });
           }
         }
       }
@@ -1082,7 +1240,11 @@ async function processRenderQueue() {
     const queuedInFile = allJobs.filter((j: any) => j.status === "queued" && j.data);
     for (const qj of queuedInFile) {
       if (!backgroundRenderQueue.some((item) => item.id === qj.id)) {
-        backgroundRenderQueue.push({ id: qj.id, data: qj.data, title: qj.title || "Ислямско видео" });
+        backgroundRenderQueue.push({
+          id: qj.id,
+          data: qj.data,
+          title: qj.title || "Ислямско видео",
+        });
       }
     }
   } catch {}
@@ -1095,8 +1257,10 @@ async function processRenderQueue() {
     const targetMp4 = path.join(dir, `${item.id}.mp4`);
 
     try {
-      console.log(`[server-queue] Starting queued render for ${item.id} (${item.title})... Queue remaining: ${backgroundRenderQueue.length}`);
-      
+      console.log(
+        `[server-queue] Starting queued render for ${item.id} (${item.title})... Queue remaining: ${backgroundRenderQueue.length}`,
+      );
+
       await withJobsLock(async () => {
         const startJobs = await loadJobs();
         const sIdx = startJobs.findIndex((j: any) => j.id === item.id);
@@ -1110,7 +1274,7 @@ async function processRenderQueue() {
       await aggressivelyCleanServerDisk(true);
 
       const renderResult = await executeRenderTask({
-        data: { ...item.data, targetOutputPath: targetMp4 }
+        data: { ...item.data, targetOutputPath: targetMp4 },
       });
 
       let directWriteSuccess = false;
@@ -1205,32 +1369,32 @@ export const retryServerRenderJob = createServerFn({ method: "POST" })
     return { success: true };
   });
 
-export const listServerRenderJobs = createServerFn({ method: "POST" })
-  .handler(async () => {
-    const fs = (await import("fs")).promises;
-    const path = await import("path");
-    const dir = await getJobsDir();
-    return await withJobsLock(async () => {
-      const jobs = await loadJobs();
-      const validJobs: ServerJobRecord[] = [];
-      let updated = false;
-      for (const j of jobs) {
-        if (j && j.status === "completed") {
-          const fileExists = await fs.stat(path.join(dir, `${j.id}.mp4`)).catch(() => null);
-          if (!fileExists) {
-            j.status = "error";
-            j.error = "Видеото е било автоматично почистено от диска на сървъра. Натиснете бутона 🔄 за повторно рендиране.";
-            updated = true;
-          }
+export const listServerRenderJobs = createServerFn({ method: "POST" }).handler(async () => {
+  const fs = (await import("fs")).promises;
+  const path = await import("path");
+  const dir = await getJobsDir();
+  return await withJobsLock(async () => {
+    const jobs = await loadJobs();
+    const validJobs: ServerJobRecord[] = [];
+    let updated = false;
+    for (const j of jobs) {
+      if (j && j.status === "completed") {
+        const fileExists = await fs.stat(path.join(dir, `${j.id}.mp4`)).catch(() => null);
+        if (!fileExists) {
+          j.status = "error";
+          j.error =
+            "Видеото е било автоматично почистено от диска на сървъра. Натиснете бутона 🔄 за повторно рендиране.";
+          updated = true;
         }
-        validJobs.push(j);
       }
-      if (updated) {
-        await writeJobsFile(validJobs);
-      }
-      return validJobs;
-    });
+      validJobs.push(j);
+    }
+    if (updated) {
+      await writeJobsFile(validJobs);
+    }
+    return validJobs;
   });
+});
 
 export const getServerRenderJobBase64 = createServerFn({ method: "POST" })
   .validator((input: { id: string }) => input)
@@ -1280,11 +1444,10 @@ export const getServerRenderJobDownloadUrl = createServerFn({ method: "POST" })
     };
   });
 
-export const cleanServerDiskSpace = createServerFn({ method: "POST" })
-  .handler(async () => {
-    await aggressivelyCleanServerDisk(true);
-    return { success: true };
-  });
+export const cleanServerDiskSpace = createServerFn({ method: "POST" }).handler(async () => {
+  await aggressivelyCleanServerDisk(true);
+  return { success: true };
+});
 
 let maintenanceTimerStarted = false;
 export function scheduleServerMaintenance() {
@@ -1292,17 +1455,30 @@ export function scheduleServerMaintenance() {
   maintenanceTimerStarted = true;
   console.log("[server-maintenance] Automatic server health & temp cleanup worker initialized.");
 
-  setTimeout(() => {
-    recoverInterruptedJobs().catch((e) => console.error("[server-maintenance] Boot recovery error:", e));
+  const bootTimer = setTimeout(() => {
+    recoverInterruptedJobs().catch((e) =>
+      console.error("[server-maintenance] Boot recovery error:", e),
+    );
   }, 3 * 1000);
+  bootTimer?.unref?.();
 
-  setInterval(() => {
-    console.log("[server-maintenance] Running scheduled 6-hour disk & PM2 log maintenance...");
-    aggressivelyCleanServerDisk(true).catch((e) => console.error("[server-maintenance] Scheduled cleanup error:", e));
-    recoverInterruptedJobs().catch((e) => console.error("[server-maintenance] Scheduled recovery error:", e));
-  }, 6 * 60 * 60 * 1000);
+  const maintInterval = setInterval(
+    () => {
+      console.log("[server-maintenance] Running scheduled 6-hour disk & PM2 log maintenance...");
+      aggressivelyCleanServerDisk(true).catch((e) =>
+        console.error("[server-maintenance] Scheduled cleanup error:", e),
+      );
+      recoverInterruptedJobs().catch((e) =>
+        console.error("[server-maintenance] Scheduled recovery error:", e),
+      );
+    },
+    6 * 60 * 60 * 1000,
+  );
+  maintInterval?.unref?.();
 }
 
 if (typeof window === "undefined" && typeof process !== "undefined" && !maintenanceTimerStarted) {
-  try { scheduleServerMaintenance(); } catch {}
+  try {
+    scheduleServerMaintenance();
+  } catch {}
 }
