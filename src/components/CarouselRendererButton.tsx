@@ -224,13 +224,8 @@ export function CarouselRendererButton({ slides: initialSlides, title }: { slide
         const downloadUrl = `/api/download/${res.jobId}?filename=${encodeURIComponent(
           cleanTitle.replace(/[<>\:"/\\|?*]+/g, "_") + ".mp4"
         )}`;
-        const a = document.createElement("a");
-        a.href = downloadUrl;
-        a.download = "";
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        toast.success("Видеото е готово!");
+        window.location.href = downloadUrl;
+        toast.success("Видеото е готово и се изтегля!");
       }
     } catch (err: any) {
       console.error(err);
