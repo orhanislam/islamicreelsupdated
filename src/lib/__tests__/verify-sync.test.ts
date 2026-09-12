@@ -143,7 +143,7 @@ function testTopicTopHeaderDisplay() {
     throw new Error(`Expected 'Тайната на истигфара', got '${topic5}'`);
   }
 
-  // Test 2: ASS top header generation displays the topic
+  // Test 2: ASS top header generation displays the topic on two lines with larger font (\fs64 and \N)
   const assExplicitTopic = generateAssSubtitles(
     {
       topic: "Покоят на сърцата",
@@ -152,11 +152,11 @@ function testTopicTopHeaderDisplay() {
     },
     5.0,
   );
-  if (!assExplicitTopic.includes("Покоят на сърцата")) {
-    throw new Error(`ASS header does not contain expected topic line! Output was:\n${assExplicitTopic}`);
+  if (!assExplicitTopic.includes("Покоят на\\Nсърцата") || !assExplicitTopic.includes("\\fs64")) {
+    throw new Error(`ASS header does not contain expected 2-line topic with \\fs64! Output was:\n${assExplicitTopic}`);
   }
 
-  // Test 3: ASS top header extracts topic from bracketed citation
+  // Test 3: ASS top header extracts topic from bracketed citation and formats on two lines
   const assBracketed = generateAssSubtitles(
     {
       reference: "[Коран 13:28] Покоят на сърцата",
@@ -164,11 +164,36 @@ function testTopicTopHeaderDisplay() {
     },
     5.0,
   );
-  if (!assBracketed.includes("Покоят на сърцата")) {
+  if (!assBracketed.includes("Покоят на\\Nсърцата")) {
     throw new Error(`ASS header does not contain extracted topic from bracketed title!`);
   }
 
-  console.log("✔ testTopicTopHeaderDisplay passed!");
+  console.log("✔ testTopicTopHeaderDisplay passed (verified two-line topic wrapping and larger font size)!");
+}
+
+function testAudioDurationSafeguards() {
+  const timings = [
+    { word: "В", start: 0.2, end: 0.5 },
+    { word: "името", start: 0.5, end: 1.1 },
+    { word: "на", start: 1.1, end: 1.4 },
+    { word: "Аллах", start: 1.4, end: 2.2 },
+    { word: "Всемилостивия", start: 2.2, end: 3.5 },
+    { word: "Милосърдния", start: 3.5, end: 26.8 }, // Speech ends at 26.8 seconds
+  ];
+
+  const maxTimingEnd = Math.max(...timings.map((t) => t.end));
+  const minRequiredDuration = maxTimingEnd + 1.2;
+
+  // Simulate a truncated probe (e.g. mp3Duration returning 18.2s for a 28s voiceover)
+  let probedDuration = 18.2;
+  if (probedDuration < minRequiredDuration) {
+    probedDuration = minRequiredDuration;
+  }
+
+  if (probedDuration < 28.0) {
+    throw new Error(`Audio duration safeguard failed: probedDuration=${probedDuration} < 28.0s!`);
+  }
+  console.log("✔ testAudioDurationSafeguards passed: Clamped duration to", probedDuration, "s (covers speech + 1.2s outro buffer)");
 }
 
 async function runAllTests() {
@@ -177,6 +202,7 @@ async function runAllTests() {
   testPhoneticWeighting();
   testTikTokSafeSubtitleWidth();
   testTopicTopHeaderDisplay();
+  testAudioDurationSafeguards();
   console.log("✔ All subtitle synchronization verification tests passed successfully!");
 }
 

@@ -115,8 +115,8 @@ PlayResY: ${sz.H}
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
 Style: Arabic,Scheherazade New,100,&H00FFFFFF,&H000000FF,&H00000000,&H80000000,-1,0,0,0,100,100,0,0,1,3,0,8,${placement.marginL},${placement.marginR},${sz.SAFE_TOP},1
-Style: Bulgarian,Outfit,74,&H00FFFFFF,&H0000D7FF,${outlineColor},${backColor},-1,0,0,0,100,100,0,0,${borderStyle},${outlineWidth},${shadowSize},${placement.alignment},${placement.marginL},${placement.marginR},${placement.marginV},1
-Style: Reference,Outfit,52,&H00FFFFFF,&H000000FF,&H00000000,&H99000000,-1,0,0,0,100,100,1,0,1,2.5,3,8,180,180,${sz.SAFE_TOP + 40},1
+Style: Bulgarian,Outfit,80,&H00FFFFFF,&H0000D7FF,${outlineColor},${backColor},-1,0,0,0,100,100,0,0,${borderStyle},${outlineWidth},${shadowSize},${placement.alignment},${placement.marginL},${placement.marginR},${placement.marginV},1
+Style: Reference,Outfit,64,&H00FFFFFF,&H000000FF,&H00000000,&H99000000,-1,0,0,0,100,100,1,0,1,2.5,3,8,180,180,${sz.SAFE_TOP + 30},1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
@@ -154,13 +154,32 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
   topText = topText.replace(/^["„“'«»\s:\-–—]+|["„“'«»\s:\-–—]+$/g, "").trim();
 
   if (topText) {
-    let topFs = 50;
-    const topWidth = estimateTextWidth(topText, topFs);
-    const maxTopWidth = 720;
-    if (topWidth > maxTopWidth) {
-      topFs = Math.max(34, Math.floor(topFs * (maxTopWidth / topWidth)));
+    // Format into two balanced lines for a clean, bold, professional 2-line header at the top
+    const words = topText.split(/\s+/).filter(Boolean);
+    let topLines: string[] = [topText];
+    if (words.length >= 2) {
+      let bestIdx = 1;
+      let minDiff = Infinity;
+      for (let i = 1; i < words.length; i++) {
+        const l1 = words.slice(0, i).join(" ");
+        const l2 = words.slice(i).join(" ");
+        const diff = Math.abs(l1.length - l2.length);
+        if (diff < minDiff) {
+          minDiff = diff;
+          bestIdx = i;
+        }
+      }
+      topLines = [words.slice(0, bestIdx).join(" "), words.slice(bestIdx).join(" ")];
     }
-    ass += `Dialogue: 0,0:00:00.00,${formatTime(audioDur)},Reference,,0,0,0,,{\\an8\\pos(540,${sz.SAFE_TOP + 40})\\fs${topFs}}${topText}\n`;
+
+    let topFs = 64;
+    const maxTopWidth = 720;
+    const longestLineWidth = Math.max(...topLines.map((l) => estimateTextWidth(l, topFs)));
+    if (longestLineWidth > maxTopWidth) {
+      topFs = Math.max(46, Math.floor(topFs * (maxTopWidth / longestLineWidth)));
+    }
+    const formattedTop = topLines.join("\\N");
+    ass += `Dialogue: 0,0:00:00.00,${formatTime(audioDur)},Reference,,0,0,0,,{\\an8\\pos(540,${sz.SAFE_TOP + 30})\\fs${topFs}}${formattedTop}\n`;
   }
 
   if (data.bulgarian) {
@@ -355,14 +374,14 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 
           let fs =
             wordCount > 50
-              ? 40
+              ? 44
               : wordCount > 35
-                ? 48
+                ? 52
                 : wordCount > 22
-                  ? 60
+                  ? 66
                   : wordCount > 12
-                    ? 70
-                    : 80;
+                    ? 76
+                    : 84;
           let lines: string[] = [];
           const minFs = 28;
 
@@ -457,8 +476,8 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         const posTag = `\\an${placement.alignment}\\pos(${placement.posX},${placement.posY})`;
         const safeLineWidth = Math.min(sz.W_SAFE, 640);
 
-        // 1. Initial base font size (titles 82, regular phrases 72)
-        let phraseFs = p.isTitle ? 82 : 72;
+        // 1. Initial base font size (titles 88, regular phrases 80)
+        let phraseFs = p.isTitle ? 88 : 80;
 
         // 2. Dynamic auto-scale down if ANY single word in the phrase exceeds safeLineWidth
         const longestWordWidth = Math.max(...p.words.map((w) => estimateTextWidth(w, phraseFs)));
@@ -661,40 +680,68 @@ export async function executeRenderTask(opts: any): Promise<any> {
 
       let audioDur = 15;
       try {
-        audioDur = await new Promise<number>((resolve) => {
-          let output = "";
-          ffmpeg()
-            .input(audioPath)
-            .outputOptions(["-f null"])
-            .output("-")
-            .on("error", () => {
-              const match = output.match(/Duration:\s*(\d+):(\d+):(\d+\.\d+)/);
-              if (match) {
-                resolve(Number(match[1]) * 3600 + Number(match[2]) * 60 + Number(match[3]));
-              } else {
-                resolve(0);
-              }
-            })
-            .on("end", () => {
-              const match = output.match(/Duration:\s*(\d+):(\d+):(\d+\.\d+)/);
-              if (match) {
-                resolve(Number(match[1]) * 3600 + Number(match[2]) * 60 + Number(match[3]));
-              } else {
-                resolve(0);
-              }
-            })
-            .on("stderr", (line: string) => {
-              output += line + "\n";
-            })
-            .run();
-        });
+        // 1. Direct ffprobe probe (fastest and most accurate for Edge-TTS, ElevenLabs, VBR MP3)
+        try {
+          const { execFile } = await import("child_process");
+          const util = await import("util");
+          const execFileAsync = util.promisify(execFile);
+          const { stdout } = await execFileAsync("ffprobe", [
+            "-v", "error",
+            "-show_entries", "format=duration",
+            "-of", "default=noprint_wrappers=1:nokey=1",
+            audioPath,
+          ]);
+          const parsed = parseFloat(stdout.trim());
+          if (!isNaN(parsed) && parsed > 0) {
+            audioDur = parsed;
+            console.log(`[server-render] ffprobe exact audio duration: ${audioDur.toFixed(2)} seconds`);
+          }
+        } catch (ffprobeErr) {
+          console.warn("[server-render] CLI ffprobe failed, trying fluent-ffmpeg fallback:", ffprobeErr);
+        }
 
-        if (!audioDur || audioDur <= 0) {
+        // 2. Fallback to fluent-ffmpeg probe if ffprobe CLI didn't yield duration
+        if (!audioDur || audioDur <= 0 || audioDur === 15) {
+          const probeDur = await new Promise<number>((resolve) => {
+            let output = "";
+            ffmpeg()
+              .setFfmpegPath(ffmpegPath)
+              .input(audioPath)
+              .outputOptions(["-f null"])
+              .output("-")
+              .on("error", () => {
+                const match = output.match(/Duration:\s*(\d+):(\d+):(\d+\.\d+)/);
+                if (match) {
+                  resolve(Number(match[1]) * 3600 + Number(match[2]) * 60 + Number(match[3]));
+                } else {
+                  resolve(0);
+                }
+              })
+              .on("end", () => {
+                const match = output.match(/Duration:\s*(\d+):(\d+):(\d+\.\d+)/);
+                if (match) {
+                  resolve(Number(match[1]) * 3600 + Number(match[2]) * 60 + Number(match[3]));
+                } else {
+                  resolve(0);
+                }
+              })
+              .on("stderr", (line: string) => {
+                output += line + "\n";
+              })
+              .run();
+          });
+          if (probeDur > 0) {
+            audioDur = probeDur;
+            console.log(`[server-render] Fluent-ffmpeg exact audio duration: ${audioDur.toFixed(2)} seconds`);
+          }
+        }
+
+        // 3. Fallback to mp3Duration if neither ffprobe nor ffmpeg worked
+        if (!audioDur || audioDur <= 0 || audioDur === 15) {
           const mp3Duration = (await import("mp3-duration")).default;
           const audioBuf = await fs.readFile(audioPath);
           audioDur = await mp3Duration(audioBuf);
         }
-        console.log(`[server-render] Exact audio duration probed: ${audioDur} seconds`);
       } catch (err) {
         console.warn(
           "[server-render] Could not probe exact audio duration, falling back to 20s",
@@ -702,6 +749,28 @@ export async function executeRenderTask(opts: any): Promise<any> {
         );
         audioDur = 20;
       }
+
+      // 4. CRITICAL SAFEGUARD: Compare against actual speech word timestamps!
+      // In Edge-TTS / ElevenLabs, each spoken word has start/end timestamps.
+      // The video must NEVER cut off 5-10 seconds before the speaker finishes talking!
+      const maxTimingEnd = Array.isArray(data.bulgarianWordTimings) && data.bulgarianWordTimings.length > 0
+        ? Math.max(...data.bulgarianWordTimings.map((t: any) => Number(t.end) || 0))
+        : 0;
+
+      if (maxTimingEnd > 0) {
+        // Speech cannot finish before the last word has been spoken!
+        // Always add a 1.2s outro buffer so the last syllable isn't cut off abruptly.
+        const minRequiredDuration = maxTimingEnd + 1.2;
+        if (audioDur < minRequiredDuration) {
+          console.log(
+            `[server-render] Probed audio duration (${audioDur.toFixed(2)}s) is shorter than last spoken word (${maxTimingEnd.toFixed(2)}s). Clamping audio duration to ${minRequiredDuration.toFixed(2)}s.`
+          );
+          audioDur = minRequiredDuration;
+        }
+      }
+
+      audioDur = Math.max(audioDur, 10);
+      console.log(`[server-render] Final video duration configured: ${audioDur.toFixed(2)} seconds`);
 
       // 2. Download/Save Background
       let isVideoBg = false;
@@ -886,7 +955,7 @@ export async function executeRenderTask(opts: any): Promise<any> {
           .complexFilter([
             // Video background remains fully visible. Light contrast bump for vibrancy, no black box overlay!
             `[0:v]crop='min(iw,ih*9/16)':'min(iw*16/9,ih)',scale=${width}:${height}:flags=bicubic,eq=contrast=1.05:saturation=1.1,subtitles='${escapedAssPath}'[v]`,
-            `[1:a]highpass=f=45,treble=g=2:f=3500:w=0.7,acompressor=threshold=-18dB:ratio=2.5:attack=5:release=50,bass=g=3:f=110:w=0.6,loudnorm=I=-14:LRA=9:TP=-1.0[a]`,
+            `[1:a]highpass=f=45,treble=g=2:f=3500:w=0.7,acompressor=threshold=-18dB:ratio=2.5:attack=5:release=50,bass=g=3:f=110:w=0.6,loudnorm=I=-14:LRA=9:TP=-1.0,apad[a]`,
           ])
           .outputOptions([
             "-map [v]",
