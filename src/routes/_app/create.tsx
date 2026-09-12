@@ -217,7 +217,7 @@ function CreatePage() {
           const title = proposal.title;
           cleanTitle = title.replace(/\[.*?\]\s*/, "").trim();
           const colonMatch = title.match(/\b(\d{1,3})\s*[:.]\s*(\d{1,3})(?:\s*-\s*(\d{1,3}))?\b/);
-          if (colonMatch && (pType === "quran" || pType === "general")) {
+          if (colonMatch && (pType === "quran" || pType === "general" || pType === "explained_video")) {
             pType = "quran";
             surah = parseInt(colonMatch[1], 10);
             ayah = parseInt(colonMatch[2], 10);

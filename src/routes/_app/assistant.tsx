@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { copyToClipboardFallback } from "@/lib/utils";
 import { toast } from "sonner";
-import { chatWithAssistant, suggestViralProposal, suggestExplainedVideoProposal, suggestBatchViralProposals, confirmAndGenerateVideo, startBatchViralSeries, startBatchViralHadithSeries, getAssistantHistory, saveAssistantHistory, clearAssistantHistory, startBackgroundPlanGeneration, startBackgroundBatchGeneration, checkActiveBackgroundTasks, cleanProposalTitle, type VideoProposal } from "@/lib/assistant.functions";
+import { chatWithAssistant, suggestViralProposal, suggestExplainedVideoProposal, suggestBatchViralProposals, confirmAndGenerateVideo, startBatchViralSeries, startBatchViralHadithSeries, getAssistantHistory, saveAssistantHistory, clearAssistantHistory, startBackgroundPlanGeneration, startBackgroundBatchGeneration, checkActiveBackgroundTasks, cleanProposalTitle, type VideoProposal, type ExplainedVideoScript } from "@/lib/assistant.functions";
 import { getAiMemory, updateAiMemory, type AiMemory } from "@/lib/memory.functions";
 import { generateViralThumbnail } from "@/lib/thumbnail.functions";
 import { formatViralSocialCaption } from "@/lib/caption.functions";
@@ -249,10 +249,21 @@ function AssistantPage() {
     }
   };
 
-  const handleCopyTikTokCaption = (title: string, summary?: string, e?: React.MouseEvent) => {
+  const handleCopyTikTokCaption = (
+    title: string,
+    summary?: string,
+    e?: React.MouseEvent,
+    scriptWorkflow?: ExplainedVideoScript,
+  ) => {
     if (e) e.stopPropagation();
-    const cleanTitle = getThumbTitle(title);
-    const text = formatViralSocialCaption(cleanTitle, summary);
+    let text = "";
+    if (scriptWorkflow) {
+      const sw = scriptWorkflow;
+      text = `🎣 ${sw.hookQuestion}\n${sw.hookContext}\n\n📖 ${title}\n${sw.dalilIntro ? `${sw.dalilIntro}\n` : ""}„${sw.dalilText || title}“\n\n💡 Поука: ${sw.explanation}\n\n⚡ Действие: ${sw.actionStep}\n\n#islamicreels #коран #хадис #ислям #напомняне #садакаджария #bulgaria #islamicvideo`;
+    } else {
+      const cleanTitle = getThumbTitle(title);
+      text = formatViralSocialCaption(cleanTitle, summary);
+    }
     copyToClipboardFallback(text);
   };
 
@@ -1066,18 +1077,64 @@ function AssistantPage() {
 
                       {m.proposal.type !== "carousel" && (
                         <>
-                          {m.proposal.type === 'explained_video' && (
-                            <div className="mt-2 mb-2 inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-emerald-500/20 border border-emerald-500/30 text-emerald-300 font-bold text-xs">
-                              <Sparkles className="size-3.5" /> 🎬 ИСЛЯМСКО ВИДЕО С ОБЯСНЕНИЕ (ТЕКСТ + ПОУКА)
+                          {m.proposal.type === 'explained_video' ? (
+                            <div className="mt-2.5 mb-3 rounded-xl border border-emerald-500/30 bg-emerald-950/20 p-3.5 space-y-2.5">
+                              <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 font-bold text-xs">
+                                <Sparkles className="size-3.5" /> 🎬 4-СТЕПЕНЕН WORKFLOW С ОБЯСНЕНИЕ
+                              </div>
+
+                              {m.proposal.scriptWorkflow ? (
+                                <div className="space-y-2 text-xs">
+                                  <div className="p-2.5 rounded-lg bg-black/40 border border-emerald-500/20">
+                                    <div className="font-bold text-amber-400 flex items-center gap-1 mb-1">
+                                      <span>🎣 1. КУКА (ВЪПРОС & ВЪВЕДЕНИЕ)</span>
+                                    </div>
+                                    <div className="font-semibold text-white/95">„{m.proposal.scriptWorkflow.hookQuestion}“</div>
+                                    <div className="text-white/70 mt-0.5">{m.proposal.scriptWorkflow.hookContext}</div>
+                                  </div>
+
+                                  <div className="p-2.5 rounded-lg bg-black/40 border border-teal-500/20">
+                                    <div className="font-bold text-teal-300 flex items-center gap-1 mb-1">
+                                      <span>📖 2. СВЕЩЕН ДАЛИЛ (АЕТ / ХАДИС)</span>
+                                    </div>
+                                    <div className="text-white/80 italic text-[11px] mb-1">{m.proposal.scriptWorkflow.dalilIntro || "Чуй какво ни разкрива свещеното слово:"}</div>
+                                    {m.proposal.scriptWorkflow.dalilText ? (
+                                      <div className="font-medium text-white/90">„{m.proposal.scriptWorkflow.dalilText}“</div>
+                                    ) : (
+                                      <div className="font-semibold text-primary">{m.proposal.title}</div>
+                                    )}
+                                  </div>
+
+                                  <div className="p-2.5 rounded-lg bg-black/40 border border-sky-500/20">
+                                    <div className="font-bold text-sky-300 flex items-center gap-1 mb-1">
+                                      <span>💡 3. РАЗЯСНЕНИЕ (ПОУКА / ТЕФСИР)</span>
+                                    </div>
+                                    <div className="text-white/90">{m.proposal.scriptWorkflow.explanation}</div>
+                                  </div>
+
+                                  <div className="p-2.5 rounded-lg bg-black/40 border border-emerald-500/30">
+                                    <div className="font-bold text-emerald-300 flex items-center gap-1 mb-1">
+                                      <span>⚡ 4. ДЕЙСТВИЕ (ПРАКТИЧЕСКА СТЪПКА & CTA)</span>
+                                    </div>
+                                    <div className="text-emerald-100/90 font-medium">{m.proposal.scriptWorkflow.actionStep}</div>
+                                  </div>
+                                </div>
+                              ) : (
+                                m.proposal.summaryBg && (
+                                  <div className="text-xs">
+                                    <span className="font-semibold text-emerald-400">Поука / Обяснение: </span>
+                                    <span className="text-foreground">{m.proposal.summaryBg}</span>
+                                  </div>
+                                )
+                              )}
                             </div>
-                          )}
-                          {m.proposal.summaryBg && (
-                            <div>
-                              <span className="font-semibold text-muted-foreground">
-                                {m.proposal.type === 'explained_video' ? "Поука / Обяснение: " : "Съдържание: "}
-                              </span>
-                              <span className="text-foreground">{m.proposal.summaryBg}</span>
-                            </div>
+                          ) : (
+                            m.proposal.summaryBg && (
+                              <div>
+                                <span className="font-semibold text-muted-foreground">Съдържание: </span>
+                                <span className="text-foreground">{m.proposal.summaryBg}</span>
+                              </div>
+                            )
                           )}
                       {m.proposal.themeBg && (
                         <div>
@@ -1172,7 +1229,7 @@ function AssistantPage() {
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={(e) => handleCopyTikTokCaption(m.proposal!.title, m.proposal!.summaryBg, e)}
+                        onClick={(e) => handleCopyTikTokCaption(m.proposal!.title, m.proposal!.summaryBg, e, m.proposal!.scriptWorkflow)}
                         className="rounded-lg text-xs border-teal-500/40 text-teal-400 hover:bg-teal-500/10 cursor-pointer"
                         title="Копирай TikTok Заглавие & Описание"
                       >

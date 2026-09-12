@@ -196,6 +196,11 @@ export const synthesizeHadithNarration = createServerFn({ method: "POST" })
     if (elevenKey) {
       try {
         console.log("[tts] Synthesizing with ElevenLabs API (with-timestamps)...");
+        const cleanForEleven = cleaned
+          .replace(/<break[^>]*\/>/gi, "... ")
+          .replace(/<[^>]+>/g, " ")
+          .replace(/\s{2,}/g, " ")
+          .trim();
         const res = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${elevenVoice}/with-timestamps`, {
           method: "POST",
           headers: {
@@ -203,7 +208,7 @@ export const synthesizeHadithNarration = createServerFn({ method: "POST" })
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
-            text: cleaned,
+            text: cleanForEleven,
             model_id: "eleven_multilingual_v2",
             voice_settings: {
               stability: 0.5,

@@ -58,10 +58,10 @@ export const buildCarouselVideo = createServerFn({ method: "POST" })
     }
 
     if (!narrationText) {
-      narrationText = cleanTitle;
+      narrationText = displayTitle;
     }
 
-    console.log(`[carousel-video] Starting professional video render for "${cleanTitle}". Narration length: ${narrationText.length}`);
+    console.log(`[carousel-video] Starting professional video render for "${displayTitle}". Narration length: ${narrationText.length}`);
 
     // 2. Synthesize authentic voiceover narration with exact word-level timings
     const narr = await synthesizeHadithNarration({ data: { text: narrationText } });
