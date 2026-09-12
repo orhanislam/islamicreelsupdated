@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Loader2, Image as ImageIcon, Copy, Send } from "lucide-react";
+import { Loader2, Image as ImageIcon, Copy, Send, Video } from "lucide-react";
 import { useServerFn } from "@tanstack/react-start";
 import { generateBackground, getCarouselBackgrounds } from "@/lib/backgrounds.functions";
 import { renderCarouselSlide } from "@/lib/render-carousel";
