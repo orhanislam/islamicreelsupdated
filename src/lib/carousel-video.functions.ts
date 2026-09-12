@@ -1,15 +1,16 @@
 import { createServerFn } from "@tanstack/react-start";
 import { synthesizeHadithNarration } from "./tts.functions";
-import * as fs from "fs/promises";
-import * as path from "path";
-import * as os from "os";
-import { exec } from "child_process";
-import { promisify } from "util";
-const execAsync = promisify(exec);
 
 export const buildCarouselVideo = createServerFn({ method: "POST" })
   .validator((input: { slides: { imageBase64: string; text: string }[]; title: string }) => input)
   .handler(async ({ data: { slides, title } }) => {
+    const fs = await import("fs/promises");
+    const path = await import("path");
+    const os = await import("os");
+    const { exec } = await import("child_process");
+    const { promisify } = await import("util");
+    const execAsync = promisify(exec);
+
     const jobId = Math.random().toString(36).substring(2, 15);
     const tmpDir = path.join(os.tmpdir(), `carousel_video_${jobId}`);
     await fs.mkdir(tmpDir, { recursive: true });
