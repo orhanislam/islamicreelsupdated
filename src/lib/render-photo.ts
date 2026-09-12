@@ -15,6 +15,7 @@ export type RenderOptions = {
   arabic?: string;
   bulgarian: string;
   reference: string;
+  topic?: string;
   style: "minimal" | "centered" | "lower-third" | "bottom";
   tiktokTheme?: "hormozi" | "gold" | "emerald" | "neon" | "classic" | "fire" | "box";
   pacingMode?: "punchy" | "ayah";
@@ -292,13 +293,29 @@ export async function renderPhoto(opts: RenderOptions): Promise<Blob> {
     ctx.stroke();
   }
 
-  // Draw Reference Pill at safe top (Y = 300px, H = 56px)
-  if (opts.reference) {
-    drawReferencePill(ctx, opts.reference, sz);
+  // Draw Reference / Topic Pill at safe top (Y = 300px, H = 56px)
+  const rawTop = (opts.topic || opts.reference || "").trim();
+  let pillText = rawTop;
+  if (opts.topic && opts.topic.trim()) {
+    pillText = opts.topic.trim();
+  } else if (rawTop) {
+    if (rawTop.includes("] ")) {
+      const after = rawTop.split("] ").slice(1).join("] ").trim();
+      if (after) pillText = after;
+    } else if (rawTop.includes("•")) {
+      const parts = rawTop.split("•").map((p) => p.trim()).filter(Boolean);
+      const nonCitation = parts.find((p) => !/(?:коран|сура|хадис|бухари|муслим|тирмизи|навауи|\d+[:.]\d+)/i.test(p));
+      if (nonCitation) pillText = nonCitation;
+    }
+  }
+  pillText = pillText.replace(/^["„“'«»\s:\-–—]+|["„“'«»\s:\-–—]+$/g, "").trim();
+
+  if (pillText) {
+    drawReferencePill(ctx, pillText, sz);
   }
 
   // Content start Y coordinate below Reference Pill
-  const contentTopMinY = opts.reference
+  const contentTopMinY = pillText
     ? sz.SAFE_TOP + 56 + REFERENCE_PILL_STANDARDS.MIN_VERTICAL_GAP
     : sz.SAFE_TOP; // 380px if reference present
 

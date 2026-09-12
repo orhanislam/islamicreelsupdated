@@ -1215,9 +1215,24 @@ export async function renderVideo(opts: VideoOptions): Promise<{ blob: Blob; mim
         ctx.shadowBlur = 0;
         ctx.shadowOffsetY = 0;
       }
-      ctx.textAlign = "center";
-
-      drawReferencePill(ctx, opts.reference, sz);
+      const rawTop = (opts.topic || opts.reference || "").trim();
+      let pillText = rawTop;
+      if (opts.topic && opts.topic.trim()) {
+        pillText = opts.topic.trim();
+      } else if (rawTop) {
+        if (rawTop.includes("] ")) {
+          const after = rawTop.split("] ").slice(1).join("] ").trim();
+          if (after) pillText = after;
+        } else if (rawTop.includes("•")) {
+          const parts = rawTop.split("•").map((p) => p.trim()).filter(Boolean);
+          const nonCitation = parts.find((p) => !/(?:коран|сура|хадис|бухари|муслим|тирмизи|навауи|\d+[:.]\d+)/i.test(p));
+          if (nonCitation) pillText = nonCitation;
+        }
+      }
+      pillText = pillText.replace(/^["„“'«»\s:\-–—]+|["„“'«»\s:\-–—]+$/g, "").trim();
+      if (pillText) {
+        drawReferencePill(ctx, pillText, sz);
+      }
       // Safari/iOS can stop emitting canvas frames during long recordings if the
       // canvas appears static around a background-video loop boundary. A tiny,
       // visually-imperceptible heartbeat pixel keeps the captured video track

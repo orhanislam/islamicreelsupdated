@@ -1,5 +1,6 @@
 import { alignTimestampsToSpeech, clampToSpeechIntervals } from "../audio-align.functions";
 import { generateAssSubtitles, estimateTextWidth } from "../render.functions";
+import { extractTopic } from "../assistant.functions";
 
 function testMonotonicityAndBounds() {
   const mockSpeechIntervals = [
@@ -115,11 +116,67 @@ function testTikTokSafeSubtitleWidth() {
   console.log("✔ testTikTokSafeSubtitleWidth passed!");
 }
 
+function testTopicTopHeaderDisplay() {
+  // Test 1: extractTopic utility
+  const topic1 = extractTopic({ title: "[Коран 13:28] Покоят на сърцата" });
+  if (topic1 !== "Покоят на сърцата") {
+    throw new Error(`Expected 'Покоят на сърцата', got '${topic1}'`);
+  }
+
+  const topic2 = extractTopic({ title: "[Сахих ал-Бухари #6424] Силата на търпението" });
+  if (topic2 !== "Силата на търпението") {
+    throw new Error(`Expected 'Силата на търпението', got '${topic2}'`);
+  }
+
+  const topic3 = extractTopic({ title: "Коран 6:19 - Доказателствата на Аллах" });
+  if (topic3 !== "Доказателствата на Аллах") {
+    throw new Error(`Expected 'Доказателствата на Аллах', got '${topic3}'`);
+  }
+
+  const topic4 = extractTopic({ title: "Сура Ал-Бакара 2:255 • Аят ал-Курси" });
+  if (topic4 !== "Аят ал-Курси") {
+    throw new Error(`Expected 'Аят ал-Курси', got '${topic4}'`);
+  }
+
+  const topic5 = extractTopic({ title: "Тайната на истигфара" });
+  if (topic5 !== "Тайната на истигфара") {
+    throw new Error(`Expected 'Тайната на истигфара', got '${topic5}'`);
+  }
+
+  // Test 2: ASS top header generation displays the topic
+  const assExplicitTopic = generateAssSubtitles(
+    {
+      topic: "Покоят на сърцата",
+      reference: "Сура Ар-Ра'д (13:28)",
+      bulgarian: "Тестов текст",
+    },
+    5.0,
+  );
+  if (!assExplicitTopic.includes("Покоят на сърцата")) {
+    throw new Error(`ASS header does not contain expected topic line! Output was:\n${assExplicitTopic}`);
+  }
+
+  // Test 3: ASS top header extracts topic from bracketed citation
+  const assBracketed = generateAssSubtitles(
+    {
+      reference: "[Коран 13:28] Покоят на сърцата",
+      bulgarian: "Тестов текст",
+    },
+    5.0,
+  );
+  if (!assBracketed.includes("Покоят на сърцата")) {
+    throw new Error(`ASS header does not contain extracted topic from bracketed title!`);
+  }
+
+  console.log("✔ testTopicTopHeaderDisplay passed!");
+}
+
 async function runAllTests() {
   console.log("Running subtitle synchronization verification tests...");
   testMonotonicityAndBounds();
   testPhoneticWeighting();
   testTikTokSafeSubtitleWidth();
+  testTopicTopHeaderDisplay();
   console.log("✔ All subtitle synchronization verification tests passed successfully!");
 }
 

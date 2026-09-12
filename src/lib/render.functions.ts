@@ -122,9 +122,45 @@ Style: Reference,Outfit,52,&H00FFFFFF,&H000000FF,&H00000000,&H99000000,-1,0,0,0,
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 `;
 
-  if (data.reference) {
-    const cleanRef = data.reference.trim();
-    ass += `Dialogue: 0,0:00:00.00,${formatTime(audioDur)},Reference,,0,0,0,,{\\an8\\pos(540,${sz.SAFE_TOP + 40})}${cleanRef}\n`;
+  const rawTop = (data.topic || data.reference || "").trim();
+  let topText = rawTop;
+  if (data.topic && data.topic.trim()) {
+    topText = data.topic.trim();
+  } else if (rawTop) {
+    if (rawTop.includes("] ")) {
+      const after = rawTop.split("] ").slice(1).join("] ").trim();
+      if (after) topText = after;
+    } else if (rawTop.includes("]")) {
+      const after = rawTop.split("]").slice(1).join("]").replace(/^[:\-–—\s]+/, "").trim();
+      if (after) topText = after;
+    } else if (rawTop.includes("•")) {
+      const parts = rawTop.split("•").map((p: string) => p.trim()).filter(Boolean);
+      const nonCitation = parts.find(
+        (p: string) => !/(?:коран|сура|хадис|бухари|муслим|тирмизи|навауи|\d+[:.]\d+)/i.test(p)
+      );
+      if (nonCitation) topText = nonCitation;
+      else if (parts.length > 1) topText = parts[1];
+    } else if (/\s+[-–—]\s+/.test(rawTop)) {
+      const parts = rawTop.split(/\s+[-–—]\s+/).map((p: string) => p.trim()).filter(Boolean);
+      const nonCitation = parts.find(
+        (p: string) => !/(?:коран|сура|хадис|бухари|муслим|тирмизи|навауи|\d+[:.]\d+)/i.test(p)
+      );
+      if (nonCitation) topText = nonCitation;
+      else if (parts.length > 1) topText = parts[1];
+    }
+  }
+
+  // Clean dangling symbols or quotes from topic
+  topText = topText.replace(/^["„“'«»\s:\-–—]+|["„“'«»\s:\-–—]+$/g, "").trim();
+
+  if (topText) {
+    let topFs = 50;
+    const topWidth = estimateTextWidth(topText, topFs);
+    const maxTopWidth = 720;
+    if (topWidth > maxTopWidth) {
+      topFs = Math.max(34, Math.floor(topFs * (maxTopWidth / topWidth)));
+    }
+    ass += `Dialogue: 0,0:00:00.00,${formatTime(audioDur)},Reference,,0,0,0,,{\\an8\\pos(540,${sz.SAFE_TOP + 40})\\fs${topFs}}${topText}\n`;
   }
 
   if (data.bulgarian) {

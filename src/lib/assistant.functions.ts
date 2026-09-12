@@ -99,6 +99,62 @@ export function cleanProposalTitle(rawTitle: string): string {
   return title;
 }
 
+export function extractTopic(proposal: {
+  title?: string;
+  themeBg?: string;
+  topic?: string;
+}): string {
+  if (proposal.topic && proposal.topic.trim()) {
+    return proposal.topic.trim();
+  }
+  const title = proposal.title ? cleanProposalTitle(proposal.title) : "";
+  if (!title) {
+    return (proposal.themeBg || "").replace(/^тема:\s*/i, "").trim();
+  }
+
+  // 1. If format is "[Коран 13:28] Покоят на сърцата" or "[Сахих ал-Бухари #6424] Силата на търпението"
+  if (title.includes("] ")) {
+    const after = title.split("] ").slice(1).join("] ").trim();
+    if (after) return after.replace(/^["„“'«»\s:\-–—]+|["„“'«»\s:\-–—]+$/g, "").trim();
+  }
+  if (title.includes("]")) {
+    const after = title.split("]").slice(1).join("]").replace(/^[:\-–—\s]+/, "").trim();
+    if (after) return after.replace(/^["„“'«»\s:\-–—]+|["„“'«»\s:\-–—]+$/g, "").trim();
+  }
+
+  // 2. If format is "Коран 2:255 • Защита от злото" or "Защита от злото • Коран 2:255"
+  if (title.includes("•")) {
+    const parts = title.split("•").map((p) => p.trim()).filter(Boolean);
+    const nonCitation = parts.find(
+      (p) => !/(?:коран|сура|хадис|бухари|муслим|тирмизи|навауи|\d+[:.]\d+)/i.test(p)
+    );
+    if (nonCitation) return nonCitation.replace(/^["„“'«»\s:\-–—]+|["„“'«»\s:\-–—]+$/g, "").trim();
+    if (parts.length > 1) return parts[1].replace(/^["„“'«»\s:\-–—]+|["„“'«»\s:\-–—]+$/g, "").trim();
+  }
+
+  // 3. If format is "Коран 6:19 - Доказателствата на Аллах"
+  if (/\s+[-–—]\s+/.test(title)) {
+    const parts = title.split(/\s+[-–—]\s+/).map((p) => p.trim()).filter(Boolean);
+    const nonCitation = parts.find(
+      (p) => !/(?:коран|сура|хадис|бухари|муслим|тирмизи|навауи|\d+[:.]\d+)/i.test(p)
+    );
+    if (nonCitation) return nonCitation.replace(/^["„“'«»\s:\-–—]+|["„“'«»\s:\-–—]+$/g, "").trim();
+    if (parts.length > 1) return parts[1].replace(/^["„“'«»\s:\-–—]+|["„“'«»\s:\-–—]+$/g, "").trim();
+  }
+
+  // 4. Check if title is purely a citation (e.g. "Коран 2:255" or "Сура Ал-Бакара 2:255")
+  const isPureCitation =
+    /^(?:коран|сура|хадис|сахих|сунан|айят|аят)\b/i.test(title) && /\d+/.test(title);
+  if (isPureCitation && proposal.themeBg) {
+    return proposal.themeBg
+      .replace(/^тема:\s*/i, "")
+      .replace(/^["„“'«»\s:\-–—]+|["„“'«»\s:\-–—]+$/g, "")
+      .trim();
+  }
+
+  return title.replace(/^["„“'«»\s:\-–—]+|["„“'«»\s:\-–—]+$/g, "").trim();
+}
+
 async function injectAuthenticCarouselText(proposals: VideoProposal[]) {
   if (!proposals) return;
   const rx =
@@ -268,7 +324,8 @@ SALAFI HALAL ПРИНЦИПИ (СТРИКТНО ЗАДЪЛЖИТЕЛНО):
 ИСЛЯМСКО ВИДЕО С ОБЯСНЕНИЕ (ISLAMIC VIDEO WITH EXPLANATION) — СПЕЦИАЛЕН 4-СТЕПЕНЕН WORKFLOW:
 Ако потребителят иска "видео с обяснение", "islamic video with explanation", "видео с поука", "разяснение на аят/хадис", кука с въпрос и действие, или иска да съчетае цитат с житейска поука:
 1. Задай proposal.type: "explained_video".
-2. В title ЗАДЪЛЖИТЕЛНО сложи точна референция с ДВОЕТОЧИЕ, напр. "[Коран 13:28] Покоят на сърцата" или "[Сахих ал-Бухари #6424] Силата на търпението". (НИКОГА не използвай долна черта в заглавието, само двоеточие!).
+2. В title ЗАДЪЛЖИТЕЛНО сложи точна референция с ДВОЕТОЧИЕ, последвана от силна и въздействаща ТЕМА на български, напр. "[Коран 13:28] Покоят на сърцата" или "[Сахих ал-Бухари #6424] Силата на търпението". (НИКОГА не използвай долна черта в заглавието, само двоеточие!).
+ВАЖНО ЗА ТЕМАТА: Горе на екрана на видеото ще се изписва ТЕМАТА (напр. "Покоят на сърцата"), която моментално грабва вниманието в TikTok и Reels, а самата референция за сурата или хадиса се показва в самото видео и се изговаря от гласа. Избирай винаги силна, интригуваща тема!
 3. ЗАДЪЛЖИТЕЛНО включи "scriptWorkflow" с 4-степенната структура:
    - "hookQuestion": Силна кука-въпрос в първите 2-3 секунди, грабваща болка/емоция (напр. "Защо усещаш тежест в гърдите си, дори когато имаш всичко?").
    - "hookContext": 1-2 кратки изречения кратко обяснение на ситуацията (напр. "Търсим мир в телефона или материалния свят, но душата остава жадна.").
@@ -631,7 +688,7 @@ ${historyContext}
 ${userTopic}
 
 ИЗКЛЮЧИТЕЛНИ ПРАВИЛА:
-- Заглавието ЗАДЪЛЖИТЕЛНО трябва да съдържа точна референция с ДВОЕТОЧИЕ, например: "[Коран 13:28] Покоят на сърцата" или "[Сахих ал-Бухари #6424] Силата на благодарността" (НИКОГА долна черта в заглавието, само двоеточие!).
+- Заглавието ЗАДЪЛЖИТЕЛНО трябва да съдържа точна референция с ДВОЕТОЧИЕ, например: "[Коран 13:28] Покоят на сърцата" или "[Сахих ал-Бухари #6424] Силата на благодарността" (НИКОГА долна черта в заглавието, само двоеточие!). Горе на екрана на видеото ще се изписва ТЕМАТА (напр. "Покоят на сърцата"), която привлича погледа, а самата референция за сурата или хадиса ще се чуе и види в самото видео.
 - "type": "explained_video"
 - "summaryBg": Кратък обобщен текст на поуката за бърз преглед.
 - "themeBg": Визуално описание за атмосферата (напр. "Звездно небе и планински върхове в мъгла").
@@ -973,11 +1030,14 @@ export const confirmAndGenerateVideo = createServerFn({ method: "POST" })
       undefined;
     let arabicWordCount: number | undefined = undefined;
 
-    let viralTitle = proposal.title || "";
-    if (viralTitle.includes("] ")) {
-      viralTitle = viralTitle.split("] ").slice(1).join("] ").trim();
-    } else if (viralTitle.includes("•")) {
-      viralTitle = viralTitle.split("•")[1].trim();
+    const topic = extractTopic(proposal);
+    let viralTitle = topic || proposal.title || "";
+    if (!topic) {
+      if (viralTitle.includes("] ")) {
+        viralTitle = viralTitle.split("] ").slice(1).join("] ").trim();
+      } else if (viralTitle.includes("•")) {
+        viralTitle = viralTitle.split("•")[1].trim();
+      }
     }
 
     if (
@@ -1215,14 +1275,16 @@ export const confirmAndGenerateVideo = createServerFn({ method: "POST" })
 
     const { jobId } = await startServerRenderJob({
       data: {
-        title: viralTitle || reference,
+        title: proposal.title || topic || reference,
         data: {
           backgroundUrl: bestVid,
           backgroundVideoUrl: bestVid,
           arabic,
           bulgarian,
-          reference,
-          viralTitle,
+          reference: topic, // Display TOPIC at the top of the video (SAFE_TOP + 40)!
+          topic,
+          scriptureReference: reference,
+          viralTitle: topic,
           style: subtitleStyle,
           tiktokTheme: proposal.tiktokTheme || "hormozi",
           subtitlePosition: subtitleStyle,
@@ -1242,10 +1304,11 @@ export const confirmAndGenerateVideo = createServerFn({ method: "POST" })
     });
 
     return {
-      reply: `🎬 **Одобрено! Стартирах генерирането на видеото за „${reference}“ на сървъра!**\n\nМожеш да го намериш и свалиш веднага след рендиране от раздел **[Изтегляния](/downloads)**.`,
+      reply: `🎬 **Одобрено! Стартирах генерирането на видеото за тема „${topic}“ на сървъра!**\n\n📌 **Горе на екрана ще се показва темата:** „${topic}“\n📖 **Свещен цитат:** ${reference} (изговаря се и се показва в самото видео)\n\nМожеш да го намериш и свалиш веднага след рендиране от раздел **[Изтегляния](/downloads)**.`,
       jobStarted: true,
       jobId,
       reference,
+      topic,
     };
   });
 

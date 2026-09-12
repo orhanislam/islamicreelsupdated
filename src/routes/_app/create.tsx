@@ -121,6 +121,7 @@ function CreatePage() {
   // current content
   const [content, setContent] = useState<Content | null>(null);
   const [bulgarian, setBulgarian] = useState("");
+  const [topic, setTopic] = useState("");
   const [loading, setLoading] = useState(false);
   const [translating, setTranslating] = useState(false);
 
@@ -243,6 +244,11 @@ function CreatePage() {
           }
         }
 
+        const proposalTopic = cleanTitle || proposal.themeBg || "";
+        if (proposalTopic) {
+          setTopic(proposalTopic);
+        }
+
         if (pType === "quran" && surah && ayah) {
           setTab("ayah");
           setSurah(surah);
@@ -323,6 +329,9 @@ function CreatePage() {
         ? `${prependTheme} <break time="1.0s" />\n\n${stripped}`
         : stripped;
       setBulgarian(finalBulgarian);
+      if (prependTheme) {
+        setTopic(prependTheme);
+      }
       if (t.ayahBounds) {
         c.ayahBounds = t.ayahBounds;
         setContent({ ...c, ayahBounds: t.ayahBounds });
@@ -400,6 +409,9 @@ function CreatePage() {
         ? `${prependTheme} <break time="1.0s" />\n\n${stripped}`
         : stripped;
       setBulgarian(finalBulgarian);
+      if (prependTheme) {
+        setTopic(prependTheme);
+      }
       toast.success(`${h.reference} · ${h.grade ?? "Sahih"}`);
       return true;
     } catch (e: unknown) {
@@ -763,12 +775,16 @@ function CreatePage() {
     if (!content || !bulgarian) return;
     setRendering(true);
     try {
+      const effectiveTopic = topic.trim() || undefined;
+      const displayRef = effectiveTopic || content.source_ref;
+
       if (format === "photo") {
         const blob = await renderPhoto({
           backgroundUrl: bgUrl,
           arabic: content.arabic,
           bulgarian,
-          reference: content.source_ref,
+          reference: displayRef,
+          topic: effectiveTopic,
           style: captionStyle,
           tiktokTheme,
           pacingMode,
@@ -824,7 +840,8 @@ function CreatePage() {
           backgroundVideoUrl: bgVideoUrl,
           arabic: content.arabic,
           bulgarian,
-          reference: content.source_ref,
+          reference: displayRef,
+          topic: effectiveTopic,
           style: captionStyle,
           tiktokTheme,
           pacingMode,
@@ -854,7 +871,7 @@ function CreatePage() {
           await startServerRenderJob({
             data: {
               data: opts,
-              title: content.source_ref || "Ислямско видео",
+              title: effectiveTopic || content.source_ref || "Ислямско видео",
             },
           });
           toast.success(
@@ -972,12 +989,15 @@ function CreatePage() {
 
       const activeTimingsFinal =
         activeTimings && activeTimings.length > 0 ? activeTimings : undefined;
+      const effectiveTopic = topic.trim() || undefined;
+      const displayRef = effectiveTopic || content.source_ref;
       const opts = {
         backgroundUrl: bgUrl,
         backgroundVideoUrl: activeBgVideoUrl,
         arabic: content.arabic,
         bulgarian: currentBulgarian,
-        reference: content.source_ref,
+        reference: displayRef,
+        topic: effectiveTopic,
         style: "lower-third" as const,
         tiktokTheme: "hormozi" as const,
         pacingMode: "punchy" as const,
@@ -994,7 +1014,7 @@ function CreatePage() {
       await startServerRenderJob({
         data: {
           data: opts,
-          title: content.source_ref || "Ислямско видео",
+          title: effectiveTopic || content.source_ref || "Ислямско видео",
         },
       });
       toast.success(
@@ -1504,6 +1524,26 @@ function CreatePage() {
                       <SelectItem value="minimal">👁️ Минималистичен (Без караоке)</SelectItem>
                     </SelectContent>
                   </Select>
+                </div>
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <Label className="font-ui text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                      Тема за видеото (заглавие горе на екрана)
+                    </Label>
+                    <span className="text-[10px] text-muted-foreground">Safe Zone горе</span>
+                  </div>
+                  <Input
+                    value={topic}
+                    onChange={(e) => {
+                      setTopic(e.target.value);
+                      clearRendered();
+                    }}
+                    placeholder={content?.source_ref ? `напр. Покоят на сърцата (по подразбиране: ${content.source_ref})` : "напр. Покоят на сърцата"}
+                    className="font-ui bg-background/60 text-sm"
+                  />
+                  <p className="text-[11px] text-muted-foreground">
+                    Вместо името на сурата или хадиса, най-горе на екрана се изписва темата за по-голямо задържане на вниманието.
+                  </p>
                 </div>
                 <div className="space-y-2">
                   <Label className="font-ui text-xs font-semibold uppercase tracking-wider text-muted-foreground">
@@ -2060,8 +2100,8 @@ function CreatePage() {
                           {/* Dark overlay for readability */}
                           <div className="absolute inset-0 bg-black/20" />
 
-                          {/* Reference Text Overlay (Surah/Ayah) positioned at SAFE_TOP (15.6%) */}
-                          {content?.source_ref && (
+                          {/* Reference / Topic Text Overlay positioned at SAFE_TOP (15.6%) */}
+                          {(topic || content?.source_ref) && (
                             <div className="absolute top-[15.6%] inset-x-0 text-center px-4 z-10">
                               <p
                                 className="text-white font-bold tracking-wide break-words"
@@ -2071,7 +2111,7 @@ function CreatePage() {
                                     "1px 1px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 0px 4px 6px rgba(0,0,0,0.8)",
                                 }}
                               >
-                                {content.source_ref}
+                                {topic || content?.source_ref}
                               </p>
                             </div>
                           )}

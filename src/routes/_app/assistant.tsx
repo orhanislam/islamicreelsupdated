@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { copyToClipboardFallback } from "@/lib/utils";
 import { toast } from "sonner";
-import { chatWithAssistant, suggestViralProposal, suggestExplainedVideoProposal, suggestBatchViralProposals, confirmAndGenerateVideo, startBatchViralSeries, startBatchViralHadithSeries, getAssistantHistory, saveAssistantHistory, clearAssistantHistory, startBackgroundPlanGeneration, startBackgroundBatchGeneration, checkActiveBackgroundTasks, cleanProposalTitle, type VideoProposal, type ExplainedVideoScript } from "@/lib/assistant.functions";
+import { chatWithAssistant, suggestViralProposal, suggestExplainedVideoProposal, suggestBatchViralProposals, confirmAndGenerateVideo, startBatchViralSeries, startBatchViralHadithSeries, getAssistantHistory, saveAssistantHistory, clearAssistantHistory, startBackgroundPlanGeneration, startBackgroundBatchGeneration, checkActiveBackgroundTasks, cleanProposalTitle, extractTopic, type VideoProposal, type ExplainedVideoScript } from "@/lib/assistant.functions";
 import { getAiMemory, updateAiMemory, type AiMemory } from "@/lib/memory.functions";
 import { generateViralThumbnail } from "@/lib/thumbnail.functions";
 import { formatViralSocialCaption } from "@/lib/caption.functions";
@@ -1057,6 +1057,15 @@ function AssistantPage() {
                         <span className="font-semibold text-muted-foreground">Заглавие: </span>
                         <span className="font-medium text-foreground">{cleanProposalTitle(m.proposal.title)}</span>
                       </div>
+
+                      {m.proposal.type !== "carousel" && (
+                        <div className="rounded-md bg-amber-500/10 border border-amber-500/25 px-2.5 py-1.5 text-xs text-amber-300 flex items-center justify-between gap-2">
+                          <span className="font-semibold text-amber-400">🏷️ Горе на видеото ще пише:</span>
+                          <span className="font-bold text-white bg-black/40 px-2 py-0.5 rounded border border-amber-500/30">
+                            {extractTopic(m.proposal)}
+                          </span>
+                        </div>
+                      )}
 
                       {m.proposal.type === 'carousel' && m.proposal.carouselSlides && (
                         <div className="mt-4 flex flex-col gap-3">
