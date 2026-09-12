@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { copyToClipboardFallback } from "@/lib/utils";
 import { toast } from "sonner";
-import { chatWithAssistant, suggestViralProposal, suggestBatchViralProposals, confirmAndGenerateVideo, startBatchViralSeries, startBatchViralHadithSeries, getAssistantHistory, saveAssistantHistory, clearAssistantHistory, startBackgroundPlanGeneration, startBackgroundBatchGeneration, checkActiveBackgroundTasks, cleanProposalTitle, type VideoProposal } from "@/lib/assistant.functions";
+import { chatWithAssistant, suggestViralProposal, suggestExplainedVideoProposal, suggestBatchViralProposals, confirmAndGenerateVideo, startBatchViralSeries, startBatchViralHadithSeries, getAssistantHistory, saveAssistantHistory, clearAssistantHistory, startBackgroundPlanGeneration, startBackgroundBatchGeneration, checkActiveBackgroundTasks, cleanProposalTitle, type VideoProposal } from "@/lib/assistant.functions";
 import { getAiMemory, updateAiMemory, type AiMemory } from "@/lib/memory.functions";
 import { generateViralThumbnail } from "@/lib/thumbnail.functions";
 import { formatViralSocialCaption } from "@/lib/caption.functions";
@@ -67,6 +67,7 @@ function AssistantPage() {
   const [batchCount, setBatchCount] = useState<number>(5);
   const [hadithBatchCount, setHadithBatchCount] = useState<number>(5);
   const [viralLoading, setViralLoading] = useState(false);
+  const [explainedLoading, setExplainedLoading] = useState(false);
   const [confirmingIdx, setConfirmingIdx] = useState<number | null>(null);
   const [showMemory, setShowMemory] = useState(false);
   const [memory, setMemory] = useState<AiMemory | null>(null);
@@ -551,6 +552,30 @@ function AssistantPage() {
     }
   };
 
+  const handleExplainedVideoSuggest = async () => {
+    try {
+      playStudioClick("start");
+      setExplainedLoading(true);
+      toast.message("🎬 AI подготвя Ислямско видео с обяснение (цитат + поука)...");
+
+      const res = await suggestExplainedVideoProposal();
+
+      setMessages((prev) => [
+        ...prev,
+        {
+          role: "assistant",
+          text: `🎬 **Ислямско видео с обяснение:**\n\n${res.reply}\n\n📖 **Цитат:** ${res.proposal?.title}\n💡 **Поука / Обяснение:** ${res.proposal?.summaryBg}\n🎨 **Атмосфера:** ${res.proposal?.themeBg}\n\n👆 Натисни **\"✨ Генерирай в Изтегляния\"** за да създам цялостното видео с аудио и синхронизирани субтитри!`,
+          proposal: res.proposal,
+        },
+      ]);
+      playStudioClick("success");
+    } catch (e: any) {
+      toast.error(e?.message || "Грешка при генериране на предложение за видео с обяснение");
+    } finally {
+      setExplainedLoading(false);
+    }
+  };
+
   const handleClearChat = async () => {
     if (typeof window !== "undefined" && !window.confirm("Сигурни ли сте, че искате да изчистите историята на чата?")) return;
     playStudioClick("click");
@@ -847,6 +872,33 @@ function AssistantPage() {
           </button>
         </div>
 
+        {/* Islamic Video with Explanation Quick Action Toolbar */}
+        <div className="rounded-2xl border border-emerald-500/40 bg-gradient-to-r from-emerald-500/15 via-teal-500/10 to-transparent p-3.5 sm:p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4 mt-6">
+          <div>
+            <div className="flex items-center gap-2 text-emerald-400 font-bold text-sm">
+              <Sparkles className="size-4" /> 🎬 ИСЛЯМСКО ВИДЕО С ОБЯСНЕНИЕ (ТЕКСТ + ПОУКА)
+            </div>
+            <p className="text-xs text-muted-foreground mt-1">
+              Генерирай готово кинематографично видео: автентичен аят/хадис, последван от дълбоко обяснение и житейска поука със синхронизирани караоке субтитри.
+            </p>
+          </div>
+          <button
+            onClick={handleExplainedVideoSuggest}
+            disabled={explainedLoading}
+            className="inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 px-5 py-3 text-xs font-bold text-white shadow-lg hover:from-emerald-400 hover:to-teal-500 transition shrink-0 cursor-pointer self-stretch sm:self-auto"
+          >
+            {explainedLoading ? (
+              <>
+                <Loader2 className="size-4 animate-spin" /> Генериране...
+              </>
+            ) : (
+              <>
+                <Video className="size-4" /> Създай Видео с Обяснение
+              </>
+            )}
+          </button>
+        </div>
+
         {/* Carousel Quick Action Toolbar */}
         <div className="rounded-2xl border border-blue-500/30 bg-gradient-to-r from-blue-500/10 via-cyan-500/5 to-transparent p-3.5 sm:p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4 mt-6">
           <div>
@@ -1014,12 +1066,19 @@ function AssistantPage() {
 
                       {m.proposal.type !== "carousel" && (
                         <>
+                          {m.proposal.type === 'explained_video' && (
+                            <div className="mt-2 mb-2 inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-emerald-500/20 border border-emerald-500/30 text-emerald-300 font-bold text-xs">
+                              <Sparkles className="size-3.5" /> 🎬 ИСЛЯМСКО ВИДЕО С ОБЯСНЕНИЕ (ТЕКСТ + ПОУКА)
+                            </div>
+                          )}
                           {m.proposal.summaryBg && (
                             <div>
-                              <span className="font-semibold text-muted-foreground">Съдържание: </span>
-                          <span className="text-foreground">{m.proposal.summaryBg}</span>
-                        </div>
-                      )}
+                              <span className="font-semibold text-muted-foreground">
+                                {m.proposal.type === 'explained_video' ? "Поука / Обяснение: " : "Съдържание: "}
+                              </span>
+                              <span className="text-foreground">{m.proposal.summaryBg}</span>
+                            </div>
+                          )}
                       {m.proposal.themeBg && (
                         <div>
                           <span className="font-semibold text-muted-foreground">Визуална атмосфера: </span>

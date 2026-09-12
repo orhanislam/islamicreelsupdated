@@ -113,14 +113,15 @@ PlayResY: ${sz.H}
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
 Style: Arabic,Scheherazade New,100,&H00FFFFFF,&H000000FF,&H00000000,&H80000000,-1,0,0,0,100,100,0,0,1,3,0,8,${placement.marginL},${placement.marginR},${sz.SAFE_TOP},1
 Style: Bulgarian,Outfit,120,&H00FFFFFF,&H0000D7FF,${outlineColor},${backColor},-1,0,0,0,100,100,0,0,${borderStyle},${outlineWidth},${shadowSize},${placement.alignment},${placement.marginL},${placement.marginR},${placement.marginV},1
-Style: Reference,Outfit,70,&H00FFFFFF,&H000000FF,&H00000000,&H99000000,-1,0,0,0,100,100,0,0,1,3,4,8,${placement.marginL},${placement.marginR},${sz.SAFE_TOP + 40},1
+Style: Reference,Outfit,58,&H00FFFFFF,&H000000FF,&H00000000,&H99000000,-1,0,0,0,100,100,1,0,1,2.5,3,8,160,160,${sz.SAFE_TOP + 40},1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 `;
 
   if (data.reference) {
-    ass += `Dialogue: 0,0:00:00.00,${formatTime(audioDur)},Reference,,0,0,0,,{\\an8\\pos(${placement.posX},${sz.SAFE_TOP + 40})}${data.reference}\n`;
+    const cleanRef = data.reference.trim();
+    ass += `Dialogue: 0,0:00:00.00,${formatTime(audioDur)},Reference,,0,0,0,,{\\an8\\pos(540,${sz.SAFE_TOP + 40})}${cleanRef}\n`;
   }
 
   if (data.bulgarian) {
@@ -416,7 +417,8 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 
         const posTag = `\\an${placement.alignment}\\pos(${placement.posX},${placement.posY})`;
         const phraseFs = p.isTitle ? 110 : 96;
-        const linesOfWords = wrapTextToSafeWidth(p.words, phraseFs, sz.W_SAFE);
+        const safeLineWidth = Math.min(sz.W_SAFE, 680);
+        const linesOfWords = wrapTextToSafeWidth(p.words, phraseFs, safeLineWidth);
 
         for (let wIdx = 0; wIdx < p.words.length; wIdx++) {
           const globalIdx = p.startIdx + wIdx;

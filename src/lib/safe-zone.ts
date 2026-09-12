@@ -445,15 +445,19 @@ export function getASSSubtitlePlacement(
   style?: "lower-third" | "bottom" | "center" | "minimal" | string,
 ): ASSSubtitlePlacement {
   const sz = getSafeZone(platform);
-  const isCenter = style === "center" || platform === "center";
+  const isCenter =
+    style === "center" ||
+    style === "middle" ||
+    platform === "center" ||
+    platform === "middle";
 
   if (isCenter) {
     return {
       alignment: 5, // Middle-Center
-      posX: 540,
+      posX: 540, // True horizontal center
       posY: 960,
-      marginL: sz.SAFE_LEFT,
-      marginR: sz.SAFE_RIGHT,
+      marginL: 160, // Extra safe margin for mobile zoom
+      marginR: 160,
       marginV: 960,
     };
   }
@@ -463,10 +467,10 @@ export function getASSSubtitlePlacement(
 
   return {
     alignment: 2, // Bottom-Center
-    posX: sz.CENTER_X, // 480 for TikTok (shifted left to clear right sidebar action buttons)
+    posX: 540, // True center avoids left clipping on TikTok mobile zoom
     posY,
-    marginL: sz.SAFE_LEFT,
-    marginR: sz.SAFE_RIGHT,
+    marginL: 160,
+    marginR: 160,
     marginV: sz.H - posY,
   };
 }

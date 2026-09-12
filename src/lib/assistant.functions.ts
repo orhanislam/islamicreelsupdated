@@ -16,7 +16,7 @@ import {
 
 export type VideoProposal = {
   title: string;
-  type: "hadith" | "quran" | "tiktok" | "general" | "carousel";
+  type: "hadith" | "quran" | "tiktok" | "general" | "carousel" | "explained_video";
   collection?: string;
   number?: number;
   surah?: number;
@@ -254,6 +254,14 @@ SALAFI HALAL ПРИНЦИПИ (СТРИКТНО ЗАДЪЛЖИТЕЛНО):
 ВИНАГИ генерирай "searchQuery", което търси САМО природа (nature, ocean, forest), абстрактни фонове (abstract, particles, dark background), космос (space, stars) или архитектура (mosque, kaaba). 
 АБСОЛЮТНО ЗАБРАНЕНО е присъствието на хора (people), човешки лица (faces), мъже, жени (woman, man) или животни.
 СЪЩО ТАКА Е ЗАБРАНЕНО: закрити помещения (indoor, room), музикални инструменти (piano, music) и предмети от бита (book, books, table, coffee). Фоновете трябва да са ВИНАГИ НА ОТКРИТО (outdoor) или АБСТРАКТНИ. Спазвай стриктни Salafi Halal принципи. Всяко съдържание трябва да съответства строго на Салафитската методология (Quran & Sunnah upon the understanding of the Salaf). Без бида (нововъведения), без слаби (da'if) хадиси. ТИ СИ ПРОФЕСИОНАЛЕН И СТРИКТЕН ПРЕВОДАЧ НА КОРАН И СУННА. ПРЕВЕЖДАЙ АЯТИТЕ И ХАДИСИТЕ БУКВАЛНО, ТОЧНО И ПРОФЕСИОНАЛНО ОТ АРАБСКИ НА БЪЛГАРСКИ ЕЗИК, ЗАПАЗВАЙКИ ОРИГИНАЛНИЯ ИМ БОЖЕСТВЕН СМИСЪЛ БЕЗ ДА ДОБАВЯШ СОБСТВЕНИ ИНТЕРПРЕТАЦИИ. ЗАДЪЛЖИТЕЛНО ги взимай САМО от Quran.com и Sunnah.com! ПИШИ АБСОЛЮТНО ГРАМОТНО НА БЪЛГАРСКИ ЕЗИК, БЕЗ ПРАВОПИСНИ ГРЕШКИ (напр. пиши "вярвай", а не "вервай"). ВНИМАВАЙ С ПРЕВОДИТЕ: Не използвай грешни думи като "Анима" (вместо "А наистина" за "Ala inna"). Проверявай всяка дума.
+
+ИСЛЯМСКО ВИДЕО С ОБЯСНЕНИЕ (ISLAMIC VIDEO WITH EXPLANATION) — СПЕЦИАЛЕН ФОРМАТ:
+Ако потребителят иска "видео с обяснение", "islamic video with explanation", "видео с поука", "разяснение на аят/хадис", или иска да съчетае цитат с житейска поука:
+1. Задай proposal.type: "explained_video".
+2. В title ЗАДЪЛЖИТЕЛНО сложи точна референция с ДВОЕТОЧИЕ, напр. "[Коран 6:19] Истинското Свидетелство" или "[Сахих ал-Бухари #6424] Силата на търпението". (НИКОГА не използвай долна черта в заглавието, само двоеточие!).
+3. В summaryBg напиши ясна, практична житейска поука и обяснение (30-50 думи) на български език, показващо мъдростта на цитата.
+4. В themeBg и searchQuery задай кинематографични открити природни пейзажи (планини, облаци, звездно небе, джамийска архитектура).
+5. Задай useBRoll: true, bRollInterval: 4, tiktokTheme: "hormozi".
 
 КАРУСЕЛИ (CAROUSEL) — РАМКА ЗА ВИРУСНИ КАРУСЕЛИ (VIRAL RETENTION FRAMEWORK):
 Ако потребителят иска "карусел" (слайдове със снимки за TikTok/Reels): 
@@ -574,6 +582,102 @@ SALAFI HALAL ПРИНЦИПИ (СТРИКТНО ЗАДЪЛЖИТЕЛНО):
   };
 });
 
+export const suggestExplainedVideoProposal = createServerFn({ method: "POST" })
+  .validator((input?: { topic?: string }) => input || {})
+  .handler(async ({ data }) => {
+    const memory = await getAiMemory();
+    const historyList = (memory.usageHistory || []).map((x) => `- ${x.identifier}`).join("\n");
+    const historyContext = historyList
+      ? `\n\nСКОРОШНО ИЗПОЛЗВАНИ ТЕМИ (СТРИКТНО ЗАБРАНЕНО Е ДА ГИ ПРЕДЛАГАШ ОТНОВО):\n${historyList}`
+      : "";
+
+    const userTopic = data?.topic ? `Тема по желание на потребителя: "${data.topic}"` : "";
+
+    const prompt = `Ти си елитен продуцент на формат "Ислямско видео с обяснение" (Islamic video with explanation) за TikTok и Reels на български език.
+В този формат целта е:
+1. Да се цитира силен, неповторим и дълбок аят от Корана или Сахих Хадис.
+2. Да се даде кратка, въздействаща поука/обяснение (тефсир), което разяснява житейската мъдрост за съвременния мюсюлманин.${historyContext}
+${userTopic}
+
+ИЗКЛЮЧИТЕЛНИ ПРАВИЛА:
+- Заглавието ЗАДЪЛЖИТЕЛНО трябва да съдържа точна референция с двоеточие, например: "[Коран 6:19] Свидетелството на Аллах" или "[Сахих ал-Бухари #6424] Силата на благодарността" (НИКОГА долна черта в заглавието, само двоеточие като 6:19!).
+- "type": "explained_video"
+- "summaryBg": Дълбока, практична поука/обяснение на български език (30-50 думи).
+- "themeBg": Визуално описание за атмосферата (напр. "Звездно небе и планински върхове в мъгла").
+- "searchQuery": Английски термини за Pexels САМО за природа/космос/джамия (напр. "night sky stars mountains cinematic nature"). СТРИКТНО Salafi Halal (0% хора, 0% лица, 0% музика).
+- "tiktokTheme": "hormozi" (златно караоке)
+- "useBRoll": true
+- "bRollInterval": 4
+
+Върни валиден JSON със следната структура:
+{
+  "reply": "Вълнуващо представяне на български защо този аят/хадис и неговото обяснение са толкова силни.",
+  "proposal": {
+    "title": "[Коран 6:19] Истинското Свидетелство",
+    "type": "explained_video",
+    "surah": 6,
+    "ayah": 19,
+    "count": 1,
+    "summaryBg": "Когато целият свят се съмнява в теб, достатъчно е Аллах да бъде свидетел между теб и хората. Истинската вяра носи непоклатимо спокойствие в сърцето.",
+    "themeBg": "Величествени планински облаци и слънчев лъч",
+    "searchQuery": "mountain clouds dramatic cinematic nature",
+    "tiktokTheme": "hormozi",
+    "useBRoll": true,
+    "bRollInterval": 4,
+    "quality": "high"
+  }
+}
+Върни САМО валиден JSON без маркдаун кавички.`;
+
+    const msgs: ChatMessage[] = [
+      { role: "system", content: prompt },
+      { role: "user", content: "Генерирай 1 ново и уникално Ислямско видео с обяснение сега според системните инструкции." },
+    ];
+
+    const raw = await geminiChat("gemini-3.6-flash", msgs, true);
+    let parsed: { reply?: string; proposal?: VideoProposal | null };
+    try {
+      let clean = raw.replace(/```json\s*|\s*```/g, "").trim();
+      const firstBrace = clean.indexOf("{");
+      const lastBrace = clean.lastIndexOf("}");
+      if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+        clean = clean.substring(firstBrace, lastBrace + 1);
+      }
+      parsed = JSON.parse(clean);
+    } catch {
+      parsed = {
+        reply: "Предлагам ти дълбок аят от Сура Ал-Ан'ам с практично обяснение за упованието в Аллах.",
+        proposal: {
+          title: "[Коран 6:19] Истинското Свидетелство",
+          type: "explained_video",
+          surah: 6,
+          ayah: 19,
+          count: 1,
+          summaryBg: "Когато целият свят се съмнява в теб, достатъчно е Аллах да бъде свидетел между теб и хората. Истинската вяра носи непоклатимо спокойствие.",
+          themeBg: "Величествени планински облаци и слънчев лъч",
+          searchQuery: "mountain clouds dramatic cinematic nature",
+          tiktokTheme: "hormozi",
+          useBRoll: true,
+          bRollInterval: 4,
+          quality: "high",
+        },
+      };
+    }
+
+    if (parsed.proposal && parsed.proposal.title) {
+      parsed.proposal.title = cleanProposalTitle(parsed.proposal.title);
+    }
+
+    if (parsed.proposal) {
+      await recordProposalUsages({ data: { proposals: [parsed.proposal] } }).catch(() => {});
+    }
+
+    return {
+      reply: parsed.reply,
+      proposal: parsed.proposal as VideoProposal,
+    };
+  });
+
 export const suggestBatchViralProposals = createServerFn({ method: "POST" })
   .validator(
     (
@@ -775,6 +879,14 @@ export const confirmAndGenerateVideo = createServerFn({ method: "POST" })
       });
       bulgarian = t.bulgarian;
 
+      const cleanExplanation = (proposal.summaryBg || "")
+        .replace(/^обяснение:\s*/i, "")
+        .replace(/^поука:\s*/i, "")
+        .trim();
+      if (cleanExplanation && cleanExplanation.length > 15 && !bulgarian.includes(cleanExplanation)) {
+        bulgarian = `${bulgarian} <break time="0.8s" /> Поука: ${cleanExplanation}`;
+      }
+
       try {
         if (viralTitle) {
           bulgarian = `${viralTitle} <break time="1.0s" />\n\n${bulgarian}`;
@@ -888,6 +1000,15 @@ export const confirmAndGenerateVideo = createServerFn({ method: "POST" })
           },
         });
         bulgarian = t.bulgarian.replace(/(^|\n)\s*(?:\(\d+\)|\[\d+\]|\d+\.)\s*/g, "$1").trim();
+
+        const cleanExplanation = (proposal.summaryBg || "")
+          .replace(/^обяснение:\s*/i, "")
+          .replace(/^поука:\s*/i, "")
+          .trim();
+        if (cleanExplanation && cleanExplanation.length > 15 && !bulgarian.includes(cleanExplanation)) {
+          bulgarian = `${bulgarian} <break time="0.8s" /> Поука: ${cleanExplanation}`;
+        }
+
         if (viralTitle) {
           bulgarian = `${viralTitle} <break time="1.0s" />\n\n${bulgarian}`;
         }

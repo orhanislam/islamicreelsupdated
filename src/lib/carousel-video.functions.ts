@@ -28,7 +28,8 @@ export const buildCarouselVideo = createServerFn({ method: "POST" })
     const { fetchMultiSceneBRoll } = await import("./pexels.functions");
 
     const jobId = `reel_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
-    const cleanTitle = (data.title || "Ислямско видео").replace(/[<>:"/\\|?*]+/g, "_").trim();
+    const displayTitle = (data.title || "Ислямско видео").trim();
+    const safeFileTitle = displayTitle.replace(/[<>:"/\\|?*]+/g, "_").trim() || "islamic_video";
 
     // 1. Build cohesive, professional narration script from carousel content
     let narrationText = (data.script || "").trim();
@@ -114,8 +115,8 @@ export const buildCarouselVideo = createServerFn({ method: "POST" })
         bRollUrls: bRollClips.length > 1 ? bRollClips : undefined,
         bulgarian: narrationText,
         bulgarianWordTimings: narr.wordTimings,
-        reference: cleanTitle,
-        viralTitle: cleanTitle,
+        reference: displayTitle,
+        viralTitle: displayTitle,
         subtitlePosition: "middle",
         subtitleSlicingMode: "phrase",
         pacingMode: "punchy",
@@ -127,7 +128,7 @@ export const buildCarouselVideo = createServerFn({ method: "POST" })
       },
     });
 
-    const finalFilename = `${cleanTitle}.mp4`;
+    const finalFilename = `${safeFileTitle}.mp4`;
     const downloadUrl = `/api/download/${jobId}?filename=${encodeURIComponent(finalFilename)}`;
 
     // 5. Register in jobs.json so it immediately appears in the Downloads tab
@@ -142,7 +143,7 @@ export const buildCarouselVideo = createServerFn({ method: "POST" })
 
       jobs.unshift({
         id: jobId,
-        title: cleanTitle || "Ислямско видео от карусел",
+        title: displayTitle || "Ислямско видео от карусел",
         status: "completed",
         createdAt: Date.now(),
         completedAt: Date.now(),
@@ -156,7 +157,7 @@ export const buildCarouselVideo = createServerFn({ method: "POST" })
     return {
       success: true,
       jobId,
-      title: cleanTitle,
+      title: displayTitle,
       downloadUrl,
     };
   });
