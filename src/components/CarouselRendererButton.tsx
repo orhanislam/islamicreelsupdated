@@ -31,6 +31,7 @@ function blobToBase64(blob: Blob): Promise<string> {
 }
 
 import { autoSplitSlides } from "@/lib/split-slides";
+import { buildCarouselVideo } from "@/lib/carousel-video.functions";
 
 export function CarouselRendererButton({ slides: initialSlides, title }: { slides: Slide[]; title: string }) {
   const [loading, setLoading] = useState(false);
@@ -38,6 +39,7 @@ export function CarouselRendererButton({ slides: initialSlides, title }: { slide
   const runGenerate = useServerFn(generateBackground);
   const runGetBackgrounds = useServerFn(getCarouselBackgrounds);
   const runMake = useServerFn(triggerMakeWebhook);
+  const runBuildVideo = useServerFn(buildCarouselVideo);
 
   const cleanTitle = cleanProposalTitle(title) || "Ислямски_Карусел";
 
@@ -199,6 +201,46 @@ export function CarouselRendererButton({ slides: initialSlides, title }: { slide
     }
   };
 
+  const handleGenerateVideo = async () => {
+    if (!initialSlides || initialSlides.length === 0) return;
+    setLoading(true);
+    try {
+      const renderedSlides = await _renderAllSlides();
+      setProgress("Конвертиране към видео (свързване с аудио)...");
+      const base64Slides = await Promise.all(renderedSlides.map((s) => blobToBase64(s.blob)));
+      
+      const payload = base64Slides.map((b64, i) => {
+        const text = [
+          initialSlides[i].topTitle,
+          initialSlides[i].quoteText,
+          initialSlides[i].commentaryText,
+          initialSlides[i].mainText
+        ].filter(Boolean).join(". ");
+        return { imageBase64: b64, text };
+      });
+
+      const res = await runBuildVideo({ data: { slides: payload, title: cleanTitle } });
+      if (res.jobId) {
+        const downloadUrl = `/api/download/${res.jobId}?filename=${encodeURIComponent(
+          cleanTitle.replace(/[<>\:"/\\|?*]+/g, "_") + ".mp4"
+        )}`;
+        const a = document.createElement("a");
+        a.href = downloadUrl;
+        a.download = "";
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        toast.success("Видеото е готово!");
+      }
+    } catch (err: any) {
+      console.error(err);
+      toast.error("Грешка при генериране на видео: " + err.message);
+    } finally {
+      setLoading(false);
+      setProgress("");
+    }
+  };
+
   return (
     <div className="mt-3 flex flex-col gap-2">
       <Button
@@ -208,23 +250,31 @@ export function CarouselRendererButton({ slides: initialSlides, title }: { slide
       >
         <Copy className="size-4" /> Копирай Заглавието (за TikTok)
       </Button>
-      <div className="flex gap-2 w-full">
+      <div className="flex gap-2 w-full flex-wrap">
         <Button
           onClick={handleGenerate}
           disabled={loading}
-          className="w-1/2 bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-500/20 shadow-lg gap-2"
+          className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-500/20 shadow-lg gap-2"
         >
           {loading ? (
             <Loader2 className="size-4 animate-spin" />
           ) : (
             <ImageIcon className="size-4" />
           )}
-          Изтегли
+          Изтегли ZIP
+        </Button>
+        <Button
+          onClick={handleGenerateVideo}
+          disabled={loading}
+          className="flex-1 bg-blue-600 hover:bg-blue-500 text-white shadow-blue-500/20 shadow-lg gap-2"
+        >
+          {loading ? <Loader2 className="size-4 animate-spin" /> : <Video className="size-4" />}
+          Изтегли Видео
         </Button>
         <Button
           onClick={handleSendToMake}
           disabled={loading}
-          className="w-1/2 bg-purple-600 hover:bg-purple-500 text-white shadow-purple-500/20 shadow-lg gap-2"
+          className="flex-1 bg-purple-600 hover:bg-purple-500 text-white shadow-purple-500/20 shadow-lg gap-2"
         >
           {loading ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
           Прати в Make
