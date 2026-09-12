@@ -88,7 +88,7 @@ export function generateAssSubtitles(data: any, audioDur: number): string {
   const outlineColor = "&H00000000";
   const outlineWidth = "2";
   const shadowSize = "6.5";
-  let highlightColor = "&H32CD32&";
+  let highlightColor = "&H00D7FF&"; // Default Hormozi vibrant gold/yellow
   const borderStyle = "1";
   const backColor = "&H99000000";
 
@@ -100,7 +100,7 @@ export function generateAssSubtitles(data: any, audioDur: number): string {
     highlightColor = "&H00FFFFFF&";
   } else if (tiktokTheme === "fire") {
     highlightColor = "&H0066FF&";
-  } else if (tiktokTheme === "box") {
+  } else if (tiktokTheme === "box" || tiktokTheme === "hormozi") {
     highlightColor = "&H00D7FF&";
   }
 
@@ -445,7 +445,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                 if (isWordInTitle) {
                   return `{\\c&H00FFFFFF&}${w}`;
                 } else {
-                  return isActive ? `{\\c&H0000B7FF&}${w}` : `{\\c&H00FFFFFF&}${w}`;
+                  return isActive ? `{\\c${highlightColor}}${w}` : `{\\c&H00FFFFFF&}${w}`;
                 }
               })
               .join(" ");

@@ -1,202 +1,162 @@
 import { createServerFn } from "@tanstack/react-start";
-import { synthesizeHadithNarration } from "./tts.functions";
-import {
-  getLocalHalalVideoFallback,
-  ensureFallbackVideoExists,
-} from "./backgrounds.functions";
 
 export interface BuildCarouselVideoInput {
-  slides: {
-    overlayBase64?: string; // Transparent PNG with text & scrim
-    imageBase64?: string;   // For backwards compatibility
-    videoUrl?: string;     // Context-aware moving video background
-    text: string;          // Slide text for TTS voiceover narration
+  slides?: {
+    overlayBase64?: string;
+    imageBase64?: string;
+    videoUrl?: string;
+    text?: string;
+    topTitle?: string;
+    quoteText?: string;
+    commentaryText?: string;
+    mainText?: string;
   }[];
+  script?: string;
   title: string;
+  tiktokTheme?: string;
+  bRollUrls?: string[];
 }
 
 export const buildCarouselVideo = createServerFn({ method: "POST" })
   .validator((input: BuildCarouselVideoInput) => input)
-  .handler(async ({ data: { slides, title } }) => {
+  .handler(async ({ data }) => {
     const fs = await import("fs/promises");
     const path = await import("path");
     const os = await import("os");
-    const { exec } = await import("child_process");
-    const { promisify } = await import("util");
-    const execAsync = promisify(exec);
+    const { executeRenderTask } = await import("./render.functions");
+    const { synthesizeHadithNarration } = await import("./tts.functions");
+    const { fetchMultiSceneBRoll } = await import("./pexels.functions");
 
-    const jobId = Math.random().toString(36).substring(2, 15);
-    const tmpDir = path.join(os.tmpdir(), `carousel_video_${jobId}`);
-    await fs.mkdir(tmpDir, { recursive: true });
+    const jobId = `reel_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+    const cleanTitle = (data.title || "Ислямско видео").replace(/[<>:"/\\|?*]+/g, "_").trim();
 
-    try {
-      const inputsListPath = path.join(tmpDir, "inputs.txt");
-      let inputsListContent = "";
-      let totalDurationSecs = 0;
+    // 1. Build cohesive, professional narration script from carousel content
+    let narrationText = (data.script || "").trim();
+    if (!narrationText && Array.isArray(data.slides)) {
+      const parts: string[] = [];
+      const seen = new Set<string>();
 
-      for (let i = 0; i < slides.length; i++) {
-        const slide = slides[i];
+      for (const slide of data.slides) {
+        const candidates = [slide.quoteText, slide.mainText, slide.commentaryText, slide.text]
+          .filter((t): t is string => Boolean(t && typeof t === "string" && t.trim().length > 0));
 
-        // 1. Accept either overlayBase64 or imageBase64; write PNG overlay to slide_${i}.png
-        const rawBase64 = slide.overlayBase64 || slide.imageBase64 || "";
-        const base64Data = rawBase64.includes(",") ? rawBase64.split(",")[1] : rawBase64;
-        const imageBuffer = Buffer.from(base64Data, "base64");
-        const overlayPath = path.join(tmpDir, `slide_${i}.png`);
-        await fs.writeFile(overlayPath, imageBuffer);
-
-        // 2. TTS Voiceover Audio synthesis & duration extraction
-        let audioDurationSecs = 3.0;
-        const audioPath = path.join(tmpDir, `audio_${i}.mp3`);
-
-        if (slide.text && slide.text.trim().length > 0) {
-          try {
-            const narr = await synthesizeHadithNarration({ data: { text: slide.text } });
-            const audioBuffer = Buffer.from(narr.base64, "base64");
-            await fs.writeFile(audioPath, audioBuffer);
-
-            try {
-              const { stdout } = await execAsync(
-                `ffprobe -i "${audioPath}" -show_entries format=duration -v quiet -of csv="p=0"`
-              );
-              const dur = parseFloat(stdout.trim());
-              if (!isNaN(dur) && dur >= 0.5) {
-                audioDurationSecs = dur;
-              } else {
-                audioDurationSecs = 3.0;
-              }
-            } catch (probeErr) {
-              console.warn("Failed to get duration via ffprobe, using fallback 3s", probeErr);
-              audioDurationSecs = 3.0;
-            }
-          } catch (ttsErr) {
-            console.warn("TTS failed for slide", i, ttsErr);
-            await execAsync(
-              `ffmpeg -y -f lavfi -i anullsrc=r=44100:cl=stereo -t 3 -q:a 9 -acodec libmp3lame "${audioPath}"`
-            );
-            audioDurationSecs = 3.0;
-          }
-        } else {
-          await execAsync(
-            `ffmpeg -y -f lavfi -i anullsrc=r=44100:cl=stereo -t 3 -q:a 9 -acodec libmp3lame "${audioPath}"`
-          );
-          audioDurationSecs = 3.0;
-        }
-
-        // Add 0.5s padding
-        audioDurationSecs += 0.5;
-        totalDurationSecs += audioDurationSecs;
-
-        // 3. Moving video background or image loop fallback
-        const slideVideoPath = path.join(tmpDir, `vid_${i}.mp4`);
-        let hasVideoBg = false;
-        const bgPath = path.join(tmpDir, `bg_${i}.mp4`);
-
-        if (slide.videoUrl && typeof slide.videoUrl === "string" && slide.videoUrl.trim().length > 0) {
-          const vUrl = slide.videoUrl.trim();
-          if (vUrl.startsWith("http://") || vUrl.startsWith("https://")) {
-            try {
-              const controller = new AbortController();
-              const timeout = setTimeout(() => controller.abort(), 12000);
-              const res = await fetch(vUrl, { signal: controller.signal });
-              clearTimeout(timeout);
-              if (res.ok) {
-                const buf = Buffer.from(await res.arrayBuffer());
-                if (buf.length > 5000) {
-                  await fs.writeFile(bgPath, buf);
-                  hasVideoBg = true;
-                }
-              }
-            } catch (fetchErr) {
-              console.warn(`Failed to fetch remote videoUrl for slide ${i}:`, fetchErr);
-            }
-          } else {
-            // Local or relative path
-            try {
-              const resolved = path.isAbsolute(vUrl) ? vUrl : path.resolve(process.cwd(), vUrl);
-              const stat = await fs.stat(resolved).catch(() => null);
-              if (stat && stat.size > 5000) {
-                await fs.copyFile(resolved, bgPath);
-                hasVideoBg = true;
-              }
-            } catch (resolveErr) {
-              console.warn(`Failed to resolve local videoUrl for slide ${i}:`, resolveErr);
-            }
-          }
-
-          // If fetching/resolving fails, fallback gracefully to getLocalHalalVideoFallback(i)
-          if (!hasVideoBg) {
-            try {
-              const fallbackAsset = getLocalHalalVideoFallback(i);
-              const fallbackFilePath = await ensureFallbackVideoExists(fallbackAsset);
-              const stat = await fs.stat(fallbackFilePath).catch(() => null);
-              if (stat && stat.size > 5000) {
-                await fs.copyFile(fallbackFilePath, bgPath);
-                hasVideoBg = true;
-              }
-            } catch (fallbackErr) {
-              console.warn(`Fallback video ensure failed for slide ${i}:`, fallbackErr);
-            }
+        for (const text of candidates) {
+          const clean = text
+            .replace(/Продължава\s*👉?/gi, "")
+            .replace(/👉/g, "")
+            .replace(/Слайд\s*\d+/gi, "")
+            .trim();
+          if (clean && !seen.has(clean)) {
+            seen.add(clean);
+            parts.push(clean);
           }
         }
-
-        if (hasVideoBg) {
-          try {
-            await execAsync(
-              `ffmpeg -y -stream_loop -1 -i "${bgPath}" -i "${overlayPath}" -i "${audioPath}" ` +
-              `-filter_complex "[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,setsar=1[bg];[bg][1:v]overlay=0:0[v]" ` +
-              `-map "[v]" -map 2:a -c:v libx264 -preset veryfast -pix_fmt yuv420p -c:a aac -b:a 192k ` +
-              `-t ${audioDurationSecs} "${slideVideoPath}"`
-            );
-          } catch (ffmpegVideoErr) {
-            console.warn(
-              `FFmpeg video compositing failed for slide ${i}, falling back to image loop:`,
-              ffmpegVideoErr
-            );
-            await execAsync(
-              `ffmpeg -y -loop 1 -i "${overlayPath}" -i "${audioPath}" ` +
-              `-c:v libx264 -tune stillimage -c:a aac -b:a 192k -pix_fmt yuv420p ` +
-              `-t ${audioDurationSecs} "${slideVideoPath}"`
-            );
-          }
-        } else {
-          // If slide.videoUrl is absent, support image loop fallback with -loop 1 -i "${overlayPath}" -i "${audioPath}" -c:v libx264 -tune stillimage ...
-          await execAsync(
-            `ffmpeg -y -loop 1 -i "${overlayPath}" -i "${audioPath}" ` +
-            `-c:v libx264 -tune stillimage -c:a aac -b:a 192k -pix_fmt yuv420p ` +
-            `-t ${audioDurationSecs} "${slideVideoPath}"`
-          );
-        }
-
-        inputsListContent += `file 'vid_${i}.mp4'\n`;
       }
 
-      await fs.writeFile(inputsListPath, inputsListContent);
-
-      const primaryDir = path.join(os.homedir(), ".islamicreels_jobs");
-      await fs.mkdir(primaryDir, { recursive: true });
-
-      const finalVideoPath = path.join(primaryDir, `${jobId}.mp4`);
-      await execAsync(`ffmpeg -y -f concat -safe 0 -i "${inputsListPath}" -c copy "${finalVideoPath}"`);
-
-      try {
-        await fs.rm(tmpDir, { recursive: true, force: true });
-      } catch (e) {
-        console.warn("Failed to clean up tmp dir", e);
-      }
-
-      const cleanTitleSafe =
-        (title || "Ислямски_Карусел").replace(/[<>:"/\\|?*]+/g, "_").trim() || "Ислямски_Карусел";
-      const finalVideoName = `${cleanTitleSafe}.mp4`;
-
-      return {
-        success: true,
-        jobId,
-        title,
-        downloadUrl: `/api/download/${jobId}?filename=${encodeURIComponent(finalVideoName)}`,
-        duration: Number(totalDurationSecs.toFixed(2)),
-      };
-    } catch (e: any) {
-      console.error("Carousel video build failed:", e);
-      throw new Error("Грешка: " + e.message);
+      narrationText = parts.join(". ").replace(/\s+/g, " ").replace(/\.+/g, ".").trim();
     }
+
+    if (!narrationText) {
+      narrationText = cleanTitle;
+    }
+
+    console.log(`[carousel-video] Starting professional video render for "${cleanTitle}". Narration length: ${narrationText.length}`);
+
+    // 2. Synthesize authentic voiceover narration with exact word-level timings
+    const narr = await synthesizeHadithNarration({ data: { text: narrationText } });
+    const audioUrl = `data:${narr.mimeType || "audio/mp3"};base64,${narr.base64}`;
+
+    // 3. Collect & fetch dynamic, context-aware, Salafi-compliant B-Roll scenes
+    let bRollClips: string[] = [];
+    if (Array.isArray(data.bRollUrls) && data.bRollUrls.length > 0) {
+      bRollClips = data.bRollUrls.filter((u) => typeof u === "string" && u.startsWith("http"));
+    }
+
+    if (bRollClips.length < 2 && Array.isArray(data.slides)) {
+      for (const slide of data.slides) {
+        if (slide.videoUrl && typeof slide.videoUrl === "string" && slide.videoUrl.startsWith("http")) {
+          if (!bRollClips.includes(slide.videoUrl)) {
+            bRollClips.push(slide.videoUrl);
+          }
+        }
+      }
+    }
+
+    if (bRollClips.length < 2) {
+      try {
+        const bRollRes = await fetchMultiSceneBRoll({
+          data: {
+            query: "islamic calm nature peaceful cinematic landscape",
+            text: narrationText,
+          },
+        });
+        if (bRollRes.clips && bRollRes.clips.length > 0) {
+          bRollClips = bRollRes.clips;
+        }
+      } catch (e) {
+        console.warn("[carousel-video] fetchMultiSceneBRoll fallback:", e);
+      }
+    }
+
+    const fallbackBg =
+      "https://videos.pexels.com/video-files/30054113/12891205_1080_1920_30fps.mp4";
+    const primaryBg = bRollClips[0] || fallbackBg;
+
+    // 4. Render using the battle-tested executeRenderTask engine
+    const primaryDir = path.join(os.homedir(), ".islamicreels_jobs");
+    await fs.mkdir(primaryDir, { recursive: true });
+    const targetMp4 = path.join(primaryDir, `${jobId}.mp4`);
+
+    await executeRenderTask({
+      data: {
+        backgroundUrl: primaryBg,
+        backgroundVideoUrl: primaryBg,
+        bRollUrls: bRollClips.length > 1 ? bRollClips : undefined,
+        bulgarian: narrationText,
+        bulgarianWordTimings: narr.wordTimings,
+        reference: cleanTitle,
+        viralTitle: cleanTitle,
+        subtitlePosition: "middle",
+        subtitleSlicingMode: "phrase",
+        pacingMode: "punchy",
+        tiktokTheme: data.tiktokTheme || "hormozi",
+        audioUrl,
+        requireAudio: true,
+        quality: "1080p",
+        targetOutputPath: targetMp4,
+      },
+    });
+
+    const finalFilename = `${cleanTitle}.mp4`;
+    const downloadUrl = `/api/download/${jobId}?filename=${encodeURIComponent(finalFilename)}`;
+
+    // 5. Register in jobs.json so it immediately appears in the Downloads tab
+    try {
+      const jobsFile = path.join(primaryDir, "jobs.json");
+      let jobs: any[] = [];
+      try {
+        const raw = await fs.readFile(jobsFile, "utf-8");
+        jobs = JSON.parse(raw);
+        if (!Array.isArray(jobs)) jobs = [];
+      } catch {}
+
+      jobs.unshift({
+        id: jobId,
+        title: cleanTitle || "Ислямско видео от карусел",
+        status: "completed",
+        createdAt: Date.now(),
+        completedAt: Date.now(),
+        downloadUrl,
+      });
+      await fs.writeFile(jobsFile, JSON.stringify(jobs.slice(0, 100), null, 2));
+    } catch (jobsErr) {
+      console.warn("[carousel-video] Could not record in jobs.json:", jobsErr);
+    }
+
+    return {
+      success: true,
+      jobId,
+      title: cleanTitle,
+      downloadUrl,
+    };
   });

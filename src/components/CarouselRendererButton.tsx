@@ -203,91 +203,53 @@ export function CarouselRendererButton({ slides: initialSlides, title }: { slide
     if (!initialSlides || initialSlides.length === 0) return;
     setLoading(true);
     try {
-      setProgress("Търсене на кинематографични видео фонове...");
-      let videoResults: any[] = [];
-      try {
-        videoResults = await runFetchVideos({ data: { slides: initialSlides as any } });
-      } catch (serverFetchErr) {
-        console.warn("Server video fetch failed, falling back to direct:", serverFetchErr);
-      }
-      if (!videoResults || videoResults.length === 0) {
-        videoResults = await fetchCarouselSlideVideos(initialSlides as any);
-      }
+      setProgress("Създаване на наративен сценарий от карусела...");
 
-      setProgress("Изчисляване на глобален размер на текста за видео safe zone...");
-      let minScale = 1.0;
-      let minGapScale = 1.0;
-      if (typeof document !== "undefined") {
-        const tempCanvas = document.createElement("canvas");
-        tempCanvas.width = 1080;
-        tempCanvas.height = 1920;
-        const ctx = tempCanvas.getContext("2d");
-        if (ctx) {
-          const { fitSlideLayout } = await import("@/lib/render-carousel");
-          for (const slide of initialSlides) {
-            const layout = fitSlideLayout(ctx, {
-              backgroundUrl: "",
-              topTitle: slide.topTitle || "",
-              mainText: slide.mainText || "",
-              bottomText: slide.bottomText || "",
-              footerText: slide.footerText || "",
-              quoteText: slide.quoteText,
-              commentaryText: slide.commentaryText,
-              sourceBadge: slide.sourceBadge,
-              overlayOnly: true,
-              useVideoSafeZone: true,
-            });
-            if (layout.scale < minScale) minScale = layout.scale;
-            if (layout.gapScale < minGapScale) minGapScale = layout.gapScale;
+      // 1. Build cohesive, professional narration script from carousel slides
+      const scriptParts: string[] = [];
+      const seen = new Set<string>();
+
+      for (const slide of initialSlides) {
+        const candidates = [slide.quoteText, slide.mainText, slide.commentaryText, slide.text]
+          .filter((t): t is string => Boolean(t && typeof t === "string" && t.trim().length > 0));
+
+        for (const text of candidates) {
+          const clean = text
+            .replace(/Продължава\s*👉?/gi, "")
+            .replace(/👉/g, "")
+            .replace(/Слайд\s*\d+/gi, "")
+            .trim();
+          if (clean && !seen.has(clean)) {
+            seen.add(clean);
+            scriptParts.push(clean);
           }
         }
       }
 
-      setProgress("Рендиране на прозрачни текстови слоеве в TikTok Video Safe Zone...");
-      const renderedBlobs = await Promise.all(
-        initialSlides.map(async (slide) => {
-          return await renderCarouselSlide(
-            {
-              topTitle: slide.topTitle || "",
-              mainText: slide.mainText || "",
-              bottomText: slide.bottomText || "",
-              footerText: slide.footerText || "",
-              quoteText: slide.quoteText,
-              commentaryText: slide.commentaryText,
-              sourceBadge: slide.sourceBadge,
-              overlayOnly: true,
-              useVideoSafeZone: true,
-            },
-            minScale,
-            minGapScale
-          );
-        })
-      );
+      const fullNarrationScript = scriptParts.join(". ").replace(/\s+/g, " ").replace(/\.+/g, ".").trim();
 
-      setProgress("Конвертиране на слоевете към Base64...");
-      const base64Slides = await Promise.all(renderedBlobs.map((blob) => blobToBase64(blob)));
+      setProgress("Търсене на кинематографични видео сцени (Халал B-Roll)...");
+      let videoUrls: string[] = [];
+      try {
+        const videoResults = await runFetchVideos({ data: { slides: initialSlides as any } });
+        if (Array.isArray(videoResults)) {
+          videoUrls = videoResults.map((v: any) => v?.videoUrl).filter(Boolean);
+        }
+      } catch (serverFetchErr) {
+        console.warn("Pre-fetch video failed, will use server B-roll:", serverFetchErr);
+      }
 
-      const payload = initialSlides.map((slide, i) => {
-        const b64 = base64Slides[i];
-        const slideText = [
-          slide.topTitle,
-          slide.quoteText,
-          slide.commentaryText,
-          slide.mainText,
-        ]
-          .filter(Boolean)
-          .join(". ");
-
-        return {
-          overlayBase64: b64,
-          imageBase64: b64,
-          videoUrl: videoResults[i]?.videoUrl,
-          text: slideText,
-        };
+      setProgress("Генериране на видео със синхронизирани субтитри и аудио...");
+      const res = await runBuildVideo({
+        data: {
+          slides: initialSlides as any,
+          script: fullNarrationScript,
+          title: cleanTitle,
+          bRollUrls: videoUrls,
+          tiktokTheme: "hormozi",
+        },
       });
 
-      setProgress("Конвертиране към видео (свързване с аудио)...");
-      const res = await runBuildVideo({ data: { slides: payload, title: cleanTitle } });
       if (res && res.jobId) {
         const downloadUrl =
           res.downloadUrl ||
@@ -295,7 +257,7 @@ export function CarouselRendererButton({ slides: initialSlides, title }: { slide
             cleanTitle.replace(/[<>:"/\\|?*]+/g, "_") + ".mp4"
           )}`;
         window.location.href = downloadUrl;
-        toast.success("Видеото е готово и се изтегля!");
+        toast.success("Видеото е готово с динамични субтитри и се изтегля!");
       }
     } catch (err: any) {
       console.error(err);
