@@ -1,4 +1,5 @@
 import { alignTimestampsToSpeech, clampToSpeechIntervals } from "../audio-align.functions";
+import { generateAssSubtitles, estimateTextWidth } from "../render.functions";
 
 function testMonotonicityAndBounds() {
   const mockSpeechIntervals = [
@@ -71,10 +72,54 @@ function testPhoneticWeighting() {
   console.log("✔ testPhoneticWeighting passed!", { durV, durMilo });
 }
 
+function testTikTokSafeSubtitleWidth() {
+  const phrase = "И доказателствата на Аллах";
+  const timings = [
+    { word: "И", start: 0, end: 0.4 },
+    { word: "доказателствата", start: 0.4, end: 1.4 },
+    { word: "на", start: 1.4, end: 1.8 },
+    { word: "Аллах", start: 1.8, end: 2.6 },
+  ];
+  const ass = generateAssSubtitles(
+    {
+      bulgarian: phrase,
+      bulgarianWordTimings: timings,
+      subtitlePosition: "middle",
+      tiktokTheme: "hormozi",
+    },
+    3.0,
+  );
+
+  // Extract \fs tag
+  const fsMatch = ass.match(/\\fs(\d+)/);
+  if (!fsMatch) {
+    throw new Error("ASS output does not contain explicit \\fs tag!");
+  }
+  const fs = parseInt(fsMatch[1], 10);
+  console.log("✔ Auto-scaled font size for 'доказателствата':", fs);
+
+  if (fs > 80) {
+    throw new Error(`Font size ${fs} is too large for 15-char word 'доказателствата'! Should be <= 80.`);
+  }
+
+  // Check that the word width at this font size is strictly <= 640px
+  const wordWidth = estimateTextWidth("доказателствата", fs);
+  const margin = (1080 - wordWidth) / 2;
+  console.log(`✔ 'доказателствата' rendered width at fs=${fs}: ${wordWidth}px (Safe margin: ${margin}px on left & right)`);
+  if (wordWidth > 640) {
+    throw new Error(`Word width ${wordWidth}px exceeds safeLineWidth (640px)!`);
+  }
+  if (margin < 200) {
+    throw new Error(`Margin ${margin}px is less than 200px!`);
+  }
+  console.log("✔ testTikTokSafeSubtitleWidth passed!");
+}
+
 async function runAllTests() {
   console.log("Running subtitle synchronization verification tests...");
   testMonotonicityAndBounds();
   testPhoneticWeighting();
+  testTikTokSafeSubtitleWidth();
   console.log("✔ All subtitle synchronization verification tests passed successfully!");
 }
 

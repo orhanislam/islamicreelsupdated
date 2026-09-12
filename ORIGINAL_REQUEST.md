@@ -68,3 +68,64 @@ Update the carousel generation to use different background images from the exist
 - [ ] The generated video/carousel title does not contain the string "[tiktok carousels]".
 - [ ] Successive carousel generations pick different background images from the existing asset pool.
 
+## 2026-09-12T07:16:57Z
+
+# Teamwork Project Prompt — Draft
+
+> Status: Launched
+> Goal: Craft prompt → get user approval → delegate to teamwork_preview
+> Requested team: [none — teamwork routes from the description]
+
+Upgrade the carousel video generation engine to use AI-generated or stock background videos instead of static images.
+
+Working directory: `C:\Users\admin\Downloads\Islamic Reels Studio`
+Integrity mode: development
+
+## Requirements
+
+### R1. Dynamic Context-Aware Video Backgrounds
+Instead of using static AI-generated images for the background of each carousel slide, integrate an API or logic to fetch/generate short looping video backgrounds. The video chosen for each slide must be contextually relevant and based on the slide's text/subtitles (e.g., if the text mentions Jannah, show a Jannah-like scene; if it mentions patience, show calm nature).
+
+### R2. Adhere to Salafi Principles
+The generated or fetched video backgrounds must align with Salafi principles (e.g., no animate beings with faces, no music). Focus strictly on nature (mountains, rivers, space), architecture (Masjids), and abstract peaceful scenes.
+
+### R3. Seamless Compositing
+Update the video engine to composite the slide text over these video backgrounds seamlessly, ensuring the text remains perfectly readable within the TikTok safe zones.
+
+## Acceptance Criteria
+
+### Verification
+- [ ] Visual verification confirms that the final MP4 output uses moving video backgrounds rather than static images.
+- [ ] Visual verification confirms backgrounds contain only permissible imagery (nature, Masjids, abstract).
+
+## 2026-09-12T13:40:44Z
+
+# Teamwork Project Prompt — Draft
+
+> Status: Launched
+> Goal: Craft prompt → get user approval → delegate to teamwork_preview
+> Requested team: [none — teamwork routes from the description]
+
+Finish the upgrade of the carousel video generation engine to use AI-generated or stock background videos instead of static images.
+
+Working directory: `C:\Users\admin\Downloads\Islamic Reels Studio`
+Integrity mode: development
+
+## Requirements
+
+### R1. Dynamic Context-Aware Video Backgrounds
+Complete the integration to fetch/generate short looping video backgrounds. The video chosen for each slide must be contextually relevant and based on the slide's text/subtitles (e.g., if the text mentions Jannah, show a Jannah-like scene; if it mentions patience, show calm nature).
+
+### R2. Adhere to Salafi Principles
+The generated or fetched video backgrounds must align with Salafi principles (e.g., no animate beings with faces, no music). Focus strictly on nature (mountains, rivers, space), architecture (Masjids), and abstract peaceful scenes.
+
+### R3. Seamless Compositing
+Ensure the video engine composites the slide text over these video backgrounds seamlessly, ensuring the text remains perfectly readable within the TikTok safe zones.
+
+## Acceptance Criteria
+
+### Verification
+- [ ] Visual verification confirms that the final MP4 output uses moving video backgrounds rather than static images.
+- [ ] Visual verification confirms backgrounds contain only permissible imagery (nature, Masjids, abstract).
+
+

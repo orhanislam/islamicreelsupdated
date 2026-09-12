@@ -18,16 +18,19 @@ export function estimateTextWidth(text: string, fontSize: number): number {
     if (char === " ") {
       width += fontSize * 0.28;
     } else if (/[.,!?:;'"„“”«»`()[\]-]/.test(char)) {
-      width += fontSize * 0.3;
+      width += fontSize * 0.32;
     } else if (/[ЖШЩЮЫжшщюыWMwm%@]/.test(char)) {
-      width += fontSize * 0.82;
+      width += fontSize * 0.86;
     } else if (/[iljt1I|]/.test(char)) {
-      width += fontSize * 0.3;
+      width += fontSize * 0.32;
     } else if (/[A-ZА-Я]/.test(char)) {
-      width += fontSize * 0.68;
+      width += fontSize * 0.72;
     } else {
-      width += fontSize * 0.56;
+      width += fontSize * 0.60;
     }
+  }
+  if (width > 0) {
+    width += Math.round(fontSize * 0.14); // Outline stroke buffer
   }
   return Math.round(width);
 }
@@ -112,8 +115,8 @@ PlayResY: ${sz.H}
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
 Style: Arabic,Scheherazade New,100,&H00FFFFFF,&H000000FF,&H00000000,&H80000000,-1,0,0,0,100,100,0,0,1,3,0,8,${placement.marginL},${placement.marginR},${sz.SAFE_TOP},1
-Style: Bulgarian,Outfit,120,&H00FFFFFF,&H0000D7FF,${outlineColor},${backColor},-1,0,0,0,100,100,0,0,${borderStyle},${outlineWidth},${shadowSize},${placement.alignment},${placement.marginL},${placement.marginR},${placement.marginV},1
-Style: Reference,Outfit,58,&H00FFFFFF,&H000000FF,&H00000000,&H99000000,-1,0,0,0,100,100,1,0,1,2.5,3,8,160,160,${sz.SAFE_TOP + 40},1
+Style: Bulgarian,Outfit,74,&H00FFFFFF,&H0000D7FF,${outlineColor},${backColor},-1,0,0,0,100,100,0,0,${borderStyle},${outlineWidth},${shadowSize},${placement.alignment},${placement.marginL},${placement.marginR},${placement.marginV},1
+Style: Reference,Outfit,52,&H00FFFFFF,&H000000FF,&H00000000,&H99000000,-1,0,0,0,100,100,1,0,1,2.5,3,8,180,180,${sz.SAFE_TOP + 40},1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
@@ -306,7 +309,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
           if (end <= start) end = start + 0.5;
 
           const wordCount = ayahWords.length;
-          const maxLineWidth = sz.W_SAFE;
+          const maxLineWidth = Math.min(sz.W_SAFE, 640);
           const refBottomY = sz.SAFE_TOP + 40 + 70 + 20; // ~430px
           const minSubtitleTopY = refBottomY + 30; // 460px
           const maxAllowedHeight =
@@ -316,14 +319,14 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 
           let fs =
             wordCount > 50
-              ? 44
+              ? 40
               : wordCount > 35
-                ? 54
+                ? 48
                 : wordCount > 22
-                  ? 68
+                  ? 60
                   : wordCount > 12
-                    ? 82
-                    : 98;
+                    ? 70
+                    : 80;
           let lines: string[] = [];
           const minFs = 28;
 
@@ -416,9 +419,28 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         );
 
         const posTag = `\\an${placement.alignment}\\pos(${placement.posX},${placement.posY})`;
-        const phraseFs = p.isTitle ? 110 : 96;
-        const safeLineWidth = Math.min(sz.W_SAFE, 680);
-        const linesOfWords = wrapTextToSafeWidth(p.words, phraseFs, safeLineWidth);
+        const safeLineWidth = Math.min(sz.W_SAFE, 640);
+
+        // 1. Initial base font size (titles 82, regular phrases 72)
+        let phraseFs = p.isTitle ? 82 : 72;
+
+        // 2. Dynamic auto-scale down if ANY single word in the phrase exceeds safeLineWidth
+        const longestWordWidth = Math.max(...p.words.map((w) => estimateTextWidth(w, phraseFs)));
+        if (longestWordWidth > safeLineWidth) {
+          const scale = safeLineWidth / longestWordWidth;
+          phraseFs = Math.max(46, Math.floor(phraseFs * scale * 0.94));
+        }
+
+        // 3. Wrap words into lines with safeLineWidth and the adapted font size
+        let linesOfWords = wrapTextToSafeWidth(p.words, phraseFs, safeLineWidth);
+
+        // 4. Verify widest line after wrapping; scale down and re-wrap if necessary
+        const maxLineWidth = Math.max(...linesOfWords.map((line) => estimateTextWidth(line, phraseFs)));
+        if (maxLineWidth > safeLineWidth) {
+          const scale = safeLineWidth / maxLineWidth;
+          phraseFs = Math.max(44, Math.floor(phraseFs * scale * 0.94));
+          linesOfWords = wrapTextToSafeWidth(p.words, phraseFs, safeLineWidth);
+        }
 
         for (let wIdx = 0; wIdx < p.words.length; wIdx++) {
           const globalIdx = p.startIdx + wIdx;
@@ -431,8 +453,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
           if (sliceEnd <= sliceStart) continue;
 
           const useAnim = isLastPhrase && wIdx === p.words.length - 1 ? `\\fad(0,100)` : ``;
-          const titleTag = p.isTitle ? "\\fs110" : "";
-          const phraseStyleTag = `{${posTag}\\blur6${useAnim}${titleTag}}`;
+          const phraseStyleTag = `{${posTag}\\fs${phraseFs}\\blur6${useAnim}}`;
 
           let wordCounter = 0;
           const formattedLineStrings = linesOfWords.map((lineStr) => {

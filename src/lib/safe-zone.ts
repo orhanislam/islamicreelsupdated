@@ -456,8 +456,8 @@ export function getASSSubtitlePlacement(
       alignment: 5, // Middle-Center
       posX: 540, // True horizontal center
       posY: 960,
-      marginL: 160, // Extra safe margin for mobile zoom
-      marginR: 160,
+      marginL: 200, // Extra safe margin for mobile zoom
+      marginR: 200,
       marginV: 960,
     };
   }
@@ -469,8 +469,8 @@ export function getASSSubtitlePlacement(
     alignment: 2, // Bottom-Center
     posX: 540, // True center avoids left clipping on TikTok mobile zoom
     posY,
-    marginL: 160,
-    marginR: 160,
+    marginL: 200,
+    marginR: 200,
     marginV: sz.H - posY,
   };
 }
