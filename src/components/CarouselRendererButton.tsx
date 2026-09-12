@@ -9,6 +9,9 @@ import { cleanProposalTitle } from "@/lib/assistant.functions";
 import { toast } from "sonner";
 import { saveMediaBlob } from "@/lib/download-media";
 import JSZip from "jszip";
+import { autoSplitSlides } from "@/lib/split-slides";
+import { buildCarouselVideo } from "@/lib/carousel-video.functions";
+import { fetchCarouselSlideVideos, getCarouselSlideVideos } from "@/lib/pexels.functions";
 
 type Slide = {
   topTitle: string;
@@ -19,6 +22,7 @@ type Slide = {
   quoteText?: string;
   commentaryText?: string;
   sourceBadge?: string;
+  text?: string;
 };
 
 function blobToBase64(blob: Blob): Promise<string> {
@@ -30,9 +34,6 @@ function blobToBase64(blob: Blob): Promise<string> {
   });
 }
 
-import { autoSplitSlides } from "@/lib/split-slides";
-import { buildCarouselVideo } from "@/lib/carousel-video.functions";
-
 export function CarouselRendererButton({ slides: initialSlides, title }: { slides: Slide[]; title: string }) {
   const [loading, setLoading] = useState(false);
   const [progress, setProgress] = useState("");
@@ -40,6 +41,7 @@ export function CarouselRendererButton({ slides: initialSlides, title }: { slide
   const runGetBackgrounds = useServerFn(getCarouselBackgrounds);
   const runMake = useServerFn(triggerMakeWebhook);
   const runBuildVideo = useServerFn(buildCarouselVideo);
+  const runFetchVideos = useServerFn(getCarouselSlideVideos);
 
   const cleanTitle = cleanProposalTitle(title) || "Ислямски_Карусел";
 
@@ -79,10 +81,6 @@ export function CarouselRendererButton({ slides: initialSlides, title }: { slide
       tempCanvas.height = 1920;
       const ctx = tempCanvas.getContext("2d");
       if (ctx) {
-        // Import fitSlideLayout dynamically to avoid SSR issues if necessary, but it's statically imported above
-        import("@/lib/render-carousel").then(({ fitSlideLayout }) => {
-          // We can do this synchronously if we already have it imported
-        });
         const { fitSlideLayout } = await import("@/lib/render-carousel");
         
         for (const slide of slides) {
@@ -205,25 +203,97 @@ export function CarouselRendererButton({ slides: initialSlides, title }: { slide
     if (!initialSlides || initialSlides.length === 0) return;
     setLoading(true);
     try {
-      const renderedSlides = await _renderAllSlides();
-      setProgress("Конвертиране към видео (свързване с аудио)...");
-      const base64Slides = await Promise.all(renderedSlides.map((s) => blobToBase64(s.blob)));
-      
-      const payload = base64Slides.map((b64, i) => {
-        const text = [
-          initialSlides[i].topTitle,
-          initialSlides[i].quoteText,
-          initialSlides[i].commentaryText,
-          initialSlides[i].mainText
-        ].filter(Boolean).join(". ");
-        return { imageBase64: b64, text };
+      setProgress("Търсене на кинематографични видео фонове...");
+      let videoResults: any[] = [];
+      try {
+        videoResults = await runFetchVideos({ data: { slides: initialSlides as any } });
+      } catch (serverFetchErr) {
+        console.warn("Server video fetch failed, falling back to direct:", serverFetchErr);
+      }
+      if (!videoResults || videoResults.length === 0) {
+        videoResults = await fetchCarouselSlideVideos(initialSlides as any);
+      }
+
+      setProgress("Изчисляване на глобален размер на текста за видео safe zone...");
+      let minScale = 1.0;
+      let minGapScale = 1.0;
+      if (typeof document !== "undefined") {
+        const tempCanvas = document.createElement("canvas");
+        tempCanvas.width = 1080;
+        tempCanvas.height = 1920;
+        const ctx = tempCanvas.getContext("2d");
+        if (ctx) {
+          const { fitSlideLayout } = await import("@/lib/render-carousel");
+          for (const slide of initialSlides) {
+            const layout = fitSlideLayout(ctx, {
+              backgroundUrl: "",
+              topTitle: slide.topTitle || "",
+              mainText: slide.mainText || "",
+              bottomText: slide.bottomText || "",
+              footerText: slide.footerText || "",
+              quoteText: slide.quoteText,
+              commentaryText: slide.commentaryText,
+              sourceBadge: slide.sourceBadge,
+              overlayOnly: true,
+              useVideoSafeZone: true,
+            });
+            if (layout.scale < minScale) minScale = layout.scale;
+            if (layout.gapScale < minGapScale) minGapScale = layout.gapScale;
+          }
+        }
+      }
+
+      setProgress("Рендиране на прозрачни текстови слоеве в TikTok Video Safe Zone...");
+      const renderedBlobs = await Promise.all(
+        initialSlides.map(async (slide) => {
+          return await renderCarouselSlide(
+            {
+              topTitle: slide.topTitle || "",
+              mainText: slide.mainText || "",
+              bottomText: slide.bottomText || "",
+              footerText: slide.footerText || "",
+              quoteText: slide.quoteText,
+              commentaryText: slide.commentaryText,
+              sourceBadge: slide.sourceBadge,
+              overlayOnly: true,
+              useVideoSafeZone: true,
+            },
+            minScale,
+            minGapScale
+          );
+        })
+      );
+
+      setProgress("Конвертиране на слоевете към Base64...");
+      const base64Slides = await Promise.all(renderedBlobs.map((blob) => blobToBase64(blob)));
+
+      const payload = initialSlides.map((slide, i) => {
+        const b64 = base64Slides[i];
+        const slideText = [
+          slide.topTitle,
+          slide.quoteText,
+          slide.commentaryText,
+          slide.mainText,
+        ]
+          .filter(Boolean)
+          .join(". ");
+
+        return {
+          overlayBase64: b64,
+          imageBase64: b64,
+          videoUrl: videoResults[i]?.videoUrl,
+          text: slideText,
+        };
       });
 
+      setProgress("Конвертиране към видео (свързване с аудио)...");
       const res = await runBuildVideo({ data: { slides: payload, title: cleanTitle } });
-      if (res.jobId) {
-        const downloadUrl = `/api/download/${res.jobId}?filename=${encodeURIComponent(
-          cleanTitle.replace(/[<>\:"/\\|?*]+/g, "_") + ".mp4"
-        )}`;
+      if (res && res.jobId) {
+        const downloadUrl =
+          res.downloadUrl ||
+          `/api/download/${res.jobId}?filename=${encodeURIComponent(
+            cleanTitle.replace(/[<>:"/\\|?*]+/g, "_") + ".mp4"
+          )}`;
         window.location.href = downloadUrl;
         toast.success("Видеото е готово и се изтегля!");
       }

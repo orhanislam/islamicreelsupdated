@@ -219,6 +219,24 @@ export const CENTER_SAFE_ZONE: SafeZoneGeometry = createSafeZone({
   SAFE_RIGHT: 100,
 });
 
+/**
+ * Carousel 9:16 Safe Zone (1080x1920) for photo carousels
+ * Less aggressive than video safe zone since carousels have less UI chrome:
+ * - Top: 120px (status bar + minimal header)
+ * - Bottom: 220px (caption + handle — no audio disk or progress bar)
+ * - Left: 60px
+ * - Right: 120px (action buttons are smaller on carousel)
+ * Gives H_SAFE ~1580px vs the video's 1220px → much more room for text.
+ */
+export const CAROUSEL_SAFE_ZONE: SafeZoneGeometry = createSafeZone({
+  W: 1080,
+  H: 1920,
+  SAFE_TOP: 120,
+  SAFE_BOTTOM: 220,
+  SAFE_LEFT: 60,
+  SAFE_RIGHT: 120,
+});
+
 export const SOCIAL_SAFE_ZONES: Record<PlatformSafeZoneProfile, SafeZoneGeometry> = Object.freeze({
   tiktok: TIKTOK_SAFE_ZONE,
   reels: REELS_SAFE_ZONE,

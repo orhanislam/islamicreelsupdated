@@ -1065,7 +1065,10 @@ async function aggressivelyCleanServerDisk(forceAll = false) {
         isCompleted: boolean;
       }[] = [];
       for (const jf of jFiles) {
-        if (jf === "jobs.json") continue;
+        // STRICT EXEMPTION: Never purge metadata indexes or the permanent video cache directory
+        if (jf === "jobs.json" || jf === "video_cache" || jf === "halal_verified_videos.json") {
+          continue;
+        }
         const jp = path.join(jobsDir, jf);
         const st = await fs.stat(jp).catch(() => null);
         if (!st) continue;

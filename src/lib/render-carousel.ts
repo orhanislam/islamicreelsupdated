@@ -1,33 +1,33 @@
-import { TIKTOK_SAFE_ZONE, createSafeZone, type SafeZoneGeometry } from "./safe-zone";
-export { TIKTOK_SAFE_ZONE, type SafeZoneGeometry };
-
-/**
- * Carousel-specific safe zone — less aggressive than the video safe zone.
- * TikTok carousel images have smaller UI overlays than full-screen videos:
- * - Top: 150px (just the status bar + minimal header)
- * - Bottom: 260px (caption + handle — no audio disk or progress bar)
- * - Left: 80px
- * - Right: 140px (action buttons are smaller on carousel)
- * Gives H_SAFE ~1510px vs the video's 1220px → much more room for text.
- */
-export const CAROUSEL_SAFE_ZONE: SafeZoneGeometry = createSafeZone({
-  W: 1080,
-  H: 1920,
-  SAFE_TOP: 120,
-  SAFE_BOTTOM: 220,
-  SAFE_LEFT: 60,
-  SAFE_RIGHT: 120,
-});
+import {
+  TIKTOK_SAFE_ZONE,
+  CAROUSEL_SAFE_ZONE,
+  REFERENCE_PILL_STANDARDS,
+  createSafeZone,
+  type SafeZoneGeometry,
+} from "./safe-zone";
+export { TIKTOK_SAFE_ZONE, CAROUSEL_SAFE_ZONE, type SafeZoneGeometry };
 
 export type CarouselSlideOptions = {
-  backgroundUrl: string;
+  backgroundUrl?: string; // Optional for overlayOnly
   topTitle: string;
   mainText: string;
   bottomText: string;
   footerText?: string;
   quoteText?: string;
   commentaryText?: string;
+  sourceBadge?: string;
+  overlayOnly?: boolean; // When true, renders transparent alpha canvas with scrim + text, no background image
+  useVideoSafeZone?: boolean; // When true, uses TIKTOK_SAFE_ZONE instead of CAROUSEL_SAFE_ZONE
 };
+
+/**
+ * Select active safe zone based on slide options.
+ * Defaults to CAROUSEL_SAFE_ZONE for static photo carousel slides,
+ * and switches to TIKTOK_SAFE_ZONE when useVideoSafeZone is requested.
+ */
+export function getSlideSafeZone(opts?: CarouselSlideOptions): SafeZoneGeometry {
+  return opts?.useVideoSafeZone ? TIKTOK_SAFE_ZONE : CAROUSEL_SAFE_ZONE;
+}
 
 export interface TextSegment {
   type: "sacred" | "human";
@@ -382,7 +382,8 @@ export function computeSlideLayout(
   gapScale?: number,
 ): SlideLayoutResult {
   const actualGapScale = typeof gapScale === "number" ? gapScale : scale;
-  const maxWidth = CAROUSEL_SAFE_ZONE.W_SAFE;
+  const safeZone = getSlideSafeZone(opts);
+  const maxWidth = safeZone.W_SAFE;
   const parsed = parseSlideSegments(opts);
 
   const fontTop = `800 ${Math.max(8, Math.round(68 * scale))}px 'Montserrat', sans-serif`;
@@ -496,6 +497,7 @@ export function fitSlideLayout(
   ctx: CanvasRenderingContext2D,
   opts: CarouselSlideOptions,
 ): SlideLayoutResult {
+  const safeZone = getSlideSafeZone(opts);
   let scale = 1.0;
   let gapScale = 1.0;
   let layout = computeSlideLayout(ctx, opts, scale, gapScale);
@@ -503,18 +505,25 @@ export function fitSlideLayout(
   // Calculate exact space taken by bottom elements (matches renderCarouselSlide logic)
   const FOOTER_LH = 64;
   const GAP_FOOTER_TO_BOTTOM = 20;
-  const footerClean = (opts.footerText || "").trim();
-  const footerBaselineY = CAROUSEL_SAFE_ZONE.BOTTOM_MAX_Y - 10;
+  const footerClean = stripEmojis((opts.footerText || "").trim());
+  const footerBaselineY = safeZone.BOTTOM_MAX_Y - 10;
   
   const bottomAnchorBaselineY = footerClean
     ? footerBaselineY - FOOTER_LH - GAP_FOOTER_TO_BOTTOM
-    : CAROUSEL_SAFE_ZONE.BOTTOM_MAX_Y - 10;
+    : safeZone.BOTTOM_MAX_Y - 10;
+
+  // Calculate space taken by top sourceBadge pill (if present)
+  const badgeClean = stripEmojis((opts.sourceBadge || "").trim());
+  const badgeH = badgeClean
+    ? REFERENCE_PILL_STANDARDS.FONT_SIZE + REFERENCE_PILL_STANDARDS.PAD_Y * 2 + REFERENCE_PILL_STANDARDS.MIN_VERTICAL_GAP
+    : 0;
+  const bodyAreaTop = safeZone.SAFE_TOP + badgeH;
 
   const getSafeH = (currentLayout: SlideLayoutResult) => {
     const bottomBlockTop = currentLayout.bottomLines.length > 0
       ? (bottomAnchorBaselineY - currentLayout.bottomH - GAP_FOOTER_TO_BOTTOM)
-      : (footerClean ? footerBaselineY - FOOTER_LH - GAP_FOOTER_TO_BOTTOM : CAROUSEL_SAFE_ZONE.BOTTOM_MAX_Y);
-    return bottomBlockTop - CAROUSEL_SAFE_ZONE.SAFE_TOP;
+      : (footerClean ? footerBaselineY - FOOTER_LH - GAP_FOOTER_TO_BOTTOM : safeZone.BOTTOM_MAX_Y);
+    return Math.max(100, bottomBlockTop - bodyAreaTop);
   };
 
   if (layout.totalH <= getSafeH(layout)) {
@@ -538,24 +547,24 @@ export function fitSlideLayout(
   layout = computeSlideLayout(ctx, opts, scale, gapScale);
 
   // 3. Fine-tuning loop with dynamic gap balancing
-  while (layout.totalH > getSafeH(layout) && (scale > 0.50 || gapScale > 0.10)) {
-    if (hasMultipleSegments && gapScale > 0.30 && gapScale > scale * 0.5) {
-      gapScale = Math.max(0.15, gapScale - 0.05);
-    } else if (scale > 0.55) {
-      scale = Math.max(0.50, scale - 0.03);
+  while (layout.totalH > getSafeH(layout) && (scale > 0.45 || gapScale > 0.10)) {
+    if (hasMultipleSegments && gapScale > 0.25 && gapScale > scale * 0.5) {
+      gapScale = Math.max(0.12, gapScale - 0.05);
+    } else if (scale > 0.50) {
+      scale = Math.max(0.45, scale - 0.03);
       gapScale = Math.min(gapScale, scale);
     } else if (gapScale > 0.10) {
-      gapScale = Math.max(0.08, gapScale - 0.04);
+      gapScale = Math.max(0.06, gapScale - 0.04);
     } else {
-      scale = Math.max(0.45, scale - 0.02);
+      scale = Math.max(0.40, scale - 0.02);
     }
 
     layout = computeSlideLayout(ctx, opts, scale, gapScale);
   }
 
   // 4. Ultimate safety fallback for extreme edge cases (e.g. 20+ segments / 2000+ chars)
-  while (layout.totalH > getSafeH(layout) && scale > 0.40) {
-    scale = Math.max(0.40, scale - 0.01);
+  while (layout.totalH > getSafeH(layout) && scale > 0.35) {
+    scale = Math.max(0.35, scale - 0.01);
     gapScale = Math.max(0.01, gapScale - 0.01);
     layout = computeSlideLayout(ctx, opts, scale, gapScale);
   }
@@ -578,59 +587,80 @@ export async function renderCarouselSlide(
     }
   }
 
-  const W = CAROUSEL_SAFE_ZONE.W;
-  const H = CAROUSEL_SAFE_ZONE.H;
+  const safeZone = getSlideSafeZone(opts);
+  const W = safeZone.W;
+  const H = safeZone.H;
+  const centerX = safeZone.CENTER_X;
 
   const canvas = document.createElement("canvas");
   canvas.width = W;
   canvas.height = H;
   const ctx = canvas.getContext("2d")!;
 
-  try {
-    const img = await loadImage(opts.backgroundUrl);
-    const imgRatio = img.width / img.height;
-    const canvasRatio = W / H;
-    let sx = 0,
-      sy = 0,
-      sw = img.width,
-      sh = img.height;
-    if (imgRatio > canvasRatio) {
-      sw = img.height * canvasRatio;
-      sx = (img.width - sw) / 2;
+  if (opts.overlayOnly) {
+    // 1. Clear the canvas completely with transparent alpha (RGBA 0, 0, 0, 0)
+    ctx.clearRect(0, 0, W, H);
+
+    // 2. Draw subtle dark vertical scrim gradient directly onto transparent canvas
+    const scrim = ctx.createLinearGradient(0, 0, 0, H);
+    scrim.addColorStop(0, "rgba(0, 0, 0, 0.65)");    // Upper header darkening
+    scrim.addColorStop(0.35, "rgba(0, 0, 0, 0.40)"); // Subtle darkening behind sacred quote
+    scrim.addColorStop(0.70, "rgba(0, 0, 0, 0.55)"); // Medium contrast behind commentary
+    scrim.addColorStop(1, "rgba(0, 0, 0, 0.85)");    // Lower safe zone darkening for CTA & handles
+    ctx.fillStyle = scrim;
+    ctx.fillRect(0, 0, W, H);
+  } else {
+    if (opts.backgroundUrl) {
+      try {
+        const img = await loadImage(opts.backgroundUrl);
+        const imgRatio = img.width / img.height;
+        const canvasRatio = W / H;
+        let sx = 0,
+          sy = 0,
+          sw = img.width,
+          sh = img.height;
+        if (imgRatio > canvasRatio) {
+          sw = img.height * canvasRatio;
+          sx = (img.width - sw) / 2;
+        } else {
+          sh = img.width / canvasRatio;
+          sy = (img.height - sh) / 2;
+        }
+        ctx.drawImage(img, sx, sy, sw, sh, 0, 0, W, H);
+      } catch {
+        ctx.fillStyle = "#111827";
+        ctx.fillRect(0, 0, W, H);
+      }
     } else {
-      sh = img.width / canvasRatio;
-      sy = (img.height - sh) / 2;
+      ctx.fillStyle = "#111827";
+      ctx.fillRect(0, 0, W, H);
     }
-    ctx.drawImage(img, sx, sy, sw, sh, 0, 0, W, H);
-  } catch {
-    ctx.fillStyle = "#111827";
+
+    // Dark gradient overlay to guarantee text legibility
+    const grad = ctx.createLinearGradient(0, 0, 0, H);
+    grad.addColorStop(0, "rgba(0, 0, 0, 0.65)");
+    grad.addColorStop(0.5, "rgba(0, 0, 0, 0.35)");
+    grad.addColorStop(1, "rgba(0, 0, 0, 0.85)");
+    ctx.fillStyle = grad;
     ctx.fillRect(0, 0, W, H);
   }
 
-  // Dark gradient overlay to guarantee text legibility
-  const grad = ctx.createLinearGradient(0, 0, 0, H);
-  grad.addColorStop(0, "rgba(0, 0, 0, 0.65)");
-  grad.addColorStop(0.5, "rgba(0, 0, 0, 0.35)");
-  grad.addColorStop(1, "rgba(0, 0, 0, 0.85)");
-  ctx.fillStyle = grad;
-  ctx.fillRect(0, 0, W, H);
-
-  // Dynamic auto-fit font scaling & gap balancing (body content only, bottomText excluded)
-  const layout = fitSlideLayout(ctx, opts);
-
-  const centerX = CAROUSEL_SAFE_ZONE.CENTER_X;
+  // Dynamic auto-fit font scaling & gap balancing (honors forcedScale if provided)
+  const layout = typeof forcedScale === "number"
+    ? computeSlideLayout(ctx, opts, forcedScale, forcedGapScale)
+    : fitSlideLayout(ctx, opts);
 
   // ── FIXED-POSITION BOTTOM ELEMENTS ───────────────────────────────────────
-  // These are anchored absolutely to the bottom of the TikTok safe zone so they
-  // never overflow the canvas or get hidden by TikTok UI elements.
+  // These are anchored absolutely to the bottom of the safe zone so they
+  // never overflow the canvas or get hidden by UI elements.
 
   // footerText: swipe indicator (e.g. "← Плъзнете наляво") — pinned at very bottom
   const FOOTER_FONT_SIZE = 52;
   const FOOTER_LH = 64;
   const FOOTER_FONT = `500 ${FOOTER_FONT_SIZE}px 'Montserrat', sans-serif`;
   const footerClean = stripEmojis((opts.footerText || "").trim());
-  // Anchor baseline to 10px above BOTTOM_MAX_Y so nothing bleeds into TikTok UI
-  const footerBaselineY = CAROUSEL_SAFE_ZONE.BOTTOM_MAX_Y - 10;
+  // Anchor baseline to 10px above BOTTOM_MAX_Y so nothing bleeds into UI
+  const footerBaselineY = safeZone.BOTTOM_MAX_Y - 10;
 
   if (footerClean) {
     ctx.font = FOOTER_FONT;
@@ -654,7 +684,7 @@ export async function renderCarouselSlide(
   const GAP_FOOTER_TO_BOTTOM = 20;
   const bottomAnchorBaselineY = footerClean
     ? footerBaselineY - FOOTER_LH - GAP_FOOTER_TO_BOTTOM
-    : CAROUSEL_SAFE_ZONE.BOTTOM_MAX_Y - 10;
+    : safeZone.BOTTOM_MAX_Y - 10;
 
   if (layout.bottomLines.length > 0) {
     // Draw lines bottom-up: last line sits at bottomAnchorBaselineY
@@ -674,16 +704,53 @@ export async function renderCarouselSlide(
     });
   }
 
+  // ── SOURCE BADGE PILL (TOP SAFE ZONE) ─────────────────────────────────────
+  const badgeClean = stripEmojis((opts.sourceBadge || "").trim());
+  const BADGE_HEIGHT = REFERENCE_PILL_STANDARDS.FONT_SIZE + REFERENCE_PILL_STANDARDS.PAD_Y * 2; // 56px
+  const BADGE_GAP = REFERENCE_PILL_STANDARDS.MIN_VERTICAL_GAP; // 24px
+  const totalBadgeH = badgeClean ? BADGE_HEIGHT + BADGE_GAP : 0;
+  const bodyAreaTop = safeZone.SAFE_TOP + totalBadgeH;
+
+  if (badgeClean) {
+    const badgeFont = `600 ${REFERENCE_PILL_STANDARDS.FONT_SIZE}px 'Montserrat', sans-serif`;
+    ctx.font = badgeFont;
+    const textW = ctx.measureText(badgeClean).width;
+    const pillW = Math.min(safeZone.W_SAFE, textW + REFERENCE_PILL_STANDARDS.PAD_X * 2);
+    const pillH = BADGE_HEIGHT;
+    const pillX = centerX - pillW / 2;
+    const pillY = safeZone.SAFE_TOP; // 300 on video, 120 on carousel
+
+    ctx.save();
+    ctx.fillStyle = "rgba(243, 209, 121, 0.15)";
+    ctx.strokeStyle = "rgba(243, 209, 121, 0.55)";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    if (typeof (ctx as any).roundRect === "function") {
+      (ctx as any).roundRect(pillX, pillY, pillW, pillH, pillH / 2);
+    } else {
+      ctx.rect(pillX, pillY, pillW, pillH);
+    }
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.font = badgeFont;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillStyle = "#F3D179";
+    ctx.fillText(badgeClean, centerX, pillY + pillH / 2);
+    ctx.restore();
+  }
+
   // ── FLOWING BODY CONTENT ──────────────────────────────────────────────────
   // Compute available vertical space for body (everything above the bottom elements)
   const bottomBlockTop = layout.bottomLines.length > 0
     ? (bottomAnchorBaselineY - layout.bottomH - GAP_FOOTER_TO_BOTTOM)
-    : (footerClean ? footerBaselineY - FOOTER_LH - GAP_FOOTER_TO_BOTTOM : CAROUSEL_SAFE_ZONE.BOTTOM_MAX_Y);
+    : (footerClean ? footerBaselineY - FOOTER_LH - GAP_FOOTER_TO_BOTTOM : safeZone.BOTTOM_MAX_Y);
 
   // Vertically center the body block within the available space
-  const bodyAreaHeight = bottomBlockTop - CAROUSEL_SAFE_ZONE.SAFE_TOP;
+  const bodyAreaHeight = bottomBlockTop - bodyAreaTop;
   let currentY =
-    CAROUSEL_SAFE_ZONE.SAFE_TOP +
+    bodyAreaTop +
     Math.max(0, Math.round((bodyAreaHeight - layout.totalH) / 2));
 
   // 1. Draw Top Title (Gold)
