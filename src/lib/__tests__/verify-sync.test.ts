@@ -196,6 +196,44 @@ function testAudioDurationSafeguards() {
   console.log("✔ testAudioDurationSafeguards passed: Clamped duration to", probedDuration, "s (covers speech + 1.2s outro buffer)");
 }
 
+async function testSalafiArabicPhoneticNormalization() {
+  const { normalizeIslamicArabicPhoneticsForTts, normalizePhoneticsToDisplayWord } = await import("../tts.functions");
+
+  // Test 1: astafirullah / astaghfirullah / астафируллах conversion to authentic Salafi Arabic
+  const t1 = normalizeIslamicArabicPhoneticsForTts("Кажи astafirullah и направи истигфар.");
+  if (!t1.includes("Астагфируллаах") || !t1.includes("истигфаар")) {
+    throw new Error(`Salafi phonetic test 1 failed! Got: ${t1}`);
+  }
+
+  const t2 = normalizeIslamicArabicPhoneticsForTts("Кажи астафируллах от сърце, брат!");
+  if (!t2.includes("Астагфируллаах")) {
+    throw new Error(`Salafi phonetic test 2 failed! Got: ${t2}`);
+  }
+
+  const t3 = normalizeIslamicArabicPhoneticsForTts("Субханаллах и Алхамдулиллях, Аллаху Акбар, Ля иляха илляллах.");
+  if (!t3.includes("Субхааналлаах") || !t3.includes("Алхамдулиллаах") || !t3.includes("Аллааху Акбар") || !t3.includes("Ляя иляяха илляллаах")) {
+    throw new Error(`Salafi phonetic test 3 failed! Got: ${t3}`);
+  }
+
+  const t4 = normalizeIslamicArabicPhoneticsForTts("Пратеникът ﷺ ни учи на таухид и сабр.");
+  if (!t4.includes("Саллаллааху 'алейхи ва саллям") || !t4.includes("таухиийд")) {
+    throw new Error(`Salafi phonetic test 4 failed! Got: ${t4}`);
+  }
+
+  // Test 2: Display word normalization for clean subtitles
+  const d1 = normalizePhoneticsToDisplayWord("Астагфируллаах,");
+  if (d1 !== "Астагфируллах,") {
+    throw new Error(`Display word test 1 failed! Got: ${d1}`);
+  }
+
+  const d2 = normalizePhoneticsToDisplayWord("Субхааналлаах!");
+  if (d2 !== "Субханаллах!") {
+    throw new Error(`Display word test 2 failed! Got: ${d2}`);
+  }
+
+  console.log("✔ testSalafiArabicPhoneticNormalization passed: 100% verified authentic Arabic Salafi pronunciations!");
+}
+
 async function runAllTests() {
   console.log("Running subtitle synchronization verification tests...");
   testMonotonicityAndBounds();
@@ -203,6 +241,7 @@ async function runAllTests() {
   testTikTokSafeSubtitleWidth();
   testTopicTopHeaderDisplay();
   testAudioDurationSafeguards();
+  await testSalafiArabicPhoneticNormalization();
   console.log("✔ All subtitle synchronization verification tests passed successfully!");
 }
 
