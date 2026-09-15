@@ -183,20 +183,33 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
   }
 
   if (data.bulgarian) {
-    data.bulgarian = data.bulgarian.replace(/<[^>]+>/g, "").trim();
+    data.bulgarian = data.bulgarian
+      .replace(/<[^>]+>/g, "")
+      .replace(/\[(?:коран|сура|хадис|бухари|муслим|тирмизи|навауи)[^\]]*\]/gi, "")
+      .replace(/[\[\]]/g, "")
+      .trim();
     let words = data.bulgarian.split(/\s+/).filter(Boolean);
     let timings = data.bulgarianWordTimings;
     if (timings && timings.length > 0) {
       const syncRes = verifyAndCorrectSubtitleSync(timings, audioDur);
       timings = syncRes.correctedTimings;
       if (timings.length > 0 && timings[0].word && timings[0].word !== "...") {
-        timings = timings.filter((t: any) => {
-          if (!t.word) return true;
-          const w = t.word.toLowerCase();
-          return (
-            !w.includes("<") && !w.includes(">") && !w.includes("time=") && !w.includes("1.0s")
-          );
-        });
+        timings = timings
+          .map((t: any) => ({
+            ...t,
+            word: (t.word || "").replace(/[\[\]]/g, "").trim(),
+          }))
+          .filter((t: any) => {
+            if (!t.word) return false;
+            const w = t.word.toLowerCase();
+            return (
+              !w.includes("<") &&
+              !w.includes(">") &&
+              !w.includes("time=") &&
+              !w.includes("1.0s") &&
+              !/^\(?(?:\d+[:.]\d+)\)?$/.test(w)
+            );
+          });
         words = timings.map((t: any) => t.word);
       }
       if (timings.length !== words.length) {

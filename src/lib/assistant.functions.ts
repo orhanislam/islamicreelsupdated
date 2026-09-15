@@ -952,7 +952,7 @@ export const suggestBatchViralProposals = createServerFn({ method: "POST" })
     },
   );
 
-function buildExplainedNarrationText(params: {
+export function buildExplainedNarrationText(params: {
   viralTitle?: string;
   reference: string;
   quoteText: string;
@@ -978,17 +978,38 @@ function buildExplainedNarrationText(params: {
     blocks.push(hookParts.join(" "));
   }
 
-  // Step 2: Dalil (Intro + Sacred Quote + Reference)
-  const defaultIntro = params.isQuran
-    ? "Чуй какво казва Аллах Всевишният в Корана:"
-    : "Пратеникът на Аллах ﷺ ни учи:";
-  const intro = (sw?.dalilIntro || defaultIntro).trim();
+  // Step 2: Dalil (Intro + Sacred Quote)
+  let intro = (sw?.dalilIntro || "").trim();
+  if (
+    !intro ||
+    intro === "Чуй какво казва Аллах Всевишният в Корана:" ||
+    intro === "Пратеникът на Аллах ﷺ ни учи:"
+  ) {
+    if (params.isQuran) {
+      const cleanRefName = params.reference
+        ? params.reference.replace(/^\[|\]$/g, "").replace(/\s*\([^)]*\)/, "").trim()
+        : "";
+      intro = cleanRefName && !cleanRefName.startsWith("[")
+        ? `Чуй какво казва Аллах Всевишният в ${cleanRefName}:`
+        : "Чуй какво казва Аллах Всевишният в Корана:";
+    } else {
+      const cleanRefName = params.reference
+        ? params.reference.replace(/^\[|\]$/g, "").replace(/\s*#\d+.*$/, "").trim()
+        : "";
+      intro = cleanRefName && !cleanRefName.startsWith("[")
+        ? `Пратеникът на Аллах ﷺ ни учи в ${cleanRefName}:`
+        : "Пратеникът на Аллах ﷺ ни учи:";
+    }
+  }
+
   const cleanDalil = params.quoteText
     .replace(/(^|\n)\s*(?:\(\d+\)|\[\d+\]|\d+\.)\s*/g, "$1")
+    .replace(/\[(?:коран|сура|хадис|бухари|муслим|тирмизи|навауи)[^\]]*\]/gi, "")
+    .replace(/\((?:коран|сура|хадис|бухари|муслим|тирмизи|навауи)[^)]*\)/gi, "")
     .replace(/^["„“']+|["„“']+$/g, "")
     .trim();
 
-  blocks.push(`${intro}\n„${cleanDalil}“ [${params.reference}]`);
+  blocks.push(`${intro}\n„${cleanDalil}“`);
 
   // Step 3: Explanation (Поука / Тефсир)
   let explanation = sw?.explanation?.trim() || "";

@@ -234,6 +234,77 @@ async function testSalafiArabicPhoneticNormalization() {
   console.log("✔ testSalafiArabicPhoneticNormalization passed: 100% verified authentic Arabic Salafi pronunciations!");
 }
 
+async function testArabicTransliterationAndDalilIntegrity() {
+  const { normalizeIslamicTermsBulgarian } = await import("../translate.functions");
+  const { normalizeIslamicArabicPhoneticsForTts, normalizePhoneticsToDisplayWord } = await import("../tts.functions");
+  const { buildExplainedNarrationText } = await import("../assistant.functions");
+
+  // 1. Verify Ar-Ra'd and names with apostrophes/hyphens are NOT mangled by honorific abbreviations
+  const quranRefCyrillic = "Сура Ар-Ра'д (13:28)";
+  const quranRefLatin = "Surah Ar-Ra'd (13:28)";
+
+  const transCyrillic = normalizeIslamicTermsBulgarian(quranRefCyrillic);
+  if (transCyrillic.includes("доволен от него")) {
+    throw new Error(`Ar-Ra'd Cyrillic was mangled in translation! Got: ${transCyrillic}`);
+  }
+
+  const transLatin = normalizeIslamicTermsBulgarian(quranRefLatin);
+  if (transLatin.includes("доволен от него")) {
+    throw new Error(`Ar-Ra'd Latin was mangled in translation! Got: ${transLatin}`);
+  }
+
+  // 2. Verify legitimate honorifics are still correctly converted
+  const aliWithHonorific = normalizeIslamicTermsBulgarian("Али (р.а.) каза");
+  if (!aliWithHonorific.includes("Аллах да е доволен от него")) {
+    throw new Error(`Legitimate honorific (р.а.) failed to expand! Got: ${aliWithHonorific}`);
+  }
+
+  // 3. Verify TTS phonetic normalization does NOT mangle Ar-Ra'd
+  const ttsCyrillic = normalizeIslamicArabicPhoneticsForTts(quranRefCyrillic);
+  if (ttsCyrillic.includes("Радийаллааху 'анху")) {
+    throw new Error(`TTS mangled Ar-Ra'd into honorific! Got: ${ttsCyrillic}`);
+  }
+
+  // 4. Verify buildExplainedNarrationText does NOT append bracketed [reference] after quote
+  const narrated = buildExplainedNarrationText({
+    viralTitle: "Покоят на сърцата",
+    reference: "Сура Ар-Ра'д (13:28)",
+    quoteText: "Тези, които вярват и чиито сърца се успокояват при споменаването на Аллах. А нима не със споменаването на Аллах сърцата намират покой!",
+    isQuran: true,
+    summaryBg: "Споменаването на Аллах носи истински мир.",
+  });
+
+  if (narrated.includes("[Сура Ар-Ра'д (13:28)]") || narrated.includes("[Сура") || narrated.includes("(13:28)]")) {
+    throw new Error(`buildExplainedNarrationText leaked bracketed citation into spoken narration! Got:\n${narrated}`);
+  }
+  if (!narrated.includes("Сура Ар-Ра'д")) {
+    throw new Error(`Expected natural mention of Surah in intro, got:\n${narrated}`);
+  }
+
+  // 5. Verify generateAssSubtitles cleans stray brackets from subtitles
+  const assSub = generateAssSubtitles(
+    {
+      topic: "Покоят на сърцата",
+      bulgarian: "намират покой! [Сура Ар-Ра'д (13:28)] Поука:",
+      bulgarianWordTimings: [
+        { word: "намират", start: 0.1, end: 0.5 },
+        { word: "покой!", start: 0.5, end: 0.9 },
+        { word: "[Сура", start: 0.9, end: 1.2 },
+        { word: "Ар-Ра'д", start: 1.2, end: 1.6 },
+        { word: "(13:28)]", start: 1.6, end: 2.0 },
+        { word: "Поука:", start: 2.0, end: 2.5 },
+      ],
+    },
+    3.0,
+  );
+
+  if (assSub.includes("[Сура") || assSub.includes("(13:28)]")) {
+    throw new Error(`generateAssSubtitles rendered raw bracketed tokens in subtitles! Got:\n${assSub}`);
+  }
+
+  console.log("✔ testArabicTransliterationAndDalilIntegrity passed: Ar-Ra'd protected, clean intro without citation subtitle leakage!");
+}
+
 async function runAllTests() {
   console.log("Running subtitle synchronization verification tests...");
   testMonotonicityAndBounds();
@@ -242,6 +313,7 @@ async function runAllTests() {
   testTopicTopHeaderDisplay();
   testAudioDurationSafeguards();
   await testSalafiArabicPhoneticNormalization();
+  await testArabicTransliterationAndDalilIntegrity();
   console.log("✔ All subtitle synchronization verification tests passed successfully!");
 }
 

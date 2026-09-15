@@ -23,10 +23,11 @@ export function normalizeIslamicTermsBulgarian(t: string): string {
     // Abbreviations
     .replace(/\(\s*с\s*\/\s*у\s*\)/gi, "(мир да бъде с него)")
     .replace(/\bс\s*\/\s*у\b/gi, "мир да бъде с него")
-    .replace(/\b(?:с\.а\.с\.|с\.а\.в\.|с\.а\.в|saw|pbuh|ﷺ)\b/gi, "мир да бъде с него")
+    .replace(/(?:\(\s*(?:saw|pbuh|с\.а\.с\.|с\.а\.в\.)\s*\)|\b(?:с\.а\.с\.|с\.а\.в\.|ﷺ)\b)/gi, "мир да бъде с него")
     .replace(/\(\s*(?:saw|pbuh|ﷺ|саллялляху алейхи (?:ва|уе) селлем)\s*\)/gi, "(мир да бъде с него)")
     .replace(/\b(?:с\.в\.т\.|swt)\b/gi, "Субханаху ва Тааля")
-    .replace(/\b(?:р\.а\.|ra)\b/gi, "Аллах да е доволен от него")
+    .replace(/(?:\(\s*(?:р\.а\.|ra|ра)\s*\)|\bр\.а\.)/gi, " (Аллах да е доволен от него) ")
+    .replace(/\b(?:radiyallahu\s+anhu|радияллаху\s+анху)\b/gi, " Аллах да е доволен от него ")
     // Contextual fixes for proper Islamic terminology & preventing AI transliteration mistakes
     .replace(/\bal-djadjali\b/gi, "Ал-Даджжал")
     .replace(/\bал-джаджали\b/gi, "Ал-Даджжал")

@@ -145,9 +145,10 @@ export function normalizeIslamicArabicPhoneticsForTts(text: string): string {
   res = res
     .replace(/\(\s*с\s*\/\s*у\s*\)/gi, " Саллаллааху 'алейхи ва саллям ")
     .replace(/(?<=^|[^\p{L}\p{N}])с\s*\/\s*у(?=[^\p{L}\p{N}]|$)/gui, " Саллаллааху 'алейхи ва саллям ")
-    .replace(/(?<=^|[^\p{L}\p{N}])(?:с\.а\.с\.|с\.а\.в\.|saw|pbuh|ﷺ)(?=[^\p{L}\p{N}]|$)/gui, " Саллаллааху 'алейхи ва саллям ")
+    .replace(/(?:\(\s*(?:с\.а\.с\.|с\.а\.в\.|saw|pbuh)\s*\)|(?<=^|[^\p{L}\p{N}])(?:с\.а\.с\.|с\.а\.в\.|ﷺ)(?=[^\p{L}\p{N}]|$))/gui, " Саллаллааху 'алейхи ва саллям ")
     .replace(/(?<=^|[^\p{L}\p{N}])(?:с\.в\.т\.|swt|свт)(?=[^\p{L}\p{N}]|$)/gui, " Субхаанаху ва Та'ааля ")
-    .replace(/(?<=^|[^\p{L}\p{N}])(?:р\.а\.|ra|ра)(?=[^\p{L}\p{N}]|$)/gui, " Радийаллааху 'анху ");
+    .replace(/(?:\(\s*(?:р\.а\.|ra|ра)\s*\)|(?<=^|[^\p{L}\p{N}])(?:р\.а\.)(?=[^\p{L}\p{N}]|$))/gui, " Радийаллааху 'анху ")
+    .replace(/(?<=^|[^\p{L}\p{N}])(?:radiyallahu\s+anhu|радияллаху\s+анху)(?=[^\p{L}\p{N}]|$)/gui, " Радийаллааху 'анху ");
 
   // 2. Astaghfirullah & Istighfar (Salafi Arabic Diction - user requirement)
   // Replaces "astafirullah", "астафируллах", "астафирулла", "astaghfirullah" with authentic Arabic Salafi "Астагфируллаах"
@@ -249,6 +250,7 @@ export function normalizeIslamicArabicPhoneticsForTts(text: string): string {
   replaceWord("(?:ibn\\s+uthaymeen|ibn\\s+uthaimeen|ибн\\s+усеймин|ибн\\s+утаймин)", "Ибн Усаймийн");
 
   // 8. Fix Arabic prefixes that cause Bulgarian TTS to expand them as abbreviations
+  replaceWord("(?:Ар-Ра'д|Ar-Ra'd|Ра'д|Ra'd)", "Ар-Раад");
   res = res
     .replace(/(?<=^|[^\p{L}\p{N}])(А|а)л-(?=\p{L})/gu, "$1л ")
     .replace(/(?<=^|[^\p{L}\p{N}])(А|а)т-(?=\p{L})/gu, "$1т ")
@@ -257,7 +259,6 @@ export function normalizeIslamicArabicPhoneticsForTts(text: string): string {
     .replace(/(?<=^|[^\p{L}\p{N}])(А|а)с-(?=\p{L})/gu, "$1с ")
     .replace(/(?<=^|[^\p{L}\p{N}])(А|а)ш-(?=\p{L})/gu, "$1ш ")
     .replace(/(?<=^|[^\p{L}\p{N}])(А|а)д-(?=\p{L})/gu, "$1д ")
-    .replace(/(?<=^|[^\p{L}\p{N}])(А|а)р-(?=\p{L})/gu, "$1р ")
     .replace(/[_…]+/g, " ")
     .replace(/[ \t]+/g, " ")
     .trim();
@@ -267,7 +268,9 @@ export function normalizeIslamicArabicPhoneticsForTts(text: string): string {
 
 export function normalizePhoneticsToDisplayWord(word: string): string {
   if (!word) return "";
-  return word
+  let clean = word.replace(/[\[\]]/g, "").trim();
+  clean = clean.replace(/(?<=^|[^\p{L}\p{N}])Ар-Раад(?=[^\p{L}\p{N}]|$)/gui, "Ар-Ра'д");
+  return clean
     .replace(/(?<=^|[^\p{L}\p{N}])Астагфируллаах(?=[^\p{L}\p{N}]|$)/gui, "Астагфируллах")
     .replace(/(?<=^|[^\p{L}\p{N}])Субхааналлаах(?=[^\p{L}\p{N}]|$)/gui, "Субханаллах")
     .replace(/(?<=^|[^\p{L}\p{N}])Алхамдулиллаах(?=[^\p{L}\p{N}]|$)/gui, "Алхамдулиллях")
@@ -318,6 +321,8 @@ export const synthesizeHadithNarration = createServerFn({ method: "POST" })
         const cleanForEleven = cleaned
           .replace(/<break[^>]*\/>/gi, "... ")
           .replace(/<[^>]+>/g, " ")
+          .replace(/\[[^\]]*\]/g, " ")
+          .replace(/[\[\]]/g, " ")
           .replace(/\s{2,}/g, " ")
           .trim();
         const res = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${elevenVoice}/with-timestamps`, {
@@ -369,7 +374,11 @@ export const synthesizeHadithNarration = createServerFn({ method: "POST" })
         const fs = await import("fs/promises");
 
         const tmpPath = path.join(os.tmpdir(), `tts-${Date.now()}-${Math.random().toString(36).slice(2)}.mp3`);
-        const cleanForEdge = cleaned.replace(/<[^>]+>/g, "... ");
+        const cleanForEdge = cleaned
+          .replace(/<[^>]+>/g, "... ")
+          .replace(/\[[^\]]*\]/g, " ")
+          .replace(/[\[\]]/g, " ")
+          .trim();
         await tts.ttsPromise(cleanForEdge, tmpPath);
         audioBuffer = await fs.readFile(tmpPath);
         await fs.unlink(tmpPath).catch(() => {});
@@ -385,7 +394,11 @@ export const synthesizeHadithNarration = createServerFn({ method: "POST" })
 
           const tmpPyPath = path.join(os.tmpdir(), `py-tts-${Date.now()}.mp3`);
           const tmpVttPath = path.join(os.tmpdir(), `py-tts-${Date.now()}.vtt`);
-          const cleanForEdge = cleaned.replace(/<[^>]+>/g, "... ");
+          const cleanForEdge = cleaned
+            .replace(/<[^>]+>/g, "... ")
+            .replace(/\[[^\]]*\]/g, " ")
+            .replace(/[\[\]]/g, " ")
+            .trim();
           await execFileAsync("edge-tts", [
             "--voice", "bg-BG-BorislavNeural",
             "--text", cleanForEdge,
