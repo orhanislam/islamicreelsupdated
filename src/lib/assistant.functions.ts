@@ -325,11 +325,11 @@ SALAFI HALAL ПРИНЦИПИ (СТРИКТНО ЗАДЪЛЖИТЕЛНО):
 Ако потребителят иска "видео с обяснение", "islamic video with explanation", "видео с поука", "разяснение на аят/хадис", кука с въпрос и действие, или иска да съчетае цитат с житейска поука:
 1. Задай proposal.type: "explained_video".
 2. В title ЗАДЪЛЖИТЕЛНО сложи точна референция с ДВОЕТОЧИЕ, последвана от силна и въздействаща ТЕМА на български, напр. "[Коран 13:28] Покоят на сърцата" или "[Сахих ал-Бухари #6424] Силата на търпението". (НИКОГА не използвай долна черта в заглавието, само двоеточие!).
-ВАЖНО ЗА ТЕМАТА: Горе на екрана на видеото ще се изписва ТЕМАТА (напр. "Покоят на сърцата"), която моментално грабва вниманието в TikTok и Reels, а самата референция за сурата или хадиса се показва в самото видео и се изговаря от гласа. Избирай винаги силна, интригуваща тема!
+ВАЖНО ЗА ТЕМАТА: Горе на екрана на видеото ще се изписва ТЕМАТА (напр. "Покоят на сърцата"), която моментално грабва вниманието в TikTok и Reels, а самата референция с име на сурата, номер на сурата и номер на аята (напр. "Сура Ар-Ра'д, сура 13, аят 28") се изговаря гладко и авторитетно в увода на далила от гласа и се показва в субтитрите.
 3. ЗАДЪЛЖИТЕЛНО включи "scriptWorkflow" с 4-степенната структура:
    - "hookQuestion": Силна кука-въпрос в първите 2-3 секунди, грабваща болка/емоция (напр. "Защо усещаш тежест в гърдите си, дори когато имаш всичко?").
    - "hookContext": 1-2 кратки изречения кратко обяснение на ситуацията (напр. "Търсим мир в телефона или материалния свят, но душата остава жадна.").
-   - "dalilIntro": "Чуй какво казва Аллах Всевишният в Корана:" (за аят) или "Пратеникът на Аллах ﷺ ни учи:" (за хадис).
+   - "dalilIntro": "Чуй какво казва Аллах Всевишният в Сура [Име на сурата], сура [Номер], аят [Номер]:" (за аят) или "Пратеникът на Аллах ﷺ ни учи в [Сборник], хадис [Номер]:" (за хадис).
    - "dalilText": Автентичният текст на аята или хадиса на български език.
    - "explanation": Дълбоко, практично разяснение (поука/тефсир) за съвременния мюсюлманин (25-45 думи).
    - "actionStep": Конкретна духовна стъпка още днес (дуа, истигфар, сабр) + подкана за запазване и споделяне (15-25 думи).
@@ -952,6 +952,48 @@ export const suggestBatchViralProposals = createServerFn({ method: "POST" })
     },
   );
 
+export function formatSpokenCitation(rawRef: string, isQuran: boolean): string {
+  if (!rawRef) return "";
+  let ref = rawRef.replace(/^[\[\s]+|[\]\s]+$/g, "").trim();
+
+  if (isQuran) {
+    const m1 = ref.match(
+      /(?:Сура\s+)?([^\d()]+)?\s*(?:\((\d+)[:.](\d+(?:-\d+)?)\)|(\d+)[:.](\d+(?:-\d+)?))/i
+    );
+    if (m1) {
+      let name = (m1[1] || "").trim().replace(/^Сура\s+/i, "").replace(/[-–—•\s]+$/, "").trim();
+      const surahNum = m1[2] || m1[4];
+      let ayahNum = m1[3] || m1[5];
+      if (ayahNum && ayahNum.includes("-")) {
+        ayahNum = "аяти " + ayahNum.replace("-", " до ");
+      } else if (ayahNum) {
+        ayahNum = "аят " + ayahNum;
+      }
+
+      const parts: string[] = [];
+      if (name && !/(?:коран)/i.test(name)) {
+        parts.push("Сура " + name);
+        if (surahNum) parts.push("сура " + surahNum);
+      } else if (surahNum) {
+        parts.push("сура " + surahNum);
+      }
+      if (ayahNum) parts.push(ayahNum);
+
+      if (parts.length > 0) return parts.join(", ");
+    }
+  } else {
+    // Hadith format: 'Сахих ал-Бухари #6424' or 'Сахих Муслим #123'
+    const m2 = ref.match(/^([^#]+)(?:#\s*(\d+))?/);
+    if (m2) {
+      const coll = m2[1].trim();
+      const num = m2[2];
+      if (coll && num) return coll + ", хадис номер " + num;
+      if (coll) return coll;
+    }
+  }
+  return ref;
+}
+
 export function buildExplainedNarrationText(params: {
   viralTitle?: string;
   reference: string;
@@ -979,25 +1021,21 @@ export function buildExplainedNarrationText(params: {
   }
 
   // Step 2: Dalil (Intro + Sacred Quote)
+  const spokenRef = formatSpokenCitation(params.reference, params.isQuran);
   let intro = (sw?.dalilIntro || "").trim();
   if (
     !intro ||
     intro === "Чуй какво казва Аллах Всевишният в Корана:" ||
-    intro === "Пратеникът на Аллах ﷺ ни учи:"
+    intro === "Пратеникът на Аллах ﷺ ни учи:" ||
+    (spokenRef && !intro.includes(spokenRef))
   ) {
     if (params.isQuran) {
-      const cleanRefName = params.reference
-        ? params.reference.replace(/^\[|\]$/g, "").replace(/\s*\([^)]*\)/, "").trim()
-        : "";
-      intro = cleanRefName && !cleanRefName.startsWith("[")
-        ? `Чуй какво казва Аллах Всевишният в ${cleanRefName}:`
+      intro = spokenRef && !spokenRef.startsWith("[")
+        ? `Чуй какво казва Аллах Всевишният в ${spokenRef}:`
         : "Чуй какво казва Аллах Всевишният в Корана:";
     } else {
-      const cleanRefName = params.reference
-        ? params.reference.replace(/^\[|\]$/g, "").replace(/\s*#\d+.*$/, "").trim()
-        : "";
-      intro = cleanRefName && !cleanRefName.startsWith("[")
-        ? `Пратеникът на Аллах ﷺ ни учи в ${cleanRefName}:`
+      intro = spokenRef && !spokenRef.startsWith("[")
+        ? `Пратеникът на Аллах ﷺ ни учи в ${spokenRef}:`
         : "Пратеникът на Аллах ﷺ ни учи:";
     }
   }

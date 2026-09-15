@@ -265,7 +265,17 @@ async function testArabicTransliterationAndDalilIntegrity() {
     throw new Error(`TTS mangled Ar-Ra'd into honorific! Got: ${ttsCyrillic}`);
   }
 
-  // 4. Verify buildExplainedNarrationText does NOT append bracketed [reference] after quote
+  // 4. Verify buildExplainedNarrationText articulates surah name, surah number, and ayah number cleanly
+  const { formatSpokenCitation } = await import("../assistant.functions");
+  const c1 = formatSpokenCitation("Сура Ар-Ра'д (13:28)", true);
+  if (c1 !== "Сура Ар-Ра'д, сура 13, аят 28") {
+    throw new Error(`Expected 'Сура Ар-Ра'д, сура 13, аят 28', got '${c1}'`);
+  }
+  const c2 = formatSpokenCitation("Сахих ал-Бухари #6424", false);
+  if (c2 !== "Сахих ал-Бухари, хадис номер 6424") {
+    throw new Error(`Expected 'Сахих ал-Бухари, хадис номер 6424', got '${c2}'`);
+  }
+
   const narrated = buildExplainedNarrationText({
     viralTitle: "Покоят на сърцата",
     reference: "Сура Ар-Ра'д (13:28)",
@@ -277,8 +287,8 @@ async function testArabicTransliterationAndDalilIntegrity() {
   if (narrated.includes("[Сура Ар-Ра'д (13:28)]") || narrated.includes("[Сура") || narrated.includes("(13:28)]")) {
     throw new Error(`buildExplainedNarrationText leaked bracketed citation into spoken narration! Got:\n${narrated}`);
   }
-  if (!narrated.includes("Сура Ар-Ра'д")) {
-    throw new Error(`Expected natural mention of Surah in intro, got:\n${narrated}`);
+  if (!narrated.includes("Сура Ар-Ра'д, сура 13, аят 28")) {
+    throw new Error(`Expected 'Сура Ар-Ра'д, сура 13, аят 28' in intro, got:\n${narrated}`);
   }
 
   // 5. Verify generateAssSubtitles cleans stray brackets from subtitles
