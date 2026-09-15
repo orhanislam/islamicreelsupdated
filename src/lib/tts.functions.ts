@@ -141,6 +141,11 @@ export function normalizeIslamicArabicPhoneticsForTts(text: string): string {
     res = res.replace(reg, replacement);
   };
 
+  // 0. Salafi Adab Gate: Reverence for Allah (strictly eliminate casual 'оня')
+  res = res
+    .replace(/(?:търси|иска|зове|напомня\s+за)\s+оня\b/gi, "$1 своя Създател")
+    .replace(/(?<=^|[^\p{L}\p{N}])оня(?=[^\p{L}\p{N}]|$)/gui, "Аллах Всевишният");
+
   // 1. Invocations, Honorifics & Abbreviations
   res = res
     .replace(/\(\s*с\s*\/\s*у\s*\)/gi, " Саллаллааху 'алейхи ва саллям ")
@@ -366,6 +371,8 @@ export const synthesizeHadithNarration = createServerFn({ method: "POST" })
         voice: "bg-BG-BorislavNeural", // Premium natural male voice for Bulgarian
         lang: "bg-BG",
         outputFormat: "audio-24khz-48kbitrate-mono-mp3",
+        rate: "-2%",
+        pitch: "-2Hz",
       });
 
       try {

@@ -89,10 +89,10 @@ function cacheKey(text: string, avoid?: string[]) {
 // ============================================================================
 
 export const TIER1_FORBIDDEN_QUERY_TOKENS =
-  /\b(man|men|woman|women|person|people|human|humans|boy|boys|girl|girls|child|children|baby|babies|kid|kids|toddler|toddlers|teen|teenager|adult|adults|elder|elders|couple|couples|crowd|crowds|pedestrian|pedestrians|tourist|tourists|model|models|lady|ladies|guy|guys|dancer|dancers|singer|singers|actor|actress|swimmer|runner|jogger|family|father|mother|brother|sister|son|daughter|husband|wife|friend|friends|face|faces|head|heads|hand|hands|arm|arms|leg|legs|foot|feet|body|bodies|eye|eyes|lip|lips|mouth|mouths|smile|smiling|finger|fingers|skin|hair|beard|silhouette|silhouettes|shadow|walking|running|standing|sitting|praying|reading|working|talking|looking|holding|posing|dancing|sleeping|animal|animals|dog|dogs|puppy|puppies|cat|cats|kitten|kittens|bird|birds|horse|horses|lion|lions|tiger|tigers|bear|bears|elephant|elephants|camel|camels|sheep|goat|goats|cow|cows|cattle|monkey|monkeys|fish|fishes|wildlife|pet|pets|insect|insects|butterfly|butterflies|music|musical|instrument|instruments|guitar|guitars|piano|pianos|violin|violins|drum|drums|flute|flutes|trumpet|trumpets|saxophone|saxophones|cello|cellos|harp|harps|oud|band|orchestra|concert|cross|crucifix|church|churches|monastery|cathedral|synagogue|temple|temples|statue|statues|idol|idols|sculpture|sculptures|figurine|figurines|sheikh|sheikhs|shaykh|shaykhs|imam|imams|scholar|scholars|worshipper|worshippers|worshiper|worshipers|pilgrim|pilgrims|congregation|congregations|monk|monks|priest|priests|pastor|pastors|melody|melodies)\b/gi;
+  /\b(man|men|woman|women|person|people|human|humans|boy|boys|girl|girls|child|children|baby|babies|kid|kids|toddler|toddlers|teen|teenager|adult|adults|elder|elders|couple|couples|crowd|crowds|pedestrian|pedestrians|tourist|tourists|model|models|lady|ladies|guy|guys|dancer|dancers|singer|singers|actor|actress|swimmer|runner|jogger|family|father|mother|brother|sister|son|daughter|husband|wife|friend|friends|face|faces|head|heads|hand|hands|arm|arms|leg|legs|foot|feet|body|bodies|eye|eyes|lip|lips|mouth|mouths|smile|smiling|finger|fingers|skin|hair|beard|silhouette|silhouettes|shadow|walking|running|standing|sitting|praying|reading|working|talking|looking|holding|posing|dancing|sleeping|animal|animals|dog|dogs|puppy|puppies|cat|cats|kitten|kittens|bird|birds|horse|horses|lion|lions|tiger|tigers|bear|bears|elephant|elephants|camel|camels|sheep|goat|goats|cow|cows|cattle|monkey|monkeys|fish|fishes|wildlife|pet|pets|insect|insects|butterfly|butterflies|music|musical|instrument|instruments|guitar|guitars|piano|pianos|violin|violins|drum|drums|flute|flutes|trumpet|trumpets|saxophone|saxophones|cello|cellos|harp|harps|oud|band|orchestra|concert|cross|crucifix|church|churches|monastery|cathedral|synagogue|temple|temples|statue|statues|idol|idols|sculpture|sculptures|figurine|figurines|sheikh|sheikhs|shaykh|shaykhs|imam|imams|scholar|scholars|worshipper|worshippers|worshiper|worshipers|pilgrim|pilgrims|congregation|congregations|monk|monks|priest|priests|pastor|pastors|melody|melodies|note|notes|sheet\s*music|music\s*sheet|songbook|score)\b/gi;
 
 export const TIER1_POSITIVE_NATURE_ANCHORS =
-  /\b(nature|landscape|mountain|mountains|valley|valleys|forest|forests|trees|wood|woods|river|rivers|stream|streams|lake|lakes|sea|ocean|waves|waterfall|waterfalls|sky|clouds|sunset|sunsets|sunrise|sunrises|sunlight|sunbeams|stars|starry|milky\s*way|galaxy|nebula|desert|sand\s*dunes|dune|dunes|meadow|meadows|water|rain|raindrops|fog|mist)\b/i;
+  /\b(nature|landscape|mountain|mountains|valley|valleys|forest|forests|trees|wood|woods|river|rivers|stream|streams|lake|lakes|sea|ocean|waves|waterfall|waterfalls|sky|clouds|sunset|sunsets|sunrise|sunrises|sunlight|sunbeams|stars|starry|milky\s*way|galaxy|nebula|desert|sand\s*dunes|dune|dunes|meadow|meadows|water|rain|raindrops|fog|mist|fire|flames|flame|embers|ember|lava|sparks|smoke)\b/i;
 
 export const TIER1_POSITIVE_ARCH_ANCHORS =
   /\b(architecture|arch|arches|columns|marble|geometric|patterns|ancient\s+ruins)\b/i;
@@ -140,7 +140,7 @@ export const sanitizeSalafiQuery = sanitizeSearchQuery;
 // ============================================================================
 
 export const TIER2_HARAM_METADATA_REGEX =
-  /\b(man|men|woman|women|people|person|human|humans|face|faces|girl|girls|boy|boys|child|children|kid|kids|baby|babies|toddler|toddlers|teen|teenager|adult|adults|couple|couples|crowd|crowds|model|models|portrait|lady|ladies|guy|guys|pedestrian|pedestrians|tourist|tourists|dancer|dancers|singer|singers|jogger|runner|swimmer|family|father|mother|brother|sister|son|daughter|husband|wife|body|bodies|hand|hands|feet|foot|leg|legs|arm|arms|head|heads|finger|fingers|skin|hair|beard|silhouette|silhouettes|shadow|shadows|walk|walking|run|running|jump|jumping|dance|dancing|sing|singing|pray|praying|sleep|sleeping|sit|sitting|stand|standing|look|looking|hold|holding|smile|smiling|laugh|laughing|animal|animals|dog|dogs|puppy|puppies|cat|cats|kitten|kittens|bird|birds|horse|horses|lion|lions|tiger|tigers|bear|bears|elephant|elephants|camel|camels|sheep|goat|goats|cow|cows|cattle|monkey|monkeys|fish|fishes|wildlife|pet|pets|insect|insects|butterfly|butterflies|piano|guitar|violin|drum|drums|flute|trumpet|saxophone|cello|harp|oud|music|musical|instrument|instruments|concert|orchestra|band|statue|statues|idol|idols|sculpture|sculptures|figurine|figurines|cross|crucifix|church|synagogue|temple|sheikh|sheikhs|shaykh|shaykhs|imam|imams|scholar|scholars|worshipper|worshippers|worshiper|worshipers|pilgrim|pilgrims|congregation|congregations|monk|monks|priest|priests|pastor|pastors|melody|melodies)\b/i;
+  /\b(man|men|woman|women|people|person|human|humans|face|faces|girl|girls|boy|boys|child|children|kid|kids|baby|babies|toddler|toddlers|teen|teenager|adult|adults|couple|couples|crowd|crowds|model|models|portrait|lady|ladies|guy|guys|pedestrian|pedestrians|tourist|tourists|dancer|dancers|singer|singers|jogger|runner|swimmer|family|father|mother|brother|sister|son|daughter|husband|wife|body|bodies|hand|hands|feet|foot|leg|legs|arm|arms|head|heads|finger|fingers|skin|hair|beard|silhouette|silhouettes|shadow|shadows|walk|walking|run|running|jump|jumping|dance|dancing|sing|singing|pray|praying|sleep|sleeping|sit|sitting|stand|standing|look|looking|hold|holding|smile|smiling|laugh|laughing|animal|animals|dog|dogs|puppy|puppies|cat|cats|kitten|kittens|bird|birds|horse|horses|lion|lions|tiger|tigers|bear|bears|elephant|elephants|camel|camels|sheep|goat|goats|cow|cows|cattle|monkey|monkeys|fish|fishes|wildlife|pet|pets|insect|insects|butterfly|butterflies|piano|guitar|violin|drum|drums|flute|trumpet|saxophone|cello|harp|oud|music|musical|instrument|instruments|concert|orchestra|band|statue|statues|idol|idols|sculpture|sculptures|figurine|figurines|cross|crucifix|church|synagogue|temple|sheikh|sheikhs|shaykh|shaykhs|imam|imams|scholar|scholars|worshipper|worshippers|worshiper|worshipers|pilgrim|pilgrims|congregation|congregations|monk|monks|priest|priests|pastor|pastors|melody|melodies|note|notes|sheet\s*music|music\s*sheet|songbook|score)\b/i;
 
 export function isMetadataHaram(video: PexelsVideo): boolean {
   if (
@@ -383,6 +383,121 @@ export interface TheologicalConcept {
 }
 
 export const THEOLOGICAL_CONCEPT_MAP: TheologicalConcept[] = [
+  {
+    id: "jahannam",
+    nameBg: "Джехеннем и Предупреждение за Огъня",
+    keywords: [
+      "джехенем",
+      "джехеннем",
+      "джаханнам",
+      "ад",
+      "ада",
+      "огън",
+      "огъня",
+      "пламък",
+      "пламъци",
+      "жарава",
+      "наказание",
+      "гибел",
+      "съдния ден",
+      "саир",
+      "джахим",
+      "страдание",
+    ],
+    arabicTerms: ["jahannam", "nar", "adhab", "sa'ir", "jahim", "waqood"],
+    mood: "solemn",
+    roleQueries: {
+      hook: [
+        "raging fire flames dark night vertical",
+        "intense burning fire flames embers vertical",
+      ],
+      context: [
+        "volcanic lava flowing glowing red night vertical",
+        "burning embers rising dark smoke vertical",
+      ],
+      dalil: [
+        "dramatic dark storm clouds lightning fire sky vertical",
+        "raging fiery smoke dark apocalyptic sky vertical",
+      ],
+      cta: [
+        "dark storm clouds parting twilight rays vertical",
+        "somber sunset dark horizon landscape vertical",
+      ],
+    },
+  },
+  {
+    id: "sakina",
+    nameBg: "Покой на сърцето и спокойствие",
+    keywords: [
+      "покой",
+      "покоят",
+      "спокойствие",
+      "мир",
+      "сакина",
+      "сърца",
+      "сърцата",
+      "душата",
+      "утеха",
+      "зикр",
+      "помнене",
+    ],
+    arabicTerms: ["sakina", "itmi'nan", "dhikr", "qalb", "salam"],
+    mood: "calm",
+    roleQueries: {
+      hook: [
+        "tranquil peaceful lake morning sunrise mist calm water vertical",
+        "serene calm mirror lake dawn water reflection vertical",
+      ],
+      context: [
+        "morning mist rising over calm river nature vertical",
+        "peaceful gentle morning lake reflections vertical",
+      ],
+      dalil: [
+        "golden sunlight filtering through tranquil forest river vertical",
+        "calm glass water reflecting warm sunrise sky vertical",
+      ],
+      cta: [
+        "peaceful sunset calm water gentle ripples nature vertical",
+        "golden serene sunset over tranquil lake vertical",
+      ],
+    },
+  },
+  {
+    id: "dunya",
+    nameBg: "Преходността на земния живот",
+    keywords: [
+      "дуня",
+      "земния живот",
+      "преходност",
+      "смърт",
+      "смъртта",
+      "край",
+      "времето",
+      "живота",
+      "залез",
+      "измама",
+    ],
+    arabicTerms: ["dunya", "mawt", "ajal", "fana"],
+    mood: "reflective",
+    roleQueries: {
+      hook: [
+        "timelapse clouds passing mountains sunset twilight vertical",
+        "dramatic sun setting horizon vast desert landscape vertical",
+      ],
+      context: [
+        "wind blowing sand ripples desert sunset vertical",
+        "ancient sand dunes golden sunset twilight shadows vertical",
+      ],
+      dalil: [
+        "golden sunset dying light over vast horizon vertical",
+        "lonely desert silhouette sunset dramatic sky vertical",
+      ],
+      cta: [
+        "twilight fading into night sky solitary star vertical",
+        "peaceful evening horizon calm twilight sky vertical",
+      ],
+    },
+  },
   {
     id: "jannah",
     nameBg: "Рай и вечни градини",

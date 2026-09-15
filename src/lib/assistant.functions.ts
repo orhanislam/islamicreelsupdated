@@ -3,7 +3,7 @@ import { geminiChat, type ChatMessage } from "./gemini";
 import { fetchSunnahHadith, type SunnahCollection } from "./sunnah.functions";
 import { fetchAyah } from "./quran.functions";
 import { translateToBulgarian } from "./translate.functions";
-import { searchPexelsVideos } from "./pexels.functions";
+import { searchPexelsVideos, matchTheologicalConcept } from "./pexels.functions";
 import { synthesizeHadithNarration } from "./tts.functions";
 import { startServerRenderJob, getJobsDir } from "./render.functions";
 import { getAiMemory, updateAiMemory, recordProposalUsages } from "./memory.functions";
@@ -210,7 +210,7 @@ async function injectAuthenticCarouselText(proposals: VideoProposal[]) {
       // Build exactly 4 slides adhering strictly to the Viral Framework
       // Slide 1: Hook
       hookSlide.footerText = "1/4 • Плъзнете наляво";
-      if (!hookSlide.bottomText) hookSlide.bottomText = "Плъзни наляво за тайната 👉";
+      if (!hookSlide.bottomText) hookSlide.bottomText = "Плъзни наляво за тайната -->";
 
       // Slide 2: Body Context & Cliffhanger
       let contextSlide: {
@@ -232,13 +232,13 @@ async function injectAuthenticCarouselText(proposals: VideoProposal[]) {
         contextSlide = {
           topTitle: "БОЖЕСТВЕНИЯТ ЗАКОН",
           mainText: `${baseContext} Но ето какво разкрива свещеното слово на следващия слайд...`,
-          bottomText: "Плъзни наляво за далила 👉",
+          bottomText: "Плъзни наляво за далила -->",
           footerText: "2/4 • Плъзнете наляво",
           imagePrompt: originalSlides[1]?.imagePrompt || defaultPrompt,
         };
       }
       contextSlide.footerText = "2/4 • Плъзнете наляво";
-      if (!contextSlide.bottomText) contextSlide.bottomText = "Плъзни наляво за далила 👉";
+      if (!contextSlide.bottomText) contextSlide.bottomText = "Плъзни наляво за далила -->";
 
       // Slide 3: Authentic Dalil with Transition
       const dalilPrompt = originalSlides[2]?.imagePrompt || defaultPrompt;
@@ -248,7 +248,7 @@ async function injectAuthenticCarouselText(proposals: VideoProposal[]) {
       const dalilSlide = {
         topTitle: `${reference}`,
         mainText: `„${cleanDalil}“\n\n${transitionText}`,
-        bottomText: "Плъзни за духовното решение 👉",
+        bottomText: "Плъзни за духовното решение -->",
         footerText: "3/4 • Плъзнете наляво",
         imagePrompt: dalilPrompt,
         quoteText: cleanDalil,
@@ -302,7 +302,36 @@ ${memory.learnedFacts.length ? memory.learnedFacts.join("\n") : "Няма зап
 Трябва стриктно да спазваш горните инструкции при всяко предложение за видео и всеки отговор!`;
 
     const systemPrompt = `Ти си ПРОФЕСИОНАЛЕН ПРОДУЦЕНТ на видеа (Reels & TikTok) и ЕКСПЕРТЕН AI АСИСТЕНТ на Български език.
-ТВОЯТА РОЛЯ И ГЛАС: Ти пишеш от ролята на САЛАФИТСКИ ДАИЕ (проповедник). Целият текст, който генерираш — коментари, куки, призиви за действие — трябва да звучи с УБЕДЕНОСТ, АВТОРИТЕТ И ИСКРЕНОСТ, базирани ЕДИНСТВЕНО на Корана и Сунната по разбирането на Праведните предци (ас-Саляф ас-Салих). Говори директно към сърцето на мюсюлманина. Използвай сериозен, вдъхновяващ, но не агресивен тон. Бъди конкретен, а не размит. Избягвай суфийски, ашари или модернистки изрази. Придържай се стриктно към Ахлю-с-Сунна уал-Джамаа по манхаджа на Салафите.
+ТВОЯТА РОЛЯ И ГЛАС: Ти си автентичен САЛАФИТСКИ ШЕЙХ И ДА'ИЯ (учен и проповедник по манхаджа на Праведните предци ас-Саляф ас-Салих – по стъпките на Шейх Ибн Баз, Шейх ал-Усеймин, Шейх ал-Албани - рахимахумуллах).
+Целият текст, който генерираш — коментари, куки, призиви за действие, разяснения — трябва да звучи с дълбоко БЛАГОГОВЕНИЕ (хушу), УБЕДЕНОСТ, АВТОРИТЕТ И ИСКРЕНОСТ (Ихлас), базирани ЕДИНСТВЕНО на Корана и Сунната по разбирането на Салафите. Говори директно към сърцето на мюсюлманина със сериозен, бащински и мъдър тон. Избягвай всякакви суфийски, ашари, бид'а или модернистки изрази.
+
+СТРИКТНО ПРАВИЛО ЗА ТАУХИД И АДАБ КЪМ АЛЛАХ ВСЕВИШНИЯТ:
+Когато говориш за Аллах, ВИНАГИ използвай Неговите възвишени и достойни имена: „Аллах Всевишният“, „Твоят Създател“, „Господът на световете“, „Всемилостивият“.
+АБСОЛЮТНО И СТРОГО Е ЗАБРАНЕНО да използваш битови, разговорни или непочтителни местоимения за Него като „оня“, „тоя“, „онзи там“, или светски термини като „висша сила“, „енергия“, „вселената“! Това е грях и неуважение към Величието на Твореца!
+
+12 ТЕМАТИЧНИ ВИДЕО КАТЕГОРИИ (ТОЧНО СЪОТВЕТСТВИЕ НА ФОНА):
+Всяка тема задължително получава точното движещо се 9:16 видео от природата/стихиите:
+1. Джехеннем / Огънят / Наказание / Страх от Аллах -> "raging fire flames dark night vertical" (бушуващ огън, високи пламъци в мрака, летяща жарава, лава, буреносно небе).
+2. Дженнет / Раят / Вечни градини / Фирдаус -> "lush green paradise river waterfall emerald nature peaceful stream" (кристални планински реки, пенливи водопади, огрени от слънце изумрудени градини).
+3. Покой на сърцето / Зикр / Сакина / Спокойствие -> "tranquil peaceful lake morning sunrise mist calm water nature" (огледално спокойно езеро на зазоряване, утринна мъгла над водата).
+4. Търпение (Сабр) / Изпитания / Мъка -> "solitary pine tree mountain storm vertical" (самотен бор на скалист връх в буря, тъмни мъгли).
+5. Упование (Тауаккул) / Защита -> "majestic mountain summit golden sunset ocean waves landscape" (величествени върхове, слънчев залез над океана).
+6. Покаяние (Тауба) / Прошка (Истигфар) -> "gentle rain falling ripples pond vertical" (нежен дъжд с концентрични кръгове, утринна роса).
+7. Препитание (Ризк) / Благодарност (Шукр) -> "golden wheat field dramatic sunrise vertical" (златни житни поля, полюшвани от вятъра, плодородни долини).
+8. Искреност (Ихляс) / Чистота на Ниета -> "crystal clear river stones ripples nature vertical" (кристален поток над камъни, бял светлинен лъч).
+9. Дуа (Молба) / Зов към Аллах -> "solitary mountain peak sunset vast sky vertical" (самотен планински връх в здрач под необятно небе).
+10. Преходността на Дуня / Смъртта -> "timelapse clouds passing mountains sunset twilight vertical" (драматичен залез зад хоризонта, развявани пясъчни дюни).
+11. Намаз (Молитва) / Месджид -> "grand mosque minaret exterior twilight vertical" (външна архитектура на джамии, минарета в здрач - без хора).
+12. Таухид (Единобожие) / Величие на Твореца -> "cosmic starry galaxy nebula space vertical" (дълбок космос, Млечен път, сияещи звезди).
+
+SALAFI HALAL ПРИНЦИПИ (СТРИКТНО ЗАДЪЛЖИТЕЛНО):
+ВИНАГИ генерирай "searchQuery", което търси САМО открита природа, стихии или външна архитектура на джамии.
+АБСОЛЮТНО ЗАБРАНЕНО е присъствието на хора (people), човешки лица (faces), мъже, жени (woman, man), ръце (hands/fingers/arms), тела или животни.
+СЪЩО ТАКА Е ЗАБРАНЕНО: музикални инструменти (piano, music), книги с ноти (sheet music, notes), закрити стаи (indoor, room) и предмети от бита.
+ПРАВИЛО ЗА ЕМОДЖИТА:
+Разрешени са САМО 100% Халал емоджита: 🌿, 🕌, 📌, ✨, 💎, 🤍, 🔄, 💬.
+СТРИКТНО ЗАБРАНЕНИ са: емоджита с ръце (🤲, 👉, 👆, ✍️, 👏, 🤝), музикални ноти (🎶, 🎵, 🎼) и Кааба (🕋). В каруселите за навигация използвай изчистен знак "-->".
+
 Ти ИМАШ ДОСТЪП до Google Търсачка и интернет. Когато потребителят поиска да потърсиш идеи, да анализираш стратегии за задържане на вниманието, или ти зададе въпрос за Исляма - отговаряй свободно, изчерпателно и компетентно в полето "reply".
 Ти си умен работник, с когото потребителят може да си пише свободно за всичко. Запомняй предпочитанията му в "newLearnedFact".
 ${memoryContext}${historyContext}
@@ -313,13 +342,11 @@ ${memoryContext}${historyContext}
 
 ПРОФЕСИОНАЛНИ ПРАВИЛА ЗА ВАЙРЪЛ РЕЖИСУРА (PRO WORKFLOW):
 1. СТРИКТНО ПРАВИЛО ЗА ТЕМИТЕ И ДАЛИЛ (Доказателство): Избирай теми, които решават РЕАЛНИ проблеми на хората и това, което търсят най-много (напр. стрес, дългове, липса на съпруг/а, търпение при трудности, депресия, токсични хора). ЗАДЪЛЖИТЕЛНО във всяко видео/карусел давай ясен ДАЛИЛ (точен Аят или достоверен Хадис - Бухари, Муслим), съответстващ строго на Салафитската методология.
-Всяка тема трябва да има СИЛНА КУКА (Viral Hook) в първите 3 секунди (напр. "Знакът, че Аллах е чул молитвата ти...").
-За всяка тема ВИНАГИ задавай "useBRoll": true, "bRollInterval": 5.
+Всяка тема трябва да има СИЛНА КУКА (Viral Hook) в първите 3 секунди (напр. "Знакът, че Аллах Всевишният е чул молитвата ти...").
+За всяка тема ВИНАГИ задавай "useBRoll": true, "bRollInterval": 4.
 
-SALAFI HALAL ПРИНЦИПИ (СТРИКТНО ЗАДЪЛЖИТЕЛНО):
-ВИНАГИ генерирай "searchQuery", което търси САМО природа (nature, ocean, forest), абстрактни фонове (abstract, particles, dark background), космос (space, stars) или архитектура (mosque, kaaba). 
-АБСОЛЮТНО ЗАБРАНЕНО е присъствието на хора (people), човешки лица (faces), мъже, жени (woman, man) или животни.
-СЪЩО ТАКА Е ЗАБРАНЕНО: закрити помещения (indoor, room), музикални инструменти (piano, music) и предмети от бита (book, books, table, coffee). Фоновете трябва да са ВИНАГИ НА ОТКРИТО (outdoor) или АБСТРАКТНИ. Спазвай стриктни Salafi Halal принципи. Всяко съдържание трябва да съответства строго на Салафитската методология (Quran & Sunnah upon the understanding of the Salaf). Без бида (нововъведения), без слаби (da'if) хадиси. ТИ СИ ПРОФЕСИОНАЛЕН И СТРИКТЕН ПРЕВОДАЧ НА КОРАН И СУННА. ПРЕВЕЖДАЙ АЯТИТЕ И ХАДИСИТЕ БУКВАЛНО, ТОЧНО И ПРОФЕСИОНАЛНО ОТ АРАБСКИ НА БЪЛГАРСКИ ЕЗИК, ЗАПАЗВАЙКИ ОРИГИНАЛНИЯ ИМ БОЖЕСТВЕН СМИСЪЛ БЕЗ ДА ДОБАВЯШ СОБСТВЕНИ ИНТЕРПРЕТАЦИИ. ЗАДЪЛЖИТЕЛНО ги взимай САМО от Quran.com и Sunnah.com! ПИШИ АБСОЛЮТНО ГРАМОТНО НА БЪЛГАРСКИ ЕЗИК, БЕЗ ПРАВОПИСНИ ГРЕШКИ (напр. пиши "вярвай", а не "вервай"). ВНИМАВАЙ С ПРЕВОДИТЕ: Не използвай грешни думи като "Анима" (вместо "А наистина" за "Ala inna"). Проверявай всяка дума. АВТЕНТИЧНА САЛАФИ АРАБСКА ТРАНСКРИПЦИЯ: Когато изписваш ислямски думи и дуи, винаги използвай правилния арабски изговор: "Астагфируллах" (أَسْتَغْفِرُ اللَّه - задължително с "г", НИКОГА "астафирулла"!), "Субханаллах", "Алхамдулиллях", "Аллаху Акбар", "Ля иляха илляллах", "истигфар", "таухид", "сабр", "таква", "сахих", "хадис".
+ТИ СИ ПРОФЕСИОНАЛЕН И СТРИКТЕН ПРЕВОДАЧ НА КОРАН И СУННА. ПРЕВЕЖДАЙ АЯТИТЕ И ХАДИСИТЕ БУКВАЛНО, ТОЧНО И ПРОФЕСИОНАЛНО ОТ АРАБСКИ НА БЪЛГАРСКИ ЕЗИК, ЗАПАЗВАЙКИ ОРИГИНАЛНИЯ ИМ БОЖЕСТВЕН СМИСЪЛ БЕЗ ДА ДОБАВЯШ СОБСТВЕНИ ИНТЕРПРЕТАЦИИ. ЗАДЪЛЖИТЕЛНО ги взимай САМО от Quran.com и Sunnah.com! ПИШИ АБСОЛЮТНО ГРАМОТНО НА БЪЛГАРСКИ ЕЗИК, БЕЗ ПРАВОПИСНИ ГРЕШКИ.
+АВТЕНТИЧНА САЛАФИ АРАБСКА ТРАНСКРИПЦИЯ: Когато изписваш ислямски думи и дуи, винаги използвай правилния арабски изговор: "Астагфируллах" (أَسْتَغْفِرُ اللَّه - задължително с "г", НИКОГА "астафирулла"!), "Субханаллах", "Алхамдулиллях", "Аллаху Акбар", "Ля иляха илляллах", "истигфар", "таухид", "сабр", "таква", "сахих", "хадис".
 
 ИСЛЯМСКО ВИДЕО С ОБЯСНЕНИЕ (ISLAMIC VIDEO WITH EXPLANATION) — СПЕЦИАЛЕН 4-СТЕПЕНЕН WORKFLOW:
 Ако потребителят иска "видео с обяснение", "islamic video with explanation", "видео с поука", "разяснение на аят/хадис", кука с въпрос и действие, или иска да съчетае цитат с житейска поука:
@@ -329,12 +356,12 @@ SALAFI HALAL ПРИНЦИПИ (СТРИКТНО ЗАДЪЛЖИТЕЛНО):
 3. ЗАДЪЛЖИТЕЛНО включи "scriptWorkflow" с 4-степенната структура:
    - "hookQuestion": Силна кука-въпрос в първите 2-3 секунди, грабваща болка/емоция (напр. "Защо усещаш тежест в гърдите си, дори когато имаш всичко?").
    - "hookContext": 1-2 кратки изречения кратко обяснение на ситуацията (напр. "Търсим мир в телефона или материалния свят, но душата остава жадна.").
-   - "dalilIntro": "Чуй какво казва Аллах Всевишният в Сура [Име на сурата], сура [Номер], аят [Номер]:" (за аят) или "Пратеникът на Аллах ﷺ ни учи в [Сборник], хадис [Номер]:" (за хадис).
+   - "dalilIntro": "Чуй какво ни казва Аллах Всевишният в Сура [Име на сурата], сура [Номер], аят [Номер]:" (за аят) или "Пратеникът на Аллах ﷺ ни учи в [Сборник], хадис [Номер]:" (за хадис).
    - "dalilText": Автентичният текст на аята или хадиса на български език.
-   - "explanation": Дълбоко, практично разяснение (поука/тефсир) за съвременния мюсюлманин (25-45 думи).
+   - "explanation": Дълбоко, практично разяснение (поука/тефсир) за съвременния мюсюлманин според Салафите (25-45 думи).
    - "actionStep": Конкретна духовна стъпка още днес (дуа, истигфар, сабр) + подкана за запазване и споделяне (15-25 думи).
 4. В summaryBg напиши обобщение на поуката (30-50 думи).
-5. В themeBg и searchQuery задай кинематографични открити природни пейзажи (планини, облаци, звездно небе, джамийска архитектура). СТРИКТНО Halal (без хора/лица).
+5. В themeBg и searchQuery задай точното тематично движещо се видео от 12-те категории (напр. огън за Джехеннем, реки/градини за Дженнет, тихо езеро за Зикр).
 6. Задай useBRoll: true, bRollInterval: 4, tiktokTheme: "hormozi".
 
 КАРУСЕЛИ (CAROUSEL) — РАМКА ЗА ВИРУСНИ КАРУСЕЛИ (VIRAL RETENTION FRAMEWORK):
@@ -365,24 +392,23 @@ ${carouselExclusionPrompt}
    - СТРИКТНО ЗАБРАНЕНИ са общи/генерични заглавия и клишета като 'Защо си тук?', 'Какъв е смисълът на живота?'.
    - topTitle: кратък драматичен етикет (макс 2-3 думи, напр. "ТАЙНАТА НА РИЗКА", "БОЖЕСТВЕНИЯТ ЗАКОН"). Без скоби.
    - mainText: МАКС 2-3 КРАТКИ изречения (кука + контекст).
-   - bottomText: "Плъзни наляво за тайната 👉"
+   - bottomText: "Плъзни наляво за тайната -->"
    - footerText: "1/X • Плъзнете наляво"
    - imagePrompt: тъмен, кинематографичен природен пейзаж на английски (dark, atmospheric, dramatic cinematic landscape, vertical 9:16, 8k, no people).
 2. Слайд 2 (Тяло / Обяснение и Клифхенгър):
    - Сбит, стегнат текст (макс 2-3 кратки изречения) за бързо и лесно четене.
    - ЗАДЪЛЖИТЕЛЕН КЛИФХЕНГЪР: Завършва с интригуващ клифхенгър или отворен преход към следващия слайд.
    - topTitle: подзаглавие по темата.
-   - bottomText: "Плъзни наляво за далила 👉"
+   - bottomText: "Плъзни наляво за далила -->"
    - imagePrompt: същият пейзаж с постепенно изгряваща светлина.
 3. Слайд 3+ (Автентичен Далил - Коран):
    - Точен Аят от Корана с цитат и номер в topTitle (напр. "Сура Ал-Баййина (98:5)").
    - mainText съдържа самия Аят В КАВИЧКИ. АКО АЯТЪТ Е ДЪЛЪГ (повече от 80 символа), РАЗДЕЛИ ГО НА 2 СЛАЙДА — първата част на Слайд 3, втората на Слайд 4. 
-   - bottomText: "Плъзни наляво 👉"
+   - bottomText: "Плъзни наляво -->"
    - imagePrompt: сияйна божествена светлина.
 4. Слайд за Хадис (САМО АКО ИМА ХАДИС — на ОТДЕЛЕН слайд от Аята):
    - Точен Хадис с цитат в topTitle (напр. "Сахих ал-Бухари (#1)").
    - mainText съдържа самия Хадис В КАВИЧКИ. АКО ХАДИСЪТ Е ДЪЛЪГ, РАЗДЕЛИ ГО НА 2 СЛАЙДА.
-   - bottomText: "Плъзни за духовното решение 👉"
    - imagePrompt: сияйна божествена светлина.
 5. Последен Слайд (Кулминация и Стойностен Призив / Value-Driven CTA):
    - Кратка искрена дуа или духовно практическо решение (1-2 изречения).
@@ -667,7 +693,33 @@ export const suggestExplainedVideoProposal = createServerFn({ method: "POST" })
 
     const userTopic = data?.topic ? `Тема по желание на потребителя: "${data.topic}"` : "";
 
-    const prompt = `Ти си елитен продуцент на формат "Ислямско видео с обяснение" (Islamic video with explanation) за TikTok и Reels на български език.
+    const prompt = `Ти си автентичен САЛАФИТСКИ ШЕЙХ И ДА'ИЯ (по манхаджа на ас-Саляф ас-Салих – Шейх Ибн Баз, Шейх ал-Усеймин, Шейх ал-Албани - рахимахумуллах) и елитен продуцент на формат "Ислямско видео с обяснение" (Islamic video with explanation) за TikTok и Reels на български език.
+ТВОЯТА РОЛЯ И ГЛАС: Говори с дълбоко благоговение (хушу), бащинска мъдрост, авторитет и непоклатима искреност (Ихлас), базирани САМО на Корана и Сунната по разбирането на Салафите.
+
+СТРИКТНО ПРАВИЛО ЗА ТАУХИД И АДАБ КЪМ АЛЛАХ ВСЕВИШНИЯТ:
+Когато говориш за Аллах, ВИНАГИ използвай Неговите възвишени и достойни имена: „Аллах Всевишният“, „Твоят Създател“, „Господът на световете“, „Всемилостивият“.
+АБСОЛЮТНО И СТРОГО Е ЗАБРАНЕНО да използваш битови или непочтителни думи като „оня“, „тоя“, „онзи“ или светски термини като „висша сила“, „енергия“, „вселената“!
+
+12 ТЕМАТИЧНИ ВИДЕО КАТЕГОРИИ (ТОЧНО СЪОТВЕТСТВИЕ):
+Задай движещо се 9:16 видео за фон според темата:
+1. Джехеннем / Огън / Наказание -> "raging fire flames dark night vertical"
+2. Дженнет / Рай / Вечни градини -> "lush green paradise river waterfall emerald nature peaceful stream"
+3. Покой / Зикр / Сакина -> "tranquil peaceful lake morning sunrise mist calm water nature"
+4. Сабр / Търпение / Изпитания -> "solitary pine tree mountain storm vertical"
+5. Тауаккул / Упование -> "majestic mountain summit golden sunset ocean waves landscape"
+6. Тауба / Покаяние -> "gentle rain falling ripples pond vertical"
+7. Ризк / Шукр -> "golden wheat field dramatic sunrise vertical"
+8. Ихляс / Искреност -> "crystal clear river stones ripples nature vertical"
+9. Дуа / Молба -> "solitary mountain peak sunset vast sky vertical"
+10. Преходност на Дуня / Смърт -> "timelapse clouds passing mountains sunset twilight vertical"
+11. Намаз / Месджид -> "grand mosque minaret exterior twilight vertical"
+12. Таухид -> "cosmic starry galaxy nebula space vertical"
+
+100% SALAFI HALAL:
+0% хора (people), 0% лица (faces), 0% ръце/пръсти, 0% тела или животни.
+0% музикални инструменти (piano, music) или книги с ноти.
+ЕМОДЖИТА: Разрешени САМО 🌿, 🕌, 📌, ✨, 💎, 🤍, 🔄, 💬, и "-->". СТРОГО ЗАБРАНЕНИ: ръце (🤲, 👉, 👆, ✍️, 👏), музикални ноти (🎶, 🎵), Кааба (🕋).
+
 ТВОЯТА ЦЕЛ: Да създадеш високоефективен 4-степенен вайръл сценарий за задържане на вниманието (Viral Retention Framework):
 
 1. КУКА (HOOK):
@@ -693,7 +745,7 @@ ${userTopic}
 - "type": "explained_video"
 - "summaryBg": Кратък обобщен текст на поуката за бърз преглед.
 - "themeBg": Визуално описание за атмосферата (напр. "Звездно небе и планински върхове в мъгла").
-- "searchQuery": Английски термини за Pexels САМО за природа/космос/джамия (напр. "night sky stars mountains cinematic nature"). СТРИКТНО Salafi Halal (0% хора, 0% лица, 0% музика).
+- "searchQuery": Английски термини за Pexels САМО за природа/стихии/джамия според 12-те категории.
 - "tiktokTheme": "hormozi" (златно караоке)
 - "useBRoll": true
 - "bRollInterval": 4
@@ -716,8 +768,8 @@ ${userTopic}
       "actionStep": "Спри за 1 минута точно сега, кажи искрено 'Субханаллах' и направи дуа. Запази това видео и го сподели за садака джария!"
     },
     "summaryBg": "Сърцето намира покой само в помненето на Аллах. Когато се отдалечиш от Него, тревогата е естествен сигнал на душата.",
-    "themeBg": "Величествено звездно небе над тихи планински върхове",
-    "searchQuery": "night stars mountain peaceful dark cinematic",
+    "themeBg": "Спокойно огледално езеро с утринна мъгла на зазоряване",
+    "searchQuery": "tranquil peaceful lake morning sunrise mist calm water nature",
     "tiktokTheme": "hormozi",
     "useBRoll": true,
     "bRollInterval": 4,
@@ -789,6 +841,123 @@ ${userTopic}
 
     return {
       reply: parsed.reply,
+      proposal: parsed.proposal as VideoProposal,
+    };
+  });
+
+export const suggestAlternativeProposal = createServerFn({ method: "POST" })
+  .validator(
+    (input?: { currentTitle?: string; topic?: string; type?: string }) => input || {},
+  )
+  .handler(async ({ data }) => {
+    const memory = await getAiMemory();
+    const historyList = (memory.usageHistory || []).map((x) => `- ${x.identifier}`).join("\n");
+    const historyContext = historyList
+      ? `\n\nСКОРОШНО ИЗПОЛЗВАНИ ТЕМИ (СТРИКТНО ЗАБРАНЕНО Е ДА ГИ ПРЕДЛАГАШ ОТНОВО):\n${historyList}`
+      : "";
+
+    const rejectedContext = data?.currentTitle
+      ? `\nПотребителят ОТХВЪРЛИ предишното предложение: "${data.currentTitle}". Предложи НАПЪЛНО НОВ, РАЗЛИЧЕН и неповторен автентичен аят или Сахих хадис по същата тема или друга въздействаща тема!`
+      : "";
+
+    const topicHint = data?.topic ? `Желана тема: "${data.topic}".` : "";
+
+    const prompt = `Ти си автентичен САЛАФИТСКИ ШЕЙХ И ДА'ИЯ (по манхаджа на ас-Саляф ас-Салих: Шейх Ибн Баз, Шейх ал-Усеймин, Шейх ал-Албани - рахимахумуллах) и топ продуцент на Ислямски видеа на български език.
+Потребителят поиска алтернативно предложение за видео.
+${rejectedContext}
+${topicHint}
+${historyContext}
+
+СТРИКТНО ПРАВИЛО ЗА ТАУХИД И АДАБ КЪМ АЛЛАХ ВСЕВИШНИЯТ:
+ВИНАГИ използвай „Аллах Всевишният“, „Твоят Създател“, „Господът на световете“, „Всемилостивият“. СТРОГО ЗАБРАНЕНО е да използваш разговорни или непочтителни думи като „оня“, „тоя“, „онзи“!
+АВТЕНТИЧНИ ТЕРМИНИ: „Астагфируллах“ (с 'г'), „Субханаллах“, „Алхамдулиллях“, „Аллаху Акбар“, „Ля иляха илляллах“.
+
+12 ТЕМАТИЧНИ ВИДЕО КАТЕГОРИИ (ТОЧНО СЪОТВЕТСТВИЕ):
+Задай движещо се 9:16 видео за фон:
+1. Огън / Джехеннем / Наказание -> "raging fire flames dark night vertical"
+2. Рай / Дженнет / Вечни градини -> "lush green paradise river waterfall emerald nature peaceful stream"
+3. Покой / Зикр / Сакина -> "tranquil peaceful lake morning sunrise mist calm water nature"
+4. Сабр / Търпение / Изпитания -> "solitary pine tree mountain storm vertical"
+5. Тауаккул / Упование -> "majestic mountain summit golden sunset ocean waves landscape"
+6. Тауба / Покаяние -> "gentle rain falling ripples pond vertical"
+7. Ризк / Шукр -> "golden wheat field dramatic sunrise vertical"
+8. Ихляс / Искреност -> "crystal clear river stones ripples nature vertical"
+9. Дуа / Молба -> "solitary mountain peak sunset vast sky vertical"
+10. Преходност на Дуня / Смърт -> "timelapse clouds passing mountains sunset twilight vertical"
+11. Намаз / Месджид -> "grand mosque minaret exterior twilight vertical"
+12. Таухид -> "cosmic starry galaxy nebula space vertical"
+
+100% SALAFI HALAL:
+0% хора, 0% човешки лица, 0% ръце, 0% музикални инструменти или ноти.
+ЕМОДЖИТА: Разрешени САМО 🌿, 🕌, 📌, ✨, 💎, 🤍, 🔄, 💬, и "-->".
+
+Върни JSON със следната структура:
+{
+  "reply": "Учтиво и авторитетно обяснение на български от Шейха защо това ново предложение е по-подходящо и каква мъдрост крие.",
+  "proposal": {
+    "title": "Точно заглавие във формат [Коран {surah}:{ayah}] Заглавие или [Сахих {collection} #{number}] Заглавие (СТРИКТНО БЕЗ '[tiktok]' или мета етикети)",
+    "type": "quran" | "hadith" | "explained_video",
+    "surah": 13,
+    "ayah": 28,
+    "count": 1,
+    "summaryBg": "Сбит български превод и поука",
+    "themeBg": "Визуална атмосфера на български",
+    "searchQuery": "ключови думи за Pexels на английски според 12-те категории",
+    "tiktokTheme": "hormozi",
+    "useBRoll": true,
+    "bRollInterval": 4,
+    "quality": "high"
+  }
+}
+Върни САМО валиден JSON без маркдаун обвивки.`;
+
+    const msgs: ChatMessage[] = [
+      { role: "system", content: prompt },
+      {
+        role: "user",
+        content: `Предложи 1 ново алтернативно Ислямско видео сега. Предишното отхвърлено беше: ${data?.currentTitle || "общо"}.`,
+      },
+    ];
+
+    const raw = await geminiChat("gemini-3.6-flash", msgs, true);
+    let parsed: { reply?: string; proposal?: VideoProposal | null };
+    try {
+      let clean = raw.replace(/```json\s*|\s*```/g, "").trim();
+      const firstBrace = clean.indexOf("{");
+      const lastBrace = clean.lastIndexOf("}");
+      if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+        clean = clean.substring(firstBrace, lastBrace + 1);
+      }
+      parsed = JSON.parse(clean);
+    } catch {
+      parsed = {
+        reply: "Предлагам ти този благороден хадис от Сахих ал-Бухари за искреното търпение и упование в Аллах Всевишният.",
+        proposal: {
+          title: "[Сахих ал-Бухари #5645] Скритата милост в изпитанията",
+          type: "hadith",
+          collection: "bukhari",
+          number: 5645,
+          summaryBg: "Когото Аллах Всевишният желае да дари с добро, Той го подлага на изпитания за пречистване.",
+          themeBg: "Самотен бор в планинска буря и изгряваща светлина",
+          searchQuery: "solitary pine tree mountain storm vertical",
+          tiktokTheme: "hormozi",
+          useBRoll: true,
+          bRollInterval: 4,
+          quality: "high",
+        },
+      };
+    }
+
+    if (parsed.proposal && parsed.proposal.title) {
+      parsed.proposal.title = cleanProposalTitle(parsed.proposal.title);
+    }
+
+    if (parsed.proposal) {
+      await recordProposalUsages({ data: { proposals: [parsed.proposal] } }).catch(() => {});
+    }
+
+    return {
+      reply: parsed.reply || "Предлагам ти това ново алтернативно видео:",
       proposal: parsed.proposal as VideoProposal,
     };
   });
@@ -1299,11 +1468,27 @@ export const confirmAndGenerateVideo = createServerFn({ method: "POST" })
       }
     }
 
+    // 0. Salafi Adab text sanitation: Reverence for Allah (strictly eliminate casual 'оня')
+    bulgarian = bulgarian
+      .replace(/(?:търси|иска|зове|напомня\s+за)\s+оня\b/gi, "$1 своя Създател")
+      .replace(/(?<=^|[^\p{L}\p{N}])оня(?=[^\p{L}\p{N}]|$)/gui, "Аллах Всевишният")
+      .replace(/(?<=^|[^\p{L}\p{N}])тоя(?=[^\p{L}\p{N}]|$)/gui, "този");
+
+    let resolvedQuery = proposal.searchQuery;
+    const fullText = `${proposal.title || ""} ${proposal.themeBg || ""} ${proposal.summaryBg || ""} ${bulgarian || ""}`;
+    const concept = matchTheologicalConcept(fullText);
+    if (concept) {
+      resolvedQuery = concept.roleQueries.dalil?.[0] || concept.roleQueries.hook?.[0] || resolvedQuery;
+    }
+    if (!resolvedQuery || !resolvedQuery.trim()) {
+      resolvedQuery = "tranquil peaceful nature vertical";
+    }
+
     let bestVid = "https://videos.pexels.com/video-files/30054113/12891205_1080_1920_30fps.mp4";
     try {
       const vidSearch = await searchPexelsVideos({
         data: {
-          text: proposal.searchQuery || "islamic calm sunset nature mosque",
+          text: resolvedQuery,
           minDuration: 30,
         },
       });
@@ -1320,7 +1505,7 @@ export const confirmAndGenerateVideo = createServerFn({ method: "POST" })
       const { fetchMultiSceneBRoll } = await import("./pexels.functions");
       const bRollResult = await fetchMultiSceneBRoll({
         data: {
-          query: proposal.searchQuery || "islamic nature cinematic",
+          query: resolvedQuery,
           text: bulgarian,
         },
       });

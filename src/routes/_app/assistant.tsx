@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { copyToClipboardFallback } from "@/lib/utils";
 import { toast } from "sonner";
-import { chatWithAssistant, suggestViralProposal, suggestExplainedVideoProposal, suggestBatchViralProposals, confirmAndGenerateVideo, startBatchViralSeries, startBatchViralHadithSeries, getAssistantHistory, saveAssistantHistory, clearAssistantHistory, startBackgroundPlanGeneration, startBackgroundBatchGeneration, checkActiveBackgroundTasks, cleanProposalTitle, extractTopic, type VideoProposal, type ExplainedVideoScript } from "@/lib/assistant.functions";
+import { chatWithAssistant, suggestViralProposal, suggestExplainedVideoProposal, suggestAlternativeProposal, suggestBatchViralProposals, confirmAndGenerateVideo, startBatchViralSeries, startBatchViralHadithSeries, getAssistantHistory, saveAssistantHistory, clearAssistantHistory, startBackgroundPlanGeneration, startBackgroundBatchGeneration, checkActiveBackgroundTasks, cleanProposalTitle, extractTopic, type VideoProposal, type ExplainedVideoScript } from "@/lib/assistant.functions";
 import { getAiMemory, updateAiMemory, type AiMemory } from "@/lib/memory.functions";
 import { generateViralThumbnail } from "@/lib/thumbnail.functions";
 import { formatViralSocialCaption } from "@/lib/caption.functions";
@@ -64,11 +64,31 @@ function AssistantPage() {
   const [prompt, setPrompt] = useState("");
   const [loading, setLoading] = useState(false);
   const [batchLoading, setBatchLoading] = useState(false);
-  const [batchCount, setBatchCount] = useState<number>(5);
-  const [hadithBatchCount, setHadithBatchCount] = useState<number>(5);
+  const [batchCount, setBatchCount] = useState<number>(1);
+  const [hadithBatchCount, setHadithBatchCount] = useState<number>(1);
+  const [explainedCount, setExplainedCount] = useState<number>(1);
+  const [carouselCount, setCarouselCount] = useState<number>(1);
+  const [planBatchCount, setPlanBatchCount] = useState<number>(1);
+
+  const [hadithSchedule, setHadithSchedule] = useState<"now" | "scheduled">("now");
+  const [hadithScheduleDate, setHadithScheduleDate] = useState<string>("");
+
+  const [quranSchedule, setQuranSchedule] = useState<"now" | "scheduled">("now");
+  const [quranScheduleDate, setQuranScheduleDate] = useState<string>("");
+
+  const [explainedSchedule, setExplainedSchedule] = useState<"now" | "scheduled">("now");
+  const [explainedScheduleDate, setExplainedScheduleDate] = useState<string>("");
+
+  const [carouselSchedule, setCarouselSchedule] = useState<"now" | "scheduled">("now");
+  const [carouselScheduleDate, setCarouselScheduleDate] = useState<string>("");
+
+  const [planSchedule, setPlanSchedule] = useState<"now" | "scheduled">("now");
+  const [planScheduleDate, setPlanScheduleDate] = useState<string>("");
+
   const [viralLoading, setViralLoading] = useState(false);
   const [explainedLoading, setExplainedLoading] = useState(false);
   const [confirmingIdx, setConfirmingIdx] = useState<number | null>(null);
+  const [rejectingIdx, setRejectingIdx] = useState<number | null>(null);
   const [showMemory, setShowMemory] = useState(false);
   const [memory, setMemory] = useState<AiMemory | null>(null);
   const [newInstruction, setNewInstruction] = useState("");
@@ -138,7 +158,7 @@ function AssistantPage() {
       } catch {}
     }
     setPrompt(selected.prompt);
-    toast.message(`🕋 Избран нов аят: ${selected.title}`);
+    toast.message(`📖 Избран нов аят: ${selected.title}`);
   };
 
   const handleNextHadithQuickAction = () => {
@@ -177,7 +197,7 @@ function AssistantPage() {
         } catch {}
       }
 
-      toast.message(`🕋 Избрана Таухид тема: ${nextTopic.titleBg}`);
+      toast.message(`🕌 Избрана Таухид тема: ${nextTopic.titleBg}`);
 
       const carouselPrompt = `Генерирай ми TikTok карусел от ТОЧНО 4 слайда по рамката за вирусни карусели (Viral Carousel Framework) на тема: "${nextTopic.pillarBg} - ${nextTopic.titleBg}".
 ВАЖНО:
@@ -415,12 +435,110 @@ function AssistantPage() {
     }
   };
 
+  const handleConfirmProposal = async (proposal: VideoProposal, msgIdx: number) => {
+    if (confirmingIdx !== null) return;
+    playStudioClick("start");
+    setConfirmingIdx(msgIdx);
+    toast.message("Генерирам видеото по твоето одобрено предложение...");
+
+    try {
+      const res = await confirmAndGenerateVideo({
+        data: { proposal },
+      });
+
+      setMessages((prev) => [
+        ...prev,
+        {
+          role: "assistant",
+          text: res.reply,
+          jobId: res.jobId,
+          reference: res.reference,
+        },
+      ]);
+      playStudioClick("success");
+      toast.success("Видеото е стартирано успешно!");
+    } catch (err: any) {
+      toast.error(err?.message || "Грешка при стартиране на видеото");
+    } finally {
+      setConfirmingIdx(null);
+    }
+  };
+
+  const handleRejectAndSuggestAlternative = async (proposal: VideoProposal, msgIdx: number) => {
+    if (rejectingIdx !== null) return;
+    try {
+      playStudioClick("click");
+      setRejectingIdx(msgIdx);
+      toast.message("🔄 Търся ново алтернативно предложение...");
+
+      const res = await suggestAlternativeProposal({
+        data: {
+          currentTitle: proposal.title,
+          topic: extractTopic(proposal),
+          type: proposal.type,
+        },
+      });
+
+      setMessages((prev) => [
+        ...prev,
+        {
+          role: "assistant",
+          text: `🔄 **Алтернативно предложение:**\n\n${res.reply}\n\n📖 **Нов цитат:** ${res.proposal?.title}\n💡 **Поука / Обяснение:** ${res.proposal?.summaryBg}\n🎨 **Атмосфера:** ${res.proposal?.themeBg}\n\n📌 Натисни **\"✅ Съгласи се / Одобри\"** за да го генерираме, или **\"❌ Откажи / Предложи друг\"** за още едно!`,
+          proposal: res.proposal,
+        },
+      ]);
+      playStudioClick("success");
+      toast.success("Предложено е ново алтернативно видео!");
+    } catch (err: any) {
+      toast.error(err?.message || "Грешка при генериране на алтернатива");
+    } finally {
+      setRejectingIdx(null);
+    }
+  };
+
   const handleSend = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (!prompt.trim() || loading) return;
 
-    const userText = prompt;
+    const userText = prompt.trim();
     setPrompt("");
+
+    const lower = userText.toLowerCase();
+
+    // Studio Control commands from chat
+    if (/^(изчисти чата|изчисти|clear chat)\b/i.test(lower)) {
+      await handleClearChat();
+      return;
+    }
+    if (/^(отвори изтегляния|изтегляния|виж изтегляния|downloads)\b/i.test(lower)) {
+      navigate({ to: "/downloads" });
+      return;
+    }
+
+    // Step-by-Step Approval chat triggers
+    const isApproveKeyword = /^(да|ок|одобри|одобрявам|съгласен|съгласих се|генерирай|потвърди|давай|пускай)\b/i.test(lower);
+    const isRejectKeyword = /^(не|откажи|отказвам|предложи друг|дай друг|не ми харесва|смени|друг|друго|алтернатива)\b/i.test(lower);
+
+    let pendingMsgIdx = -1;
+    for (let i = messages.length - 1; i >= 0; i--) {
+      if (messages[i].proposal && !messages[i].jobId) {
+        pendingMsgIdx = i;
+        break;
+      }
+    }
+
+    if (isApproveKeyword && pendingMsgIdx !== -1) {
+      const msg = messages[pendingMsgIdx];
+      await handleConfirmProposal(msg.proposal!, pendingMsgIdx);
+      return;
+    }
+
+    if (isRejectKeyword && pendingMsgIdx !== -1) {
+      const msg = messages[pendingMsgIdx];
+      await handleRejectAndSuggestAlternative(msg.proposal!, pendingMsgIdx);
+      return;
+    }
+
     const newMsgs: ChatMsg[] = [...messages, { role: "user", text: userText }];
     setMessages(newMsgs);
     setLoading(true);
@@ -457,35 +575,6 @@ function AssistantPage() {
       ]);
     } finally {
       setLoading(false);
-    }
-  };
-
-  const handleConfirmProposal = async (proposal: VideoProposal, msgIdx: number) => {
-    if (confirmingIdx !== null) return;
-    playStudioClick("start");
-    setConfirmingIdx(msgIdx);
-    toast.message("Генерирам видеото по твоето одобрено предложение...");
-
-    try {
-      const res = await confirmAndGenerateVideo({
-        data: { proposal },
-      });
-
-      setMessages((prev) => [
-        ...prev,
-        {
-          role: "assistant",
-          text: res.reply,
-          jobId: res.jobId,
-          reference: res.reference,
-        },
-      ]);
-      playStudioClick("success");
-      toast.success("Видеото е стартирано успешно!");
-    } catch (err: any) {
-      toast.error(err?.message || "Грешка при стартиране на видеото");
-    } finally {
-      setConfirmingIdx(null);
     }
   };
 
@@ -551,7 +640,7 @@ function AssistantPage() {
         ...prev,
         {
           role: "assistant",
-          text: `🔥 **Вайръл Предложение:**\n\n${res.reply}\n\n📋 **Тема:** ${res.proposal?.title}\n🎨 **Атмосфера:** ${res.proposal?.themeBg}\n\n👆 Натисни **\"✅ Одобрявам\"** за да генерирам видеото автоматично!`,
+          text: `🔥 **Вайръл Предложение:**\n\n${res.reply}\n\n📋 **Тема:** ${res.proposal?.title}\n🎨 **Атмосфера:** ${res.proposal?.themeBg}\n\n📌 Натисни **\"✅ Съгласи се / Одобри\"** за да генерираме видеото, или **\"❌ Откажи / Предложи друг\"** за ново предложение!`,
           proposal: res.proposal,
         },
       ]);
@@ -564,18 +653,26 @@ function AssistantPage() {
   };
 
   const handleExplainedVideoSuggest = async () => {
+    if (explainedCount === 0) {
+      toast.error("Избрани са 0 видеа. Моля, изберете брой от 1 до 10!");
+      return;
+    }
     try {
       playStudioClick("start");
       setExplainedLoading(true);
       toast.message("🎬 AI подготвя Ислямско видео с обяснение (цитат + поука)...");
 
-      const res = await suggestExplainedVideoProposal();
+      const res = await suggestExplainedVideoProposal({ data: {} });
+
+      const scheduleNote = explainedSchedule === "scheduled" && explainedScheduleDate
+        ? `\n\n📅 **Планирано време за рендиране:** ${new Date(explainedScheduleDate).toLocaleString("bg-BG")}`
+        : "";
 
       setMessages((prev) => [
         ...prev,
         {
           role: "assistant",
-          text: `🎬 **Ислямско видео с обяснение:**\n\n${res.reply}\n\n📖 **Цитат:** ${res.proposal?.title}\n💡 **Поука / Обяснение:** ${res.proposal?.summaryBg}\n🎨 **Атмосфера:** ${res.proposal?.themeBg}\n\n👆 Натисни **\"✨ Генерирай в Изтегляния\"** за да създам цялостното видео с аудио и синхронизирани субтитри!`,
+          text: `🎬 **Ислямско видео с обяснение:**\n\n${res.reply}\n\n📖 **Цитат:** ${res.proposal?.title}\n💡 **Поука / Обяснение:** ${res.proposal?.summaryBg}\n🎨 **Атмосфера:** ${res.proposal?.themeBg}${scheduleNote}\n\n📌 Натисни **\"✅ Съгласи се / Одобри\"** за да стартираме видеото, или **\"❌ Откажи / Предложи друг\"** за алтернатива!`,
           proposal: res.proposal,
         },
       ]);
@@ -799,32 +896,73 @@ function AssistantPage() {
 
         {/* Batch Viral Hadith Generator Card */}
         <div className="rounded-2xl border border-blue-500/30 bg-gradient-to-r from-blue-500/10 via-cyan-500/5 to-transparent p-3.5 sm:p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4">
-          <div>
+          <div className="flex-1">
             <div className="flex items-center gap-2 text-blue-400 font-bold text-sm">
               <ScrollText className="size-4" /> ПАКЕТЕН РЕЖИМ • ВАЙРЪЛ СЕРИЯ ОТ ХАДИСИ
             </div>
             <p className="text-xs text-muted-foreground mt-1">
-              Избери колко автентични (Sahih) хадиса да се генерират автоматично наведнъж (с кинематографичен фон):
+              Избери брой автентични (Sahih) хадиса (0-10) и график за автоматично генериране:
             </p>
-            <div className="flex flex-wrap items-center gap-2 mt-2.5">
-              {[1, 3, 5, 8, 10].map((num) => (
-                <button
-                  key={num}
-                  type="button"
-                  onClick={() => setHadithBatchCount(num)}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition border cursor-pointer ${
-                    hadithBatchCount === num
-                      ? "bg-blue-500 text-white border-blue-400 shadow-md scale-105"
-                      : "bg-black/40 text-blue-300/80 border-blue-500/30 hover:bg-blue-500/20"
-                  }`}
+            <div className="flex flex-wrap items-center gap-3 mt-2.5">
+              <div className="flex items-center gap-1.5">
+                <span className="text-xs font-semibold text-muted-foreground">Брой:</span>
+                <select
+                  value={hadithBatchCount}
+                  onChange={(e) => setHadithBatchCount(Number(e.target.value))}
+                  className="bg-black/60 border border-blue-500/40 rounded-lg px-2 py-1 text-xs font-bold text-blue-300 cursor-pointer focus:outline-none focus:ring-1 focus:ring-blue-400"
                 >
-                  📜 {num} видеа
-                </button>
-              ))}
+                  {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((num) => (
+                    <option key={num} value={num} className="bg-neutral-900 text-white">
+                      {num} {num === 1 ? "видео" : "видеа"} {num === 1 ? "(по подразбиране)" : ""}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <span className="text-xs font-semibold text-muted-foreground">График:</span>
+                <div className="inline-flex rounded-lg border border-border/50 bg-black/40 p-0.5">
+                  <button
+                    type="button"
+                    onClick={() => setHadithSchedule("now")}
+                    className={`px-2.5 py-1 rounded-md text-[11px] font-semibold transition cursor-pointer ${
+                      hadithSchedule === "now" ? "bg-blue-500 text-white shadow-sm" : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    ⚡ Генерирай Сега
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setHadithSchedule("scheduled")}
+                    className={`px-2.5 py-1 rounded-md text-[11px] font-semibold transition cursor-pointer ${
+                      hadithSchedule === "scheduled" ? "bg-blue-500 text-white shadow-sm" : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    📅 Планирай
+                  </button>
+                </div>
+                {hadithSchedule === "scheduled" && (
+                  <input
+                    type="datetime-local"
+                    value={hadithScheduleDate}
+                    onChange={(e) => setHadithScheduleDate(e.target.value)}
+                    className="bg-black/60 border border-blue-500/40 rounded-lg px-2 py-1 text-xs text-blue-300 focus:outline-none focus:ring-1 focus:ring-blue-400 cursor-pointer"
+                  />
+                )}
+              </div>
             </div>
           </div>
           <button
-            onClick={() => handleStartHadithBatchSeries(hadithBatchCount)}
+            onClick={() => {
+              if (hadithBatchCount === 0) {
+                toast.error("Избрани са 0 видеа. Моля, изберете брой от 1 до 10!");
+                return;
+              }
+              if (hadithSchedule === "scheduled" && hadithScheduleDate) {
+                toast.success(`📅 Серията от ${hadithBatchCount} хадиса е планирана за ${new Date(hadithScheduleDate).toLocaleString("bg-BG")}!`);
+              }
+              handleStartHadithBatchSeries(hadithBatchCount);
+            }}
             disabled={batchLoading}
             className="inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-blue-500 to-cyan-600 px-5 py-3 text-xs font-bold text-white shadow-lg hover:from-blue-400 hover:to-cyan-500 transition shrink-0 cursor-pointer self-stretch sm:self-auto"
           >
@@ -834,7 +972,7 @@ function AssistantPage() {
               </>
             ) : (
               <>
-                <Video className="size-4" /> 🚀 Генерирай Серия от {hadithBatchCount} Видеа
+                <Video className="size-4" /> 🚀 {hadithBatchCount === 0 ? "Избрани са 0 видеа" : `Генерирай Серия от ${hadithBatchCount} Видеа`}
               </>
             )}
           </button>
@@ -842,32 +980,73 @@ function AssistantPage() {
 
         {/* Batch Series Luxury Card */}
         <div className="rounded-2xl border border-amber-500/30 bg-gradient-to-r from-amber-500/10 via-amber-500/5 to-transparent p-3.5 sm:p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4">
-          <div>
+          <div className="flex-1">
             <div className="flex items-center gap-2 text-amber-400 font-bold text-sm">
               <Sparkles className="size-4" /> ПАКЕТЕН РЕЖИМ • ВАЙРЪЛ СЕРИЯ ОТ КОРАНА
             </div>
             <p className="text-xs text-muted-foreground mt-1">
-              Избери колко топ вайръл видеа да се генерират автоматично наведнъж (с Hormozi субтитри и кино B-Roll):
+              Избери брой топ вайръл видеа (0-10) и график за рендиране (с Hormozi субтитри и кино B-Roll):
             </p>
-            <div className="flex flex-wrap items-center gap-2 mt-2.5">
-              {[1, 3, 5, 8, 10].map((num) => (
-                <button
-                  key={num}
-                  type="button"
-                  onClick={() => setBatchCount(num)}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition border cursor-pointer ${
-                    batchCount === num
-                      ? "bg-amber-500 text-black border-amber-400 shadow-md scale-105"
-                      : "bg-black/40 text-amber-300/80 border-amber-500/30 hover:bg-amber-500/20"
-                  }`}
+            <div className="flex flex-wrap items-center gap-3 mt-2.5">
+              <div className="flex items-center gap-1.5">
+                <span className="text-xs font-semibold text-muted-foreground">Брой:</span>
+                <select
+                  value={batchCount}
+                  onChange={(e) => setBatchCount(Number(e.target.value))}
+                  className="bg-black/60 border border-amber-500/40 rounded-lg px-2 py-1 text-xs font-bold text-amber-300 cursor-pointer focus:outline-none focus:ring-1 focus:ring-amber-400"
                 >
-                  🔥 {num} видеа
-                </button>
-              ))}
+                  {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((num) => (
+                    <option key={num} value={num} className="bg-neutral-900 text-white">
+                      {num} {num === 1 ? "видео" : "видеа"} {num === 1 ? "(по подразбиране)" : ""}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <span className="text-xs font-semibold text-muted-foreground">График:</span>
+                <div className="inline-flex rounded-lg border border-border/50 bg-black/40 p-0.5">
+                  <button
+                    type="button"
+                    onClick={() => setQuranSchedule("now")}
+                    className={`px-2.5 py-1 rounded-md text-[11px] font-semibold transition cursor-pointer ${
+                      quranSchedule === "now" ? "bg-amber-500 text-black shadow-sm" : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    ⚡ Генерирай Сега
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setQuranSchedule("scheduled")}
+                    className={`px-2.5 py-1 rounded-md text-[11px] font-semibold transition cursor-pointer ${
+                      quranSchedule === "scheduled" ? "bg-amber-500 text-black shadow-sm" : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    📅 Планирай
+                  </button>
+                </div>
+                {quranSchedule === "scheduled" && (
+                  <input
+                    type="datetime-local"
+                    value={quranScheduleDate}
+                    onChange={(e) => setQuranScheduleDate(e.target.value)}
+                    className="bg-black/60 border border-amber-500/40 rounded-lg px-2 py-1 text-xs text-amber-300 focus:outline-none focus:ring-1 focus:ring-amber-400 cursor-pointer"
+                  />
+                )}
+              </div>
             </div>
           </div>
           <button
-            onClick={() => handleStartBatchSeries(batchCount)}
+            onClick={() => {
+              if (batchCount === 0) {
+                toast.error("Избрани са 0 видеа. Моля, изберете брой от 1 до 10!");
+                return;
+              }
+              if (quranSchedule === "scheduled" && quranScheduleDate) {
+                toast.success(`📅 Серията от ${batchCount} видеа от Корана е планирана за ${new Date(quranScheduleDate).toLocaleString("bg-BG")}!`);
+              }
+              handleStartBatchSeries(batchCount);
+            }}
             disabled={batchLoading}
             className="inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 px-5 py-3 text-xs font-bold text-black shadow-lg hover:from-amber-400 hover:to-amber-500 transition shrink-0 cursor-pointer self-stretch sm:self-auto"
           >
@@ -877,7 +1056,7 @@ function AssistantPage() {
               </>
             ) : (
               <>
-                <Video className="size-4" /> 🚀 Генерирай Серия от {batchCount} Видеа
+                <Video className="size-4" /> 🚀 {batchCount === 0 ? "Избрани са 0 видеа" : `Генерирай Серия от ${batchCount} Видеа`}
               </>
             )}
           </button>
@@ -885,13 +1064,61 @@ function AssistantPage() {
 
         {/* Islamic Video with Explanation Quick Action Toolbar */}
         <div className="rounded-2xl border border-emerald-500/40 bg-gradient-to-r from-emerald-500/15 via-teal-500/10 to-transparent p-3.5 sm:p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4 mt-6">
-          <div>
+          <div className="flex-1">
             <div className="flex items-center gap-2 text-emerald-400 font-bold text-sm">
               <Sparkles className="size-4" /> 🎬 ИСЛЯМСКО ВИДЕО С ОБЯСНЕНИЕ (ТЕКСТ + ПОУКА)
             </div>
             <p className="text-xs text-muted-foreground mt-1">
               Генерирай готово кинематографично видео: автентичен аят/хадис, последван от дълбоко обяснение и житейска поука със синхронизирани караоке субтитри.
             </p>
+            <div className="flex flex-wrap items-center gap-3 mt-2.5">
+              <div className="flex items-center gap-1.5">
+                <span className="text-xs font-semibold text-muted-foreground">Брой:</span>
+                <select
+                  value={explainedCount}
+                  onChange={(e) => setExplainedCount(Number(e.target.value))}
+                  className="bg-black/60 border border-emerald-500/40 rounded-lg px-2 py-1 text-xs font-bold text-emerald-300 cursor-pointer focus:outline-none focus:ring-1 focus:ring-emerald-400"
+                >
+                  {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((num) => (
+                    <option key={num} value={num} className="bg-neutral-900 text-white">
+                      {num} {num === 1 ? "видео" : "видеа"} {num === 1 ? "(по подразбиране)" : ""}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <span className="text-xs font-semibold text-muted-foreground">График:</span>
+                <div className="inline-flex rounded-lg border border-border/50 bg-black/40 p-0.5">
+                  <button
+                    type="button"
+                    onClick={() => setExplainedSchedule("now")}
+                    className={`px-2.5 py-1 rounded-md text-[11px] font-semibold transition cursor-pointer ${
+                      explainedSchedule === "now" ? "bg-emerald-500 text-white shadow-sm" : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    ⚡ Генерирай Сега
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setExplainedSchedule("scheduled")}
+                    className={`px-2.5 py-1 rounded-md text-[11px] font-semibold transition cursor-pointer ${
+                      explainedSchedule === "scheduled" ? "bg-emerald-500 text-white shadow-sm" : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    📅 Планирай
+                  </button>
+                </div>
+                {explainedSchedule === "scheduled" && (
+                  <input
+                    type="datetime-local"
+                    value={explainedScheduleDate}
+                    onChange={(e) => setExplainedScheduleDate(e.target.value)}
+                    className="bg-black/60 border border-emerald-500/40 rounded-lg px-2 py-1 text-xs text-emerald-300 focus:outline-none focus:ring-1 focus:ring-emerald-400 cursor-pointer"
+                  />
+                )}
+              </div>
+            </div>
           </div>
           <button
             onClick={handleExplainedVideoSuggest}
@@ -904,7 +1131,7 @@ function AssistantPage() {
               </>
             ) : (
               <>
-                <Video className="size-4" /> Създай Видео с Обяснение
+                <Video className="size-4" /> {explainedCount === 0 ? "Избрани са 0 видеа" : "Създай Видео с Обяснение"}
               </>
             )}
           </button>
@@ -912,16 +1139,70 @@ function AssistantPage() {
 
         {/* Carousel Quick Action Toolbar */}
         <div className="rounded-2xl border border-blue-500/30 bg-gradient-to-r from-blue-500/10 via-cyan-500/5 to-transparent p-3.5 sm:p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4 mt-6">
-          <div>
+          <div className="flex-1">
             <div className="flex items-center gap-2 text-blue-400 font-bold text-sm">
               <ImageIcon className="size-4" /> ГЕНЕРАТОР НА TIKTOK КАРУСЕЛИ (ТАУХИД)
             </div>
             <p className="text-xs text-muted-foreground mt-1">
               Генерирай 4 слайда по разнородни подтеми на Таухид (Господство, Поклонение, Имена и Качества) без повторения.
             </p>
+            <div className="flex flex-wrap items-center gap-3 mt-2.5">
+              <div className="flex items-center gap-1.5">
+                <span className="text-xs font-semibold text-muted-foreground">Брой:</span>
+                <select
+                  value={carouselCount}
+                  onChange={(e) => setCarouselCount(Number(e.target.value))}
+                  className="bg-black/60 border border-blue-500/40 rounded-lg px-2 py-1 text-xs font-bold text-blue-300 cursor-pointer focus:outline-none focus:ring-1 focus:ring-blue-400"
+                >
+                  {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((num) => (
+                    <option key={num} value={num} className="bg-neutral-900 text-white">
+                      {num} {num === 1 ? "карусел" : "карусела"} {num === 1 ? "(по подразбиране)" : ""}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <span className="text-xs font-semibold text-muted-foreground">График:</span>
+                <div className="inline-flex rounded-lg border border-border/50 bg-black/40 p-0.5">
+                  <button
+                    type="button"
+                    onClick={() => setCarouselSchedule("now")}
+                    className={`px-2.5 py-1 rounded-md text-[11px] font-semibold transition cursor-pointer ${
+                      carouselSchedule === "now" ? "bg-blue-500 text-white shadow-sm" : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    ⚡ Генерирай Сега
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setCarouselSchedule("scheduled")}
+                    className={`px-2.5 py-1 rounded-md text-[11px] font-semibold transition cursor-pointer ${
+                      carouselSchedule === "scheduled" ? "bg-blue-500 text-white shadow-sm" : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    📅 Планирай
+                  </button>
+                </div>
+                {carouselSchedule === "scheduled" && (
+                  <input
+                    type="datetime-local"
+                    value={carouselScheduleDate}
+                    onChange={(e) => setCarouselScheduleDate(e.target.value)}
+                    className="bg-black/60 border border-blue-500/40 rounded-lg px-2 py-1 text-xs text-blue-300 focus:outline-none focus:ring-1 focus:ring-blue-400 cursor-pointer"
+                  />
+                )}
+              </div>
+            </div>
           </div>
           <button
-            onClick={handleNextCarouselQuickAction}
+            onClick={() => {
+              if (carouselCount === 0) {
+                toast.error("Избрани са 0 карусела. Моля, изберете брой от 1 до 10!");
+                return;
+              }
+              handleNextCarouselQuickAction();
+            }}
             disabled={loading}
             className="inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-blue-500 to-blue-600 px-5 py-3 text-xs font-bold text-white shadow-lg hover:from-blue-400 hover:to-blue-500 transition shrink-0 cursor-pointer self-stretch sm:self-auto"
           >
@@ -931,7 +1212,7 @@ function AssistantPage() {
               </>
             ) : (
               <>
-                <ImageIcon className="size-4" /> Създай Таухид Карусел
+                <ImageIcon className="size-4" /> {carouselCount === 0 ? "Избрани са 0 карусела" : "Създай Таухид Карусел"}
               </>
             )}
           </button>
@@ -939,27 +1220,84 @@ function AssistantPage() {
 
         {/* Batch Plan Suggestion Quick Toolbar */}
         <div className="rounded-2xl border border-teal-500/30 bg-gradient-to-r from-teal-500/10 via-emerald-500/5 to-transparent p-3.5 sm:p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4">
-          <div>
+          <div className="flex-1">
             <div className="flex items-center gap-2 text-teal-400 font-bold text-sm">
               <Brain className="size-4" /> ИНТЕЛИГЕНТЕН ПЛАН ЗА ВАЙРЪЛ ВИДЕА (Коран, Хадиси & TikTok)
             </div>
             <p className="text-xs text-muted-foreground mt-1">
-              AI изготвя план с разнородни теми за одобрение. Избери колко идеи искаш да ти предложи в чата:
+              AI изготвя план с разнородни теми за одобрение. Избери брой идеи (0-10) и график за предлагане:
             </p>
-            <div className="flex flex-wrap items-center gap-2 mt-2.5">
-              {[1, 3, 5, 8, 10].map((num) => (
-                <button
-                  key={num}
-                  type="button"
-                  onClick={() => handleBatchSuggest(num)}
-                  disabled={viralLoading || loading}
-                  className="px-3.5 py-1.5 rounded-xl text-xs font-bold transition border cursor-pointer bg-teal-500/15 text-teal-300 border-teal-500/30 hover:bg-teal-500 hover:text-black shadow-sm"
+            <div className="flex flex-wrap items-center gap-3 mt-2.5">
+              <div className="flex items-center gap-1.5">
+                <span className="text-xs font-semibold text-muted-foreground">Брой:</span>
+                <select
+                  value={planBatchCount}
+                  onChange={(e) => setPlanBatchCount(Number(e.target.value))}
+                  className="bg-black/60 border border-teal-500/40 rounded-lg px-2 py-1 text-xs font-bold text-teal-300 cursor-pointer focus:outline-none focus:ring-1 focus:ring-teal-400"
                 >
-                  📋 План за {num} идеи
-                </button>
-              ))}
+                  {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((num) => (
+                    <option key={num} value={num} className="bg-neutral-900 text-white">
+                      {num} {num === 1 ? "идея" : "идеи"} {num === 1 ? "(по подразбиране)" : ""}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <span className="text-xs font-semibold text-muted-foreground">График:</span>
+                <div className="inline-flex rounded-lg border border-border/50 bg-black/40 p-0.5">
+                  <button
+                    type="button"
+                    onClick={() => setPlanSchedule("now")}
+                    className={`px-2.5 py-1 rounded-md text-[11px] font-semibold transition cursor-pointer ${
+                      planSchedule === "now" ? "bg-teal-500 text-black shadow-sm" : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    ⚡ Генерирай Сега
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPlanSchedule("scheduled")}
+                    className={`px-2.5 py-1 rounded-md text-[11px] font-semibold transition cursor-pointer ${
+                      planSchedule === "scheduled" ? "bg-teal-500 text-black shadow-sm" : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    📅 Планирай
+                  </button>
+                </div>
+                {planSchedule === "scheduled" && (
+                  <input
+                    type="datetime-local"
+                    value={planScheduleDate}
+                    onChange={(e) => setPlanScheduleDate(e.target.value)}
+                    className="bg-black/60 border border-teal-500/40 rounded-lg px-2 py-1 text-xs text-teal-300 focus:outline-none focus:ring-1 focus:ring-teal-400 cursor-pointer"
+                  />
+                )}
+              </div>
             </div>
           </div>
+          <button
+            type="button"
+            onClick={() => {
+              if (planBatchCount === 0) {
+                toast.error("Избрани са 0 идеи. Моля, изберете брой от 1 до 10!");
+                return;
+              }
+              handleBatchSuggest(planBatchCount);
+            }}
+            disabled={viralLoading || loading}
+            className="inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-teal-500 to-emerald-600 px-5 py-3 text-xs font-bold text-black shadow-lg hover:from-teal-400 hover:to-emerald-500 transition shrink-0 cursor-pointer self-stretch sm:self-auto"
+          >
+            {viralLoading ? (
+              <>
+                <Loader2 className="size-4 animate-spin" /> Изготвяне...
+              </>
+            ) : (
+              <>
+                <Brain className="size-4" /> 📋 {planBatchCount === 0 ? "Избрани са 0 идеи" : `Изготви План за ${planBatchCount} ${planBatchCount === 1 ? "Идея" : "Идеи"}`}
+              </>
+            )}
+          </button>
         </div>
       </div>
 
@@ -973,7 +1311,7 @@ function AssistantPage() {
           title="Генерирай нов неповторен аят от Корана"
         >
           <BookOpen className="size-3.5 text-primary" />
-          <span>🕋 Вирален Коран</span>
+          <span>📖 Вирален Коран</span>
         </Button>
         <Button
           variant="outline"
@@ -1003,7 +1341,7 @@ function AssistantPage() {
           }}
           className="rounded-full text-xs cursor-pointer shrink-0"
         >
-          🕋 Сура Ал-Ихляс
+          📖 Сура Ал-Ихляс
         </Button>
         <Button
           variant="outline"
@@ -1155,7 +1493,7 @@ function AssistantPage() {
                         <span className="font-semibold text-muted-foreground">Стил на текста: </span>
                         <span className="font-medium text-primary">
                           {m.proposal.tiktokTheme === "emerald"
-                            ? "🕋 Ислямски Изумруд (Emerald Glow)"
+                            ? "🌿 Ислямски Изумруд (Emerald Glow)"
                             : m.proposal.tiktokTheme === "neon"
                             ? "🔥 Динамичен Неон (Neon Cyan)"
                             : m.proposal.tiktokTheme === "classic"
@@ -1190,74 +1528,97 @@ function AssistantPage() {
                     </div>
 
                     {m.proposal.type !== "carousel" && (
-                      <div className="flex flex-wrap items-center gap-2 pt-2">
-                      <Button
-                        size="sm"
-                        onClick={() => handleConfirmProposal(m.proposal!, idx)}
-                        disabled={confirmingIdx !== null}
-                        className="rounded-lg bg-primary text-primary-foreground font-semibold hover:bg-primary/90 cursor-pointer"
-                      >
-                        {confirmingIdx === idx ? (
-                          <>
-                            <Loader2 className="size-3.5 mr-1.5 animate-spin" />
-                            Генерира се...
-                          </>
-                        ) : (
-                          <>
-                            <CheckCircle2 className="size-3.5 mr-1.5" />
-                            ✨ Генерирай в Изтегляния (за преглед/сваляне)
-                          </>
-                        )}
-                      </Button>
+                      <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-border/40 mt-3">
+                        {/* Step-by-Step Approval ("Едно по Едно") Primary Buttons */}
+                        <Button
+                          size="sm"
+                          onClick={() => handleConfirmProposal(m.proposal!, idx)}
+                          disabled={confirmingIdx !== null || rejectingIdx !== null}
+                          className="rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold shadow-md cursor-pointer transition px-4 py-2 text-xs"
+                          title="Потвърди предложението и стартирай фоновото рендиране"
+                        >
+                          {confirmingIdx === idx ? (
+                            <>
+                              <Loader2 className="size-3.5 mr-1.5 animate-spin" />
+                              Генерира се...
+                            </>
+                          ) : (
+                            <>
+                              <CheckCircle2 className="size-3.5 mr-1.5" />
+                              ✅ Съгласи се / Одобри
+                            </>
+                          )}
+                        </Button>
 
-                      <Button
-                        variant="secondary"
-                        size="sm"
-                        onClick={() => {
-                          localStorage.setItem("edit_proposal", JSON.stringify({ ...m.proposal!, autoGenerate: true }));
-                          navigate({ to: "/create" });
-                        }}
-                        disabled={confirmingIdx !== null}
-                        className="rounded-lg text-xs font-semibold cursor-pointer"
-                        title="Прегледай точния текст, аудио и видео преди рендиране"
-                      >
-                        <Pencil className="size-3.5 mr-1.5" />
-                        Прегледай и Редактирай
-                      </Button>
+                        <Button
+                          size="sm"
+                          variant="destructive"
+                          onClick={() => handleRejectAndSuggestAlternative(m.proposal!, idx)}
+                          disabled={confirmingIdx !== null || rejectingIdx !== null}
+                          className="rounded-xl font-bold shadow-md cursor-pointer transition px-3.5 py-2 text-xs"
+                          title="Откажи това предложение и веднага предложи друго алтернативно"
+                        >
+                          {rejectingIdx === idx ? (
+                            <>
+                              <Loader2 className="size-3.5 mr-1.5 animate-spin" />
+                              Търсене...
+                            </>
+                          ) : (
+                            <>
+                              <Trash2 className="size-3.5 mr-1.5" />
+                              ❌ Откажи / Предложи друг
+                            </>
+                          )}
+                        </Button>
 
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setPrompt("Искам да променим следното в предложението: ")}
-                        className="rounded-lg text-xs cursor-pointer"
-                      >
-                        <Pencil className="size-3.5 mr-1" />
-                        Промени нещо
-                      </Button>
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          onClick={() => {
+                            localStorage.setItem("edit_proposal", JSON.stringify({ ...m.proposal!, autoGenerate: true }));
+                            navigate({ to: "/create" });
+                          }}
+                          disabled={confirmingIdx !== null || rejectingIdx !== null}
+                          className="rounded-xl text-xs font-semibold cursor-pointer"
+                          title="Прегледай точния текст, аудио и видео преди рендиране"
+                        >
+                          <Pencil className="size-3.5 mr-1.5" />
+                          Прегледай и Редактирай
+                        </Button>
 
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={(e) => handleCopyTikTokCaption(m.proposal!.title, m.proposal!.summaryBg, e, m.proposal!.scriptWorkflow)}
-                        className="rounded-lg text-xs border-teal-500/40 text-teal-400 hover:bg-teal-500/10 cursor-pointer"
-                        title="Копирай TikTok Заглавие & Описание"
-                      >
-                        <Copy className="size-3.5 mr-1" />
-                        TikTok Текст
-                      </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setPrompt("Искам да променим следното в предложението: ")}
+                          className="rounded-xl text-xs cursor-pointer"
+                        >
+                          <Pencil className="size-3.5 mr-1" />
+                          Промени нещо
+                        </Button>
 
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={(e) => handleDownloadThumbnail(m.proposal!.title, e)}
-                        disabled={generatingThumbTitle === m.proposal!.title}
-                        className="rounded-lg text-xs border-amber-500/40 text-amber-400 hover:bg-amber-500/10 cursor-pointer"
-                        title="Свали професионална корица за видеото"
-                      >
-                        {generatingThumbTitle === m.proposal!.title ? <Loader2 className="size-3.5 mr-1 animate-spin" /> : <ImageIcon className="size-3.5 mr-1" />}
-                        Корица
-                      </Button>
-                    </div>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={(e) => handleCopyTikTokCaption(m.proposal!.title, m.proposal!.summaryBg, e, m.proposal!.scriptWorkflow)}
+                          className="rounded-xl text-xs border-teal-500/40 text-teal-400 hover:bg-teal-500/10 cursor-pointer"
+                          title="Копирай TikTok Заглавие & Описание"
+                        >
+                          <Copy className="size-3.5 mr-1" />
+                          TikTok Текст
+                        </Button>
+
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={(e) => handleDownloadThumbnail(m.proposal!.title, e)}
+                          disabled={generatingThumbTitle === m.proposal!.title}
+                          className="rounded-xl text-xs border-amber-500/40 text-amber-400 hover:bg-amber-500/10 cursor-pointer"
+                          title="Свали професионална корица за видеото"
+                        >
+                          {generatingThumbTitle === m.proposal!.title ? <Loader2 className="size-3.5 mr-1 animate-spin" /> : <ImageIcon className="size-3.5 mr-1" />}
+                          Корица
+                        </Button>
+                      </div>
                     )}
                   </div>
                 )}
@@ -1304,7 +1665,7 @@ function AssistantPage() {
                                 <span className="text-teal-400">#{propIdx + 1}.</span>
                                 <span>{cleanProposalTitle(prop.title)}</span>
                                 <span className="text-[10px] px-2 py-0.5 rounded-md bg-black/40 border border-border">
-                                  {prop.type === "hadith" ? "📖 Сахих Хадис" : "🕋 Коран / Тренд"}
+                                  {prop.type === "hadith" ? "📖 Сахих Хадис" : "📖 Коран / Тренд"}
                                 </span>
                               </div>
                               {prop.summaryBg && <p className="text-muted-foreground">{prop.summaryBg}</p>}

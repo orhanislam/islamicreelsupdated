@@ -1,7 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import sharp from "sharp";
 import { geminiChat } from "./gemini";
-import { pexelsPhotoQuery } from "./pexels.functions";
+import { pexelsPhotoQuery, matchTheologicalConcept } from "./pexels.functions";
 import { getSafeZone, TIKTOK_SAFE_ZONE, type SafeZoneGeometry } from "./safe-zone";
 
 export interface ThumbnailRequest {
@@ -155,8 +155,10 @@ export function buildViralThumbnailSvg(options: {
 }): { svg: string; fontSize: number; lines: string[]; centerX: number; maxLineWidth: number } {
   const sz = options.safeZone || getSafeZone(options.profile || "tiktok");
   const accentColor = options.accentColor || "#FFD700";
-  const maxWidth = Math.min(sz.W_SAFE, 760);
-  const centerX = sz.CENTER_X; // 480 for TikTok
+  const maxWidth = Math.min(sz.W_SAFE, 780);
+  // TikTok Profile 1:1 and Search 3:4 grid crop optical center is exactly canvas midpoint
+  const centerX = Math.round(sz.W / 2); // 540 for 1080p
+  const centerY = Math.round(sz.H / 2); // 960 for 1920p
 
   const {
     fontSize,
@@ -169,7 +171,7 @@ export function buildViralThumbnailSvg(options: {
     .map((line, i) => {
       const lineWidth = estimateTitleWidth(line, fontSize);
       if (lineWidth > maxLineWidth) maxLineWidth = lineWidth;
-      const y = 880 + (i - (displayLines.length - 1) / 2) * lineHeight;
+      const y = centerY + (i - (displayLines.length - 1) / 2) * lineHeight;
       const isGold =
         i === 0 ||
         line.includes("АЛЛАХ") ||
@@ -218,7 +220,20 @@ export const generateViralThumbnail = createServerFn({ method: "POST" })
       const apiKey = process.env.PEXELS_API_KEY;
       if (!apiKey) throw new Error("No Pexels API Key");
 
-      const photos = await pexelsPhotoQuery(apiKey, finalTitle, 15);
+      // Concept-aware English translation for Pexels photo query (Pexels fails on Cyrillic)
+      let photoQuery = "peaceful nature sunset landscape";
+      const concept = matchTheologicalConcept(data.title);
+      if (concept && concept.roleQueries && concept.roleQueries.dalil && concept.roleQueries.dalil.length > 0) {
+        photoQuery = concept.roleQueries.dalil[0];
+      } else if (/огън|пламък|ад|джехен|наказани/i.test(data.title)) {
+        photoQuery = "fire flames dark night";
+      } else if (/рай|дженет|градин|реки|вечност/i.test(data.title)) {
+        photoQuery = "paradise river waterfall emerald nature";
+      } else if (/покой|спокой|сърц|мир/i.test(data.title)) {
+        photoQuery = "tranquil peaceful lake morning sunrise";
+      }
+
+      const photos = await pexelsPhotoQuery(apiKey, photoQuery, 15);
       if (photos && photos.length > 0) {
         const randomPhoto = photos[Math.floor(Math.random() * Math.min(5, photos.length))];
         const res = await fetch(randomPhoto.src.large2x);
