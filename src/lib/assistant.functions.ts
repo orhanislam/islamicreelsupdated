@@ -353,14 +353,14 @@ ${memoryContext}${historyContext}
 1. Задай proposal.type: "explained_video".
 2. В title ЗАДЪЛЖИТЕЛНО сложи точна референция с ДВОЕТОЧИЕ, последвана от силна и въздействаща ТЕМА на български, напр. "[Коран 13:28] Покоят на сърцата" или "[Сахих ал-Бухари #6424] Силата на търпението". (НИКОГА не използвай долна черта в заглавието, само двоеточие!).
 ВАЖНО ЗА ТЕМАТА: Горе на екрана на видеото ще се изписва ТЕМАТА (напр. "Покоят на сърцата"), която моментално грабва вниманието в TikTok и Reels, а самата референция с име на сурата, номер на сурата и номер на аята (напр. "Сура Ар-Ра'д, сура 13, аят 28") се изговаря гладко и авторитетно в увода на далила от гласа и се показва в субтитрите.
-3. ЗАДЪЛЖИТЕЛНО включи "scriptWorkflow" с 4-степенната структура:
-   - "hookQuestion": Силна кука-въпрос в първите 2-3 секунди, грабваща болка/емоция (напр. "Защо усещаш тежест в гърдите си, дори когато имаш всичко?").
-   - "hookContext": 1-2 кратки изречения кратко обяснение на ситуацията (напр. "Търсим мир в телефона или материалния свят, но душата остава жадна.").
-   - "dalilIntro": "Чуй какво ни казва Аллах Всевишният в Сура [Име на сурата], сура [Номер], аят [Номер]:" (за аят) или "Пратеникът на Аллах ﷺ ни учи в [Сборник], хадис [Номер]:" (за хадис).
-   - "dalilText": Автентичният текст на аята или хадиса на български език.
-   - "explanation": Дълбоко, практично разяснение (поука/тефсир) за съвременния мюсюлманин според Салафите (25-45 думи).
-   - "actionStep": Конкретна духовна стъпка още днес (дуа, истигфар, сабр) + подкана за запазване и споделяне (15-25 думи).
-4. В summaryBg напиши обобщение на поуката (30-50 думи).
+3. ЗАДЪЛЖИТЕЛНО включи "scriptWorkflow" с изчистена структура (БЕЗ ТОЧКИ, БЕЗ НОМЕРАЦИЯ '1.', '2.', '3.', '4.', БЕЗ БУЛЕТИ, БЕЗ 'казва ни се за...'):
+   - "hookQuestion": Силна кука-въпрос в първите 2-3 секунди, грабваща болка/емоция (напр. "Защо усещаш тежест в гърдите си, дори когато имаш всичко?"). Без номерация.
+   - "hookContext": 1-2 кратки изречения обяснение на ситуацията. Без номерация.
+   - "dalilIntro": Кратък въвеждащ преход БЕЗ изрази като 'казва ни се за...' или 'казва ми за...' (напр. "В [Име на сурата], Аллах Всевишният повелява:" или "Пратеникът на Аллах ﷺ ни учи:").
+   - "dalilText": Автентичният текст на аята или хадиса на български език В КАВИЧКИ.
+   - "explanation": Поука според Салафите (25-45 думи). ЗАПОЧВА ДИРЕКТНО БЕЗ ТОЧКИ И НОМЕРАЦИЯ (само като "Поука: ...").
+   - "actionStep": Ако е практическо действие, се обозначава като "Действие: [текст]". Ако е молитва, молба или зикр, се обозначава като "Дуа: [текст]". СТРИКТНО БЕЗ ТОЧКИ И НОМЕРАЦИЯ.
+4. В summaryBg напиши сбита поука (30-50 думи) без точки и номерация.
 5. В themeBg и searchQuery задай точното тематично движещо се видео от 12-те категории (напр. огън за Джехеннем, реки/градини за Дженнет, тихо езеро за Зикр).
 6. Задай useBRoll: true, bRollInterval: 4, tiktokTheme: "hormozi".
 
@@ -720,22 +720,22 @@ export const suggestExplainedVideoProposal = createServerFn({ method: "POST" })
 0% музикални инструменти (piano, music) или книги с ноти.
 ЕМОДЖИТА: Разрешени САМО 🌿, 🕌, 📌, ✨, 💎, 🤍, 🔄, 💬, и "-->". СТРОГО ЗАБРАНЕНИ: ръце (🤲, 👉, 👆, ✍️, 👏), музикални ноти (🎶, 🎵), Кааба (🕋).
 
-ТВОЯТА ЦЕЛ: Да създадеш високоефективен 4-степенен вайръл сценарий за задържане на вниманието (Viral Retention Framework):
+ТВОЯТА ЦЕЛ: Да създадеш високоефективен сценарий за видео с обяснение (СТРИКТНО БЕЗ ТОЧКИ, БЕЗ НОМЕРАЦИЯ '1.', '2.', '3.', '4.', БЕЗ БУЛЕТИ, БЕЗ 'казва ни се за...'):
 
-1. КУКА (HOOK):
-- hookQuestion: Мощен, интригуващ въпрос в първите 2-3 секунди, насочен към реална човешка емоция или житейска болка (тревожност, стрес, грях, търпение, молитва, страх от бъдещето).
-- hookContext: 1-2 кратки изречения, разясняващи защо хората страдат или грешния подход (напр. търсят спокойствие в телефони или пари, но душата остава жадна).
+КУКА (HOOK):
+- hookQuestion: Мощен, интригуващ въпрос в първите 2-3 секунди (насочен към тревожност, стрес, грях, търпение, молитва, страх от бъдещето). Без номерация.
+- hookContext: 1-2 кратки изречения, разясняващи ситуацията. Без номерация.
 
-2. СВЕЩЕН ДАЛИЛ (АЕТ ИЛИ ХАДИС):
-- dalilIntro: "Чуй какво казва Аллах Всевишният в Корана:" (ако е ает) или "Пратеникът на Аллах ﷺ ни учи:" (ако е хадис).
+СВЕЩЕН ДАЛИЛ (АЕТ ИЛИ ХАДИС):
+- dalilIntro: Кратък преход (напр. "В Свещения Коран, Аллах Всевишният повелява:" или "Пратеникът на Аллах ﷺ ни учи:"). НИКОГА не използвай изрази като 'казва ни се за...' или 'казва ми за...'.
 - Точен стих от Корана (surah, ayah, count) ИЛИ Сахих Хадис (collection, number).
-- dalilText: Самият текст на аята или хадиса на чист български език.
+- dalilText: Самият текст на аята или хадиса на чист български език в кавички.
 
-3. РАЗЯСНЕНИЕ (ПОУКА / ТЕФСИР):
-- explanation: Дълбока, практична поука според разбирането на Салафите (ас-Саляф ас-Салих). Обясни житейския смисъл — защо този ает/хадис дава спокойствие и решение на проблема. (25-45 думи).
+ПОУКА (РАЗЯСНЕНИЕ / ТЕФСИР):
+- explanation: Дълбока, практична поука според разбирането на Салафите (25-45 думи). Пише се САМО като "Поука: [текст]" — БЕЗ точки, БЕЗ номерация ('3.', '•').
 
-4. ДЕЙСТВИЕ (ACTION / CTA):
-- actionStep: Конкретна духовна стъпка, която зрителят да направи още днес (напр. искрен истигфар, дуа, сабр, прошка) + подкана за запазване и споделяне за садака джария. (15-25 думи).
+ДЕЙСТВИЕ ИЛИ ДУА:
+- actionStep: Ако е практическо дело, се обозначава с "Действие: [текст]". Ако е молитва, молба или зикр, се обозначава с "Дуа: [текст]". БЕЗ точки, БЕЗ номерация ('4.', '•'). (15-25 думи).
 ${historyContext}
 ${userTopic}
 
@@ -1163,6 +1163,23 @@ export function formatSpokenCitation(rawRef: string, isQuran: boolean): string {
   return ref;
 }
 
+export function detectActionOrDuaLabel(text?: string): "Дуа" | "Действие" {
+  if (!text) return "Действие";
+  const lower = text.toLowerCase();
+  const isDua =
+    /(?:\bдуа|\bду'а|молба|моли се|помоли|молитва|истигфар|астагфируллах|субханаллах|алхамдулиллах|хасбуналлах|рабби|аллахумма|дуата)\b/i.test(
+      lower,
+    );
+  return isDua ? "Дуа" : "Действие";
+}
+
+export function cleanScriptPrefixes(text: string): string {
+  return text
+    .replace(/(^|\n)\s*(?:\(\d+\)|\[\d+\]|\d+\.|\*|-|•)\s*/g, "$1")
+    .replace(/^(?:поука|обяснение|действие|дуа|призив):\s*/i, "")
+    .trim();
+}
+
 export function buildExplainedNarrationText(params: {
   viralTitle?: string;
   reference: string;
@@ -1174,16 +1191,16 @@ export function buildExplainedNarrationText(params: {
   const sw = params.scriptWorkflow;
   const blocks: string[] = [];
 
-  // Step 1: Hook (Question & Short Context)
+  // Step 1: Hook (Question & Short Context) - strictly clean, without numbered dots
   const hookParts: string[] = [];
   if (sw?.hookQuestion) {
-    hookParts.push(sw.hookQuestion.trim());
+    hookParts.push(cleanScriptPrefixes(sw.hookQuestion));
   }
   if (sw?.hookContext) {
-    hookParts.push(sw.hookContext.trim());
+    hookParts.push(cleanScriptPrefixes(sw.hookContext));
   }
   if (hookParts.length === 0 && params.viralTitle && !params.viralTitle.startsWith("[")) {
-    hookParts.push(params.viralTitle);
+    hookParts.push(cleanScriptPrefixes(params.viralTitle));
   }
   if (hookParts.length > 0) {
     blocks.push(hookParts.join(" "));
@@ -1192,6 +1209,9 @@ export function buildExplainedNarrationText(params: {
   // Step 2: Dalil (Intro + Sacred Quote)
   const spokenRef = formatSpokenCitation(params.reference, params.isQuran);
   let intro = (sw?.dalilIntro || "").trim();
+  // Strip awkward "казва ни/ми се за..." patterns
+  intro = intro.replace(/^(?:чуй\s+какво\s+)?(?:ни\s+)?казва\s+(?:се\s+)?(?:ни\s+)?за\s*[^:]*:\s*/i, "");
+
   if (
     !intro ||
     intro === "Чуй какво казва Аллах Всевишният в Корана:" ||
@@ -1210,32 +1230,33 @@ export function buildExplainedNarrationText(params: {
   }
 
   const cleanDalil = params.quoteText
-    .replace(/(^|\n)\s*(?:\(\d+\)|\[\d+\]|\d+\.)\s*/g, "$1")
+    .replace(/(^|\n)\s*(?:\(\d+\)|\[\d+\]|\d+\.|\*|-|•)\s*/g, "$1")
     .replace(/\[(?:коран|сура|хадис|бухари|муслим|тирмизи|навауи)[^\]]*\]/gi, "")
     .replace(/\((?:коран|сура|хадис|бухари|муслим|тирмизи|навауи)[^)]*\)/gi, "")
     .replace(/^["„“']+|["„“']+$/g, "")
+    .replace(/^(?:чуй\s+какво\s+)?(?:ни\s+)?казва\s+(?:се\s+)?(?:ни\s+)?за\s*[^:]*:\s*/i, "")
     .trim();
 
   blocks.push(`${intro}\n„${cleanDalil}“`);
 
-  // Step 3: Explanation (Поука / Тефсир)
+  // Step 3: Explanation (Поука:) - strictly labeled "Поука:" without dots or numbering
   let explanation = sw?.explanation?.trim() || "";
   if (!explanation && params.summaryBg) {
-    explanation = params.summaryBg
-      .replace(/^поука:\s*/i, "")
-      .replace(/^обяснение:\s*/i, "")
-      .trim();
+    explanation = params.summaryBg.trim();
   }
   if (explanation) {
-    blocks.push(`Поука: ${explanation.replace(/^поука:\s*/i, "").trim()}`);
+    const cleanExpl = cleanScriptPrefixes(explanation);
+    blocks.push(`Поука: ${cleanExpl}`);
   }
 
-  // Step 4: Action (Действие / Призив)
+  // Step 4: Action or Dua (Действие: или Дуа:) - strictly without dots or numbering
   let action = sw?.actionStep?.trim() || "";
   if (!action) {
     action = "Запази това напомняне за моменти на трудност и сподели за садака джария!";
   }
-  blocks.push(`Действие: ${action.replace(/^действие:\s*/i, "").trim()}`);
+  const cleanAct = cleanScriptPrefixes(action);
+  const label = detectActionOrDuaLabel(cleanAct);
+  blocks.push(`${label}: ${cleanAct}`);
 
   return blocks.join(' <break time="0.7s" />\n\n');
 }

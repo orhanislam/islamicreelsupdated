@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { copyToClipboardFallback } from "@/lib/utils";
 import { toast } from "sonner";
-import { chatWithAssistant, suggestViralProposal, suggestExplainedVideoProposal, suggestAlternativeProposal, suggestBatchViralProposals, confirmAndGenerateVideo, startBatchViralSeries, startBatchViralHadithSeries, getAssistantHistory, saveAssistantHistory, clearAssistantHistory, startBackgroundPlanGeneration, startBackgroundBatchGeneration, checkActiveBackgroundTasks, cleanProposalTitle, extractTopic, type VideoProposal, type ExplainedVideoScript } from "@/lib/assistant.functions";
+import { chatWithAssistant, suggestViralProposal, suggestExplainedVideoProposal, suggestAlternativeProposal, suggestBatchViralProposals, confirmAndGenerateVideo, startBatchViralSeries, startBatchViralHadithSeries, getAssistantHistory, saveAssistantHistory, clearAssistantHistory, startBackgroundPlanGeneration, startBackgroundBatchGeneration, checkActiveBackgroundTasks, cleanProposalTitle, extractTopic, detectActionOrDuaLabel, cleanScriptPrefixes, type VideoProposal, type ExplainedVideoScript } from "@/lib/assistant.functions";
 import { getAiMemory, updateAiMemory, type AiMemory } from "@/lib/memory.functions";
 import { generateViralThumbnail } from "@/lib/thumbnail.functions";
 import { formatViralSocialCaption } from "@/lib/caption.functions";
@@ -279,7 +279,10 @@ function AssistantPage() {
     let text = "";
     if (scriptWorkflow) {
       const sw = scriptWorkflow;
-      text = `🎣 ${sw.hookQuestion}\n${sw.hookContext}\n\n📖 ${title}\n${sw.dalilIntro ? `${sw.dalilIntro}\n` : ""}„${sw.dalilText || title}“\n\n💡 Поука: ${sw.explanation}\n\n⚡ Действие: ${sw.actionStep}\n\n#islamicreels #коран #хадис #ислям #напомняне #садакаджария #bulgaria #islamicvideo`;
+      const actLabel = detectActionOrDuaLabel(sw.actionStep);
+      const cleanExpl = cleanScriptPrefixes(sw.explanation);
+      const cleanAct = cleanScriptPrefixes(sw.actionStep);
+      text = `${sw.hookQuestion ? `${cleanScriptPrefixes(sw.hookQuestion)}\n${cleanScriptPrefixes(sw.hookContext || "")}\n\n` : ""}📖 ${title}\n„${sw.dalilText || title}“\n\n💡 Поука: ${cleanExpl}\n\n${actLabel === "Дуа" ? "🤍 Дуа:" : "⚡ Действие:"} ${cleanAct}\n\n#islamicreels #коран #хадис #ислям #напомняне #садакаджария #bulgaria #islamicvideo`;
     } else {
       const cleanTitle = getThumbTitle(title);
       text = formatViralSocialCaption(cleanTitle, summary);
@@ -479,11 +482,18 @@ function AssistantPage() {
         },
       });
 
+      const altAct = res.proposal?.scriptWorkflow?.actionStep
+        ? cleanScriptPrefixes(res.proposal.scriptWorkflow.actionStep)
+        : "";
+      const altActLabel = altAct ? detectActionOrDuaLabel(altAct) : "";
+      const altActText = altAct ? `\n${altActLabel === "Дуа" ? "🤍" : "⚡"} **${altActLabel}:** ${altAct}` : "";
+      const altExpl = cleanScriptPrefixes(res.proposal?.scriptWorkflow?.explanation || res.proposal?.summaryBg || "");
+
       setMessages((prev) => [
         ...prev,
         {
           role: "assistant",
-          text: `🔄 **Алтернативно предложение:**\n\n${res.reply}\n\n📖 **Нов цитат:** ${res.proposal?.title}\n💡 **Поука / Обяснение:** ${res.proposal?.summaryBg}\n🎨 **Атмосфера:** ${res.proposal?.themeBg}\n\n📌 Натисни **\"✅ Съгласи се / Одобри\"** за да го генерираме, или **\"❌ Откажи / Предложи друг\"** за още едно!`,
+          text: `🔄 **Алтернативно предложение:**\n\n${res.reply}\n\n📖 **Цитат:** ${res.proposal?.title}\n💡 **Поука:** ${altExpl}${altActText}\n🎨 **Атмосфера:** ${res.proposal?.themeBg}\n\n📌 Натисни **\"✅ Съгласи се / Одобри\"** за да го генерираме, или **\"❌ Откажи / Предложи друг\"** за още едно!`,
           proposal: res.proposal,
         },
       ]);
@@ -668,11 +678,18 @@ function AssistantPage() {
         ? `\n\n📅 **Планирано време за рендиране:** ${new Date(explainedScheduleDate).toLocaleString("bg-BG")}`
         : "";
 
+      const expAct = res.proposal?.scriptWorkflow?.actionStep
+        ? cleanScriptPrefixes(res.proposal.scriptWorkflow.actionStep)
+        : "";
+      const expActLabel = expAct ? detectActionOrDuaLabel(expAct) : "";
+      const expActText = expAct ? `\n${expActLabel === "Дуа" ? "🤍" : "⚡"} **${expActLabel}:** ${expAct}` : "";
+      const expExpl = cleanScriptPrefixes(res.proposal?.scriptWorkflow?.explanation || res.proposal?.summaryBg || "");
+
       setMessages((prev) => [
         ...prev,
         {
           role: "assistant",
-          text: `🎬 **Ислямско видео с обяснение:**\n\n${res.reply}\n\n📖 **Цитат:** ${res.proposal?.title}\n💡 **Поука / Обяснение:** ${res.proposal?.summaryBg}\n🎨 **Атмосфера:** ${res.proposal?.themeBg}${scheduleNote}\n\n📌 Натисни **\"✅ Съгласи се / Одобри\"** за да стартираме видеото, или **\"❌ Откажи / Предложи друг\"** за алтернатива!`,
+          text: `🎬 **Ислямско видео с обяснение:**\n\n${res.reply}\n\n📖 **Цитат:** ${res.proposal?.title}\n💡 **Поука:** ${expExpl}${expActText}\n🎨 **Атмосфера:** ${res.proposal?.themeBg}${scheduleNote}\n\n📌 Натисни **\"✅ Съгласи се / Одобри\"** за да стартираме видеото, или **\"❌ Откажи / Предложи друг\"** за алтернатива!`,
           proposal: res.proposal,
         },
       ]);
@@ -1432,21 +1449,21 @@ function AssistantPage() {
 
                               {m.proposal.scriptWorkflow ? (
                                 <div className="space-y-2 text-xs">
-                                  <div className="p-2.5 rounded-lg bg-black/40 border border-emerald-500/20">
-                                    <div className="font-bold text-amber-400 flex items-center gap-1 mb-1">
-                                      <span>🎣 1. КУКА (ВЪПРОС & ВЪВЕДЕНИЕ)</span>
+                                  {m.proposal.scriptWorkflow.hookQuestion && (
+                                    <div className="p-2.5 rounded-lg bg-black/40 border border-amber-500/20">
+                                      <div className="font-semibold text-white/95">„{cleanScriptPrefixes(m.proposal.scriptWorkflow.hookQuestion)}“</div>
+                                      {m.proposal.scriptWorkflow.hookContext && (
+                                        <div className="text-white/70 mt-0.5">{cleanScriptPrefixes(m.proposal.scriptWorkflow.hookContext)}</div>
+                                      )}
                                     </div>
-                                    <div className="font-semibold text-white/95">„{m.proposal.scriptWorkflow.hookQuestion}“</div>
-                                    <div className="text-white/70 mt-0.5">{m.proposal.scriptWorkflow.hookContext}</div>
-                                  </div>
+                                  )}
 
                                   <div className="p-2.5 rounded-lg bg-black/40 border border-teal-500/20">
                                     <div className="font-bold text-teal-300 flex items-center gap-1 mb-1">
-                                      <span>📖 2. СВЕЩЕН ДАЛИЛ (АЕТ / ХАДИС)</span>
+                                      <span>📖 Свещен цитат</span>
                                     </div>
-                                    <div className="text-white/80 italic text-[11px] mb-1">{m.proposal.scriptWorkflow.dalilIntro || "Чуй какво ни разкрива свещеното слово:"}</div>
                                     {m.proposal.scriptWorkflow.dalilText ? (
-                                      <div className="font-medium text-white/90">„{m.proposal.scriptWorkflow.dalilText}“</div>
+                                      <div className="font-medium text-white/90">„{cleanScriptPrefixes(m.proposal.scriptWorkflow.dalilText)}“</div>
                                     ) : (
                                       <div className="font-semibold text-primary">{m.proposal.title}</div>
                                     )}
@@ -1454,23 +1471,29 @@ function AssistantPage() {
 
                                   <div className="p-2.5 rounded-lg bg-black/40 border border-sky-500/20">
                                     <div className="font-bold text-sky-300 flex items-center gap-1 mb-1">
-                                      <span>💡 3. РАЗЯСНЕНИЕ (ПОУКА / ТЕФСИР)</span>
+                                      <span>💡 Поука:</span>
                                     </div>
-                                    <div className="text-white/90">{m.proposal.scriptWorkflow.explanation}</div>
+                                    <div className="text-white/90">{cleanScriptPrefixes(m.proposal.scriptWorkflow.explanation)}</div>
                                   </div>
 
                                   <div className="p-2.5 rounded-lg bg-black/40 border border-emerald-500/30">
                                     <div className="font-bold text-emerald-300 flex items-center gap-1 mb-1">
-                                      <span>⚡ 4. ДЕЙСТВИЕ (ПРАКТИЧЕСКА СТЪПКА & CTA)</span>
+                                      <span>
+                                        {detectActionOrDuaLabel(m.proposal.scriptWorkflow.actionStep) === "Дуа"
+                                          ? "🤍 Дуа:"
+                                          : "⚡ Действие:"}
+                                      </span>
                                     </div>
-                                    <div className="text-emerald-100/90 font-medium">{m.proposal.scriptWorkflow.actionStep}</div>
+                                    <div className="text-emerald-100/90 font-medium">
+                                      {cleanScriptPrefixes(m.proposal.scriptWorkflow.actionStep)}
+                                    </div>
                                   </div>
                                 </div>
                               ) : (
                                 m.proposal.summaryBg && (
                                   <div className="text-xs">
-                                    <span className="font-semibold text-emerald-400">Поука / Обяснение: </span>
-                                    <span className="text-foreground">{m.proposal.summaryBg}</span>
+                                    <span className="font-semibold text-emerald-400">Поука: </span>
+                                    <span className="text-foreground">{cleanScriptPrefixes(m.proposal.summaryBg)}</span>
                                   </div>
                                 )
                               )}
