@@ -12,6 +12,7 @@ import JSZip from "jszip";
 import { autoSplitSlides } from "@/lib/split-slides";
 import { buildCarouselVideo } from "@/lib/carousel-video.functions";
 import { fetchCarouselSlideVideos, getCarouselSlideVideos } from "@/lib/pexels.functions";
+import { addGenerationHistoryEntry } from "@/lib/generation-history.functions";
 
 type Slide = {
   topTitle: string;
@@ -142,6 +143,19 @@ export function CarouselRendererButton({ slides: initialSlides, title }: { slide
       const safeFilename = `${cleanTitle.replace(/[<>:"/\\|?*]+/g, "_")}_Carousel.zip`;
       await saveMediaBlob(zipBlob, safeFilename, "application/zip");
       toast.success("Успешно изтеглен ZIP архив!");
+
+      addGenerationHistoryEntry({
+        data: {
+          entry: {
+            type: "carousel",
+            title: cleanTitle,
+            reference: cleanTitle,
+            bulgarianText: initialSlides[0]?.mainText || initialSlides[0]?.topTitle,
+            format: "carousel",
+            timestamp: Date.now(),
+          },
+        },
+      }).catch(() => {});
     } catch (err: any) {
       console.error(err);
       toast.error("Грешка при генериране: " + err.message);

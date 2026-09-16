@@ -1,4 +1,4 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useState, useRef, useEffect } from "react";
 import { fetchAyah, type AyahData } from "@/lib/quran.functions";
@@ -30,6 +30,11 @@ import { renderVideo } from "@/lib/render-video";
 import { enqueueDownload } from "@/lib/downloads-queue";
 import { synthesizeHadithNarration } from "@/lib/tts.functions";
 import { runServerRender, startServerRenderJob } from "@/lib/render.functions";
+import {
+  addGenerationHistoryEntry,
+  checkScriptureCooldown,
+  type CooldownCheckResult,
+} from "@/lib/generation-history.functions";
 import { formatViralSocialCaption } from "@/lib/caption.functions";
 import { generateViralThumbnail } from "@/lib/thumbnail.functions";
 import { alignAudioTimestamps } from "@/lib/audio-align.functions";
@@ -68,6 +73,9 @@ import {
   Shield,
   RotateCcw,
   Volume2,
+  History,
+  AlertTriangle,
+  ShieldCheck,
 } from "lucide-react";
 
 type BgSuggestion = { label: string; prompt: string };
@@ -104,6 +112,7 @@ function CreatePage() {
   const runSuggestViral = useServerFn(suggestViral);
   const runNarrate = useServerFn(synthesizeHadithNarration);
   const runFetchMultiScene = useServerFn(fetchMultiSceneBRoll);
+  const runCheckCooldown = useServerFn(checkScriptureCooldown);
 
   // sources
   const [tab, setTab] = useState<"ayah" | "hadith" | "viral">("ayah");
@@ -117,6 +126,29 @@ function CreatePage() {
   const [theme, setTheme] = useState("надежда и спокойствие в трудни моменти");
   const [viral, setViral] = useState<ViralItem[]>([]);
   const [suggestingViral, setSuggestingViral] = useState(false);
+  const [cooldownWarning, setCooldownWarning] = useState<CooldownCheckResult | null>(null);
+
+  const verifyCooldown = async (params: {
+    type?: string;
+    surah?: number;
+    ayah?: number;
+    ayahEnd?: number;
+    collection?: string;
+    number?: number | string;
+    title?: string;
+    reference?: string;
+  }) => {
+    try {
+      const res = await runCheckCooldown({ data: params });
+      if (res?.isBlocked) {
+        setCooldownWarning(res);
+      } else {
+        setCooldownWarning(null);
+      }
+    } catch {
+      setCooldownWarning(null);
+    }
+  };
 
   // current content
   const [content, setContent] = useState<Content | null>(null);
@@ -298,11 +330,13 @@ function CreatePage() {
     setPexelsTheme("");
     setPexelsTried([]);
     setPexelsAvoid([]);
+    setCooldownWarning(null);
   };
 
   const loadAyah = async (s: number, a: number, aEnd?: number, prependTheme?: string) => {
     setLoading(true);
     reset();
+    verifyCooldown({ type: "ayah", surah: s, ayah: a, ayahEnd: aEnd });
     try {
       const d: AyahData = await runFetchAyah({ data: { surah: s, ayah: a, ayahEnd: aEnd } });
       const refStr =
@@ -350,6 +384,7 @@ function CreatePage() {
   const loadHadith = async (n: number) => {
     setLoading(true);
     reset();
+    verifyCooldown({ type: "hadith", number: n, title: `Хадис #${n}` });
     try {
       const h = await runFetchHadith({ data: { number: n } });
       const c: Content = {
@@ -391,6 +426,7 @@ function CreatePage() {
   ) => {
     setLoading(true);
     reset();
+    verifyCooldown({ type: "hadith", collection, number, title: `${collection} #${number}` });
     try {
       const h = await runFetchSunnah({ data: { collection, number, requireSahih } });
       const c: Content = {
@@ -429,6 +465,7 @@ function CreatePage() {
     try {
       const h = await runRandomSahih({ data: { collection } });
       setSunnahNum(h.number);
+      verifyCooldown({ type: "hadith", collection, number: h.number, title: `${collection} #${h.number}` });
       const c: Content = {
         source_type: "hadith",
         source_ref: `${h.reference}`,
@@ -798,6 +835,20 @@ function CreatePage() {
         setRenderedExt("png");
         setRenderedMime("image/png");
         toast.success("Снимката е готова");
+        addGenerationHistoryEntry({
+          data: {
+            entry: {
+              type: content.source_type === "hadith" ? "hadith" : "ayah",
+              title: effectiveTopic || content.source_ref,
+              reference: displayRef,
+              arabicText: content.arabic,
+              bulgarianText: bulgarian,
+              format: "photo",
+              theme: tiktokTheme,
+              timestamp: Date.now(),
+            },
+          },
+        }).catch(() => {});
       } else {
         let narration = narrationUrl;
         let timings = narrationTimings;
@@ -897,6 +948,21 @@ function CreatePage() {
           mimeType: cleanMediaMimeType(mimeType),
           createdAt: Date.now(),
         });
+        addGenerationHistoryEntry({
+          data: {
+            entry: {
+              id,
+              type: content.source_type === "hadith" ? "hadith" : "ayah",
+              title: effectiveTopic || content.source_ref,
+              reference: displayRef,
+              arabicText: content.arabic,
+              bulgarianText: bulgarian,
+              format: "video",
+              theme: tiktokTheme,
+              timestamp: Date.now(),
+            },
+          },
+        }).catch(() => {});
         toast.success("Видеото е готово! Прехвърляне към изтегляния...");
         navigate({ to: "/downloads" });
         return;
@@ -1048,10 +1114,46 @@ function CreatePage() {
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-8">
-      <h1 className="text-4xl">Създай пост</h1>
-      <p className="font-ui text-sm text-muted-foreground">
-        Избери източник, преведи, добави фон и каптион, рендирай.
-      </p>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-3">
+        <div>
+          <h1 className="text-3xl sm:text-4xl font-bold tracking-tight">Създай видео / пост</h1>
+          <p className="font-ui text-sm text-muted-foreground mt-0.5">
+            Избери източник, преведи, добави фон и каптион, рендирай.
+          </p>
+        </div>
+        <Link to="/history">
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-2 border-primary/30 hover:bg-primary/10 self-start sm:self-auto shadow-sm"
+          >
+            <History className="size-4 text-primary" />
+            <span>История на генериранията</span>
+          </Button>
+        </Link>
+      </div>
+
+      {cooldownWarning && cooldownWarning.isBlocked && (
+        <div className="mt-4 mb-4 rounded-xl border border-amber-500/40 bg-amber-500/10 p-4 flex items-start gap-3 text-amber-200 shadow-sm">
+          <AlertTriangle className="size-5 text-amber-400 shrink-0 mt-0.5" />
+          <div className="space-y-1 text-xs">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="font-semibold text-amber-200 text-sm">
+                Внимание: Този текст е в активна 30-дневна пауза за уникалност!
+              </span>
+              <Badge variant="outline" className="text-[10px] bg-amber-500/20 text-amber-300 border-amber-500/30">
+                Остават още {cooldownWarning.daysRemaining} {cooldownWarning.daysRemaining === 1 ? "ден" : "дни"}
+              </Badge>
+            </div>
+            <p className="text-amber-300/90 text-xs leading-relaxed">
+              {cooldownWarning.reason}
+            </p>
+            <p className="text-muted-foreground text-[11px]">
+              Препоръчва се да изберете друг аят или хадис, за да гарантирате разнообразие на вашето TikTok съдържание.
+            </p>
+          </div>
+        </div>
+      )}
 
       <Tabs value={tab} onValueChange={(v) => setTab(v as typeof tab)} className="mt-6">
         <TabsList>

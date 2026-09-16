@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as AppRouteRouteImport } from './routes/_app/route'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as InternalRenderRouteImport } from './routes/internal/render'
+import { Route as AppHistoryRouteImport } from './routes/_app/history'
 import { Route as AppDownloadsRouteImport } from './routes/_app/downloads'
 import { Route as AppCreateRouteImport } from './routes/_app/create'
 import { Route as AppAssistantRouteImport } from './routes/_app/assistant'
@@ -29,6 +30,11 @@ const InternalRenderRoute = InternalRenderRouteImport.update({
   id: '/internal/render',
   path: '/internal/render',
   getParentRoute: () => rootRouteImport,
+} as any)
+const AppHistoryRoute = AppHistoryRouteImport.update({
+  id: '/history',
+  path: '/history',
+  getParentRoute: () => AppRouteRoute,
 } as any)
 const AppDownloadsRoute = AppDownloadsRouteImport.update({
   id: '/downloads',
@@ -51,6 +57,7 @@ export interface FileRoutesByFullPath {
   '/assistant': typeof AppAssistantRoute
   '/create': typeof AppCreateRoute
   '/downloads': typeof AppDownloadsRoute
+  '/history': typeof AppHistoryRoute
   '/internal/render': typeof InternalRenderRoute
 }
 export interface FileRoutesByTo {
@@ -58,6 +65,7 @@ export interface FileRoutesByTo {
   '/assistant': typeof AppAssistantRoute
   '/create': typeof AppCreateRoute
   '/downloads': typeof AppDownloadsRoute
+  '/history': typeof AppHistoryRoute
   '/internal/render': typeof InternalRenderRoute
 }
 export interface FileRoutesById {
@@ -67,13 +75,26 @@ export interface FileRoutesById {
   '/_app/assistant': typeof AppAssistantRoute
   '/_app/create': typeof AppCreateRoute
   '/_app/downloads': typeof AppDownloadsRoute
+  '/_app/history': typeof AppHistoryRoute
   '/internal/render': typeof InternalRenderRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/assistant' | '/create' | '/downloads' | '/internal/render'
+  fullPaths:
+    | '/'
+    | '/assistant'
+    | '/create'
+    | '/downloads'
+    | '/history'
+    | '/internal/render'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/assistant' | '/create' | '/downloads' | '/internal/render'
+  to:
+    | '/'
+    | '/assistant'
+    | '/create'
+    | '/downloads'
+    | '/history'
+    | '/internal/render'
   id:
     | '__root__'
     | '/'
@@ -81,6 +102,7 @@ export interface FileRouteTypes {
     | '/_app/assistant'
     | '/_app/create'
     | '/_app/downloads'
+    | '/_app/history'
     | '/internal/render'
   fileRoutesById: FileRoutesById
 }
@@ -113,6 +135,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof InternalRenderRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/_app/history': {
+      id: '/_app/history'
+      path: '/history'
+      fullPath: '/history'
+      preLoaderRoute: typeof AppHistoryRouteImport
+      parentRoute: typeof AppRouteRoute
+    }
     '/_app/downloads': {
       id: '/_app/downloads'
       path: '/downloads'
@@ -141,12 +170,14 @@ interface AppRouteRouteChildren {
   AppAssistantRoute: typeof AppAssistantRoute
   AppCreateRoute: typeof AppCreateRoute
   AppDownloadsRoute: typeof AppDownloadsRoute
+  AppHistoryRoute: typeof AppHistoryRoute
 }
 
 const AppRouteRouteChildren: AppRouteRouteChildren = {
   AppAssistantRoute: AppAssistantRoute,
   AppCreateRoute: AppCreateRoute,
   AppDownloadsRoute: AppDownloadsRoute,
+  AppHistoryRoute: AppHistoryRoute,
 }
 
 const AppRouteRouteWithChildren = AppRouteRoute._addFileChildren(

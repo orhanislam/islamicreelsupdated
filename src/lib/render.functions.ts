@@ -8,6 +8,8 @@ import {
   getSafeAssStyles,
   TIKTOK_SAFE_ZONE,
 } from "./safe-zone";
+import { recordGenerationEntryDirect } from "./generation-history.functions";
+
 
 /**
  * Calibrated text measurement for Cyrillic/Bulgarian & Latin Outfit font.
@@ -1489,6 +1491,19 @@ export const startServerRenderJob = createServerFn({ method: "POST" })
 
     backgroundRenderQueue.push({ id: jobId, data, title: title || "Ислямско видео" });
     processRenderQueue().catch((e) => console.error("[server-queue] Queue processing error:", e));
+
+    // Record into persistent generation history
+    recordGenerationEntryDirect({
+      id: jobId,
+      title: title || data?.reference || "Ислямско видео",
+      reference: data?.reference || title || "Ислямско видео",
+      arabicText: data?.arabic,
+      bulgarianText: data?.bulgarian,
+      timestamp: Date.now(),
+      format: "video",
+      theme: data?.tiktokTheme || data?.style,
+      status: "queued",
+    }).catch((e) => console.error("[history] Failed to record generation:", e));
 
     return { jobId, status: "queued" };
   });

@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { BookOpen, Sparkles, Video } from "lucide-react";
+import { BookOpen, Sparkles, Video, History, Bot } from "lucide-react";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -21,17 +21,33 @@ function Landing() {
   return (
     <div className="min-h-screen bg-background text-foreground">
       <header className="sticky top-0 z-50 border-b border-white/5 bg-background/60 backdrop-blur-xl shadow-sm">
-        <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-5">
+        <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4 sm:py-5">
           <div className="flex items-center gap-2">
             <div className="size-8 rounded-full bg-primary text-primary-foreground grid place-items-center font-arabic text-lg shadow-lg shadow-primary/20">ن</div>
             <span className="text-xl font-semibold tracking-tight">Nur Studio</span>
           </div>
-          <Link
-            to="/create"
-            className="font-ui rounded-md bg-primary px-5 py-2.5 text-sm font-medium text-primary-foreground shadow-lg shadow-primary/30 transition-all hover:scale-105 hover:bg-primary/90"
-          >
-            Създай
-          </Link>
+          <nav className="flex items-center gap-2 sm:gap-3">
+            <Link
+              to="/assistant"
+              className="font-ui hidden sm:flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
+            >
+              <Bot className="size-4 text-primary" />
+              AI Асистент
+            </Link>
+            <Link
+              to="/history"
+              className="font-ui flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
+            >
+              <History className="size-4 text-primary" />
+              История
+            </Link>
+            <Link
+              to="/create"
+              className="font-ui rounded-md bg-primary px-4 sm:px-5 py-2 sm:py-2.5 text-sm font-medium text-primary-foreground shadow-lg shadow-primary/30 transition-all hover:scale-105 hover:bg-primary/90"
+            >
+              Създай
+            </Link>
+          </nav>
         </div>
       </header>
 
@@ -55,9 +71,10 @@ function Landing() {
           <Link to="/create" className="rounded-full bg-primary px-8 py-3.5 text-primary-foreground font-medium shadow-xl shadow-primary/30 transition-all hover:scale-105 hover:bg-primary/90">
             Започни безплатно
           </Link>
-          <a href="#features" className="rounded-full border border-white/10 bg-card/40 backdrop-blur-md px-8 py-3.5 font-medium transition-all hover:bg-secondary hover:scale-105">
-            Виж как работи
-          </a>
+          <Link to="/history" className="rounded-full border border-white/10 bg-card/40 backdrop-blur-md px-6 py-3.5 font-medium transition-all hover:bg-secondary hover:scale-105 flex items-center gap-2">
+            <History className="size-4 text-primary" />
+            Виж историята
+          </Link>
         </div>
 
         <div id="features" className="font-ui mt-24 grid gap-6 md:grid-cols-3 text-left">

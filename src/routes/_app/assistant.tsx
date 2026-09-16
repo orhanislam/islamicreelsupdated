@@ -1,7 +1,7 @@
 import { CarouselRendererButton } from "@/components/CarouselRendererButton";
 import React, { useState, useEffect, useRef } from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { Bot, Send, Loader2, Sparkles, Download, CheckCircle2, Video, Pencil, Brain, Trash2, Plus, Copy, Image as ImageIcon, BookOpen, ScrollText } from "lucide-react";
+import { Bot, Send, Loader2, Sparkles, Download, CheckCircle2, Video, Pencil, Brain, Trash2, Plus, Copy, Image as ImageIcon, BookOpen, ScrollText, ShieldCheck, History } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
@@ -9,6 +9,7 @@ import { copyToClipboardFallback } from "@/lib/utils";
 import { toast } from "sonner";
 import { chatWithAssistant, suggestViralProposal, suggestExplainedVideoProposal, suggestAlternativeProposal, suggestBatchViralProposals, confirmAndGenerateVideo, startBatchViralSeries, startBatchViralHadithSeries, getAssistantHistory, saveAssistantHistory, clearAssistantHistory, startBackgroundPlanGeneration, startBackgroundBatchGeneration, checkActiveBackgroundTasks, cleanProposalTitle, extractTopic, detectActionOrDuaLabel, cleanScriptPrefixes, type VideoProposal, type ExplainedVideoScript } from "@/lib/assistant.functions";
 import { getAiMemory, updateAiMemory, type AiMemory } from "@/lib/memory.functions";
+import { getOneMonthCooldownSummary } from "@/lib/generation-history.functions";
 import { generateViralThumbnail } from "@/lib/thumbnail.functions";
 import { formatViralSocialCaption } from "@/lib/caption.functions";
 import { playStudioClick } from "@/lib/sfx";
@@ -104,6 +105,11 @@ function AssistantPage() {
   }, [messages, loading]);
   const [generatingThumbTitle, setGeneratingThumbTitle] = useState<string | null>(null);
   const [activeTasks, setActiveTasks] = useState<any[]>([]);
+  const [cooldownSummary, setCooldownSummary] = useState<{
+    totalBlocked: number;
+    ayahs: Array<{ key: string; surah?: number; ayah?: number; daysRemaining: number; title: string }>;
+    hadiths: Array<{ key: string; collection?: string; number?: number; daysRemaining: number; title: string }>;
+  } | null>(null);
 
   const [usedQuranKeys, setUsedQuranKeys] = useState<string[]>(() => {
     if (typeof window !== "undefined" && window.localStorage) {
@@ -143,10 +149,20 @@ function AssistantPage() {
 
   const handleNextQuranQuickAction = () => {
     playStudioClick();
-    const unpicked = VIRAL_QURAN_PRESETS.filter(
+    const isPresetInCooldown = (p: typeof VIRAL_QURAN_PRESETS[0]) => {
+      if (!cooldownSummary) return false;
+      return cooldownSummary.ayahs.some(
+        (a) => a.surah === p.surah && Math.abs((a.ayah || 0) - p.ayah) < (p.count || 1)
+      );
+    };
+
+    const eligiblePresets = VIRAL_QURAN_PRESETS.filter((p) => !isPresetInCooldown(p));
+    const basePresets = eligiblePresets.length > 0 ? eligiblePresets : VIRAL_QURAN_PRESETS;
+
+    const unpicked = basePresets.filter(
       (p) => !usedQuranKeys.includes(`quran:${p.surah}:${p.ayah}`)
     );
-    const pool = unpicked.length > 0 ? unpicked : VIRAL_QURAN_PRESETS;
+    const pool = unpicked.length > 0 ? unpicked : basePresets;
     const selected = pool[Math.floor(Math.random() * pool.length)];
     const key = `quran:${selected.surah}:${selected.ayah}`;
 
@@ -163,10 +179,20 @@ function AssistantPage() {
 
   const handleNextHadithQuickAction = () => {
     playStudioClick();
-    const unpicked = VIRAL_HADITH_PRESETS.filter(
+    const isPresetInCooldown = (p: typeof VIRAL_HADITH_PRESETS[0]) => {
+      if (!cooldownSummary) return false;
+      return cooldownSummary.hadiths.some(
+        (h) => h.collection?.toLowerCase() === p.collection.toLowerCase() && h.number === p.number
+      );
+    };
+
+    const eligiblePresets = VIRAL_HADITH_PRESETS.filter((p) => !isPresetInCooldown(p));
+    const basePresets = eligiblePresets.length > 0 ? eligiblePresets : VIRAL_HADITH_PRESETS;
+
+    const unpicked = basePresets.filter(
       (p) => !usedHadithKeys.includes(`hadith:${p.collection}:${p.number}`)
     );
-    const pool = unpicked.length > 0 ? unpicked : VIRAL_HADITH_PRESETS;
+    const pool = unpicked.length > 0 ? unpicked : basePresets;
     const selected = pool[Math.floor(Math.random() * pool.length)];
     const key = `hadith:${selected.collection}:${selected.number}`;
 
@@ -363,6 +389,7 @@ function AssistantPage() {
 
   useEffect(() => {
     getAiMemory().then((m) => setMemory(m)).catch(() => {});
+    getOneMonthCooldownSummary().then((s) => setCooldownSummary(s)).catch(() => {});
   }, []);
 
   const handleAddInstruction = async () => {
@@ -792,6 +819,21 @@ function AssistantPage() {
           </div>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
+          <Link to="/history">
+            <Button
+              variant="outline"
+              className="flex items-center gap-1.5 rounded-xl text-xs px-3 cursor-pointer border-primary/40 hover:bg-primary/10 transition-colors"
+              title="Виж всички генерирани аяти и хадиси в историята"
+            >
+              <History className="size-3.5 text-primary" />
+              <span>История</span>
+              {(cooldownSummary?.totalBlocked ?? 0) > 0 && (
+                <span className="rounded-full bg-primary/20 text-primary px-1.5 py-0.2 text-[10px] font-semibold">
+                  {cooldownSummary?.totalBlocked}
+                </span>
+              )}
+            </Button>
+          </Link>
           <Button
             variant="destructive"
             onClick={handleClearChat}
@@ -901,6 +943,40 @@ function AssistantPage() {
                     </Button>
                   </div>
                 ))}
+              </div>
+            </div>
+          )}
+
+          {cooldownSummary && cooldownSummary.totalBlocked > 0 && (
+            <div className="space-y-2 pt-3 border-t border-border/40">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2 text-xs font-semibold text-emerald-400 uppercase tracking-wider">
+                  <ShieldCheck className="size-4 text-emerald-400" />
+                  <span>30-дневна пауза от историята ({cooldownSummary.totalBlocked} активни)</span>
+                </div>
+                <Link to="/history" className="text-[11px] text-primary hover:underline">
+                  Виж историята →
+                </Link>
+              </div>
+              <p className="text-[11px] text-muted-foreground">
+                Асистентът автоматично блокира повторно генериране на аяти и хадиси, които вече са били създадени през последния 1 месец.
+              </p>
+              <div className="flex flex-wrap gap-1.5 pt-1">
+                {cooldownSummary.ayahs.slice(0, 6).map((a) => (
+                  <span key={a.key} className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-300">
+                    📖 {a.title} ({a.daysRemaining}д)
+                  </span>
+                ))}
+                {cooldownSummary.hadiths.slice(0, 6).map((h) => (
+                  <span key={h.key} className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-blue-500/10 border border-blue-500/20 text-blue-300">
+                    📜 {h.title} ({h.daysRemaining}д)
+                  </span>
+                ))}
+                {cooldownSummary.totalBlocked > 12 && (
+                  <span className="text-[10px] text-muted-foreground self-center">
+                    +{cooldownSummary.totalBlocked - 12} още
+                  </span>
+                )}
               </div>
             </div>
           )}
@@ -1488,6 +1564,77 @@ function AssistantPage() {
                                       {cleanScriptPrefixes(m.proposal.scriptWorkflow.actionStep)}
                                     </div>
                                   </div>
+
+                                  {m.proposal.scriptWorkflow.sourceScholar && (
+                                    <div
+                                      className={`rounded-lg p-2.5 space-y-1.5 ${
+                                        m.proposal.scriptWorkflow.sourceType === "salafi_ai"
+                                          ? "bg-amber-950/30 border border-amber-500/30"
+                                          : "bg-emerald-950/40 border border-emerald-500/30"
+                                      }`}
+                                    >
+                                      <div className="flex items-center justify-between gap-2 flex-wrap">
+                                        <div
+                                          className={`flex items-center gap-1.5 text-[11px] font-bold ${
+                                            m.proposal.scriptWorkflow.sourceType === "salafi_ai"
+                                              ? "text-amber-400"
+                                              : "text-emerald-400"
+                                          }`}
+                                        >
+                                          {m.proposal.scriptWorkflow.sourceType === "salafi_ai" ? (
+                                            <Sparkles className="size-3.5 text-amber-400 shrink-0" />
+                                          ) : (
+                                            <ShieldCheck className="size-3.5 text-emerald-400 shrink-0" />
+                                          )}
+                                          <span>
+                                            {m.proposal.scriptWorkflow.sourceType === "salafi_ai"
+                                              ? "Разяснение от Salafi AI:"
+                                              : "Проверен източник:"}
+                                          </span>
+                                          <span className="text-white font-semibold">
+                                            {m.proposal.scriptWorkflow.sourceScholar}
+                                          </span>
+                                        </div>
+                                        {m.proposal.scriptWorkflow.sourceWork && (
+                                          <span
+                                            className={`text-[10px] px-2 py-0.5 rounded-full font-medium border ${
+                                              m.proposal.scriptWorkflow.sourceType === "salafi_ai"
+                                                ? "bg-amber-500/20 text-amber-300 border-amber-500/30"
+                                                : "bg-emerald-500/20 text-emerald-300 border-emerald-500/30"
+                                            }`}
+                                          >
+                                            {m.proposal.scriptWorkflow.sourceWork}
+                                          </span>
+                                        )}
+                                      </div>
+                                      {m.proposal.scriptWorkflow.sourceText && (
+                                        <details className="group mt-1">
+                                          <summary
+                                            className={`text-[10px] cursor-pointer select-none font-medium flex items-center gap-1 ${
+                                              m.proposal.scriptWorkflow.sourceType === "salafi_ai"
+                                                ? "text-amber-400/90 hover:text-amber-300"
+                                                : "text-emerald-400/90 hover:text-emerald-300"
+                                            }`}
+                                          >
+                                            <span>
+                                              {m.proposal.scriptWorkflow.sourceType === "salafi_ai"
+                                                ? "🌿 Виж салафитската поука и насоки (ас-Саляф ас-Салих)"
+                                                : "📜 Виж автентичния оригинален текст от базата данни"}
+                                            </span>
+                                          </summary>
+                                          <div
+                                            className={`mt-1.5 p-2 rounded bg-black/50 border text-[11px] text-white/85 leading-relaxed italic max-h-36 overflow-y-auto whitespace-pre-wrap ${
+                                              m.proposal.scriptWorkflow.sourceType === "salafi_ai"
+                                                ? "border-amber-500/20"
+                                                : "border-emerald-500/20"
+                                            }`}
+                                          >
+                                            „{m.proposal.scriptWorkflow.sourceText}“
+                                          </div>
+                                        </details>
+                                      )}
+                                    </div>
+                                  )}
                                 </div>
                               ) : (
                                 m.proposal.summaryBg && (
@@ -1690,6 +1837,22 @@ function AssistantPage() {
                                 <span className="text-[10px] px-2 py-0.5 rounded-md bg-black/40 border border-border">
                                   {prop.type === "hadith" ? "📖 Сахих Хадис" : "📖 Коран / Тренд"}
                                 </span>
+                                {prop.scriptWorkflow?.sourceScholar && (
+                                  <span
+                                    className={`inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full border ${
+                                      prop.scriptWorkflow.sourceType === "salafi_ai"
+                                        ? "bg-amber-500/20 text-amber-300 border-amber-500/40"
+                                        : "bg-emerald-500/20 text-emerald-300 border-emerald-500/40"
+                                    }`}
+                                  >
+                                    {prop.scriptWorkflow.sourceType === "salafi_ai" ? (
+                                      <Sparkles className="size-3 text-amber-400 shrink-0" />
+                                    ) : (
+                                      <ShieldCheck className="size-3 text-emerald-400 shrink-0" />
+                                    )}
+                                    {prop.scriptWorkflow.sourceScholar}
+                                  </span>
+                                )}
                               </div>
                               {prop.summaryBg && <p className="text-muted-foreground">{prop.summaryBg}</p>}
                               <div className="flex flex-wrap gap-3 text-[11px] text-amber-400/90 pt-0.5">

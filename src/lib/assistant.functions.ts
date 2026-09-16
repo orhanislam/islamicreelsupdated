@@ -13,6 +13,19 @@ import {
   formatNegativeExclusionPrompt,
   getTawheedTaxonomy,
 } from "./tawheed-taxonomy";
+import {
+  getExcludedScripturesOneMonth,
+  checkProposalOneMonthCooldown,
+  type ExcludedScripturesData,
+} from "./generation-history.functions";
+import {
+  fetchAuthenticTafsirDirect,
+  getVerifiedHadithSharhDirect,
+  formatTafsirGroundingPrompt,
+  detectScriptureFromText,
+  enrichProposalWithAuthenticTafsir,
+} from "./tafsir.functions";
+
 
 export type ExplainedVideoScript = {
   hookQuestion: string; // 1a. Въпрос за грабване на вниманието в първите 2-3 секунди
@@ -21,6 +34,11 @@ export type ExplainedVideoScript = {
   dalilText?: string;   // 2b. Текст на аята или хадиса
   explanation: string;  // 3. Разяснение / Поука / Тефсир
   actionStep: string;   // 4. Практическо действие още днес + призив за споделяне
+  sourceScholar?: string; // напр. "Шейх Абдур-Рахман ас-Са'ди" или "Шейх Мухаммад ибн Салих ал-Усеймин"
+  sourceWork?: string;    // напр. "Тефсир ас-Са'ди (Quran.com API)" или "Шарх ал-Арба'ин ан-Навауийя"
+  sourceText?: string;    // автентичен текст от базата данни
+  sourceType?: "database" | "salafi_ai"; // източник: проверена база данни или Salafi AI
+  isAuthenticVerified?: boolean; // флаг за гарантиран проверен източник
 };
 
 export type VideoProposal = {
@@ -282,6 +300,7 @@ export const chatWithAssistant = createServerFn({ method: "POST" })
   .validator((input: { prompt: string; history: { role: string; content: string }[] }) => input)
   .handler(async ({ data }) => {
     const memory = await getAiMemory();
+    const exclusionData = await getExcludedScripturesOneMonth();
     const historyList = (memory.usageHistory || []).map((x) => `- ${x.identifier}`).join("\n");
     const recentCarousels = (memory.carouselHistory || []).slice(-15);
     const nextTawheed = getNextTawheedTopic(recentCarousels.map((c) => c.subtopicId || c.title));
@@ -290,6 +309,40 @@ export const chatWithAssistant = createServerFn({ method: "POST" })
     const historyContext = historyList
       ? `\n\nСКОРОШНО ИЗПОЛЗВАНИ ТЕМИ (СТРИКТНО ЗАБРАНЕНО Е ДА ГИ ПРЕДЛАГАШ ОТНОВО):\n${historyList}`
       : "";
+
+    const oneMonthExclusionContext = exclusionData.formattedExclusionPrompt
+      ? `\n\n${exclusionData.formattedExclusionPrompt}`
+      : "";
+
+    // Grounding with Authentic Tafsir & Hadith Sharh (Quran.com & Shaykh al-Uthaymeen)
+    let dynamicGroundingPrompt = "";
+    const detectedScripture = detectScriptureFromText(data.prompt);
+    if (detectedScripture.type === "quran" && detectedScripture.surah && detectedScripture.ayah) {
+      try {
+        const tafsir = await fetchAuthenticTafsirDirect({
+          surah: detectedScripture.surah,
+          ayah: detectedScripture.ayah,
+          scholarId: 91,
+        });
+        if (tafsir) {
+          dynamicGroundingPrompt = formatTafsirGroundingPrompt({ tafsir });
+        }
+      } catch (err) {
+        console.warn("[assistant] Dynamic tafsir grounding error:", err);
+      }
+    } else if (detectedScripture.type === "hadith" && detectedScripture.collection && detectedScripture.number) {
+      try {
+        const sharh = getVerifiedHadithSharhDirect({
+          collection: detectedScripture.collection,
+          number: detectedScripture.number,
+        });
+        if (sharh) {
+          dynamicGroundingPrompt = formatTafsirGroundingPrompt({ hadithSharh: sharh });
+        }
+      } catch (err) {
+        console.warn("[assistant] Dynamic hadith sharh grounding error:", err);
+      }
+    }
 
     const memoryContext = `
 === ПАМЕТ НА АСИСТЕНТА ЗА ПОТРЕБИТЕЛЯ ===
@@ -300,6 +353,7 @@ ${memory.customInstructions.map((i, idx) => `${idx + 1}. ${i}`).join("\n")}
 ${memory.learnedFacts.length ? memory.learnedFacts.join("\n") : "Няма записани факти още."}
 =======================================
 Трябва стриктно да спазваш горните инструкции при всяко предложение за видео и всеки отговор!`;
+
 
     const systemPrompt = `Ти си ПРОФЕСИОНАЛЕН ПРОДУЦЕНТ на видеа (Reels & TikTok) и ЕКСПЕРТЕН AI АСИСТЕНТ на Български език.
 ТВОЯТА РОЛЯ И ГЛАС: Ти си автентичен САЛАФИТСКИ ШЕЙХ И ДА'ИЯ (учен и проповедник по манхаджа на Праведните предци ас-Саляф ас-Салих – по стъпките на Шейх Ибн Баз, Шейх ал-Усеймин, Шейх ал-Албани - рахимахумуллах).
@@ -334,7 +388,7 @@ SALAFI HALAL ПРИНЦИПИ (СТРИКТНО ЗАДЪЛЖИТЕЛНО):
 
 Ти ИМАШ ДОСТЪП до Google Търсачка и интернет. Когато потребителят поиска да потърсиш идеи, да анализираш стратегии за задържане на вниманието, или ти зададе въпрос за Исляма - отговаряй свободно, изчерпателно и компетентно в полето "reply".
 Ти си умен работник, с когото потребителят може да си пише свободно за всичко. Запомняй предпочитанията му в "newLearnedFact".
-${memoryContext}${historyContext}
+${memoryContext}${historyContext}${oneMonthExclusionContext}${dynamicGroundingPrompt ? `\n\n${dynamicGroundingPrompt}` : ""}
 
 ВАЖНО ПРАВИЛО: Ти ВИНАГИ ПИТАШ потребителя за одобрение преди да се генерира видеото!
 Когато потребителят поиска видео, ти НЕ генерираш видеото веднага, а му предлагаш детайлен план (proposal), за да го одобри.
@@ -508,6 +562,54 @@ CAPCUT-ПОДОБНИ ИНСТРУКЦИИ ЗА РЕДАКТИРАНЕ:
       });
     }
 
+    // 1-Month Cooldown Verification & Auto-Correction for chat proposal
+    if (parsed.proposal) {
+      const cooldownCheck = checkProposalOneMonthCooldown(parsed.proposal, exclusionData.items);
+      if (cooldownCheck.isBlocked) {
+        console.warn("[assistant] Proposal collision with 30-day cooldown history:", cooldownCheck.reason);
+        try {
+          const retryMsgs: ChatMessage[] = [
+            ...msgs,
+            { role: "model", content: raw },
+            {
+              role: "user",
+              content: `ВНИМАНИЕ! Предложението за „${parsed.proposal.title}“ НАРУШАВА строгото 30-дневно правило за уникалност: ${cooldownCheck.reason}. Предложи НАПЪЛНО РАЗЛИЧЕН и неповторен аят или Сахих хадис, който НЕ е бил генериран през последния 1 месец! Върни валиден JSON.`,
+            },
+          ];
+          const retryRaw = await geminiChat("gemini-3.6-flash", retryMsgs, true, true);
+          let cleanRetry = retryRaw.replace(/```json\s*|\s*```/g, "").trim();
+          const fBrace = cleanRetry.indexOf("{");
+          const lBrace = cleanRetry.lastIndexOf("}");
+          if (fBrace !== -1 && lBrace !== -1 && lBrace > fBrace) {
+            cleanRetry = cleanRetry.substring(fBrace, lBrace + 1);
+          }
+          const parsedRetry = JSON.parse(cleanRetry);
+          if (parsedRetry?.proposal) {
+            const secondCheck = checkProposalOneMonthCooldown(parsedRetry.proposal, exclusionData.items);
+            if (!secondCheck.isBlocked) {
+              parsed.proposal = parsedRetry.proposal;
+              if (parsed.proposal.title) parsed.proposal.title = cleanProposalTitle(parsed.proposal.title);
+              if (parsedRetry.reply) parsed.reply = parsedRetry.reply;
+            }
+          }
+        } catch (retryErr) {
+          console.warn("[assistant] Auto-correction retry error:", retryErr);
+        }
+      }
+    }
+
+    // Filter any colliding proposals from batch array
+    if (Array.isArray(parsed.proposals)) {
+      parsed.proposals = parsed.proposals.filter((p: VideoProposal) => {
+        const check = checkProposalOneMonthCooldown(p, exclusionData.items);
+        if (check.isBlocked) {
+          console.warn("[assistant] Filtered colliding proposal from batch:", check.reason);
+          return false;
+        }
+        return true;
+      });
+    }
+
     if (
       parsed.newLearnedFact &&
       typeof parsed.newLearnedFact === "string" &&
@@ -522,6 +624,9 @@ CAPCUT-ПОДОБНИ ИНСТРУКЦИИ ЗА РЕДАКТИРАНЕ:
     const proposalsToRecord: VideoProposal[] = [];
     if (parsed.proposal) proposalsToRecord.push(parsed.proposal);
     if (Array.isArray(parsed.proposals)) proposalsToRecord.push(...parsed.proposals);
+    for (const p of proposalsToRecord) {
+      await enrichProposalWithAuthenticTafsir(p);
+    }
     await injectAuthenticCarouselText(proposalsToRecord);
     if (proposalsToRecord.length > 0) {
       await recordProposalUsages({ data: { proposals: proposalsToRecord } }).catch(() => {});
@@ -575,9 +680,13 @@ CAPCUT-ПОДОБНИ ИНСТРУКЦИИ ЗА РЕДАКТИРАНЕ:
 
 export const suggestViralProposal = createServerFn({ method: "POST" }).handler(async () => {
   const memory = await getAiMemory();
+  const exclusionData = await getExcludedScripturesOneMonth();
   const historyList = (memory.usageHistory || []).map((x) => `- ${x.identifier}`).join("\n");
   const historyContext = historyList
     ? `\n\nСКОРОШНО ИЗПОЛЗВАНИ ТЕМИ (СТРИКТНО ЗАБРАНЕНО Е ДА ГИ ПРЕДЛАГАШ ОТНОВО):\n${historyList}`
+    : "";
+  const oneMonthExclusionContext = exclusionData.formattedExclusionPrompt
+    ? `\n\n${exclusionData.formattedExclusionPrompt}`
     : "";
 
   const THEMES = [
@@ -604,7 +713,7 @@ export const suggestViralProposal = createServerFn({ method: "POST" }).handler(a
 
   const prompt = `Ти си топ продуцент на вирусни Ислямски видеа (Reels & TikTok) на български език.
 ИЗКЛЮЧИТЕЛНО ВАЖНО ПРАВИЛО: ТРЯБВА ДА ГЕНЕРИРАШ АБСОЛЮТНО УНИКАЛНО ПРЕДЛОЖЕНИЕ, КОЕТО НИКОГА НЕ Е БИЛО ПРЕДЛАГАНО ПРЕДИ!
-Измисли и предложи ЕДНА изключително силна, НЕБАНАЛНА и психологически поразяваща тема/урок от Корана или Сахих Хадис за видео.${historyContext}
+Измисли и предложи ЕДНА изключително силна, НЕБАНАЛНА и психологически поразяваща тема/урок от Корана или Сахих Хадис за видео.${historyContext}${oneMonthExclusionContext}
 
 ФОКУСИРАЙ СЕ СТРИКТНО ВЪРХУ ТАЗИ ТЕМА: "${randomTheme}". (Уникален ID: ${Date.now()})
 
@@ -672,6 +781,42 @@ SALAFI HALAL ПРИНЦИПИ (СТРИКТНО ЗАДЪЛЖИТЕЛНО):
     parsed.proposal.title = cleanProposalTitle(parsed.proposal.title);
   }
 
+  // 1-Month Cooldown Verification & Auto-Correction
+  if (parsed.proposal) {
+    const cooldownCheck = checkProposalOneMonthCooldown(parsed.proposal, exclusionData.items);
+    if (cooldownCheck.isBlocked) {
+      console.warn("[suggestViralProposal] Collision with 30-day cooldown history:", cooldownCheck.reason);
+      try {
+        const retryMsgs: ChatMessage[] = [
+          ...msgs,
+          { role: "model", content: raw },
+          {
+            role: "user",
+            content: `ВНИМАНИЕ! Предложението „${parsed.proposal.title}“ НАРУШАВА 30-дневното правило за уникалност: ${cooldownCheck.reason}. Предложи ДРУГ Сахих Хадис или Аят, който НЕ е в забранения списък! Върни валиден JSON.`,
+          },
+        ];
+        const retryRaw = await geminiChat("gemini-3.6-flash", retryMsgs, true);
+        let cleanRetry = retryRaw.replace(/```json\s*|\s*```/g, "").trim();
+        const fBrace = cleanRetry.indexOf("{");
+        const lBrace = cleanRetry.lastIndexOf("}");
+        if (fBrace !== -1 && lBrace !== -1 && lBrace > fBrace) {
+          cleanRetry = cleanRetry.substring(fBrace, lBrace + 1);
+        }
+        const parsedRetry = JSON.parse(cleanRetry);
+        if (parsedRetry?.proposal) {
+          const secondCheck = checkProposalOneMonthCooldown(parsedRetry.proposal, exclusionData.items);
+          if (!secondCheck.isBlocked) {
+            parsed.proposal = parsedRetry.proposal;
+            if (parsed.proposal.title) parsed.proposal.title = cleanProposalTitle(parsed.proposal.title);
+            if (parsedRetry.reply) parsed.reply = parsedRetry.reply;
+          }
+        }
+      } catch (retryErr) {
+        console.warn("[suggestViralProposal] Retry error:", retryErr);
+      }
+    }
+  }
+
   if (parsed.proposal) {
     await recordProposalUsages({ data: { proposals: [parsed.proposal] } }).catch(() => {});
   }
@@ -686,12 +831,87 @@ export const suggestExplainedVideoProposal = createServerFn({ method: "POST" })
   .validator((input?: { topic?: string }) => input || {})
   .handler(async ({ data }) => {
     const memory = await getAiMemory();
+    const exclusionData = await getExcludedScripturesOneMonth();
     const historyList = (memory.usageHistory || []).map((x) => `- ${x.identifier}`).join("\n");
     const historyContext = historyList
       ? `\n\nСКОРОШНО ИЗПОЛЗВАНИ ТЕМИ (СТРИКТНО ЗАБРАНЕНО Е ДА ГИ ПРЕДЛАГАШ ОТНОВО):\n${historyList}`
       : "";
+    const oneMonthExclusionContext = exclusionData.formattedExclusionPrompt
+      ? `\n\n${exclusionData.formattedExclusionPrompt}`
+      : "";
 
     const userTopic = data?.topic ? `Тема по желание на потребителя: "${data.topic}"` : "";
+
+    let preGroundingPrompt = "";
+    const detected = detectScriptureFromText(data?.topic || "");
+    if (detected.type === "quran" && detected.surah && detected.ayah) {
+      const tafsir = await fetchAuthenticTafsirDirect({
+        surah: detected.surah,
+        ayah: detected.ayah,
+        scholarId: 91,
+      });
+      if (tafsir) {
+        preGroundingPrompt = formatTafsirGroundingPrompt({ tafsir });
+      }
+    } else if (detected.type === "hadith" && detected.collection && detected.number) {
+      const sharh = getVerifiedHadithSharhDirect({
+        collection: detected.collection,
+        number: detected.number,
+      });
+      if (sharh) {
+        preGroundingPrompt = formatTafsirGroundingPrompt({ hadithSharh: sharh });
+      }
+    } else if (!data?.topic) {
+      // Pick an authentic verified candidate from our database not in 30-day cooldown
+      const candidateSharhs = [
+        { collection: "bukhari", number: 1 },
+        { collection: "bukhari", number: 6424 },
+        { collection: "muslim", number: 1 },
+        { collection: "nawawi40", number: 18 },
+        { collection: "nawawi40", number: 19 },
+        { collection: "nawawi40", number: 21 },
+        { collection: "bukhari", number: 52 },
+      ];
+      const availableHadith = candidateSharhs.find(
+        (c) =>
+          !exclusionData.items.some(
+            (ex) => ex.type === "hadith" && ex.collection === c.collection && ex.number === c.number,
+          ),
+      );
+      if (availableHadith) {
+        const sharh = getVerifiedHadithSharhDirect(availableHadith);
+        if (sharh) {
+          preGroundingPrompt = formatTafsirGroundingPrompt({ hadithSharh: sharh });
+        }
+      } else {
+        const candidateVerses = [
+          { surah: 13, ayah: 28 },
+          { surah: 2, ayah: 255 },
+          { surah: 94, ayah: 5 },
+          { surah: 39, ayah: 53 },
+          { surah: 65, ayah: 2 },
+          { surah: 3, ayah: 139 },
+          { surah: 103, ayah: 1 },
+          { surah: 112, ayah: 1 },
+        ];
+        const availableVerse = candidateVerses.find(
+          (v) =>
+            !exclusionData.items.some(
+              (ex) => ex.type === "quran" && ex.surah === v.surah && ex.ayah === v.ayah,
+            ),
+        );
+        if (availableVerse) {
+          const tafsir = await fetchAuthenticTafsirDirect({
+            surah: availableVerse.surah,
+            ayah: availableVerse.ayah,
+            scholarId: 91,
+          });
+          if (tafsir) {
+            preGroundingPrompt = formatTafsirGroundingPrompt({ tafsir });
+          }
+        }
+      }
+    }
 
     const prompt = `Ти си автентичен САЛАФИТСКИ ШЕЙХ И ДА'ИЯ (по манхаджа на ас-Саляф ас-Салих – Шейх Ибн Баз, Шейх ал-Усеймин, Шейх ал-Албани - рахимахумуллах) и елитен продуцент на формат "Ислямско видео с обяснение" (Islamic video with explanation) за TikTok и Reels на български език.
 ТВОЯТА РОЛЯ И ГЛАС: Говори с дълбоко благоговение (хушу), бащинска мъдрост, авторитет и непоклатима искреност (Ихлас), базирани САМО на Корана и Сунната по разбирането на Салафите.
@@ -741,8 +961,8 @@ export const suggestExplainedVideoProposal = createServerFn({ method: "POST" })
 
 ДЕЙСТВИЕ ИЛИ ДУА:
 - actionStep: Ако е практическо дело, се обозначава с "Действие: [текст]". Ако е молитва, молба или зикр, се обозначава с "Дуа: [текст]". БЕЗ точки, БЕЗ номерация ('4.', '•'). (15-25 думи).
-${historyContext}
-${userTopic}
+${historyContext}${oneMonthExclusionContext}
+${userTopic}${preGroundingPrompt ? `\n\n${preGroundingPrompt}` : ""}
 
 ИЗКЛЮЧИТЕЛНИ ПРАВИЛА:
 - АВТЕНТИЧНИ ИСЛЯМСКИ ТЕРМИНИ: Винаги изписвай 'Астагфируллах' (НИКОГА 'астафирулла'!), 'Субханаллах', 'Алхамдулиллях', 'Аллаху Акбар', 'Ля иляха илляллах', 'истигфар', 'таухид', 'сабр', 'таква'.
@@ -830,6 +1050,42 @@ ${userTopic}
       parsed.proposal.title = cleanProposalTitle(parsed.proposal.title);
     }
 
+    // 1-Month Cooldown Verification & Auto-Correction
+    if (parsed.proposal) {
+      const cooldownCheck = checkProposalOneMonthCooldown(parsed.proposal, exclusionData.items);
+      if (cooldownCheck.isBlocked) {
+        console.warn("[suggestExplainedVideoProposal] Collision with 30-day cooldown history:", cooldownCheck.reason);
+        try {
+          const retryMsgs: ChatMessage[] = [
+            ...msgs,
+            { role: "model", content: raw },
+            {
+              role: "user",
+              content: `ВНИМАНИЕ! Предложението за „${parsed.proposal.title}“ НАРУШАВА 30-дневното правило за уникалност: ${cooldownCheck.reason}. Предложи ДРУГ Сахих Хадис или Аят за видео с обяснение, който НЕ е в забранения списък! Върни валиден JSON.`,
+            },
+          ];
+          const retryRaw = await geminiChat("gemini-3.6-flash", retryMsgs, true);
+          let cleanRetry = retryRaw.replace(/```json\s*|\s*```/g, "").trim();
+          const fBrace = cleanRetry.indexOf("{");
+          const lBrace = cleanRetry.lastIndexOf("}");
+          if (fBrace !== -1 && lBrace !== -1 && lBrace > fBrace) {
+            cleanRetry = cleanRetry.substring(fBrace, lBrace + 1);
+          }
+          const parsedRetry = JSON.parse(cleanRetry);
+          if (parsedRetry?.proposal) {
+            const secondCheck = checkProposalOneMonthCooldown(parsedRetry.proposal, exclusionData.items);
+            if (!secondCheck.isBlocked) {
+              parsed.proposal = parsedRetry.proposal;
+              if (parsed.proposal.title) parsed.proposal.title = cleanProposalTitle(parsed.proposal.title);
+              if (parsedRetry.reply) parsed.reply = parsedRetry.reply;
+            }
+          }
+        } catch (retryErr) {
+          console.warn("[suggestExplainedVideoProposal] Retry error:", retryErr);
+        }
+      }
+    }
+
     if (parsed.proposal && !parsed.proposal.scriptWorkflow) {
       parsed.proposal.scriptWorkflow = {
         hookQuestion: "Защо усещаш тревога в гърдите си, дори когато всичко изглежда наред?",
@@ -840,6 +1096,7 @@ ${userTopic}
     }
 
     if (parsed.proposal) {
+      await enrichProposalWithAuthenticTafsir(parsed.proposal);
       await recordProposalUsages({ data: { proposals: [parsed.proposal] } }).catch(() => {});
     }
 
@@ -855,9 +1112,13 @@ export const suggestAlternativeProposal = createServerFn({ method: "POST" })
   )
   .handler(async ({ data }) => {
     const memory = await getAiMemory();
+    const exclusionData = await getExcludedScripturesOneMonth();
     const historyList = (memory.usageHistory || []).map((x) => `- ${x.identifier}`).join("\n");
     const historyContext = historyList
       ? `\n\nСКОРОШНО ИЗПОЛЗВАНИ ТЕМИ (СТРИКТНО ЗАБРАНЕНО Е ДА ГИ ПРЕДЛАГАШ ОТНОВО):\n${historyList}`
+      : "";
+    const oneMonthExclusionContext = exclusionData.formattedExclusionPrompt
+      ? `\n\n${exclusionData.formattedExclusionPrompt}`
       : "";
 
     const rejectedContext = data?.currentTitle
@@ -870,7 +1131,7 @@ export const suggestAlternativeProposal = createServerFn({ method: "POST" })
 Потребителят поиска алтернативно предложение за видео.
 ${rejectedContext}
 ${topicHint}
-${historyContext}
+${historyContext}${oneMonthExclusionContext}
 
 СТРИКТНО ПРАВИЛО ЗА ТАУХИД И АДАБ КЪМ АЛЛАХ ВСЕВИШНИЯТ:
 ВИНАГИ използвай „Аллах Всевишният“, „Твоят Създател“, „Господът на световете“, „Всемилостивият“. СТРОГО ЗАБРАНЕНО е да използваш разговорни или непочтителни думи като „оня“, „тоя“, „онзи“!
@@ -972,6 +1233,42 @@ ${historyContext}
       parsed.proposal.title = cleanProposalTitle(parsed.proposal.title);
     }
 
+    // 1-Month Cooldown Verification & Auto-Correction
+    if (parsed.proposal) {
+      const cooldownCheck = checkProposalOneMonthCooldown(parsed.proposal, exclusionData.items);
+      if (cooldownCheck.isBlocked) {
+        console.warn("[suggestAlternativeProposal] Collision with 30-day cooldown history:", cooldownCheck.reason);
+        try {
+          const retryMsgs: ChatMessage[] = [
+            ...msgs,
+            { role: "model", content: raw },
+            {
+              role: "user",
+              content: `ВНИМАНИЕ! Алтернативното предложение „${parsed.proposal.title}“ НАРУШАВА 30-дневното правило за уникалност: ${cooldownCheck.reason}. Предложи ДРУГ Сахих Хадис или Аят, който НЕ е в забранения списък! Върни валиден JSON.`,
+            },
+          ];
+          const retryRaw = await geminiChat("gemini-3.6-flash", retryMsgs, true);
+          let cleanRetry = retryRaw.replace(/```json\s*|\s*```/g, "").trim();
+          const fBrace = cleanRetry.indexOf("{");
+          const lBrace = cleanRetry.lastIndexOf("}");
+          if (fBrace !== -1 && lBrace !== -1 && lBrace > fBrace) {
+            cleanRetry = cleanRetry.substring(fBrace, lBrace + 1);
+          }
+          const parsedRetry = JSON.parse(cleanRetry);
+          if (parsedRetry?.proposal) {
+            const secondCheck = checkProposalOneMonthCooldown(parsedRetry.proposal, exclusionData.items);
+            if (!secondCheck.isBlocked) {
+              parsed.proposal = parsedRetry.proposal;
+              if (parsed.proposal.title) parsed.proposal.title = cleanProposalTitle(parsed.proposal.title);
+              if (parsedRetry.reply) parsed.reply = parsedRetry.reply;
+            }
+          }
+        } catch (retryErr) {
+          console.warn("[suggestAlternativeProposal] Retry error:", retryErr);
+        }
+      }
+    }
+
     if (
       parsed.proposal &&
       !parsed.proposal.scriptWorkflow &&
@@ -988,6 +1285,7 @@ ${historyContext}
     }
 
     if (parsed.proposal) {
+      await enrichProposalWithAuthenticTafsir(parsed.proposal);
       await recordProposalUsages({ data: { proposals: [parsed.proposal] } }).catch(() => {});
     }
 
@@ -1016,9 +1314,13 @@ export const suggestBatchViralProposals = createServerFn({ method: "POST" })
       const targetType = data.targetType || "mixed";
 
       const memory = await getAiMemory();
+      const exclusionData = await getExcludedScripturesOneMonth();
       const historyList = (memory.usageHistory || []).map((x) => `- ${x.identifier}`).join("\n");
       const historyContext = historyList
         ? `\n\nСКОРОШНО ИЗПОЛЗВАНИ ТЕМИ (СТРИКТНО ЗАБРАНЕНО Е ДА ГИ ПРЕДЛАГАШ ОТНОВО):\n${historyList}`
+        : "";
+      const oneMonthExclusionContext = exclusionData.formattedExclusionPrompt
+        ? `\n\n${exclusionData.formattedExclusionPrompt}`
         : "";
 
       const THEMES = [
@@ -1049,7 +1351,7 @@ export const suggestBatchViralProposals = createServerFn({ method: "POST" })
 
       const prompt = `Ти си ПРОФЕСИОНАЛЕН ПРОДУЦЕНТ И РЕЖИСЬОР на вирусни Ислямски видеа (Reels & TikTok) на български език.
 ИЗКЛЮЧИТЕЛНО ВАЖНО ПРАВИЛО: ТРЯБВА ДА ГЕНЕРИРАШ АБСОЛЮТНО УНИКАЛНИ ПРЕДЛОЖЕНИЯ, КОИТО НИКОГА НЕ СА БИЛИ ПРЕДЛАГАНИ ПРЕДИ!
-Измисли и предложи ПАКЕТ ОТ ТОЧНО ${countNum} изключително силни, НЕБАНАЛНИ и психологически поразяващи теми/уроци за къси видеа в категория: "${topicStr}".${historyContext}
+Измисли и предложи ПАКЕТ ОТ ТОЧНО ${countNum} изключително силни, НЕБАНАЛНИ и психологически поразяващи теми/уроци за къси видеа в категория: "${topicStr}".${historyContext}${oneMonthExclusionContext}
 
 ФОКУСИРАЙ СЕ ДНЕС ВЪРХУ СЛЕДНИТЕ ТЕМИ: ${selectedThemes}. (Уникален ID: ${Date.now()})
 
@@ -1142,6 +1444,16 @@ export const suggestBatchViralProposals = createServerFn({ method: "POST" })
       }
 
       if (Array.isArray(parsed.proposals) && parsed.proposals.length > 0) {
+        // Filter out any proposal that is within the 1-month cooldown period
+        parsed.proposals = parsed.proposals.filter((p: VideoProposal) => {
+          const check = checkProposalOneMonthCooldown(p, exclusionData.items);
+          if (check.isBlocked) {
+            console.warn("[suggestBatchViralProposals] Colliding proposal filtered:", check.reason);
+            return false;
+          }
+          return true;
+        });
+
         parsed.proposals.forEach((p: VideoProposal) => {
           if (p && p.title) p.title = cleanProposalTitle(p.title);
         });
@@ -1300,10 +1612,22 @@ export function buildExplainedNarrationText(params: {
 }
 
 export const confirmAndGenerateVideo = createServerFn({ method: "POST" })
-  .validator((input: { proposal: VideoProposal }) => input)
-  .handler(async ({ data: { proposal } }) => {
+  .validator((input: { proposal: VideoProposal; force?: boolean }) => input)
+  .handler(async ({ data: { proposal, force } }) => {
     if (proposal.title) {
       proposal.title = cleanProposalTitle(proposal.title);
+    }
+
+    // 1-Month Cooldown Safety Check: Block duplicate generation unless explicitly forced
+    if (!force) {
+      const exclusionData = await getExcludedScripturesOneMonth();
+      const cooldownCheck = checkProposalOneMonthCooldown(proposal, exclusionData.items);
+      if (cooldownCheck.isBlocked) {
+        throw new Error(
+          cooldownCheck.reason ||
+            `Този аят/хадис вече беше генериран през последния 1 месец и е в 30-дневна пауза за уникалност (${cooldownCheck.daysRemaining} дни остават).`,
+        );
+      }
     }
     let arabic = "";
     let english = "";

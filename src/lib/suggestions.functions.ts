@@ -1,5 +1,9 @@
 import { createServerFn } from "@tanstack/react-start";
 import { geminiChat } from "./gemini";
+import {
+  getExcludedScripturesOneMonth,
+  checkProposalOneMonthCooldown,
+} from "./generation-history.functions";
 
 const SYS = `Ти си експерт по вирално ислямско съдържание за TikTok. Получаваш темата/настроението от потребителя и предлагаш 5 силни аята или сахих хадиси, които биха резонирали емоционално и биха станали вирални. ВАЖНО:
 - Аяти само от Корана с реални Сура:Аят (например 2:255, 94:5-6, 13:28). НЕ измисляй препратки.
@@ -11,11 +15,16 @@ const SYS = `Ти си експерт по вирално ислямско съ�
 export const suggestViral = createServerFn({ method: "POST" })
   .inputValidator((input: { theme: string; kind?: "any" | "ayah" | "hadith" }) => input)
   .handler(async ({ data }) => {
+    const exclusionData = await getExcludedScripturesOneMonth();
+    const exclusionPrompt = exclusionData.formattedExclusionPrompt
+      ? `\n\n${exclusionData.formattedExclusionPrompt}`
+      : "";
+
     const constraint = data.kind === "ayah" ? "Само аяти." : data.kind === "hadith" ? "Само сахих хадиси." : "Аяти или сахих хадиси.";
     const raw = await geminiChat(
       "gemini-3.6-flash",
       [
-        { role: "system", content: SYS },
+        { role: "system", content: `${SYS}${exclusionPrompt}` },
         { role: "user", content: `Тема/настроение: ${data.theme}\n${constraint}` },
       ],
       true,
@@ -27,8 +36,19 @@ export const suggestViral = createServerFn({ method: "POST" })
       throw new Error("Невалиден отговор от AI");
     }
     const items = (parsed.items ?? [])
-      .filter((i) => (i.kind === "ayah" || i.kind === "hadith") && typeof i.ref === "string")
+      .filter((i) => {
+        if ((i.kind !== "ayah" && i.kind !== "hadith") || typeof i.ref !== "string") return false;
+        const check = checkProposalOneMonthCooldown(
+          {
+            type: i.kind === "ayah" ? "quran" : "hadith",
+            reference: i.ref,
+            title: i.title_bg,
+          },
+          exclusionData.items,
+        );
+        return !check.isBlocked;
+      })
       .slice(0, 5);
-    if (!items.length) throw new Error("Няма предложения");
+    if (!items.length) throw new Error("Няма предложения (всички съвпадат с 30-дневната история на генериранията)");
     return { items };
   });
