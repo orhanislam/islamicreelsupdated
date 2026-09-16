@@ -68,22 +68,28 @@ function parseElevenLabsTimings(
       curEnd = ends[i];
     } else if (curWord.length > 0) {
       if (curStart !== null && curEnd > curStart) {
-        timings.push({
-          start: Math.round(curStart * 1000) / 1000,
-          end: Math.round(curEnd * 1000) / 1000,
-          word: curWord,
-        });
+        const cleanWord = curWord.replace(/^[\s.,:;!?…\-—–'"„“”«»]+|[\s.,:;!?…\-—–'"„“”«»]+$/g, "").trim();
+        if (cleanWord.length > 0) {
+          timings.push({
+            start: Math.round(curStart * 1000) / 1000,
+            end: Math.round(curEnd * 1000) / 1000,
+            word: curWord,
+          });
+        }
       }
       curWord = "";
       curStart = null;
     }
   }
   if (curWord.length > 0 && curStart !== null && curEnd > curStart) {
-    timings.push({
-      start: Math.round(curStart * 1000) / 1000,
-      end: Math.round(curEnd * 1000) / 1000,
-      word: curWord,
-    });
+    const cleanWord = curWord.replace(/^[\s.,:;!?…\-—–'"„“”«»]+|[\s.,:;!?…\-—–'"„“”«»]+$/g, "").trim();
+    if (cleanWord.length > 0) {
+      timings.push({
+        start: Math.round(curStart * 1000) / 1000,
+        end: Math.round(curEnd * 1000) / 1000,
+        word: curWord,
+      });
+    }
   }
 
   return timings;
@@ -112,15 +118,20 @@ function parseVttTimings(vttText: string): WordTiming[] {
         const end = parseTime(endStr);
         const text = lines.slice(i + 1).join(" ").trim();
         const words = text.split(/\s+/).filter(Boolean);
-        if (words.length > 0 && end > start) {
+        // Exclude standalone dots/punctuation tokens (e.g. "...", "....", ",")
+        const validWords = words.filter((w) => {
+          const stripped = w.replace(/^[\s.,:;!?…\-—–'"„“”«»]+|[\s.,:;!?…\-—–'"„“”«»]+$/g, "").trim();
+          return stripped.length > 0;
+        });
+        if (validWords.length > 0 && end > start) {
           const dur = end - start;
-          for (let w = 0; w < words.length; w++) {
-            const wStart = start + (w / words.length) * dur;
-            const wEnd = start + ((w + 1) / words.length) * dur;
+          for (let w = 0; w < validWords.length; w++) {
+            const wStart = start + (w / validWords.length) * dur;
+            const wEnd = start + ((w + 1) / validWords.length) * dur;
             timings.push({
               start: Math.round(wStart * 1000) / 1000,
               end: Math.round(wEnd * 1000) / 1000,
-              word: words[w],
+              word: validWords[w],
             });
           }
         }
@@ -264,7 +275,9 @@ export function normalizeIslamicArabicPhoneticsForTts(text: string): string {
     .replace(/(?<=^|[^\p{L}\p{N}])(А|а)с-(?=\p{L})/gu, "$1с ")
     .replace(/(?<=^|[^\p{L}\p{N}])(А|а)ш-(?=\p{L})/gu, "$1ш ")
     .replace(/(?<=^|[^\p{L}\p{N}])(А|а)д-(?=\p{L})/gu, "$1д ")
-    .replace(/[_…]+/g, " ")
+    .replace(/[_…]+/g, ", ")
+    .replace(/\.{2,}/g, ", ")
+    .replace(/,\s*,+/g, ", ")
     .replace(/[ \t]+/g, " ")
     .trim();
 
@@ -274,6 +287,7 @@ export function normalizeIslamicArabicPhoneticsForTts(text: string): string {
 export function normalizePhoneticsToDisplayWord(word: string): string {
   if (!word) return "";
   let clean = word.replace(/[\[\]]/g, "").trim();
+  clean = clean.replace(/^\.{2,}|\.{2,}$/g, "").replace(/\.{2,}/g, "").trim();
   clean = clean.replace(/(?<=^|[^\p{L}\p{N}])Ар-Раад(?=[^\p{L}\p{N}]|$)/gui, "Ар-Ра'д");
   return clean
     .replace(/(?<=^|[^\p{L}\p{N}])Астагфируллаах(?=[^\p{L}\p{N}]|$)/gui, "Астагфируллах")
@@ -324,10 +338,13 @@ export const synthesizeHadithNarration = createServerFn({ method: "POST" })
       try {
         console.log("[tts] Synthesizing with ElevenLabs API (with-timestamps)...");
         const cleanForEleven = cleaned
-          .replace(/<break[^>]*\/>/gi, "... ")
+          .replace(/<break[^>]*\/>/gi, ",\n\n")
           .replace(/<[^>]+>/g, " ")
           .replace(/\[[^\]]*\]/g, " ")
           .replace(/[\[\]]/g, " ")
+          .replace(/\.{2,}/g, ", ")
+          .replace(/…+/g, ", ")
+          .replace(/,\s*,+/g, ", ")
           .replace(/\s{2,}/g, " ")
           .trim();
         const res = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${elevenVoice}/with-timestamps`, {
@@ -382,9 +399,14 @@ export const synthesizeHadithNarration = createServerFn({ method: "POST" })
 
         const tmpPath = path.join(os.tmpdir(), `tts-${Date.now()}-${Math.random().toString(36).slice(2)}.mp3`);
         const cleanForEdge = cleaned
-          .replace(/<[^>]+>/g, "... ")
+          .replace(/<break[^>]*\/>/gi, ",\n\n")
+          .replace(/<[^>]+>/g, " ")
           .replace(/\[[^\]]*\]/g, " ")
           .replace(/[\[\]]/g, " ")
+          .replace(/\.{2,}/g, ", ")
+          .replace(/…+/g, ", ")
+          .replace(/,\s*,+/g, ", ")
+          .replace(/\s{2,}/g, " ")
           .trim();
         await tts.ttsPromise(cleanForEdge, tmpPath);
         audioBuffer = await fs.readFile(tmpPath);
@@ -402,9 +424,14 @@ export const synthesizeHadithNarration = createServerFn({ method: "POST" })
           const tmpPyPath = path.join(os.tmpdir(), `py-tts-${Date.now()}.mp3`);
           const tmpVttPath = path.join(os.tmpdir(), `py-tts-${Date.now()}.vtt`);
           const cleanForEdge = cleaned
-            .replace(/<[^>]+>/g, "... ")
+            .replace(/<break[^>]*\/>/gi, ",\n\n")
+            .replace(/<[^>]+>/g, " ")
             .replace(/\[[^\]]*\]/g, " ")
             .replace(/[\[\]]/g, " ")
+            .replace(/\.{2,}/g, ", ")
+            .replace(/…+/g, ", ")
+            .replace(/,\s*,+/g, ", ")
+            .replace(/\s{2,}/g, " ")
             .trim();
           await execFileAsync("edge-tts", [
             "--voice", "bg-BG-BorislavNeural",
@@ -425,7 +452,17 @@ export const synthesizeHadithNarration = createServerFn({ method: "POST" })
         } catch (pyErr) {
           console.warn("[tts] Python edge-tts failed, falling back to Google TTS:", pyErr);
           try {
-            const base64Audio = await googleTTS.getAudioBase64(cleaned.slice(0, 200), {
+            const cleanForGoogle = cleaned
+              .replace(/<break[^>]*\/>/gi, ", ")
+              .replace(/<[^>]+>/g, " ")
+              .replace(/\[[^\]]*\]/g, " ")
+              .replace(/[\[\]]/g, " ")
+              .replace(/\.{2,}/g, ", ")
+              .replace(/…+/g, ", ")
+              .replace(/,\s*,+/g, ", ")
+              .replace(/\s{2,}/g, " ")
+              .trim();
+            const base64Audio = await googleTTS.getAudioBase64(cleanForGoogle.slice(0, 200), {
               lang: "bg",
               slow: false,
               host: "https://translate.google.com",

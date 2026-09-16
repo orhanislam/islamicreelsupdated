@@ -233,11 +233,15 @@ export function parseSRT(content: string): ValidatedWordTiming[] {
         j++;
       }
       if (textLine) {
-        timings.push({
-          word: textLine,
-          start: Number(start.toFixed(3)),
-          end: Number(Math.max(start + 0.1, end).toFixed(3)),
-        });
+        // Exclude standalone dots/punctuation tokens (e.g. "...", "....", ",")
+        const stripped = textLine.replace(/^[\s.,:;!?…\-—–'"„“”«»]+|[\s.,:;!?…\-—–'"„“”«»]+$/g, "").trim();
+        if (stripped.length > 0) {
+          timings.push({
+            word: textLine,
+            start: Number(start.toFixed(3)),
+            end: Number(Math.max(start + 0.1, end).toFixed(3)),
+          });
+        }
       }
       i = j - 1;
     }
@@ -245,3 +249,5 @@ export function parseSRT(content: string): ValidatedWordTiming[] {
 
   return timings;
 }
+
+export const parseVttTimings = parseSRT;

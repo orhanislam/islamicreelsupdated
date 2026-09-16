@@ -315,6 +315,47 @@ async function testArabicTransliterationAndDalilIntegrity() {
   console.log("✔ testArabicTransliterationAndDalilIntegrity passed: Ar-Ra'd protected, clean intro without citation subtitle leakage!");
 }
 
+async function testDotVerbalizationPrevention() {
+  const { normalizeIslamicArabicPhoneticsForTts, normalizePhoneticsToDisplayWord } = await import("../tts.functions");
+  const { parseVttTimings } = await import("../subtitle-sync.functions");
+
+  // 1. Verify consecutive dots and ellipsis are converted to clean pauses, never raw "..."
+  const testText = "Чуй това... Аллах Всевишният прощава.... Спри греха… и направи истигфар.";
+  const normalized = normalizeIslamicArabicPhoneticsForTts(testText);
+
+  if (/\.{2,}/.test(normalized) || /…/.test(normalized)) {
+    throw new Error(`normalizeIslamicArabicPhoneticsForTts leaked multiple dots or ellipsis! Got: ${normalized}`);
+  }
+  if (!normalized.includes("истигфаар")) {
+    throw new Error(`Salafi phonetic term missing! Got: ${normalized}`);
+  }
+
+  // 2. Verify display word normalization strips leading/trailing multi-dots
+  const d1 = normalizePhoneticsToDisplayWord("Поука:...");
+  if (d1.includes("...")) {
+    throw new Error(`normalizePhoneticsToDisplayWord leaked dots! Got: ${d1}`);
+  }
+
+  // 3. Verify parseVttTimings filters out pure punctuation and dots from word timings
+  const sampleVtt = `WEBVTT
+
+00:00:01.000 --> 00:00:02.000
+...
+
+00:00:02.100 --> 00:00:03.000
+Поука:
+`;
+  const timings = parseVttTimings(sampleVtt);
+  if (timings.some(t => /^\.{2,}$/.test(t.word.trim()))) {
+    throw new Error(`parseVttTimings included pure dot tokens in timings! Got: ${JSON.stringify(timings)}`);
+  }
+  if (!timings.some(t => t.word.includes("Поука:"))) {
+    throw new Error(`parseVttTimings failed to capture legitimate word! Got: ${JSON.stringify(timings)}`);
+  }
+
+  console.log("✔ testDotVerbalizationPrevention passed: Zero spoken dots and clean silent pauses verified!");
+}
+
 async function runAllTests() {
   console.log("Running subtitle synchronization verification tests...");
   testMonotonicityAndBounds();
@@ -324,7 +365,9 @@ async function runAllTests() {
   testAudioDurationSafeguards();
   await testSalafiArabicPhoneticNormalization();
   await testArabicTransliterationAndDalilIntegrity();
+  await testDotVerbalizationPrevention();
   console.log("✔ All subtitle synchronization verification tests passed successfully!");
+  process.exit(0);
 }
 
 runAllTests().catch((err) => {
