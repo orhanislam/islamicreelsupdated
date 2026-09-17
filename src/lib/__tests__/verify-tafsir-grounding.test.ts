@@ -224,7 +224,10 @@ async function runTests() {
   if (narrationText.includes("Salafi Shaykh AI пояснява")) {
     throw new Error(`buildExplainedNarrationText leaked scholar attribution into video! Got:\n${narrationText}`);
   }
-  console.log("   ✓ Verified buildExplainedNarrationText strictly uses 'Обяснение:' without scholar attribution!");
+  if (narrationText.includes("Действие:") || narrationText.includes("Направи истигфар точно сега")) {
+    throw new Error(`buildExplainedNarrationText leaked action step into video narration! Got:\n${narrationText}`);
+  }
+  console.log("   ✓ Verified buildExplainedNarrationText strictly uses 'Обяснение:' without scholar attribution or action step!");
 
   // 13. Test Hadith 19 (Nawawi 40 / Tirmidhi 2516) Full Text Preservation
   console.log("\n13. Testing Hadith 19 (Nawawi 40 / Tirmidhi 2516) full authentic text preservation...");

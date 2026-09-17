@@ -306,12 +306,12 @@ function AssistantPage() {
     let text = "";
     if (scriptWorkflow) {
       const sw = scriptWorkflow;
-      const actLabel = detectActionOrDuaLabel(sw.actionStep);
       const cleanExpl = stripScholarAttribution(sw.explanation);
-      const cleanAct = cleanScriptPrefixes(sw.actionStep);
+      const cleanAct = sw.actionStep ? cleanScriptPrefixes(sw.actionStep) : "";
+      const actLabel = cleanAct ? detectActionOrDuaLabel(cleanAct) : "";
       const hookPrefix = sw.hookQuestion ? cleanScriptPrefixes(sw.hookQuestion) + "\n" + cleanScriptPrefixes(sw.hookContext || "") + "\n\n" : "";
-      const actPrefix = actLabel === "Дуа" ? "🤍 Дуа:" : "⚡ Действие:";
-      text = hookPrefix + "📖 " + title + "\n„" + (sw.dalilText || title) + "“\n\n💡 Обяснение: " + cleanExpl + "\n\n" + actPrefix + " " + cleanAct + "\n\n#islamicreels #коран #хадис #ислям #напомняне #садакаджария #bulgaria #islamicvideo";
+      const actLine = cleanAct ? "\n\n" + (actLabel === "Дуа" ? "🤍 Дуа:" : "⚡ Действие:") + " " + cleanAct : "";
+      text = hookPrefix + "📖 " + title + "\n„" + (sw.dalilText || title) + "“\n\n💡 Обяснение: " + cleanExpl + actLine + "\n\n#islamicreels #коран #хадис #ислям #напомняне #садакаджария #bulgaria #islamicvideo";
     } else {
       const cleanTitle = getThumbTitle(title);
       text = formatViralSocialCaption(cleanTitle, summary);
@@ -1744,18 +1744,20 @@ function AssistantPage() {
                                     <div className="text-white/90">{stripScholarAttribution(m.proposal.scriptWorkflow.explanation)}</div>
                                   </div>
 
-                                  <div className="p-2.5 rounded-lg bg-black/40 border border-emerald-500/30">
-                                    <div className="font-bold text-emerald-300 flex items-center gap-1 mb-1">
-                                      <span>
-                                        {detectActionOrDuaLabel(m.proposal.scriptWorkflow.actionStep) === "Дуа"
-                                          ? "🤍 Дуа:"
-                                          : "⚡ Действие:"}
-                                      </span>
+                                  {m.proposal.scriptWorkflow.actionStep && (
+                                    <div className="p-2.5 rounded-lg bg-black/40 border border-emerald-500/30">
+                                      <div className="font-bold text-emerald-300 flex items-center gap-1 mb-1">
+                                        <span>
+                                          {detectActionOrDuaLabel(m.proposal.scriptWorkflow.actionStep) === "Дуа"
+                                            ? "🤍 Дуа:"
+                                            : "⚡ Действие:"}
+                                        </span>
+                                      </div>
+                                      <div className="text-emerald-100/90 font-medium">
+                                        {cleanScriptPrefixes(m.proposal.scriptWorkflow.actionStep)}
+                                      </div>
                                     </div>
-                                    <div className="text-emerald-100/90 font-medium">
-                                      {cleanScriptPrefixes(m.proposal.scriptWorkflow.actionStep)}
-                                    </div>
-                                  </div>
+                                  )}
 
                                   {m.proposal.scriptWorkflow.sourceScholar && (
                                     <div
