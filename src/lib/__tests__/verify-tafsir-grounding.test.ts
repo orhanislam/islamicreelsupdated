@@ -238,7 +238,10 @@ async function runTests() {
   if (!nawawi19.hadithTextBg.includes("ако целият народ се събере")) {
     throw new Error(`Hadith 19 is missing the benefit/harm decree clause! Got: ${nawawi19.hadithTextBg}`);
   }
-  console.log("   ✓ Nawawi 19 has full untruncated Bulgarian text (pens lifted, pages dried).");
+  if (!nawawi19.hadithTextBg.includes("Пази заповедите на Аллах")) {
+    throw new Error(`Hadith 19 text should clearly state 'Пази заповедите на Аллах'! Got: ${nawawi19.hadithTextBg}`);
+  }
+  console.log("   ✓ Nawawi 19 has full untruncated Bulgarian text with clear 'Пази заповедите на Аллах'.");
 
   const promptBlock19 = formatTafsirGroundingPrompt({ hadithSharh: nawawi19 });
   if (!promptBlock19.includes("ОФИЦИАЛЕН АВТЕНТИЧЕН ПЪЛЕН ТЕКСТ НА ХАДИСА") || !promptBlock19.includes("Калемите са вдигнати")) {

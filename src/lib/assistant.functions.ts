@@ -913,7 +913,7 @@ export const suggestExplainedVideoProposal = createServerFn({ method: "POST" })
         { collection: "muslim", number: 1, title: "Сахих Муслим #1 (Хадисът на Джибрил - Ислям, Иман, Ихсан)" },
         { collection: "muslim", number: 2749, title: "Сахих Муслим #2749 (99-те части от Милостта на Аллах Всевишния)" },
         { collection: "nawawi40", number: 18, title: "Хадис 18 от ан-Науауи (Бой се от Аллах където и да се намираш)" },
-        { collection: "nawawi40", number: 19, title: "Хадис 19 от ан-Науауи (Пази Аллах и Той ще те пази)" },
+        { collection: "nawawi40", number: 19, title: "Хадис 19 от ан-Науауи (Пази заповедите на Аллах и Той ще те пази)" },
         { collection: "nawawi40", number: 21, title: "Хадис 21 от ан-Науауи (Кажи 'Повярвах в Аллах' и бъди непоколебим)" },
         { collection: "bukhari", number: 52, title: "Сахих ал-Бухари #52 (Парчето плът - пречистването на сърцето)" },
         { collection: "bukhari", number: 13, title: "Сахих ал-Бухари #13 (Желай за брата си това, което желаеш за себе си)" },
