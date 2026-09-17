@@ -1,7 +1,7 @@
 import { CarouselRendererButton } from "@/components/CarouselRendererButton";
 import React, { useState, useEffect, useRef } from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { Bot, Send, Loader2, Sparkles, Download, CheckCircle2, Video, Pencil, Brain, Trash2, Plus, Copy, Image as ImageIcon, BookOpen, ScrollText, ShieldCheck, History } from "lucide-react";
+import { Bot, Send, Loader2, Sparkles, Download, CheckCircle2, Video, Pencil, Brain, Trash2, Plus, Copy, Image as ImageIcon, BookOpen, ScrollText, ShieldCheck, History, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
@@ -9,7 +9,7 @@ import { copyToClipboardFallback } from "@/lib/utils";
 import { toast } from "sonner";
 import { chatWithAssistant, suggestViralProposal, suggestExplainedVideoProposal, suggestAlternativeProposal, suggestBatchViralProposals, confirmAndGenerateVideo, startBatchViralSeries, startBatchViralHadithSeries, getAssistantHistory, saveAssistantHistory, clearAssistantHistory, startBackgroundPlanGeneration, startBackgroundBatchGeneration, checkActiveBackgroundTasks, cleanProposalTitle, extractTopic, detectActionOrDuaLabel, cleanScriptPrefixes, stripScholarAttribution, type VideoProposal, type ExplainedVideoScript } from "@/lib/assistant.functions";
 import { getAiMemory, updateAiMemory, type AiMemory } from "@/lib/memory.functions";
-import { getOneMonthCooldownSummary } from "@/lib/generation-history.functions";
+import { getOneMonthCooldownSummary, recordRejectedProposalToHistory } from "@/lib/generation-history.functions";
 import { generateViralThumbnail } from "@/lib/thumbnail.functions";
 import { formatViralSocialCaption } from "@/lib/caption.functions";
 import { playStudioClick } from "@/lib/sfx";
@@ -29,6 +29,7 @@ type ChatMsg = {
   reference?: string;
   isPlanning?: boolean;
   planId?: string;
+  isRejected?: boolean;
 };
 
 const DEFAULT_MESSAGES: ChatMsg[] = [
@@ -387,9 +388,16 @@ function AssistantPage() {
     }
   }, [messages]);
 
+  const refreshCooldownSummary = async () => {
+    try {
+      const s = await getOneMonthCooldownSummary();
+      setCooldownSummary(s);
+    } catch {}
+  };
+
   useEffect(() => {
     getAiMemory().then((m) => setMemory(m)).catch(() => {});
-    getOneMonthCooldownSummary().then((s) => setCooldownSummary(s)).catch(() => {});
+    refreshCooldownSummary();
   }, []);
 
   const handleAddInstruction = async () => {
@@ -501,11 +509,28 @@ function AssistantPage() {
       setRejectingIdx(msgIdx);
       toast.message("🔄 Търся ново алтернативно предложение...");
 
+      // 1. Record rejected proposal immediately into 30-day cooldown history
+      await recordRejectedProposalToHistory({ data: { proposal } }).catch((err) => {
+        console.warn("Failed to record rejected proposal to history:", err);
+      });
+      refreshCooldownSummary();
+
+      // 2. Mark current proposal as rejected in chat
+      setMessages((prev) => {
+        const next = [...prev];
+        if (next[msgIdx]) {
+          next[msgIdx] = { ...next[msgIdx], isRejected: true };
+        }
+        return next;
+      });
+
+      // 3. Request alternative proposal (with rejection recorded)
       const res = await suggestAlternativeProposal({
         data: {
           currentTitle: proposal.title,
           topic: extractTopic(proposal),
           type: proposal.type,
+          rejectedProposal: proposal,
         },
       });
 
@@ -525,9 +550,39 @@ function AssistantPage() {
         },
       ]);
       playStudioClick("success");
-      toast.success("Предложено е ново алтернативно видео!");
+      toast.success(`Предложено е ново алтернативно видео! („${cleanProposalTitle(proposal.title)}“ е в Историята с 30 дни пауза)`);
     } catch (err: any) {
       toast.error(err?.message || "Грешка при генериране на алтернатива");
+    } finally {
+      setRejectingIdx(null);
+    }
+  };
+
+  const handleRejectOnly = async (proposal: VideoProposal, msgIdx: number) => {
+    if (rejectingIdx !== null) return;
+    try {
+      playStudioClick("click");
+      setRejectingIdx(msgIdx);
+      await recordRejectedProposalToHistory({ data: { proposal } });
+      refreshCooldownSummary();
+
+      setMessages((prev) => {
+        const next = [...prev];
+        if (next[msgIdx]) {
+          next[msgIdx] = { ...next[msgIdx], isRejected: true };
+        }
+        next.push({
+          role: "assistant",
+          text: `❌ **Предложението е отказано:**\n\n📖 **Цитат:** ${cleanProposalTitle(proposal.title)}\n\n🛡️ **Записано в Историята:** Този аят/хадис вече има **30-дневен период на охлаждане** (сякаш е бил използван). AI няма да го предлага отново за 1 месец, освен ако не го изтриете ръчно от страницата [📜 История](/history).`,
+        });
+        saveAssistantHistory({ data: { messages: next } }).catch(() => {});
+        return next;
+      });
+
+      playStudioClick("success");
+      toast.success(`„${cleanProposalTitle(proposal.title)}“ е записан в Историята с 30-дневен период на охлаждане!`);
+    } catch (err: any) {
+      toast.error(err?.message || "Грешка при отказване на предложението");
     } finally {
       setRejectingIdx(null);
     }
@@ -1699,47 +1754,67 @@ function AssistantPage() {
 
                     {m.proposal.type !== "carousel" && (
                       <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-border/40 mt-3">
-                        {/* Step-by-Step Approval ("Едно по Едно") Primary Buttons */}
-                        <Button
-                          size="sm"
-                          onClick={() => handleConfirmProposal(m.proposal!, idx)}
-                          disabled={confirmingIdx !== null || rejectingIdx !== null}
-                          className="rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold shadow-md cursor-pointer transition px-4 py-2 text-xs"
-                          title="Потвърди предложението и стартирай фоновото рендиране"
-                        >
-                          {confirmingIdx === idx ? (
-                            <>
-                              <Loader2 className="size-3.5 mr-1.5 animate-spin" />
-                              Генерира се...
-                            </>
-                          ) : (
-                            <>
-                              <CheckCircle2 className="size-3.5 mr-1.5" />
-                              ✅ Съгласи се / Одобри
-                            </>
-                          )}
-                        </Button>
+                        {m.isRejected ? (
+                          <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 text-xs font-semibold">
+                            <Trash2 className="size-3.5" /> Отказано и записано в Историята (30 дни пауза)
+                          </div>
+                        ) : (
+                          <>
+                            {/* Step-by-Step Approval ("Едно по Едно") Primary Buttons */}
+                            <Button
+                              size="sm"
+                              onClick={() => handleConfirmProposal(m.proposal!, idx)}
+                              disabled={confirmingIdx !== null || rejectingIdx !== null}
+                              className="rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold shadow-md cursor-pointer transition px-4 py-2 text-xs"
+                              title="Потвърди предложението и стартирай фоновото рендиране"
+                            >
+                              {confirmingIdx === idx ? (
+                                <>
+                                  <Loader2 className="size-3.5 mr-1.5 animate-spin" />
+                                  Генерира се...
+                                </>
+                              ) : (
+                                <>
+                                  <CheckCircle2 className="size-3.5 mr-1.5" />
+                                  ✅ Съгласи се / Одобри
+                                </>
+                              )}
+                            </Button>
 
-                        <Button
-                          size="sm"
-                          variant="destructive"
-                          onClick={() => handleRejectAndSuggestAlternative(m.proposal!, idx)}
-                          disabled={confirmingIdx !== null || rejectingIdx !== null}
-                          className="rounded-xl font-bold shadow-md cursor-pointer transition px-3.5 py-2 text-xs"
-                          title="Откажи това предложение и веднага предложи друго алтернативно"
-                        >
-                          {rejectingIdx === idx ? (
-                            <>
-                              <Loader2 className="size-3.5 mr-1.5 animate-spin" />
-                              Търсене...
-                            </>
-                          ) : (
-                            <>
-                              <Trash2 className="size-3.5 mr-1.5" />
-                              ❌ Откажи / Предложи друг
-                            </>
-                          )}
-                        </Button>
+                            <Button
+                              size="sm"
+                              variant="destructive"
+                              onClick={() => handleRejectAndSuggestAlternative(m.proposal!, idx)}
+                              disabled={confirmingIdx !== null || rejectingIdx !== null}
+                              className="rounded-xl font-bold shadow-md cursor-pointer transition px-3.5 py-2 text-xs"
+                              title="Откажи това предложение, запиши го в Историята и предложи алтернатива"
+                            >
+                              {rejectingIdx === idx ? (
+                                <>
+                                  <Loader2 className="size-3.5 mr-1.5 animate-spin" />
+                                  Търсене...
+                                </>
+                              ) : (
+                                <>
+                                  <Trash2 className="size-3.5 mr-1.5" />
+                                  ❌ Откажи / Предложи друг
+                                </>
+                              )}
+                            </Button>
+
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => handleRejectOnly(m.proposal!, idx)}
+                              disabled={confirmingIdx !== null || rejectingIdx !== null}
+                              className="rounded-xl font-semibold border-red-500/40 text-red-400 hover:bg-red-500/10 cursor-pointer transition px-3 py-2 text-xs"
+                              title="Само откажи предложението и го запиши в Историята (30 дни пауза) без ново предложение"
+                            >
+                              <X className="size-3.5 mr-1" />
+                              Само Откажи
+                            </Button>
+                          </>
+                        )}
 
                         <Button
                           variant="secondary"

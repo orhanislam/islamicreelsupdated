@@ -16,6 +16,7 @@ import {
 import {
   getExcludedScripturesOneMonth,
   checkProposalOneMonthCooldown,
+  recordRejectedScriptureDirect,
   type ExcludedScripturesData,
 } from "./generation-history.functions";
 import {
@@ -843,6 +844,15 @@ export const suggestExplainedVideoProposal = createServerFn({ method: "POST" })
     const userTopic = data?.topic ? `Тема по желание на потребителя: "${data.topic}"` : "";
 
     let preGroundingPrompt = "";
+    let chosenCandidateInfo: {
+      type: "quran" | "hadith";
+      title: string;
+      surah?: number;
+      ayah?: number;
+      collection?: string;
+      number?: number;
+    } | null = null;
+
     const detected = detectScriptureFromText(data?.topic || "");
     if (detected.type === "quran" && detected.surah && detected.ayah) {
       const tafsir = await fetchAuthenticTafsirDirect({
@@ -853,6 +863,12 @@ export const suggestExplainedVideoProposal = createServerFn({ method: "POST" })
       if (tafsir) {
         preGroundingPrompt = formatTafsirGroundingPrompt({ tafsir });
       }
+      chosenCandidateInfo = {
+        type: "quran",
+        title: `Сура ${detected.surah}:${detected.ayah}`,
+        surah: detected.surah,
+        ayah: detected.ayah,
+      };
     } else if (detected.type === "hadith" && detected.collection && detected.number) {
       const sharh = getVerifiedHadithSharhDirect({
         collection: detected.collection,
@@ -861,55 +877,106 @@ export const suggestExplainedVideoProposal = createServerFn({ method: "POST" })
       if (sharh) {
         preGroundingPrompt = formatTafsirGroundingPrompt({ hadithSharh: sharh });
       }
+      chosenCandidateInfo = {
+        type: "hadith",
+        title: `${detected.collection} #${detected.number}`,
+        collection: detected.collection,
+        number: Number(detected.number),
+      };
     } else if (!data?.topic) {
-      // Pick an authentic verified candidate from our database not in 30-day cooldown
-      const candidateSharhs = [
-        { collection: "bukhari", number: 1 },
-        { collection: "bukhari", number: 6424 },
-        { collection: "muslim", number: 1 },
-        { collection: "nawawi40", number: 18 },
-        { collection: "nawawi40", number: 19 },
-        { collection: "nawawi40", number: 21 },
-        { collection: "bukhari", number: 52 },
+      // Extensive verified pools of authentic Quran verses and Sahih hadiths
+      const candidateVerses = [
+        { surah: 13, ayah: 28, title: "Коран 13:28 (Покоят на сърцата при споменаването на Аллах)" },
+        { surah: 2, ayah: 255, title: "Коран 2:255 (Аят ал-Курси - Величието на Аллах)" },
+        { surah: 94, ayah: 5, title: "Коран 94:5-6 (С всяка трудност има облекчение)" },
+        { surah: 39, ayah: 53, title: "Коран 39:53 (Не губете надежда за милостта на Аллах)" },
+        { surah: 65, ayah: 2, title: "Коран 65:2-3 (Изход от всяко затруднение и препитание)" },
+        { surah: 3, ayah: 139, title: "Коран 3:139 (Не унивайте и не тъгувайте)" },
+        { surah: 2, ayah: 152, title: "Коран 2:152 (Помнете Ме, и Аз ще ви помня)" },
+        { surah: 2, ayah: 186, title: "Коран 2:186 (Аз съм наблизо, откликвам на зова на молещия се)" },
+        { surah: 2, ayah: 286, title: "Коран 2:286 (Аллах не възлага товар над силите)" },
+        { surah: 3, ayah: 173, title: "Коран 3:173 (Аллах ни е достатъчен и Той е най-прекрасният Защитник)" },
+        { surah: 8, ayah: 30, title: "Коран 8:30 (Аллах е най-добрият от кроящите)" },
+        { surah: 9, ayah: 51, title: "Коран 9:51 (Нищо няма да ни сполети освен предписаното от Аллах)" },
+        { surah: 14, ayah: 7, title: "Коран 14:7 (Ако сте благодарни, непременно ще ви надбавя)" },
+        { surah: 21, ayah: 87, title: "Коран 21:87 (Дуата на пророка Юнус - Ля иляха илля анта)" },
+        { surah: 40, ayah: 60, title: "Коран 40:60 (Зовете Ме с дуа и Аз ще ви откликна)" },
+        { surah: 50, ayah: 16, title: "Коран 50:16 (По-близо сме до човека от шийната му артерия)" },
+        { surah: 55, ayah: 13, title: "Коран 55:13 (И кое от благата на своя Господар ще отречете)" },
+        { surah: 103, ayah: 1, title: "Коран 103:1-3 (Кълна се във Времето - спасението чрез иман и сабр)" },
+        { surah: 112, ayah: 1, title: "Коран 112:1-4 (Сура Ал-Ихлас - Чистият Таухид)" },
       ];
-      const availableHadith = candidateSharhs.find(
-        (c) =>
+
+      const candidateSharhs = [
+        { collection: "bukhari", number: 1, title: "Сахих ал-Бухари #1 (Делата зависят от намеренията)" },
+        { collection: "bukhari", number: 6424, title: "Сахих ал-Бухари #6424 (Две блага - здраве и свободно време)" },
+        { collection: "muslim", number: 1, title: "Сахих Муслим #1 (Хадисът на Джибрил - Ислям, Иман, Ихсан)" },
+        { collection: "muslim", number: 2749, title: "Сахих Муслим #2749 (99-те части от Милостта на Аллах Всевишния)" },
+        { collection: "nawawi40", number: 18, title: "Хадис 18 от ан-Науауи (Бой се от Аллах където и да се намираш)" },
+        { collection: "nawawi40", number: 19, title: "Хадис 19 от ан-Науауи (Пази Аллах и Той ще те пази)" },
+        { collection: "nawawi40", number: 21, title: "Хадис 21 от ан-Науауи (Кажи 'Повярвах в Аллах' и бъди непоколебим)" },
+        { collection: "bukhari", number: 52, title: "Сахих ал-Бухари #52 (Парчето плът - пречистването на сърцето)" },
+        { collection: "bukhari", number: 13, title: "Сахих ал-Бухари #13 (Желай за брата си това, което желаеш за себе си)" },
+        { collection: "bukhari", number: 6018, title: "Сахих ал-Бухари #6018 (Говори добро или мълчи)" },
+        { collection: "bukhari", number: 6416, title: "Сахих ал-Бухари #6416 (Бъди на този свят като чужденец или пътник)" },
+      ];
+
+      // Filter out candidates within 30-day cooldown
+      const unexcludedVerses = candidateVerses.filter(
+        (v) =>
           !exclusionData.items.some(
-            (ex) => ex.type === "hadith" && ex.collection === c.collection && ex.number === c.number,
+            (ex) => ex.type === "quran" && Number(ex.surah) === v.surah && Number(ex.ayah) === v.ayah,
           ),
       );
-      if (availableHadith) {
-        const sharh = getVerifiedHadithSharhDirect(availableHadith);
+
+      const unexcludedHadiths = candidateSharhs.filter(
+        (h) =>
+          !exclusionData.items.some(
+            (ex) =>
+              ex.type === "hadith" &&
+              (ex.collection || "bukhari").toLowerCase().trim() === h.collection.toLowerCase().trim() &&
+              String(ex.number) === String(h.number),
+          ),
+      );
+
+      // Randomly pick candidate among unexcluded to guarantee fresh diversity
+      const pickVerse =
+        unexcludedVerses.length > 0 &&
+        (unexcludedHadiths.length === 0 || Math.random() < 0.5);
+
+      if (pickVerse && unexcludedVerses.length > 0) {
+        const randomIndex = Math.floor(Math.random() * unexcludedVerses.length);
+        const selected = unexcludedVerses[randomIndex];
+        const tafsir = await fetchAuthenticTafsirDirect({
+          surah: selected.surah,
+          ayah: selected.ayah,
+          scholarId: 91,
+        });
+        if (tafsir) {
+          preGroundingPrompt = formatTafsirGroundingPrompt({ tafsir });
+        }
+        chosenCandidateInfo = {
+          type: "quran",
+          title: selected.title,
+          surah: selected.surah,
+          ayah: selected.ayah,
+        };
+      } else if (unexcludedHadiths.length > 0) {
+        const randomIndex = Math.floor(Math.random() * unexcludedHadiths.length);
+        const selected = unexcludedHadiths[randomIndex];
+        const sharh = getVerifiedHadithSharhDirect({
+          collection: selected.collection,
+          number: selected.number,
+        });
         if (sharh) {
           preGroundingPrompt = formatTafsirGroundingPrompt({ hadithSharh: sharh });
         }
-      } else {
-        const candidateVerses = [
-          { surah: 13, ayah: 28 },
-          { surah: 2, ayah: 255 },
-          { surah: 94, ayah: 5 },
-          { surah: 39, ayah: 53 },
-          { surah: 65, ayah: 2 },
-          { surah: 3, ayah: 139 },
-          { surah: 103, ayah: 1 },
-          { surah: 112, ayah: 1 },
-        ];
-        const availableVerse = candidateVerses.find(
-          (v) =>
-            !exclusionData.items.some(
-              (ex) => ex.type === "quran" && ex.surah === v.surah && ex.ayah === v.ayah,
-            ),
-        );
-        if (availableVerse) {
-          const tafsir = await fetchAuthenticTafsirDirect({
-            surah: availableVerse.surah,
-            ayah: availableVerse.ayah,
-            scholarId: 91,
-          });
-          if (tafsir) {
-            preGroundingPrompt = formatTafsirGroundingPrompt({ tafsir });
-          }
-        }
+        chosenCandidateInfo = {
+          type: "hadith",
+          title: selected.title,
+          collection: selected.collection,
+          number: selected.number,
+        };
       }
     }
 
@@ -974,6 +1041,10 @@ ${userTopic}${preGroundingPrompt ? `\n\n${preGroundingPrompt}` : ""}
 - "useBRoll": true
 - "bRollInterval": 4
 
+ВАЖНО ПРАВИЛО ЗА СТРУКТУРАТА:
+Примерният JSON по-долу показва САМО ТЕХНИЧЕСКИ ОБРАЗЕЦ за структурата на ключовете.
+СТРИКТНО НЕ предлагай пак Коран 13:28, освен ако изрично не е посочен в конкретната заявка! Избери темата точно по указания далил/шарх!
+
 Върни валиден JSON със следната структура:
 {
   "reply": "Вълнуващо представяне на български защо този 4-степенен сценарий е толкова въздействащ.",
@@ -1002,9 +1073,13 @@ ${userTopic}${preGroundingPrompt ? `\n\n${preGroundingPrompt}` : ""}
 }
 Върни САМО валиден JSON без маркдаун кавички.`;
 
+    const userPromptText = chosenCandidateInfo
+      ? `Генерирай 1 ново и уникално Ислямско видео с обяснение за: ${chosenCandidateInfo.title}. Спазвай СТРИКТНО автентичния тефсир/шарх от контекста по-горе!`
+      : "Генерирай 1 ново и уникално Ислямско видео с обяснение сега според 4-степенния workflow.";
+
     const msgs: ChatMessage[] = [
       { role: "system", content: prompt },
-      { role: "user", content: "Генерирай 1 ново и уникално Ислямско видео с обяснение сега според 4-степенния workflow." },
+      { role: "user", content: userPromptText },
     ];
 
     const raw = await geminiChat("gemini-3.6-flash", msgs, true);
@@ -1018,25 +1093,28 @@ ${userTopic}${preGroundingPrompt ? `\n\n${preGroundingPrompt}` : ""}
       }
       parsed = JSON.parse(clean);
     } catch {
+      const fallbackTitle = chosenCandidateInfo?.title || "[Коран 94:5] С всяка трудност има облекчение";
       parsed = {
-        reply: "Предлагам ти дълбок аят от Корана с автентичен тефсир от Шейх ас-Са'ди (рахимахуллах) за истинския покой на сърцето.",
+        reply: `Предлагам ти благороден цитат: ${fallbackTitle} с автентично разяснение от Шейх AI.`,
         proposal: {
-          title: "[Коран 13:28] Покоят на Сърцата",
+          title: fallbackTitle,
           type: "explained_video",
-          surah: 13,
-          ayah: 28,
+          surah: chosenCandidateInfo?.surah || (chosenCandidateInfo?.type === "quran" ? 94 : undefined),
+          ayah: chosenCandidateInfo?.ayah || (chosenCandidateInfo?.type === "quran" ? 5 : undefined),
+          collection: chosenCandidateInfo?.collection,
+          number: chosenCandidateInfo?.number,
           count: 1,
           scriptWorkflow: {
-            hookQuestion: "Защо усещаш тежест и безпокойство в гърдите си, дори когато имаш всичко?",
-            hookContext: "Често търсим мир в социалните мрежи или материални неща, но душата остава празна.",
-            dalilIntro: "В Свещения Коран, Аллах Всевишният повелява:",
-            dalilText: "Онези, които вярват и сърцата им се успокояват при споменаването на Аллах. А нима не със споменаването на Аллах се успокояват сърцата?",
-            explanation: "Обяснение: Сърцето не може да намери истински покой, сигурност и наслада в нищо земно, освен чрез споменаването на Аллах, обичта към Него и отдаването единствено на Него.",
-            actionStep: "Спри за 1 минута точно сега, кажи искрено 'Субханаллах' и направи дуа. Запази това видео и го сподели за садака джария!",
+            hookQuestion: "Усещаш ли тежест и безсилие пред житейските изпитания?",
+            hookContext: "Често забравяме, че всяка трудност крие в себе си божествена мъдрост и близко облекчение.",
+            dalilIntro: chosenCandidateInfo?.type === "hadith" ? "Пратеникът на Аллах ﷺ ни учи:" : "В Свещения Коран, Аллах Всевишният повелява:",
+            dalilText: "Наистина, с всяка трудност има облекчение. Наистина, с всяка трудност има облекчение.",
+            explanation: "Обяснение: Изпитанията в живота не траят вечно. Всеки вярващ, който проявява сабр и упование в Твореца, намира лекота и избавление точно тогава, когато най-малко очаква.",
+            actionStep: "Направи търпение точно днес, кажи 'Алхамдулиллях' и направи дуа за облекчение. Сподели видеото за добро!",
           },
-          summaryBg: "Обяснение: Сърцето намира истински покой и спасение единствено в споменаването на Аллах и Таухида.",
-          themeBg: "Величествено звездно небе над тихи планински върхове",
-          searchQuery: "night stars mountain peaceful dark cinematic",
+          summaryBg: "Обяснение: Всяко изпитание е последвано от двойно облекчение и милост от Аллах Всевишния.",
+          themeBg: "Величествен планински изгрев със златисти слънчеви лъчи над буря",
+          searchQuery: "mountain sunrise golden sun rays nature vertical",
           tiktokTheme: "hormozi",
           useBRoll: true,
           bRollInterval: 4,
@@ -1107,9 +1185,16 @@ ${userTopic}${preGroundingPrompt ? `\n\n${preGroundingPrompt}` : ""}
 
 export const suggestAlternativeProposal = createServerFn({ method: "POST" })
   .validator(
-    (input?: { currentTitle?: string; topic?: string; type?: string }) => input || {},
+    (input?: { currentTitle?: string; topic?: string; type?: string; rejectedProposal?: any }) => input || {},
   )
   .handler(async ({ data }) => {
+    // Record rejected proposal immediately into 30-day cooldown history
+    if (data?.rejectedProposal) {
+      await recordRejectedScriptureDirect(data.rejectedProposal).catch((err) => {
+        console.warn("[suggestAlternativeProposal] Failed to record rejected proposal:", err);
+      });
+    }
+
     const memory = await getAiMemory();
     const exclusionData = await getExcludedScripturesOneMonth();
     const historyList = (memory.usageHistory || []).map((x) => `- ${x.identifier}`).join("\n");

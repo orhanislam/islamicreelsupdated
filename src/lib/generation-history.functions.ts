@@ -430,6 +430,82 @@ export async function clearGenerationHistoryDirect(): Promise<void> {
   });
 }
 
+/**
+ * Records a rejected proposal directly into generation history with status 'completed',
+ * placing it into the 30-day cooldown so AI will not suggest it again unless manually deleted.
+ */
+export async function recordRejectedScriptureDirect(proposal: {
+  title?: string;
+  reference?: string;
+  type?: string;
+  surah?: number;
+  ayah?: number;
+  ayahEnd?: number;
+  count?: number;
+  collection?: string;
+  hadithCollection?: string;
+  number?: string | number;
+  hadithNumber?: string | number;
+  arabicText?: string;
+  bulgarianText?: string;
+  scriptWorkflow?: {
+    hookQuestion?: string;
+    hookContext?: string;
+    dalilIntro?: string;
+    dalilText?: string;
+    explanation?: string;
+    actionStep?: string;
+  };
+  summaryBg?: string;
+  themeBg?: string;
+}): Promise<GenerationHistoryItem> {
+  const surah = proposal.surah !== undefined ? Number(proposal.surah) : undefined;
+  const ayah = proposal.ayah !== undefined ? Number(proposal.ayah) : undefined;
+  const count = proposal.count ? Number(proposal.count) : 1;
+  const ayahEnd =
+    proposal.ayahEnd !== undefined
+      ? Number(proposal.ayahEnd)
+      : ayah && count > 1
+      ? ayah + count - 1
+      : undefined;
+
+  const collection = proposal.hadithCollection || proposal.collection;
+  const hadithNumber = proposal.hadithNumber !== undefined ? proposal.hadithNumber : proposal.number;
+  const isHadith = Boolean(collection || hadithNumber);
+  const isAyah = Boolean(surah && ayah);
+
+  const cleanTitle =
+    proposal.title ||
+    proposal.reference ||
+    (isAyah
+      ? `Сура ${surah}:${ayah}${ayahEnd && ayahEnd > ayah ? `-${ayahEnd}` : ""}`
+      : isHadith
+      ? `Хадис ${collection || "Сахих"} #${hadithNumber}`
+      : "Отхвърлено предложение");
+
+  return recordGenerationEntryDirect({
+    type: isHadith ? "hadith" : isAyah ? "ayah" : (proposal.type === "carousel" ? "carousel" : "ayah"),
+    title: cleanTitle,
+    reference: cleanTitle,
+    surah,
+    ayah,
+    ayahEnd,
+    collection,
+    hadithNumber,
+    arabicText: proposal.arabicText || proposal.scriptWorkflow?.dalilText || "",
+    bulgarianText:
+      proposal.scriptWorkflow?.dalilText ||
+      proposal.bulgarianText ||
+      proposal.scriptWorkflow?.explanation ||
+      proposal.summaryBg ||
+      "",
+    format: proposal.type === "carousel" ? "carousel" : "video",
+    theme: proposal.themeBg || "hormozi",
+    status: "completed", // "сякаш съм го използвал" -> recorded as used so 30-day cooldown is immediately active
+    timestamp: Date.now(),
+  });
+}
+
 // ---------------------------------------------------------------------------
 // TanStack Start Server Functions
 // ---------------------------------------------------------------------------
@@ -444,6 +520,13 @@ export const addGenerationHistoryEntry = createServerFn({ method: "POST" })
   .validator((input: { entry: Omit<GenerationHistoryItem, "id"> & { id?: string } }) => input)
   .handler(async ({ data: { entry } }): Promise<GenerationHistoryItem> => {
     return recordGenerationEntryDirect(entry);
+  });
+
+export const recordRejectedProposalToHistory = createServerFn({ method: "POST" })
+  .validator((input: { proposal: any }) => input)
+  .handler(async ({ data: { proposal } }): Promise<{ success: boolean; item: GenerationHistoryItem }> => {
+    const item = await recordRejectedScriptureDirect(proposal);
+    return { success: true, item };
   });
 
 export const deleteGenerationHistoryEntry = createServerFn({ method: "POST" })
