@@ -61,6 +61,15 @@ export const buildCarouselVideo = createServerFn({ method: "POST" })
       narrationText = displayTitle;
     }
 
+    // Sanitize theology, respect, and artifacts with render-analyzer
+    const { analyzeAndFixRenderPayloadSync } = await import("./render-analyzer");
+    const preAnalysis = analyzeAndFixRenderPayloadSync({
+      bulgarian: narrationText,
+      topic: displayTitle,
+      reference: displayTitle,
+    });
+    narrationText = preAnalysis.data.bulgarian || narrationText;
+
     console.log(`[carousel-video] Starting professional video render for "${displayTitle}". Narration length: ${narrationText.length}`);
 
     // 2. Synthesize authentic voiceover narration with exact word-level timings

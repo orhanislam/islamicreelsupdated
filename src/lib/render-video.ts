@@ -15,6 +15,7 @@ import {
   type SafeZoneGeometry,
   type PlatformSafeZoneProfile,
 } from "./safe-zone";
+import { analyzeAndFixRenderPayloadSync } from "./render-analyzer";
 
 export type WordSegment = { start: number; end: number };
 
@@ -373,6 +374,20 @@ export async function renderVideo(opts: VideoOptions): Promise<{ blob: Blob; mim
     );
   }
 
+  // 0. Render Quality & Halal Compliance Auto-Remediator
+  try {
+    const analysis = analyzeAndFixRenderPayloadSync(opts);
+    opts = { ...opts, ...analysis.data };
+    console.log(
+      `[render-video] 🛡️ Render Analyzer: ${analysis.report.issuesFound} inspected, ${analysis.report.issuesFixed} auto-fixed.`,
+    );
+    for (const act of analysis.report.actionsTaken) {
+      console.log(`  ✔ [auto-fix] ${act}`);
+    }
+  } catch (e) {
+    console.warn("[render-video] Pre-render analyzer non-fatal warning:", e);
+  }
+
   const ios = isIOSDevice();
   const { scale, sz } = configureCanvasSize(ios, opts.quality, opts.subtitlePosition);
   const videoBitsPerSecond = opts.quality === "720p" ? 14_000_000 : 28_000_000;
@@ -532,9 +547,22 @@ export async function renderVideo(opts: VideoOptions): Promise<{ blob: Blob; mim
           paddedBuf.copyToChannel(originalBuf.getChannelData(channel), channel, 0);
         }
 
-        // The video duration is based on the REAL audio, not the silence padding
-        duration = originalBuf.duration;
-        audioBufDuration = originalBuf.duration;
+        // Zero Dead Air: video ends tightly when the last spoken word finishes
+        const maxTimingEnd = Array.isArray(opts.bulgarianWordTimings) && opts.bulgarianWordTimings.length > 0
+          ? Math.max(...opts.bulgarianWordTimings.map((t: any) => Number(t.end) || 0))
+          : 0;
+
+        if (maxTimingEnd > 0) {
+          const tightDur = Number((maxTimingEnd + 0.15).toFixed(2));
+          duration = tightDur;
+          audioBufDuration = tightDur;
+          console.log(
+            `[render-video] Zero Dead Air: Last word ends at ${maxTimingEnd.toFixed(2)}s -> tight duration: ${tightDur.toFixed(2)}s (buffer was ${originalBuf.duration.toFixed(2)}s)`
+          );
+        } else {
+          duration = originalBuf.duration;
+          audioBufDuration = originalBuf.duration;
+        }
 
         audioDest = audioCtx.createMediaStreamDestination();
         audioSource = audioCtx.createBufferSource();
@@ -904,7 +932,10 @@ export async function renderVideo(opts: VideoOptions): Promise<{ blob: Blob; mim
       return { ...p, start, end, fontSize: fs, lineHeight: lh, lines };
     });
     if (phraseRender.length) {
-      phraseRender[0].start = 0;
+      // Do NOT force phraseRender[0].start = 0 here.
+      // When ElevenLabs provides exact timestamps, the first word may have a
+      // small leading offset (e.g. 0.3s of TTS silence before speech begins).
+      // Forcing it to 0 makes subtitles appear before the speaker's voice.
       for (let i = 0; i < phraseRender.length - 1; i++) {
         // Make phrase boundaries contiguous: no overlapping timestamps or gaps
         phraseRender[i].end = phraseRender[i + 1].start;
@@ -1376,7 +1407,10 @@ export async function renderVideo(opts: VideoOptions): Promise<{ blob: Blob; mim
         } else {
           const clockElapsed =
             hasAudio && audioElapsed > 0.05 && !audioClockStale ? audioElapsed : wall;
-          elapsed = Math.min(duration, Math.max(clockElapsed, Math.min(wall, revealDuration)));
+          // Use audio clock as the sole authority for subtitle timing.
+          // Never let wall clock race ahead of audio — that causes subtitles to
+          // appear before the speaker actually pronounces the word.
+          elapsed = Math.min(duration, clockElapsed);
         }
         const { captionDone } = drawFrame(elapsed);
 

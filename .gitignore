@@ -37,4 +37,5 @@ jobs_raw.txt
 .env
 update-env.cjs
 .agents/
+ssh_deploy.*
 

@@ -632,6 +632,23 @@ export async function executeRenderTask(opts: any): Promise<any> {
       // ignore non-critical cleanup errors
     }
 
+    // 0. Self-Healing Quality & Halal Compliance Inspection (Render Analyzer)
+    let auditReport: any = null;
+    try {
+      const { analyzeAndFixRenderPayload } = await import("./render-analyzer");
+      const analysisResult = await analyzeAndFixRenderPayload(data, { synthesizeAudioIfMissing: true });
+      Object.assign(data, analysisResult.data);
+      auditReport = analysisResult.report;
+      console.log(
+        `[server-render] 🛡️ Render Analyzer: ${auditReport.issuesFound} inspected, ${auditReport.issuesFixed} auto-fixed.`
+      );
+      for (const act of auditReport.actionsTaken) {
+        console.log(`  ✔ [auto-fix] ${act}`);
+      }
+    } catch (anErr) {
+      console.warn("[server-render] Render analyzer non-fatal warning:", anErr);
+    }
+
     const sessionId = Date.now().toString() + Math.floor(Math.random() * 10000);
     const bgPath = path.join(tempDir, `bg_${sessionId}`); // extension added later
     const audioPath = path.join(tempDir, `audio_${sessionId}.mp3`);
@@ -767,26 +784,25 @@ export async function executeRenderTask(opts: any): Promise<any> {
         audioDur = 20;
       }
 
-      // 4. CRITICAL SAFEGUARD: Compare against actual speech word timestamps!
-      // In Edge-TTS / ElevenLabs, each spoken word has start/end timestamps.
-      // The video must NEVER cut off 5-10 seconds before the speaker finishes talking!
+      // 4. ZERO DEAD AIR & EXACT SPEECH TIMING ENFORCEMENT
+      // User requirement: "след като свърши последната дума да няма пауза"
       const maxTimingEnd = Array.isArray(data.bulgarianWordTimings) && data.bulgarianWordTimings.length > 0
         ? Math.max(...data.bulgarianWordTimings.map((t: any) => Number(t.end) || 0))
         : 0;
 
       if (maxTimingEnd > 0) {
-        // Speech cannot finish before the last word has been spoken!
-        // Always add a 1.2s outro buffer so the last syllable isn't cut off abruptly.
-        const minRequiredDuration = maxTimingEnd + 1.2;
-        if (audioDur < minRequiredDuration) {
-          console.log(
-            `[server-render] Probed audio duration (${audioDur.toFixed(2)}s) is shorter than last spoken word (${maxTimingEnd.toFixed(2)}s). Clamping audio duration to ${minRequiredDuration.toFixed(2)}s.`
-          );
-          audioDur = minRequiredDuration;
-        }
+        // Only 0.15s micro-release to allow the final consonant sound to complete naturally without digital click,
+        // and strictly ZERO trailing dead silence!
+        const tightDuration = Number((maxTimingEnd + 0.15).toFixed(2));
+        console.log(
+          `[server-render] Zero Dead Air: Last spoken word ends at ${maxTimingEnd.toFixed(2)}s. Clamping video duration tightly to ${tightDuration.toFixed(2)}s (probed was ${audioDur.toFixed(2)}s).`
+        );
+        audioDur = tightDuration;
+      } else {
+        // No word timings available: clamp to probed duration (minimum 3s)
+        audioDur = Math.max(audioDur, 3);
       }
 
-      audioDur = Math.max(audioDur, 10);
       console.log(`[server-render] Final video duration configured: ${audioDur.toFixed(2)} seconds`);
 
       // 2. Download/Save Background
@@ -1032,7 +1048,7 @@ export async function executeRenderTask(opts: any): Promise<any> {
                   await fs.copyFile(outPath, dest);
                   await fs.unlink(outPath).catch(() => {});
                 });
-                resolve(JSON.stringify({ directWrite: true, filePath: dest, size: stat.size }));
+                resolve(JSON.stringify({ directWrite: true, filePath: dest, size: stat.size, auditReport }));
               } else {
                 const buf = await fs.readFile(outPath);
                 resolve(buf.toString("base64"));
@@ -1428,11 +1444,15 @@ async function processRenderQueue() {
       });
 
       let directWriteSuccess = false;
+      let parsedAuditReport: any = null;
       if (typeof renderResult === "string" && renderResult.startsWith("{")) {
         try {
           const parsed = JSON.parse(renderResult);
           if (parsed.directWrite && parsed.filePath) {
             directWriteSuccess = true;
+          }
+          if (parsed.auditReport) {
+            parsedAuditReport = parsed.auditReport;
           }
         } catch {}
       }
@@ -1448,6 +1468,9 @@ async function processRenderQueue() {
         if (idx !== -1) {
           curJobs[idx].status = "completed";
           curJobs[idx].completedAt = Date.now();
+          if (parsedAuditReport) {
+            curJobs[idx].auditReport = parsedAuditReport;
+          }
           await writeJobsFile(curJobs);
         }
       });
@@ -1611,6 +1634,13 @@ export const cleanServerDiskSpace = createServerFn({ method: "POST" }).handler(a
   await aggressivelyCleanServerDisk(true);
   return { success: true };
 });
+
+export const analyzeRenderQualityAndCompliance = createServerFn({ method: "POST" })
+  .validator((input: any) => input)
+  .handler(async ({ data }) => {
+    const { analyzeAndFixRenderPayload } = await import("./render-analyzer");
+    return await analyzeAndFixRenderPayload(data);
+  });
 
 let maintenanceTimerStarted = false;
 export function scheduleServerMaintenance() {

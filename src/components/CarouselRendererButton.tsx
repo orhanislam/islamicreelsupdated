@@ -6,6 +6,7 @@ import { generateBackground, getCarouselBackgrounds } from "@/lib/backgrounds.fu
 import { renderCarouselSlide } from "@/lib/render-carousel";
 import { triggerMakeWebhook } from "@/lib/make.functions";
 import { cleanProposalTitle } from "@/lib/assistant.functions";
+import { formatViralSocialCaption, generateTikTokSEOTitle } from "@/lib/caption.functions";
 import { toast } from "sonner";
 import { saveMediaBlob } from "@/lib/download-media";
 import JSZip from "jszip";
@@ -13,6 +14,7 @@ import { autoSplitSlides } from "@/lib/split-slides";
 import { buildCarouselVideo } from "@/lib/carousel-video.functions";
 import { fetchCarouselSlideVideos, getCarouselSlideVideos } from "@/lib/pexels.functions";
 import { addGenerationHistoryEntry } from "@/lib/generation-history.functions";
+
 
 type Slide = {
   topTitle: string;
@@ -187,31 +189,96 @@ export function CarouselRendererButton({ slides: initialSlides, title }: { slide
     }
   };
 
-  const handleCopyTitle = () => {
-    if (cleanTitle) {
-      if (navigator.clipboard && navigator.clipboard.writeText) {
-        navigator.clipboard.writeText(cleanTitle).catch((err) => console.error(err));
-        toast.success("Заглавието е копирано!");
-      } else {
-        const textArea = document.createElement("textarea");
-        textArea.value = cleanTitle;
-        textArea.style.position = "fixed";
-        textArea.style.left = "-999999px";
-        textArea.style.top = "-999999px";
-        document.body.appendChild(textArea);
-        textArea.focus();
-        textArea.select();
-        try {
-          document.execCommand("copy");
-          toast.success("Заглавието е копирано!");
-        } catch (err) {
-          console.error("Fallback copy failed", err);
-          toast.error("Копирането не бе успешно.");
-        }
-        document.body.removeChild(textArea);
+  /** Extract the best summary/dalil/hook from slides for the SEO caption */
+  const _buildCaptionFromSlides = () => {
+    // Slide 1 → hook (mainText), Slide 3/4 → dalilText (quoteText), last → actionStep (bottomText or mainText with "Запази"/"Амин")
+    let hookQuestion = "";
+    let dalilText = "";
+    let explanation = "";
+    let actionStep = "";
+
+    const slides = initialSlides || [];
+    // Hook from first slide
+    const firstSlide = slides[0];
+    if (firstSlide) {
+      hookQuestion = (firstSlide.mainText || firstSlide.text || "").trim().slice(0, 180);
+    }
+    // Dalil from slide with quoteText, or slide 2+
+    for (let i = 1; i < slides.length; i++) {
+      const s = slides[i];
+      if (s.quoteText && s.quoteText.trim().length > 15) {
+        dalilText = s.quoteText.trim();
+        break;
+      }
+      if (s.mainText && /„|"|\"|«|Аллах|Пратеникът|Всевишният/i.test(s.mainText)) {
+        dalilText = s.mainText.trim();
+        break;
       }
     }
+    // Explanation from commentaryText of any slide
+    for (const s of slides) {
+      if (s.commentaryText && s.commentaryText.trim().length > 20) {
+        explanation = s.commentaryText.trim();
+        break;
+      }
+    }
+    // Action from last slide
+    const lastSlide = slides[slides.length - 1];
+    if (lastSlide && lastSlide !== firstSlide) {
+      actionStep = (lastSlide.bottomText || lastSlide.mainText || "").trim();
+    }
+
+    return { hookQuestion, dalilText, explanation, actionStep };
   };
+
+  /** Copy full TikTok SEO + Salafi AI Shaykh caption to clipboard */
+  const handleCopyCaption = () => {
+    const { hookQuestion, dalilText, explanation, actionStep } = _buildCaptionFromSlides();
+    const text = formatViralSocialCaption(cleanTitle, undefined, {
+      title: cleanTitle,
+      hookQuestion,
+      dalilText,
+      explanation,
+      actionStep,
+    });
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).catch((err) => console.error(err));
+    } else {
+      const ta = document.createElement("textarea");
+      ta.value = text;
+      ta.style.position = "fixed";
+      ta.style.left = "-999999px";
+      ta.style.top = "-999999px";
+      document.body.appendChild(ta);
+      ta.focus();
+      ta.select();
+      try { document.execCommand("copy"); } catch {}
+      document.body.removeChild(ta);
+    }
+    toast.success("✅ TikTok SEO текстът (Salafi AI Shaykh) е копиран!");
+  };
+
+  /** Copy just the clean 1-line TikTok SEO headline */
+  const handleCopyTitle = () => {
+    const seoTitle = generateTikTokSEOTitle(cleanTitle);
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(seoTitle).catch((err) => console.error(err));
+    } else {
+      const ta = document.createElement("textarea");
+      ta.value = seoTitle;
+      ta.style.position = "fixed";
+      ta.style.left = "-999999px";
+      ta.style.top = "-999999px";
+      document.body.appendChild(ta);
+      ta.focus();
+      ta.select();
+      try { document.execCommand("copy"); } catch {}
+      document.body.removeChild(ta);
+    }
+    toast.success("✅ TikTok SEO заглавието е копирано!");
+  };
+
+
 
   const handleGenerateVideo = async () => {
     if (!initialSlides || initialSlides.length === 0) return;
@@ -284,13 +351,25 @@ export function CarouselRendererButton({ slides: initialSlides, title }: { slide
 
   return (
     <div className="mt-3 flex flex-col gap-2">
+      {/* Primary: Full TikTok SEO Caption + Salafi AI Shaykh text */}
+      <Button
+        variant="outline"
+        onClick={handleCopyCaption}
+        className="w-full gap-2 border-teal-500/40 hover:bg-teal-500/10 text-teal-400 font-semibold"
+        title="Копирай пълния TikTok SEO пост (заглавие, Далил, Salafi AI Shaykh обяснение, призив, хаштагове)"
+      >
+        <Copy className="size-4" /> 📋 Копирай TikTok SEO Текст (Salafi AI Shaykh)
+      </Button>
+      {/* Secondary: Just the 1-line SEO headline */}
       <Button
         variant="outline"
         onClick={handleCopyTitle}
-        className="w-full gap-2 border-emerald-500/30 hover:bg-emerald-500/10 text-emerald-400"
+        className="w-full gap-2 border-emerald-500/30 hover:bg-emerald-500/10 text-emerald-400 text-sm"
+        title="Копирай само SEO заглавието (1 ред)"
       >
-        <Copy className="size-4" /> Копирай Заглавието (за TikTok)
+        <Copy className="size-3.5" /> Само SEO Заглавие (1 ред)
       </Button>
+
       <div className="flex gap-2 w-full flex-wrap">
         <Button
           onClick={handleGenerate}

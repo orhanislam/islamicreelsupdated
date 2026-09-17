@@ -7,11 +7,11 @@ import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { copyToClipboardFallback } from "@/lib/utils";
 import { toast } from "sonner";
-import { chatWithAssistant, suggestViralProposal, suggestExplainedVideoProposal, suggestAlternativeProposal, suggestBatchViralProposals, confirmAndGenerateVideo, startBatchViralSeries, startBatchViralHadithSeries, getAssistantHistory, saveAssistantHistory, clearAssistantHistory, startBackgroundPlanGeneration, startBackgroundBatchGeneration, checkActiveBackgroundTasks, cleanProposalTitle, extractTopic, detectActionOrDuaLabel, cleanScriptPrefixes, stripScholarAttribution, type VideoProposal, type ExplainedVideoScript } from "@/lib/assistant.functions";
+import { chatWithAssistant, suggestViralProposal, suggestExplainedVideoProposal, suggestAlternativeProposal, suggestBatchViralProposals, confirmAndGenerateVideo, startBatchViralSeries, startBatchViralHadithSeries, getAssistantHistory, saveAssistantHistory, clearAssistantHistory, startBackgroundPlanGeneration, startBackgroundBatchGeneration, checkActiveBackgroundTasks, cleanProposalTitle, extractTopic, detectActionOrDuaLabel, cleanScriptPrefixes, stripScholarAttribution, type VideoProposal, type ExplainedVideoScript, type ManagerAction } from "@/lib/assistant.functions";
 import { getAiMemory, updateAiMemory, type AiMemory } from "@/lib/memory.functions";
 import { getOneMonthCooldownSummary, recordRejectedProposalToHistory } from "@/lib/generation-history.functions";
 import { generateViralThumbnail } from "@/lib/thumbnail.functions";
-import { formatViralSocialCaption } from "@/lib/caption.functions";
+import { formatViralSocialCaption, generateTikTokSEOTitle } from "@/lib/caption.functions";
 import { playStudioClick } from "@/lib/sfx";
 import { getNextTawheedTopic, getTawheedTaxonomy } from "@/lib/tawheed-taxonomy";
 
@@ -35,7 +35,7 @@ type ChatMsg = {
 const DEFAULT_MESSAGES: ChatMsg[] = [
   {
     role: "assistant",
-    text: "Здравей! Аз съм твоят интелигентен Ислямски AI Видео Асистент с дълготрайна памет 🧠 и **постоянен чат на живо** (историята никога не се изчиства автоматично).\n\nКажи ми какво видео искаш да създадем или поискай **пакет от идеи за одобрение** (Коран, Хадиси и TikTok теми). Аз изготвям подробен план с предложения, от който можеш да избереш кои да генерираме!",
+    text: "Ас-саляму алейкум уа рахматуллахи уа баракатух, брат Муслим! 🌿\n\nАз съм **Шейх Салафи AI (Salafi Shaykh AI)** – твоят главен мениджър на това видео студио и духовно-оперативен наставник по манхаджа на Праведните предци (ас-Саляф ас-Салих – по стъпките на Шейх Ибн Баз, Шейх ал-Албани и Шейх Ибн Усеймин, рахимахумуллах).\n\nКато Главен Мениджър на студиото, аз **управлявам и изпълнявам абсолютно всичко директно от тази страница**:\n- 🎬 **Генериране и пускане на видеа** – Коран, Сахих Хадиси и 4-степенни видеа с обяснение и Тафсир.\n- 📱 **Вайръл карусели за Таухид** – 4 до 7 балансирани слайда с цитати и поуки.\n- 🚀 **Пакетни серии** – автоматично планиране и рендиране на цели серии (от 1 до 10 видеа).\n- 📊 **Мониторинг на рендирането** – проверка на активните фонови задачи на сървъра в реално време.\n- 🎨 **Вайръл корици и описания** – генериране на thumbnails и описания с хаштагове за социалните мрежи.\n- 📖 **Богословски консултации** – автентични ислямски отговори и съвети за съдържанието.\n\nКажи ми какво искаш да направим или напиши директна команда (напр. *„Пусни серия от 3 хадиса“*, *„Направи карусел за Таухид“*, *„Какво се рендира?“*), и аз веднага ще поема изпълнението!",
   },
 ];
 
@@ -309,7 +309,9 @@ function AssistantPage() {
       const actLabel = detectActionOrDuaLabel(sw.actionStep);
       const cleanExpl = stripScholarAttribution(sw.explanation);
       const cleanAct = cleanScriptPrefixes(sw.actionStep);
-      text = `${sw.hookQuestion ? `${cleanScriptPrefixes(sw.hookQuestion)}\n${cleanScriptPrefixes(sw.hookContext || "")}\n\n` : ""}📖 ${title}\n„${sw.dalilText || title}“\n\n💡 Обяснение: ${cleanExpl}\n\n${actLabel === "Дуа" ? "🤍 Дуа:" : "⚡ Действие:"} ${cleanAct}\n\n#islamicreels #коран #хадис #ислям #напомняне #садакаджария #bulgaria #islamicvideo`;
+      const hookPrefix = sw.hookQuestion ? cleanScriptPrefixes(sw.hookQuestion) + "\n" + cleanScriptPrefixes(sw.hookContext || "") + "\n\n" : "";
+      const actPrefix = actLabel === "Дуа" ? "🤍 Дуа:" : "⚡ Действие:";
+      text = hookPrefix + "📖 " + title + "\n„" + (sw.dalilText || title) + "“\n\n💡 Обяснение: " + cleanExpl + "\n\n" + actPrefix + " " + cleanAct + "\n\n#islamicreels #коран #хадис #ислям #напомняне #садакаджария #bulgaria #islamicvideo";
     } else {
       const cleanTitle = getThumbTitle(title);
       text = formatViralSocialCaption(cleanTitle, summary);
@@ -597,7 +599,7 @@ function AssistantPage() {
 
     const lower = userText.toLowerCase();
 
-    // Studio Control commands from chat
+    // 1. Studio Control commands from chat
     if (/^(изчисти чата|изчисти|clear chat)\b/i.test(lower)) {
       await handleClearChat();
       return;
@@ -607,7 +609,95 @@ function AssistantPage() {
       return;
     }
 
-    // Step-by-Step Approval chat triggers
+    // 2. Direct Task Monitoring from chat
+    if (/^(какво се рендира|какво правиш|задачи|статус|активни задачи|провери задачите|провери рендера|check tasks|tasks|status)\b/i.test(lower)) {
+      setMessages((prev) => [...prev, { role: "user", text: userText }]);
+      setLoading(true);
+      try {
+        const checkRes = await checkActiveBackgroundTasks();
+        const tasks = checkRes.activeTasks || [];
+        setActiveTasks(tasks);
+        let statusMsg = "";
+        if (tasks.length > 0) {
+          statusMsg = `📊 **Шейх Салафи AI (Доклад за активните задачи):**\n\nВ момента на сървъра се изпълняват **${tasks.length} активни задачи**:\n\n` +
+            tasks.map((t) => `• **${t.title}**: ${t.message} (${t.progress || 10}%)`).join("\n") +
+            `\n\n⏳ Рендирането продължава автоматично. Можеш спокойно да оставиш страницата или да ми възложиш още задачи!`;
+        } else {
+          statusMsg = `✨ **Шейх Салафи AI (Статус на студиото):**\n\nВ момента **няма активни задачи за рендиране** на сървъра. Всички ресурси са свободни и готови за нови видеа!\n\nКажи ми каква серия или видео проект искаш да стартираме.`;
+        }
+        setMessages((prev) => [...prev, { role: "assistant", text: statusMsg }]);
+      } catch (err: any) {
+        toast.error("Грешка при проверка на задачите");
+      } finally {
+        setLoading(false);
+      }
+      return;
+    }
+
+    // 3. Direct Batch Hadith Command from chat
+    const hadithBatchMatch = lower.match(/(?:пусни|генерирай|направи|стартирай|създай)\s+(?:серия|пакет)?\s*(?:от)?\s*(\d+)?\s*(?:видеа\s+)?(?:с\s+)?хадис/i);
+    if (hadithBatchMatch) {
+      const count = hadithBatchMatch[1] ? Math.min(10, Math.max(1, parseInt(hadithBatchMatch[1], 10))) : 3;
+      setMessages((prev) => [...prev, { role: "user", text: userText }]);
+      await handleStartHadithBatchSeries(count);
+      return;
+    }
+
+    // 4. Direct Batch Quran Command from chat
+    const quranBatchMatch = lower.match(/(?:пусни|генерирай|направи|стартирай|създай)\s+(?:серия|пакет)?\s*(?:от)?\s*(\d+)?\s*(?:видеа\s+)?(?:с\s+|от\s+)?коран/i);
+    if (quranBatchMatch) {
+      const count = quranBatchMatch[1] ? Math.min(10, Math.max(1, parseInt(quranBatchMatch[1], 10))) : 3;
+      setMessages((prev) => [...prev, { role: "user", text: userText }]);
+      await handleStartBatchSeries(count);
+      return;
+    }
+
+    // 5. Direct Thumbnail / Cover Command from chat
+    if (/(?:направи|генерирай|свали|създай)\s+(?:вайръл\s+)?(?:корица|thumbnail)/i.test(lower)) {
+      let lastTitle = "";
+      for (let i = messages.length - 1; i >= 0; i--) {
+        if (messages[i].proposal?.title) {
+          lastTitle = messages[i].proposal!.title;
+          break;
+        }
+      }
+      if (lastTitle) {
+        setMessages((prev) => [...prev, { role: "user", text: userText }]);
+        await handleDownloadThumbnail(lastTitle);
+        setMessages((prev) => [
+          ...prev,
+          {
+            role: "assistant",
+            text: `🎨 **Шейх Салафи AI:** Генерирах и свалих професионална вайръл корица за: **${cleanProposalTitle(lastTitle)}**!`,
+          },
+        ]);
+        return;
+      }
+    }
+
+    // 6. Direct Memory Instruction from chat
+    const memoryMatch = userText.match(/^(?:запомни(?:\s+правило)?|добави правило)\s*[:-]\s*(.+)/i);
+    if (memoryMatch && memory) {
+      const newRule = memoryMatch[1].trim();
+      const updated: AiMemory = {
+        ...memory,
+        customInstructions: [...memory.customInstructions, newRule],
+      };
+      setMemory(updated);
+      await updateAiMemory({ data: { memory: updated } });
+      setMessages((prev) => [
+        ...prev,
+        { role: "user", text: userText },
+        {
+          role: "assistant",
+          text: `🧠 **Шейх Салафи AI (Паметта е обновена):**\n\nЗаписах новото правило в постоянната памет на студиото:\n*„${newRule}“*\n\nЩе го спазвам стриктно при всяко следващо решение и предложение, ин шаа Аллах!`,
+        },
+      ]);
+      toast.success("Правилото е запазено в постоянната памет!");
+      return;
+    }
+
+    // 7. Step-by-Step Approval chat triggers
     const isApproveKeyword = /^(да|ок|одобри|одобрявам|съгласен|съгласих се|генерирай|потвърди|давай|пускай)\b/i.test(lower);
     const isRejectKeyword = /^(не|откажи|отказвам|предложи друг|дай друг|не ми харесва|смени|друг|друго|алтернатива)\b/i.test(lower);
 
@@ -631,6 +721,7 @@ function AssistantPage() {
       return;
     }
 
+    // 8. General AI Conversation with Shaykh Salafi AI
     const newMsgs: ChatMsg[] = [...messages, { role: "user", text: userText }];
     setMessages(newMsgs);
     setLoading(true);
@@ -654,8 +745,32 @@ function AssistantPage() {
           role: "assistant",
           text: res.reply,
           proposal: res.proposal,
+          proposals: res.proposals,
         },
       ]);
+
+      // Execute any Manager Action returned by model
+      if (res.managerAction) {
+        const ma = res.managerAction;
+        if (ma.type === "start_batch") {
+          const count = ma.count || 3;
+          if (ma.batchType === "hadith") {
+            handleStartHadithBatchSeries(count);
+          } else {
+            handleStartBatchSeries(count);
+          }
+        } else if (ma.type === "generate_thumbnail") {
+          const pTitle = res.proposal?.title;
+          if (pTitle) handleDownloadThumbnail(pTitle);
+        } else if (ma.type === "add_rule" && ma.ruleText && memory) {
+          const updated: AiMemory = {
+            ...memory,
+            customInstructions: [...memory.customInstructions, ma.ruleText.trim()],
+          };
+          setMemory(updated);
+          updateAiMemory({ data: { memory: updated } }).catch(() => {});
+        }
+      }
     } catch (err: any) {
       toast.error(err?.message || "Грешка при комуникацията с асистента");
       setMessages((prev) => [
@@ -863,13 +978,27 @@ function AssistantPage() {
     <div className="mx-auto max-w-4xl px-4 py-8 font-ui">
       <div className="mb-6 flex items-center justify-between gap-3">
         <div className="flex items-center gap-3">
-          <div className="flex size-12 items-center justify-center rounded-2xl bg-primary/15 text-primary shadow-sm">
-            <Bot className="size-6" />
+          <div className="relative flex size-12 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-500/25 via-amber-500/15 to-emerald-950/40 border border-emerald-500/40 shadow-lg text-2xl">
+            <span>🕌</span>
+            <span className="absolute -bottom-0.5 -right-0.5 flex size-3.5">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full size-3.5 bg-emerald-500 border-2 border-background"></span>
+            </span>
           </div>
           <div>
-            <h1 className="text-2xl font-bold">AI Видео Асистент (С Дълготрайна Памет)</h1>
-            <p className="text-sm text-muted-foreground">
-              Асистентът помни твоите инструкции и винаги иска одобрение преди рендиране.
+            <div className="flex items-center gap-2 flex-wrap">
+              <h1 className="text-2xl font-extrabold bg-gradient-to-r from-emerald-400 via-amber-300 to-emerald-200 bg-clip-text text-transparent">
+                Шейх Салафи AI
+              </h1>
+              <span className="text-xs px-2.5 py-0.5 rounded-full font-bold bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 shadow-xs">
+                Главен Мениджър на Студиото
+              </span>
+              <span className="text-[11px] px-2 py-0.5 rounded-full font-medium bg-black/50 border border-emerald-500/30 text-emerald-400 flex items-center gap-1">
+                <span className="size-1.5 rounded-full bg-emerald-400 animate-pulse" /> На линия (Готов за команди)
+              </span>
+            </div>
+            <p className="text-xs sm:text-sm text-muted-foreground mt-0.5">
+              Твоят духовен наставник и главен мениджър по манхаджа на ас-Саляф ас-Салих. Управлява студиото, планира и рендира видеа и прави всичко директно през чата.
             </p>
           </div>
         </div>
@@ -1513,17 +1642,25 @@ function AssistantPage() {
               }`}
             >
               {m.role === "assistant" && (
-                <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
-                  <Sparkles className="size-4" />
+                <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-500/30 via-amber-500/15 to-emerald-950/40 border border-emerald-500/50 text-base shadow-sm">
+                  <span>🕌</span>
                 </div>
               )}
               <div
                 className={`max-w-[85%] rounded-2xl px-4 py-3 text-sm leading-relaxed ${
                   m.role === "user"
                     ? "bg-primary text-primary-foreground"
-                    : "bg-muted/80 text-foreground"
+                    : "bg-muted/80 text-foreground border border-border/50 shadow-xs"
                 }`}
               >
+                {m.role === "assistant" && (
+                  <div className="flex items-center gap-1.5 mb-2 pb-1.5 border-b border-border/40 text-xs font-bold text-emerald-400">
+                    <span>🕌 Шейх Салафи AI</span>
+                    <span className="text-[10px] font-semibold text-emerald-300 bg-emerald-500/15 border border-emerald-500/30 px-1.5 py-0.2 rounded-full">
+                      Главен Мениджър
+                    </span>
+                  </div>
+                )}
                 <div className="whitespace-pre-line">{m.text}</div>
 
                 {m.proposal && (
@@ -2031,13 +2168,60 @@ function AssistantPage() {
               <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
                 <Loader2 className="size-4 animate-spin" />
               </div>
-              <div className="rounded-2xl bg-muted/80 px-4 py-3 text-sm text-muted-foreground flex items-center gap-2">
-                <Loader2 className="size-4 animate-spin" />
-                Асистентът мисли и подготвя предложение...
+              <div className="rounded-2xl bg-muted/80 px-4 py-3 text-sm text-emerald-400/90 flex items-center gap-2 border border-emerald-500/20">
+                <Loader2 className="size-4 animate-spin text-emerald-400" />
+                <span>Шейх Салафи AI обмисля и подготвя изпълнението...</span>
               </div>
             </div>
           )}
           <div ref={messagesEndRef} />
+        </div>
+
+        {/* Manager Quick Command Bar */}
+        <div className="flex items-center gap-1.5 px-4 py-2 bg-black/40 border-t border-border/40 overflow-x-auto text-[11px]">
+          <span className="font-bold text-emerald-400 flex items-center gap-1 shrink-0 text-xs mr-1">
+            <span>🕌</span> Команди към Шейха:
+          </span>
+          <button
+            type="button"
+            onClick={() => handleStartHadithBatchSeries(3)}
+            disabled={batchLoading || loading}
+            className="rounded-full bg-blue-500/10 hover:bg-blue-500/25 border border-blue-500/40 text-blue-300 px-2.5 py-1 shrink-0 transition cursor-pointer flex items-center gap-1 font-semibold"
+          >
+            <span>📜</span> Серия 3 Хадиса
+          </button>
+          <button
+            type="button"
+            onClick={() => handleNextCarouselQuickAction()}
+            disabled={loading}
+            className="rounded-full bg-amber-500/10 hover:bg-amber-500/25 border border-amber-500/40 text-amber-300 px-2.5 py-1 shrink-0 transition cursor-pointer flex items-center gap-1 font-semibold"
+          >
+            <span>🕌</span> Карусел за Таухид
+          </button>
+          <button
+            type="button"
+            onClick={() => handleStartBatchSeries(3)}
+            disabled={batchLoading || loading}
+            className="rounded-full bg-emerald-500/10 hover:bg-emerald-500/25 border border-emerald-500/40 text-emerald-300 px-2.5 py-1 shrink-0 transition cursor-pointer flex items-center gap-1 font-semibold"
+          >
+            <span>📖</span> Серия 3 Коран видеа
+          </button>
+          <button
+            type="button"
+            onClick={async () => {
+              playStudioClick("click");
+              const checkRes = await checkActiveBackgroundTasks();
+              const tasks = checkRes.activeTasks || [];
+              setActiveTasks(tasks);
+              const msg = tasks.length > 0
+                ? `📊 **Шейх Салафи AI (Доклад):** Има **${tasks.length} активни задачи** за рендиране на сървъра:\n\n` + tasks.map(t => `• **${t.title}**: ${t.message} (${t.progress || 10}%)`).join("\n")
+                : `✨ **Шейх Салафи AI (Статус на сървъра):** Няма активни задачи за рендиране. Сървърът е свободен и готов за нови проекти!`;
+              setMessages(prev => [...prev, { role: "user", text: "Какво се рендира в момента?" }, { role: "assistant", text: msg }]);
+            }}
+            className="rounded-full bg-teal-500/10 hover:bg-teal-500/25 border border-teal-500/40 text-teal-300 px-2.5 py-1 shrink-0 transition cursor-pointer flex items-center gap-1 font-semibold"
+          >
+            <span>📊</span> Какво се рендира?
+          </button>
         </div>
 
         <form
@@ -2047,14 +2231,14 @@ function AssistantPage() {
           <Input
             value={prompt}
             onChange={(e) => setPrompt(e.target.value)}
-            placeholder="Напр.: Направи видео за търпението или Хадис № 5 на Навауи..."
+            placeholder="Пиши на Шейх Салафи AI... (напр. „Пусни серия от 3 хадиса“, „Направи карусел за Таухид“, „Какво се рендира?“)"
             className="flex-1 rounded-xl"
             disabled={loading}
           />
           <Button
             type="submit"
             disabled={!prompt.trim() || loading}
-            className="rounded-xl px-5"
+            className="rounded-xl px-5 bg-gradient-to-r from-emerald-500 to-teal-600 text-white font-bold hover:from-emerald-400 hover:to-teal-500 cursor-pointer shadow-md"
           >
             {loading ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
           </Button>
