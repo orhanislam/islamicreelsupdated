@@ -1,5 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { geminiChat } from "./gemini";
+import { sanitizeTheologicalRespect } from "./theological-sanitizer";
 
 const SYSTEM = `Ти си експертен преводач на ислямски текстове на БЪЛГАРСКИ ЕЗИК (на кирилица).
 ВАЖНО: НИКОГА НЕ ПИШИ АРАБСКИ ТЕКСТ В ОТГОВОРА! Върни САМО И ЕДИНСТВЕНО превода на български език на кирилица!
@@ -8,6 +9,7 @@ const SYSTEM = `Ти си експертен преводач на ислямс�
 2. Запази без превод следните термини в българска транслитерация: Аллах, Расулюллах, Пророк, Корана, Сура, Аят, иман, такуа, дини, дуа, шахада, салят, закят, саум, хадж, джахилия, дунйа, ахират, шейтан, малаика, джинн, шахид.
 2а. ВИНАГИ заменяй съкращения като "(с/у)", "(саллялляху алейхи ва селлем)", "(ﷺ)", "(saw)", "(pbuh)", "(SAW)", "(PBUH)" с пълния български израз: "мир да бъде със него". Никога не оставяй "с/у" в превода.
 3. "Allah" -> "Аллах" (никога "Бог"). "Lord" в контекста на Аллах -> "Господар".
+3а. "The Sole Creator" / "The One Creator" / "The Only Creator" -> "Единственият Творец" (СТРИКТНО Е ЗАБРАНЕНО да се използва "единичък", "единичкият", "единичният", "единичен Творец"). Говори с подобаващо уважение, достолепие и благоговение!
 4. ВИНАГИ изписвай "тоест" като цяла дума. НИКОГА не използвай съкращението "т.е." или "т.е".
 5. Стил: Използвай възвишен, книжовен и ясен български език, подобаващ на свещени текстове.
 6. Върни САМО българския превод на кирилица, без арабски букви, без обяснения, без кавички, без префикси.`;
@@ -18,7 +20,8 @@ if (!(globalThis as any).__translationCache) {
 }
 
 export function normalizeIslamicTermsBulgarian(t: string): string {
-  return t
+  if (!t) return "";
+  const cleaned = t
     .replace(/[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF]+/g, "")
     // Abbreviations
     .replace(/\(\s*с\s*\/\s*у\s*\)/gi, "(мир да бъде с него)")
@@ -39,6 +42,8 @@ export function normalizeIslamicTermsBulgarian(t: string): string {
     .replace(/(^|\s)т\.е(?=\s|$)/gi, "$1тоест")
     .replace(/\s+/g, " ")
     .trim();
+
+  return sanitizeTheologicalRespect(cleaned);
 }
 
 export const translateToBulgarian = createServerFn({ method: "POST" })

@@ -26,7 +26,16 @@ import {
   detectScriptureFromText,
   enrichProposalWithAuthenticTafsir,
 } from "./tafsir.functions";
+import { sanitizeTheologicalRespect } from "./theological-sanitizer";
 
+
+export type ManagerAction = {
+  type: "start_batch" | "create_carousel" | "check_tasks" | "generate_thumbnail" | "add_rule" | "none";
+  batchType?: "hadith" | "quran" | "explained";
+  count?: number;
+  topic?: string;
+  ruleText?: string;
+};
 
 export type ExplainedVideoScript = {
   hookQuestion: string; // 1a. Въпрос за грабване на вниманието в първите 2-3 секунди
@@ -356,13 +365,19 @@ ${memory.learnedFacts.length ? memory.learnedFacts.join("\n") : "Няма зап
 Трябва стриктно да спазваш горните инструкции при всяко предложение за видео и всеки отговор!`;
 
 
-    const systemPrompt = `Ти си ПРОФЕСИОНАЛЕН ПРОДУЦЕНТ на видеа (Reels & TikTok) и ЕКСПЕРТЕН AI АСИСТЕНТ на Български език.
-ТВОЯТА РОЛЯ И ГЛАС: Ти си автентичен САЛАФИТСКИ ШЕЙХ И ДА'ИЯ (Salafi Shaykh AI – учен и проповедник по манхаджа на Праведните предци ас-Саляф ас-Салих – по стъпките на Шейх Ибн Баз, Шейх ал-Албани - рахимахумуллах).
-Целият текст, който генерираш — коментари, куки, призиви за действие, разяснения — трябва да звучи с дълбоко БЛАГОГОВЕНИЕ (хушу), УБЕДЕНОСТ, АВТОРИТЕТ И ИСКРЕНОСТ (Ихлас), базирани ЕДИНСТВЕНО на Корана и Сунната по разбирането на Салафите. Говори директно към сърцето на мюсюлманина със сериозен, бащински и мъдър тон. Избягвай всякакви суфийски, ашари, бид'а или модернистки изрази.
+    const systemPrompt = `ТИ СИ ШЕЙХ САЛАФИ AI (Salafi Shaykh AI) — ГЛАВЕН МЕНИДЖЪР НА ИСЛЯМСКОТО ВИДЕО СТУДИО И ДУХОВЕН НАСТАВНИК.
+ТВОЯТА РОЛЯ И ВЛАСТ: Ти си Главният Мениджър на абсолютно всичко в това студио и в тази страница! Потребителят си пише директно с теб в чата, а ти поемаш пълния оперативен и духовен контрол:
+1. Мениджмънт на цялата видео продукция: Ръководиш създаването на вайръл видеа за TikTok и Reels (Коран, Сахих Хадиси, 4-степенни видеа с обяснение и Тафсир, и 4-7 слайдови карусели за Таухид).
+2. Директно изпълнение на команди през чата (Manager Actions): Когато потребителят поиска да се пусне серия от видеа, да се направи карусел, да се проверят задачите за рендиране, да се направи корица или да се добави правило, ти действаш уверено и решително като главен мениджър и връщаш съответното действие в "managerAction".
+3. Религиозен авторитет и глас: Ти си автентичен САЛАФИТСКИ ШЕЙХ И ДА'ИЯ по манхаджа на Праведните предци ас-Саляф ас-Салих (по стъпките на великите имами и учени като Шейх Ибн Баз, Шейх ал-Албани, Шейх Ибн Усеймин - рахимахумуллах).
+Целият текст, който генерираш — съвети, коментари, куки, призиви за действие, разяснения — звучи с дълбоко БЛАГОГОВЕНИЕ (хушу), УБЕДЕНОСТ, АВТОРИТЕТ, ИСКРЕНОСТ (Ихлас), БАЩИНСКА ГРИЖА и БРАТСКО УВАЖЕНИЕ към потребителя ("брат Муслим"), базирани ЕДИНСТВЕНО на Корана и Сунната по разбирането на Салафите. Говори директно към сърцето със сериозен и мъдър тон, разбираемо за обикновените хора. Избягвай всякакви суфийски, ашари, бид'а или модернистки изрази.
 
-СТРИКТНО ПРАВИЛО ЗА ТАУХИД И АДАБ КЪМ АЛЛАХ ВСЕВИШНИЯТ:
-Когато говориш за Аллах, ВИНАГИ използвай Неговите възвишени и достойни имена: „Аллах Всевишният“, „Твоят Създател“, „Господът на световете“, „Всемилостивият“.
-АБСОЛЮТНО И СТРОГО Е ЗАБРАНЕНО да използваш битови, разговорни или непочтителни местоимения за Него като „оня“, „тоя“, „онзи там“, или светски термини като „висша сила“, „енергия“, „вселената“! Това е грях и неуважение към Величието на Твореца!
+СТРИКТНО ПРАВИЛО ЗА ТАУХИД, БОГОСЛОВСКА ПРЕЦИЗНОСТ И АДАБ КЪМ АЛЛАХ ВСЕВИШНИЯТ:
+1. За Единобожието и Единствеността на Аллах ВИНАГИ използвай „Единственият Творец“!
+2. КАТЕГОРИЧНО И СТРОГО Е ЗАБРАНЕНО да използваш умалителни, диалектни или грешни машинизирани форми като „единичък“, „единичкият“, „единичният“ или „единичен Творец“! Думата „единичкият“ е умалителна, погрешна и абсолютно недопустима за Величието на Твореца!
+3. Когато говориш за Аллах, ВИНАГИ използвай Неговите възвишени и достойни имена: „Аллах Всевишният“, „Единственият Творец“, „Твоят Създател“, „Господарят на световете“, „Всемилостивият“, „Единственият, достоен за обожание“.
+4. АБСОЛЮТНО И СТРОГО Е ЗАБРАНЕНО да използваш битови, разговорни или непочтителни местоимения за Него като „оня“, „тоя“, „онзи там“, или светски термини като „висша сила“, „енергия“, „вселената“! Това е грях и неуважение към Величието на Твореца!
+5. Говори по топъл, кристално ясен и разбираем начин за всеки човек, с авторитета и почтеността на Salafi Shaykh AI.
 
 12 ТЕМАТИЧНИ ВИДЕО КАТЕГОРИИ (ТОЧНО СЪОТВЕТСТВИЕ НА ФОНА):
 Всяка тема задължително получава точното движещо се 9:16 видео от природата/стихиите:
@@ -509,14 +524,29 @@ CAPCUT-ПОДОБНИ ИНСТРУКЦИИ ЗА РЕДАКТИРАНЕ:
     "bRollInterval": 5,
     "subtitlePosition": "bottom" | "middle" | "lower-third",
     "quality": "high"
+  },
+  "managerAction": {
+    "type": "start_batch" | "create_carousel" | "check_tasks" | "generate_thumbnail" | "add_rule" | "none",
+    "batchType": "hadith" | "quran" | "explained",
+    "count": 3,
+    "topic": "тема (ако е приложимо)",
+    "ruleText": "правило за запазване (ако е приложимо)"
   }
 }
 
-2. Ако потребителят задава въпрос, поздравява или обсъжда без конкретно искане за видео:
+2. Ако потребителят задава въпрос, иска консултация, поздравява или дава команда:
 {
-  "reply": "Отговор на български език",
-  "newLearnedFact": "Ако има нов факт или предпочитание за запомняне",
-  "proposal": null
+  "reply": "Отговор на български език като Шейх Салафи AI и Главен Мениджър",
+  "proposal": null,
+  "proposals": null,
+  "managerAction": {
+    "type": "start_batch" | "create_carousel" | "check_tasks" | "generate_thumbnail" | "add_rule" | "none",
+    "batchType": "hadith" | "quran" | "explained",
+    "count": 3,
+    "topic": "тема",
+    "ruleText": "правило"
+  } или null,
+  "newLearnedFact": "Ако има нов факт или предпочитание за запомняне" или null
 }
 
 ВАЖНО: Върни САМО валиден JSON. ОТГОВОРЪТ ТИ ТРЯБВА ДА ЗАПОЧВА ДИРЕКТНО СЪС ЗНАКА { И ДА ЗАВЪРШВА С }. НЕ ПИШИ НИКАКЪВ ДРУГ ТЕКСТ ПРЕДИ ИЛИ СЛЕД JSON ОБЕКТА.`;
@@ -536,6 +566,7 @@ CAPCUT-ПОДОБНИ ИНСТРУКЦИИ ЗА РЕДАКТИРАНЕ:
       proposal?: VideoProposal | null;
       proposals?: VideoProposal[] | null;
       newLearnedFact?: string | null;
+      managerAction?: ManagerAction | null;
     };
     try {
       let clean = raw.replace(/```json\s*|\s*```/g, "").trim();
@@ -634,12 +665,13 @@ CAPCUT-ПОДОБНИ ИНСТРУКЦИИ ЗА РЕДАКТИРАНЕ:
     }
 
     const replyObj = {
-      reply: parsed.reply || "С какво мога да ти помогна днес?",
-      proposal: (parsed.proposal as VideoProposal) || null,
+      reply: sanitizeTheologicalRespect(parsed.reply || "С какво мога да ти помогна днес?"),
+      proposal: parsed.proposal ? sanitizeProposalFields(parsed.proposal as VideoProposal) : null,
       proposals:
         Array.isArray(parsed.proposals) && parsed.proposals.length > 0
-          ? (parsed.proposals as VideoProposal[])
+          ? (parsed.proposals as VideoProposal[]).map(sanitizeProposalFields)
           : null,
+      managerAction: parsed.managerAction || null,
       memory,
     };
 
@@ -823,8 +855,8 @@ SALAFI HALAL ПРИНЦИПИ (СТРИКТНО ЗАДЪЛЖИТЕЛНО):
   }
 
   return {
-    reply: parsed.reply,
-    proposal: parsed.proposal as VideoProposal,
+    reply: sanitizeTheologicalRespect(parsed.reply || ""),
+    proposal: parsed.proposal ? sanitizeProposalFields(parsed.proposal as VideoProposal) : null,
   };
 });
 
@@ -981,11 +1013,14 @@ export const suggestExplainedVideoProposal = createServerFn({ method: "POST" })
     }
 
     const prompt = `Ти си автентичен САЛАФИТСКИ ШЕЙХ И ДА'ИЯ (Salafi Shaykh AI – по манхаджа на ас-Саляф ас-Салих: Шейх Ибн Баз, Шейх ал-Албани - рахимахумуллах) и елитен продуцент на формат "Ислямско видео с обяснение" (Islamic video with explanation) за TikTok и Reels на български език.
-ТВОЯТА РОЛЯ И ГЛАС: Говори с дълбоко благоговение (хушу), бащинска мъдрост, авторитет и непоклатима искреност (Ихлас), базирани САМО на Корана и Сунната по разбирането на Салафите.
+ТВОЯТА РОЛЯ И ГЛАС: Говори с дълбоко благоговение (хушу), бащинска мъдрост, авторитет и непоклатима искреност (Ихлас), базирани САМО на Корана и Сунната по разбирането на Салафите. Говори по уважителен и напълно разбираем начин за обикновените хора.
 
-СТРИКТНО ПРАВИЛО ЗА ТАУХИД И АДАБ КЪМ АЛЛАХ ВСЕВИШНИЯТ:
-Когато говориш за Аллах, ВИНАГИ използвай Неговите възвишени и достойни имена: „Аллах Всевишният“, „Твоят Създател“, „Господът на световете“, „Всемилостивият“.
-АБСОЛЮТНО И СТРОГО Е ЗАБРАНЕНО да използваш битови или непочтителни думи като „оня“, „тоя“, „онзи“ или светски термини като „висша сила“, „енергия“, „вселената“!
+СТРИКТНО ПРАВИЛО ЗА ТАУХИД, БОГОСЛОВСКА ПРЕЦИЗНОСТ И АДАБ КЪМ АЛЛАХ ВСЕВИШНИЯТ:
+1. За Единобожието и Единствеността на Аллах ВИНАГИ използвай „Единственият Творец“!
+2. КАТЕГОРИЧНО И СТРОГО Е ЗАБРАНЕНО да използваш умалителни, диалектни или грешни машинизирани форми като „единичък“, „единичкият“, „единичният“ или „единичен Творец“! Думата „единичкият“ е умалителна, погрешна и абсолютно недопустима за Величието на Твореца!
+3. Когато говориш за Аллах, ВИНАГИ използвай Неговите възвишени и достойни имена: „Аллах Всевишният“, „Единственият Творец“, „Твоят Създател“, „Господът на световете“, „Всемилостивият“, „Единственият, достоен за обожание“.
+4. АБСОЛЮТНО И СТРОГО Е ЗАБРАНЕНО да използваш битови или непочтителни думи като „оня“, „тоя“, „онзи“ или светски термини като „висша сила“, „енергия“, „вселената“!
+5. Говори по топъл, кристално ясен и разбираем начин за всеки човек, с авторитета и почтеността на Salafi Shaykh AI.
 
 12 ТЕМАТИЧНИ ВИДЕО КАТЕГОРИИ (ТОЧНО СЪОТВЕТСТВИЕ):
 Задай движещо се 9:16 видео за фон според темата:
@@ -1178,8 +1213,8 @@ ${userTopic}${preGroundingPrompt ? `\n\n${preGroundingPrompt}` : ""}
     }
 
     return {
-      reply: parsed.reply,
-      proposal: parsed.proposal as VideoProposal,
+      reply: sanitizeTheologicalRespect(parsed.reply || ""),
+      proposal: parsed.proposal ? sanitizeProposalFields(parsed.proposal as VideoProposal) : null,
     };
   });
 
@@ -1374,8 +1409,8 @@ ${historyContext}${oneMonthExclusionContext}
     }
 
     return {
-      reply: parsed.reply || "Предлагам ти това ново алтернативно видео:",
-      proposal: parsed.proposal as VideoProposal,
+      reply: sanitizeTheologicalRespect(parsed.reply || "Предлагам ти това ново алтернативно видео:"),
+      proposal: parsed.proposal ? sanitizeProposalFields(parsed.proposal as VideoProposal) : null,
     };
   });
 
@@ -1546,8 +1581,8 @@ export const suggestBatchViralProposals = createServerFn({ method: "POST" })
       }
 
       return {
-        reply: parsed.reply,
-        proposals: (parsed.proposals || []).slice(0, countNum) as VideoProposal[],
+        reply: sanitizeTheologicalRespect(parsed.reply || ""),
+        proposals: (parsed.proposals || []).slice(0, countNum).map(sanitizeProposalFields) as VideoProposal[],
       };
     },
   );
@@ -1604,8 +1639,27 @@ export function detectActionOrDuaLabel(text?: string): "Дуа" | "Действ�
   return isDua ? "Дуа" : "Действие";
 }
 
+export { sanitizeTheologicalRespect };
+
+export function sanitizeProposalFields(p: VideoProposal): VideoProposal {
+  if (!p) return p;
+  if (p.title) p.title = sanitizeTheologicalRespect(cleanProposalTitle(p.title));
+  if (p.summaryBg) p.summaryBg = sanitizeTheologicalRespect(p.summaryBg);
+  if (p.themeBg) p.themeBg = sanitizeTheologicalRespect(p.themeBg);
+  if (p.scriptWorkflow) {
+    const sw = p.scriptWorkflow;
+    if (sw.hookQuestion) sw.hookQuestion = sanitizeTheologicalRespect(sw.hookQuestion);
+    if (sw.hookContext) sw.hookContext = sanitizeTheologicalRespect(sw.hookContext);
+    if (sw.dalilIntro) sw.dalilIntro = sanitizeTheologicalRespect(sw.dalilIntro);
+    if (sw.dalilText) sw.dalilText = sanitizeTheologicalRespect(sw.dalilText);
+    if (sw.explanation) sw.explanation = sanitizeTheologicalRespect(sw.explanation);
+    if (sw.actionStep) sw.actionStep = sanitizeTheologicalRespect(sw.actionStep);
+  }
+  return p;
+}
+
 export function cleanScriptPrefixes(text: string): string {
-  return text
+  const cleaned = text
     .replace(/(^|\n)\s*(?:\(\d+\)|\[\d+\]|\d+\.|\*|-|•)\s*/g, "$1")
     .replace(/^(?:поука|обяснение|действие|дуа|призив):\s*/i, "")
     .replace(/(?:по\s+манхаджа\s+на\s+)?(?:ас[- ]?саляф\s+ас[- ]?салих|салаф\s+ус\s+салих|саляф\s+ас\s+салих)(?:\s*[–—,]\s*)?/gi, "")
@@ -1616,6 +1670,8 @@ export function cleanScriptPrefixes(text: string): string {
     .replace(/…+/g, " ")
     .replace(/\s{2,}/g, " ")
     .trim();
+
+  return sanitizeTheologicalRespect(cleaned);
 }
 
 export function stripScholarAttribution(text: string): string {
@@ -1651,7 +1707,7 @@ export function stripScholarAttribution(text: string): string {
     cleaned = cleaned.charAt(0).toUpperCase() + cleaned.slice(1);
   }
 
-  return cleaned;
+  return sanitizeTheologicalRespect(cleaned);
 }
 
 export function buildExplainedNarrationText(params: {
@@ -1677,7 +1733,7 @@ export function buildExplainedNarrationText(params: {
     hookParts.push(cleanScriptPrefixes(params.viralTitle));
   }
   if (hookParts.length > 0) {
-    blocks.push(hookParts.join(" "));
+    blocks.push(sanitizeTheologicalRespect(hookParts.join(" ")));
   }
 
   // Step 2: Dalil (Intro + Sacred Quote + Citation spoken at the end)
@@ -1699,13 +1755,13 @@ export function buildExplainedNarrationText(params: {
     }
   }
 
-  const cleanDalil = params.quoteText
+  const cleanDalil = sanitizeTheologicalRespect(params.quoteText
     .replace(/(^|\n)\s*(?:\(\d+\)|\[\d+\]|\d+\.|\*|-|•)\s*/g, "$1")
     .replace(/\[(?:коран|сура|хадис|бухари|муслим|тирмизи|навауи)[^\]]*\]/gi, "")
     .replace(/\((?:коран|сура|хадис|бухари|муслим|тирмизи|навауи)[^)]*\)/gi, "")
     .replace(/^["„“']+|["„“']+$/g, "")
     .replace(/^(?:чуй\s+какво\s+)?(?:ни\s+)?казва\s+(?:се\s+)?(?:ни\s+)?за\s*[^:]*:\s*/i, "")
-    .trim();
+    .trim());
 
   // At the end of the quote, state the exact number/citation of the ayah or hadith
   const citationAtEnd = spokenRef && !spokenRef.startsWith("[") ? `\n— ${spokenRef}.` : "";
@@ -1717,7 +1773,7 @@ export function buildExplainedNarrationText(params: {
     explanation = params.summaryBg.trim();
   }
   if (explanation) {
-    const cleanExpl = stripScholarAttribution(explanation);
+    const cleanExpl = sanitizeTheologicalRespect(stripScholarAttribution(explanation));
     blocks.push(`Обяснение: ${cleanExpl}`);
   }
 
@@ -1726,18 +1782,30 @@ export function buildExplainedNarrationText(params: {
   if (!action) {
     action = "Запази това напомняне за моменти на трудност и сподели за садака джария!";
   }
-  const cleanAct = cleanScriptPrefixes(action);
+  const cleanAct = sanitizeTheologicalRespect(cleanScriptPrefixes(action));
   const label = detectActionOrDuaLabel(cleanAct);
   blocks.push(`${label}: ${cleanAct}`);
 
-  return blocks.join(' <break time="0.7s" />\n\n');
+  return sanitizeTheologicalRespect(blocks.join(' <break time="0.7s" />\n\n'));
 }
 
 export const confirmAndGenerateVideo = createServerFn({ method: "POST" })
   .validator((input: { proposal: VideoProposal; force?: boolean }) => input)
   .handler(async ({ data: { proposal, force } }) => {
     if (proposal.title) {
-      proposal.title = cleanProposalTitle(proposal.title);
+      proposal.title = sanitizeTheologicalRespect(cleanProposalTitle(proposal.title));
+    }
+    if (proposal.summaryBg) {
+      proposal.summaryBg = sanitizeTheologicalRespect(proposal.summaryBg);
+    }
+    if (proposal.scriptWorkflow) {
+      const sw = proposal.scriptWorkflow;
+      if (sw.hookQuestion) sw.hookQuestion = sanitizeTheologicalRespect(sw.hookQuestion);
+      if (sw.hookContext) sw.hookContext = sanitizeTheologicalRespect(sw.hookContext);
+      if (sw.dalilIntro) sw.dalilIntro = sanitizeTheologicalRespect(sw.dalilIntro);
+      if (sw.dalilText) sw.dalilText = sanitizeTheologicalRespect(sw.dalilText);
+      if (sw.explanation) sw.explanation = sanitizeTheologicalRespect(sw.explanation);
+      if (sw.actionStep) sw.actionStep = sanitizeTheologicalRespect(sw.actionStep);
     }
 
     // 1-Month Cooldown Safety Check: Block duplicate generation unless explicitly forced
@@ -1813,6 +1881,7 @@ export const confirmAndGenerateVideo = createServerFn({ method: "POST" })
           bulgarian = `${viralTitle} <break time="1.0s" />\n\n${bulgarian}`;
         }
       }
+      bulgarian = sanitizeTheologicalRespect(bulgarian);
 
       try {
         const narr = await synthesizeHadithNarration({ data: { text: bulgarian } });
@@ -1849,6 +1918,8 @@ export const confirmAndGenerateVideo = createServerFn({ method: "POST" })
           bulgarian = `${viralTitle} <break time="1.0s" />\n\n${bulgarian}`;
         }
       }
+
+      bulgarian = sanitizeTheologicalRespect(bulgarian);
 
       try {
         const narr = await synthesizeHadithNarration({ data: { text: bulgarian } });
@@ -1956,6 +2027,8 @@ export const confirmAndGenerateVideo = createServerFn({ method: "POST" })
           }
         }
 
+        bulgarian = sanitizeTheologicalRespect(bulgarian);
+
         try {
           const narr = await synthesizeHadithNarration({ data: { text: bulgarian } });
           audioUrl = `data:${narr.mimeType || "audio/mp3"};base64,${narr.base64}`;
@@ -1973,10 +2046,7 @@ export const confirmAndGenerateVideo = createServerFn({ method: "POST" })
     }
 
     // 0. Salafi Adab text sanitation: Reverence for Allah (strictly eliminate casual 'оня')
-    bulgarian = bulgarian
-      .replace(/(?:търси|иска|зове|напомня\s+за)\s+оня\b/gi, "$1 своя Създател")
-      .replace(/(?<=^|[^\p{L}\p{N}])оня(?=[^\p{L}\p{N}]|$)/gui, "Аллах Всевишният")
-      .replace(/(?<=^|[^\p{L}\p{N}])тоя(?=[^\p{L}\p{N}]|$)/gui, "този");
+    bulgarian = sanitizeTheologicalRespect(bulgarian);
 
     let resolvedQuery = proposal.searchQuery;
     const fullText = `${proposal.title || ""} ${proposal.themeBg || ""} ${proposal.summaryBg || ""} ${bulgarian || ""}`;

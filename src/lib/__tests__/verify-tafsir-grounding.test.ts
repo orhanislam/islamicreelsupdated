@@ -295,7 +295,98 @@ async function runTests() {
   }
   console.log(`   ✓ All ${dbData.hadiths.length} hadiths in database verified clean with 0 scholar attributions!`);
 
-  console.log("\n🎉 ALL AUTHENTIC TAFSIR & SHARH TESTS (INCLUDING HADITH 19 & MUSLIM 2749) PASSED 100%!");
+  // 17. Test Theological Respect & Tawheed Sanitizer (Elimination of "единичкият Творец")
+  console.log("\n17. Testing Theological Respect & Tawheed Sanitizer (Elimination of 'единичкият Творец')...");
+  const { sanitizeTheologicalRespect } = await import("../theological-sanitizer");
+  const { normalizeIslamicTermsBulgarian } = await import("../translate.functions");
+  const { normalizeIslamicArabicPhoneticsForTts } = await import("../tts.functions");
+
+  // A. Direct sanitizer checks
+  const t1 = sanitizeTheologicalRespect("Той е единичкият творец на всичко.");
+  if (!t1.includes("Единственият Творец") || t1.includes("единичк")) {
+    throw new Error(`sanitizeTheologicalRespect failed on 'единичкият творец': ${t1}`);
+  }
+  console.log("   ✓ 'единичкият творец' -> 'Единственият Творец' verified.");
+
+  const t2 = sanitizeTheologicalRespect("Поклони се на единичния Творец.");
+  if (!t2.includes("Единствения Творец") || t2.includes("единичн")) {
+    throw new Error(`sanitizeTheologicalRespect failed on 'единичния Творец': ${t2}`);
+  }
+  console.log("   ✓ 'единичния Творец' -> 'Единствения Творец' verified.");
+
+  const t3 = sanitizeTheologicalRespect("Той е единичък Творец.");
+  if (!t3.includes("Единствен Творец") || t3.includes("единичък")) {
+    throw new Error(`sanitizeTheologicalRespect failed on 'единичък Творец': ${t3}`);
+  }
+  console.log("   ✓ 'единичък Творец' -> 'Единствен Творец' verified.");
+
+  const t4 = sanitizeTheologicalRespect("Вярвай в единичкия Създател.");
+  if (!t4.includes("Единствения Създател")) {
+    throw new Error(`sanitizeTheologicalRespect failed on 'единичкия Създател': ${t4}`);
+  }
+  console.log("   ✓ 'единичкия Създател' -> 'Единствения Създател' verified.");
+
+  const t5 = sanitizeTheologicalRespect("Оня вижда всяко твое дело.");
+  if (!t5.includes("Аллах Всевишният вижда")) {
+    throw new Error(`sanitizeTheologicalRespect failed on 'оня': ${t5}`);
+  }
+  console.log("   ✓ 'оня' -> 'Аллах Всевишният' verified.");
+
+  // B. Translation pipeline normalization check
+  const transTest = normalizeIslamicTermsBulgarian("Служи на единичкия Творец с искрено сърце.");
+  if (!transTest.includes("Единствения Творец") || transTest.includes("единичк")) {
+    throw new Error(`normalizeIslamicTermsBulgarian failed to sanitize 'единичкия Творец': ${transTest}`);
+  }
+  console.log("   ✓ normalizeIslamicTermsBulgarian sanitizes diminutive forms.");
+
+  // C. TTS phonetic pipeline check
+  const ttsTest = normalizeIslamicArabicPhoneticsForTts("Служи на единичкия Творец.");
+  if (!ttsTest.includes("Единствения Творец") || ttsTest.includes("единичк")) {
+    throw new Error(`normalizeIslamicArabicPhoneticsForTts failed to sanitize 'единичкия Творец': ${ttsTest}`);
+  }
+  console.log("   ✓ normalizeIslamicArabicPhoneticsForTts sanitizes diminutive forms.");
+
+  // D. Proposal enrichment check
+  const tawheedProposal: any = {
+    title: "Вяра в единичкия Творец",
+    type: "explained_video",
+    collection: "bukhari",
+    number: 1,
+    scriptWorkflow: {
+      hookQuestion: "Знаеш ли кой е единичкият Творец?",
+      hookContext: "Всичко на този свят се крепи на единичния Творец.",
+      dalilIntro: "Пратеникът на Аллах ﷺ ни учи:",
+      dalilText: "Делата се оценяват според намеренията...",
+      explanation: "Обяснение: Той е единичният Творец на вселената.",
+      actionStep: "Посвети делата си на единичкия Творец.",
+    },
+  };
+  await enrichProposalWithAuthenticTafsir(tawheedProposal);
+  if (
+    tawheedProposal.title.includes("единичк") ||
+    tawheedProposal.scriptWorkflow.hookQuestion.includes("единичк") ||
+    tawheedProposal.scriptWorkflow.hookContext.includes("единичн") ||
+    tawheedProposal.scriptWorkflow.explanation.includes("единичн") ||
+    tawheedProposal.scriptWorkflow.actionStep.includes("единичк")
+  ) {
+    throw new Error(`enrichProposalWithAuthenticTafsir failed to sanitize theological terms: ${JSON.stringify(tawheedProposal)}`);
+  }
+  console.log("   ✓ enrichProposalWithAuthenticTafsir sanitizes all fields to 'Единственият Творец'.");
+
+  // E. Narration text generation check
+  const narration = buildExplainedNarrationText({
+    viralTitle: "Кой е единичкият Творец?",
+    themeBg: "Таухид",
+    quoteText: "Делата се съдят по намеренията.",
+    summaryBg: "Той е единичният Творец.",
+    actionStep: "Поклони се на единичкия Творец.",
+  });
+  if (narration.includes("единичк") || narration.includes("единичн")) {
+    throw new Error(`buildExplainedNarrationText produced unsanitized output: ${narration}`);
+  }
+  console.log("   ✓ buildExplainedNarrationText produces clean 'Единственият Творец' narration.");
+
+  console.log("\n🎉 ALL AUTHENTIC TAFSIR & SHARH TESTS (INCLUDING TAWHEED 'ЕДИНСТВЕНИЯТ ТВОРЕЦ') PASSED 100%!");
   process.exit(0);
 }
 

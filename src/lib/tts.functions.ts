@@ -2,6 +2,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import * as googleTTS from "google-tts-api";
 import mp3Duration from "mp3-duration";
+import { sanitizeTheologicalRespect } from "./theological-sanitizer";
 
 export type WordTiming = { start: number; end: number; word: string };
 
@@ -152,10 +153,8 @@ export function normalizeIslamicArabicPhoneticsForTts(text: string): string {
     res = res.replace(reg, replacement);
   };
 
-  // 0. Salafi Adab Gate: Reverence for Allah (strictly eliminate casual 'оня')
-  res = res
-    .replace(/(?:търси|иска|зове|напомня\s+за)\s+оня\b/gi, "$1 своя Създател")
-    .replace(/(?<=^|[^\p{L}\p{N}])оня(?=[^\p{L}\p{N}]|$)/gui, "Аллах Всевишният");
+  // 0. Salafi Adab Gate: Reverence for Allah & Tawheed titles (eliminate diminutive "единичкият" & casual 'оня')
+  res = sanitizeTheologicalRespect(res);
 
   // 1. Invocations, Honorifics & Abbreviations
   res = res
