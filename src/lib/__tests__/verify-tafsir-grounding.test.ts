@@ -154,7 +154,28 @@ async function runTests() {
   if (arbitraryProposal.scriptWorkflow?.sourceType !== "salafi_ai" || arbitraryProposal.scriptWorkflow?.sourceScholar !== "Salafi Shaykh AI") {
     throw new Error(`Expected sourceScholar to be Salafi Shaykh AI, got ${arbitraryProposal.scriptWorkflow?.sourceScholar}`);
   }
-  console.log("   ✓ Enriched arbitrary hadith with Salafi Shaykh AI badge:", arbitraryProposal.scriptWorkflow.sourceScholar);
+  if (arbitraryProposal.scriptWorkflow?.explanation?.includes("Този Сахих хадис ни учи на искреност към Всевишния Аллах, твърдост във вярата")) {
+    throw new Error(`arbitraryProposal still contains forbidden generic boilerplate! Got: ${arbitraryProposal.scriptWorkflow?.explanation}`);
+  }
+  console.log("   ✓ Enriched arbitrary hadith with Salafi Shaykh AI badge and non-generic explanation:", arbitraryProposal.scriptWorkflow.sourceScholar);
+
+  const muslim2749Proposal: any = {
+    title: "[Сахих Муслим #2749] 99-те части от Милостта",
+    type: "explained_video",
+    collection: "muslim",
+    number: 2749,
+    scriptWorkflow: {
+      hookQuestion: "Знаеш ли колко необятна е Милостта на Твоя Създател?",
+      dalilText: "Аллах Всевишният създаде милостта в сто части...",
+      explanation: "Обяснение: Този хадис разкрива необятната милост на Аллах Всевишният. Една част крепи добротата на земята, а 99 части са за вярващите в Съдния ден.",
+      actionStep: "Направи искрено покаяние днес.",
+    },
+  };
+  await enrichProposalWithAuthenticTafsir(muslim2749Proposal);
+  if (!muslim2749Proposal.scriptWorkflow.explanation.includes("99 части са за вярващите")) {
+    throw new Error(`enrichProposalWithAuthenticTafsir overwrote specific explanation! Got: ${muslim2749Proposal.scriptWorkflow.explanation}`);
+  }
+  console.log("   ✓ Verified enrichProposalWithAuthenticTafsir strictly preserves specific AI explanation for Muslim #2749!");
 
   if (testHadithProposal.scriptWorkflow?.sourceType !== "salafi_ai") {
     throw new Error(`Expected testHadithProposal sourceType to be salafi_ai, got ${testHadithProposal.scriptWorkflow?.sourceType}`);

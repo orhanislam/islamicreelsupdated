@@ -3,6 +3,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import verifiedSharhData from "./data/verified-hadith-sharh.json";
+import { geminiChat } from "./gemini";
 
 export interface TafsirEntry {
   surah: number;
@@ -254,8 +255,50 @@ export function getVerifiedHadithSharhDirect(params: {
     work: "Разяснение от Salafi Shaykh AI",
     topic: `Сахих Хадис #${num}`,
     sourceType: "salafi_ai",
-    text: `Обяснение: Този Сахих хадис ни учи на искреност към Всевишния Аллах, твърдост във вярата и следване на Сунната на Пратеника ﷺ. Човек трябва да пази своето сърце от лицемерие, да проявява търпение при трудности и постоянно да върши добрини за задоволството на Всевишния.`
+    text: "",
   };
+}
+
+/**
+ * Dynamically generates a tailored, authentic Salafi Shaykh AI explanation
+ * for any specific hadith or scripture when not available in pre-seeded data.
+ */
+export async function generateAuthenticSalafiSharh(params: {
+  collection?: string;
+  number?: string | number;
+  title?: string;
+  dalilText?: string;
+  topic?: string;
+}): Promise<string> {
+  const collName = params.collection ? params.collection.toUpperCase() : "ХАДИС";
+  const numStr = params.number ? `#${params.number}` : "";
+  const citation = `${collName} ${numStr}`.trim();
+  const textContext = params.dalilText ? `Текст на хадиса: "${params.dalilText}"` : "";
+  const topicContext = params.topic ? `Тема: "${params.topic}"` : "";
+  const titleContext = params.title ? `Заглавие: "${params.title}"` : "";
+
+  const prompt = `Ти си автентичен САЛАФИТСКИ ШЕЙХ (Salafi Shaykh AI – по стъпките на Шейх Ибн Баз, Шейх ал-Албани - рахимахумуллах).
+Твоята задача е да дадеш кратко, въздействащо и съдържателно разяснение (30-45 думи) за следния хадис:
+${citation}
+${titleContext}
+${topicContext}
+${textContext}
+
+СТРИКТНИ ПРАВИЛА:
+1. Разясни СПЕЦИФИЧНИЯ смисъл и мъдрост на ТОЗИ ХАДИС (напр. ако е за 99-те части от Милостта на Аллах — обясни защо милостта е в 100 части и как една част крепи цялата доброта на земята, а 99 части са за вярващите в Деня на страшния съд; ако е за търпението — обясни същината на сабра; ако е за препитанието — защо ризкът е гарантиран от Твореца).
+2. СТРИКТНО ЗАБРАНЕНО е да използваш общи заучени шаблони като "Този Сахих хадис ни учи на искреност..."!
+3. НЕ използвай сложни богословски термини като "ас-Саляф ас-Салих" или "Салаф ус-Салих", защото обикновените хора не ги разбират. Обяснявай топло, разбираемо и директно към сърцето.
+4. ЗАДЪЛЖИТЕЛНО започни с: "Обяснение: [текст]" (без да споменаваш автора, шейха или AI във видео текста).`;
+
+  try {
+    const raw = await geminiChat("gemini-3.6-flash", [{ role: "user", content: prompt }], false, false);
+    let clean = raw.replace(/```[\s\S]*?```/g, "").trim();
+    clean = clean.replace(/^(?:поука|обяснение|разяснение):\s*/i, "").trim();
+    return `Обяснение: ${clean}`;
+  } catch (err) {
+    console.warn("[generateAuthenticSalafiSharh] Fallback generation error:", err);
+    return "Обяснение: Този благословен хадис ни учи на упование във Всевишния Аллах, покорство пред Неговите повели и следване на благородния път на Пратеника ﷺ.";
+  }
 }
 
 /**
@@ -287,26 +330,44 @@ ${t.text}
 =============================================================================`;
   }
 
-  if (params.hadithSharh && params.hadithSharh.text) {
+  if (params.hadithSharh) {
     const h = params.hadithSharh;
-    const cleanText = h.text
-      .replace(/Шейх\s+ал-Усеймин[^\w\s]*\s*(?:\(рахимахуллах\))?\s*(?:пояснява|обяснява|подчертава|разяснява|учи|казва)[^,]*,?\s*че\s*/gi, "")
-      .replace(/Salafi\s+Shaykh\s+AI\s*(?:пояснява|обяснява|подчертава|разяснява|учи|казва)[^,]*,?\s*че\s*/gi, "")
-      .replace(/^поука:\s*/i, "Обяснение: ")
-      .trim();
+    const hasPreSeededText = Boolean(
+      h.text &&
+      h.text.trim().length > 15 &&
+      !h.text.includes("Този Сахих хадис ни учи на искреност към Всевишния Аллах, твърдост във вярата")
+    );
 
-    return `
+    if (hasPreSeededText) {
+      const cleanText = h.text
+        .replace(/Шейх\s+ал-Усеймин[^\w\s]*\s*(?:\(рахимахуллах\))?\s*(?:пояснява|обяснява|подчертава|разяснява|учи|казва)[^,]*,?\s*че\s*/gi, "")
+        .replace(/Salafi\s+Shaykh\s+AI\s*(?:пояснява|обяснява|подчертава|разяснява|учи|казва)[^,]*,?\s*че\s*/gi, "")
+        .replace(/^поука:\s*/i, "Обяснение: ")
+        .trim();
+
+      return `
 =============================================================================
-=== РАЗЯСНЕНИЕ ОТ SALAFI SHAYKH AI ===
+=== АВТЕНТИЧНА ОСНОВА ЗА РАЗЯСНЕНИЕ (SALAFI SHAYKH AI) ===
 Твоята задача като Salafi Shaykh AI е да дадеш чисто, достъпно и въздействащо разяснение и поука:
 1. Обясни смисъла, мъдростта и поуката на ясен, красив и разбираем български език, който обикновените хора лесно възприемат.
 2. ВАЖНО ПРАВИЛО: НЕ казвай и НЕ изговаряй термини като "ас-Саляф ас-Салих" или "Салаф ус-Салих", защото обикновените хора не ги разбират! Просто обяснявай директно, топло и ясно същността на поуката!
 3. Придържай се строго към Таухида, следването на Сунната и искреността на намерението.
-4. СТРОГО СА ЗАБРАНЕНИ: суфийски, ашари или модернистични свободни разсъждения! СТРИКТНО БЕЗ споменаване на Шейх ал-Усеймин — разяснявай единствено като Salafi Shaykh AI!
-5. Обяснение за "explanation" и "summaryBg":
+4. СТРОГО СА ЗАБРАНЕНИ: суфийски, ашари или модернистични свободни разсъждения!
+5. Автентична основа за разяснението:
 "${cleanText}"
+- Предай този автентичен смисъл в "explanation" и "summaryBg" с красиви и въздействащи думи (30-50 думи).
 - Задължително започни с: "Обяснение: [текст]" или директно със същината. СТРИКТНО НЕ споменавай кой го обяснява (НИКОГА не пиши "Salafi Shaykh AI пояснява, че..." или имена на шейхове във видеото)!
-- Дължина: 35-45 думи в "explanation" и "summaryBg".
+=============================================================================`;
+    }
+
+    return `
+=============================================================================
+=== РАЗЯСНЕНИЕ ОТ SALAFI SHAYKH AI ===
+Твоята задача като Salafi Shaykh AI е да дадеш АВТЕНТИЧНО, ТОЧНО И ДЪЛБОКО разяснение на този конкретен хадис:
+1. Разясни СПЕЦИФИЧНИЯ смисъл, думи и мъдрост на ТОЗИ КОНКРЕТЕН ХАДИС (напр. ако е за 99-те части от Милостта на Аллах — разясни защо милостта Му е в 100 части и как 1 част крепи цялата майчина любов и доброта на земята, а 99 части са запазени за Съдния ден; ако е за търпението — защо сабрът носи спасение; ако е за намаза — защо молитвата е стълбът; ако е за дуа — защо Аллах откликва).
+2. СТРИКТНО ЗАБРАНЕНО е да използваш общи заучени фрази или шаблони! Разясни точно и конкретно смисъла на думите на Пратеника ﷺ!
+3. ВАЖНО ПРАВИЛО: НЕ казвай и НЕ изговаряй термини като "ас-Саляф ас-Салих" или "Салаф ус-Салих", защото обикновените хора не ги разбират! Просто обяснявай директно, топло и ясно същността на поуката!
+4. В "explanation" и "summaryBg" напиши чист текст, започващ с "Обяснение: [текст]" (30-50 думи). СТРИКТНО БЕЗ споменаване на автора/шейха във видео текста (НИКОГА не пиши "Salafi Shaykh AI пояснява, че..." или имена на шейхове).
 =============================================================================`;
   }
 
@@ -471,7 +532,9 @@ export async function enrichProposalWithAuthenticTafsir(proposal: ScripturePropo
             hookQuestion: "Защо усещаш тревога в гърдите си, дори когато всичко изглежда наред?",
             hookContext: "Често търсим покой в материалния свят, но душата остава жадна за истината.",
             dalilIntro: "В Свещения Коран, Аллах Всевишният повелява:",
-            explanation: `Обяснение: ${tafsir.text}`,
+            explanation: proposal.summaryBg && !proposal.summaryBg.includes("ас-Са'ди")
+              ? proposal.summaryBg
+              : "Обяснение: Истинският покой на душата идва от помненето на Аллах, спазването на Таухида и следването на Сунната.",
             actionStep: "Спри за 1 минута, направи искрен истигфар и дуа към Аллах Всевишният. Запази и сподели!",
           };
         }
@@ -481,6 +544,21 @@ export async function enrichProposalWithAuthenticTafsir(proposal: ScripturePropo
           proposal.scriptWorkflow.sourceText = tafsir.text;
           proposal.scriptWorkflow.sourceType = "database";
           proposal.scriptWorkflow.isAuthenticVerified = true;
+
+          if (proposal.scriptWorkflow.explanation) {
+            let cleaned = proposal.scriptWorkflow.explanation
+              .replace(/Шейх\s+ал-Усеймин[^\w\s]*\s*(?:\(рахимахуллах\))?\s*(?:пояснява|обяснява|подчертава|разяснява|учи|казва)[^,]*,?\s*че\s*/gi, "")
+              .replace(/Salafi\s+Shaykh\s+AI\s*(?:пояснява|обяснява|подчертава|разяснява|учи|казва)[^,]*,?\s*че\s*/gi, "")
+              .replace(/^(?:поука|обяснение|разяснение):\s*/i, "")
+              .trim();
+            if (cleaned.length > 0) {
+              cleaned = cleaned.charAt(0).toUpperCase() + cleaned.slice(1);
+            }
+            proposal.scriptWorkflow.explanation = `Обяснение: ${cleaned}`;
+            if (!proposal.summaryBg || proposal.summaryBg.includes("ас-Са'ди (рахимахуллах)")) {
+              proposal.summaryBg = proposal.scriptWorkflow.explanation;
+            }
+          }
         }
       }
     } catch (e) {
@@ -502,42 +580,84 @@ export async function enrichProposalWithAuthenticTafsir(proposal: ScripturePropo
   if (collection && number) {
     try {
       const sharh = getVerifiedHadithSharhDirect({ collection, number });
-      if (sharh && sharh.text) {
-        let cleanText = sharh.text
-          .replace(/Шейх\s+ал-Усеймин[^\w\s]*\s*(?:\(рахимахуллах\))?\s*(?:пояснява|обяснява|подчертава|разяснява|учи|казва)[^,]*,?\s*че\s*/gi, "")
-          .replace(/Salafi\s+Shaykh\s+AI\s*(?:пояснява|обяснява|подчертава|разяснява|учи|казва)[^,]*,?\s*че\s*/gi, "")
-          .replace(/^поука:\s*/i, "Обяснение: ")
-          .trim();
-        if (!cleanText.startsWith("Обяснение:")) {
-          cleanText = cleanText.replace(/^(?:поука|обяснение):\s*/i, "");
-          cleanText = `Обяснение: ${cleanText}`;
-        }
+      if (proposal.scriptWorkflow) {
+        proposal.scriptWorkflow.sourceScholar = "Salafi Shaykh AI";
+        proposal.scriptWorkflow.sourceWork = "Разяснение от Salafi Shaykh AI";
+        proposal.scriptWorkflow.sourceType = "salafi_ai";
+        proposal.scriptWorkflow.isAuthenticVerified = true;
 
-        if (!proposal.scriptWorkflow && proposal.type === "explained_video") {
-          proposal.scriptWorkflow = {
-            hookQuestion: "Защо делата ни понякога губят своята благодат и чистота?",
-            hookContext: "Искреността към Аллах е в основата на всяко прието дело и спасението на душата.",
-            dalilIntro: "Пратеникът на Аллах ﷺ ни учи:",
-            explanation: cleanText,
-            actionStep: "Обнови своя нийет (намерение) още сега само за Аллах Всевишният. Запази и сподели за добро!",
-          };
+        const currentExpl = (proposal.scriptWorkflow.explanation || "").trim();
+        const isGenericOrMissing =
+          !currentExpl ||
+          currentExpl.length < 20 ||
+          currentExpl.includes("Този Сахих хадис ни учи на искреност към Всевишния Аллах, твърдост във вярата");
+
+        if (isGenericOrMissing) {
+          if (sharh && sharh.text && !sharh.text.includes("Този Сахих хадис ни учи на искреност")) {
+            let cleanText = sharh.text
+              .replace(/Шейх\s+ал-Усеймин[^\w\s]*\s*(?:\(рахимахуллах\))?\s*(?:пояснява|обяснява|подчертава|разяснява|учи|казва)[^,]*,?\s*че\s*/gi, "")
+              .replace(/Salafi\s+Shaykh\s+AI\s*(?:пояснява|обяснява|подчертава|разяснява|учи|казва)[^,]*,?\s*че\s*/gi, "")
+              .replace(/^(?:поука|обяснение|разяснение):\s*/i, "")
+              .trim();
+            if (cleanText.length > 0) cleanText = cleanText.charAt(0).toUpperCase() + cleanText.slice(1);
+            cleanText = `Обяснение: ${cleanText}`;
+            proposal.scriptWorkflow.explanation = cleanText;
+            proposal.summaryBg = cleanText;
+          } else {
+            // Dynamically generate tailored Salafi Shaykh AI explanation using Gemini
+            const generated = await generateAuthenticSalafiSharh({
+              collection,
+              number,
+              title: proposal.title,
+              dalilText: proposal.scriptWorkflow.dalilText,
+            });
+            if (generated) {
+              proposal.scriptWorkflow.explanation = generated;
+              proposal.summaryBg = generated;
+            }
+          }
+        } else {
+          // Keep the smart AI explanation! Just sanitize attribution and ensure "Обяснение: " prefix.
+          let cleaned = currentExpl
+            .replace(/Шейх\s+ал-Усеймин[^\w\s]*\s*(?:\(рахимахуллах\))?\s*(?:пояснява|обяснява|подчертава|разяснява|учи|казва)[^,]*,?\s*че\s*/gi, "")
+            .replace(/Salafi\s+Shaykh\s+AI\s*(?:пояснява|обяснява|подчертава|разяснява|учи|казва)[^,]*,?\s*че\s*/gi, "")
+            .replace(/^(?:поука|обяснение|разяснение):\s*/i, "")
+            .trim();
+          if (cleaned.length > 0) cleaned = cleaned.charAt(0).toUpperCase() + cleaned.slice(1);
+          cleaned = `Обяснение: ${cleaned}`;
+          proposal.scriptWorkflow.explanation = cleaned;
+          if (!proposal.summaryBg || proposal.summaryBg.includes("Този Сахих хадис ни учи")) {
+            proposal.summaryBg = cleaned;
+          }
         }
-        if (proposal.scriptWorkflow) {
-          proposal.scriptWorkflow.sourceScholar = "Salafi Shaykh AI";
-          proposal.scriptWorkflow.sourceWork = "Разяснение от Salafi Shaykh AI";
-          proposal.scriptWorkflow.sourceText = cleanText;
-          proposal.scriptWorkflow.sourceType = "salafi_ai";
-          proposal.scriptWorkflow.isAuthenticVerified = true;
-          proposal.scriptWorkflow.explanation = cleanText;
-          proposal.summaryBg = cleanText;
+      } else if (proposal.type === "explained_video") {
+        let expl = "";
+        if (sharh && sharh.text && !sharh.text.includes("Този Сахих хадис ни учи на искреност")) {
+          expl = sharh.text;
+        } else {
+          expl = await generateAuthenticSalafiSharh({
+            collection,
+            number,
+            title: proposal.title,
+          });
         }
-      } else if (proposal.scriptWorkflow) {
-        if (!proposal.scriptWorkflow.sourceScholar || proposal.scriptWorkflow.sourceScholar.includes("Усеймин")) {
-          proposal.scriptWorkflow.sourceScholar = "Salafi Shaykh AI";
-          proposal.scriptWorkflow.sourceWork = "Разяснение от Salafi Shaykh AI";
-          proposal.scriptWorkflow.sourceType = "salafi_ai";
-          proposal.scriptWorkflow.isAuthenticVerified = true;
-        }
+        let cleanExpl = expl.replace(/^(?:поука|обяснение|разяснение):\s*/i, "").trim();
+        if (cleanExpl.length > 0) cleanExpl = cleanExpl.charAt(0).toUpperCase() + cleanExpl.slice(1);
+        cleanExpl = `Обяснение: ${cleanExpl}`;
+
+        proposal.scriptWorkflow = {
+          hookQuestion: "Защо делата ни понякога губят своята благодат и чистота?",
+          hookContext: "Искреността към Аллах е в основата на всяко прието дело и спасението на душата.",
+          dalilIntro: "Пратеникът на Аллах ﷺ ни учи:",
+          explanation: cleanExpl,
+          actionStep: "Обнови своя нийет (намерение) още сега само за Аллах Всевишният. Запази и сподели за добро!",
+          sourceScholar: "Salafi Shaykh AI",
+          sourceWork: "Разяснение от Salafi Shaykh AI",
+          sourceText: cleanExpl,
+          sourceType: "salafi_ai",
+          isAuthenticVerified: true,
+        };
+        proposal.summaryBg = cleanExpl;
       }
     } catch (e) {
       console.warn("[enrichProposal] Hadith sharh lookup failed:", e);
