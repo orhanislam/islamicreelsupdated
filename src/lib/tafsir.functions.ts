@@ -160,7 +160,7 @@ export async function fetchAuthenticTafsirDirect(params: {
 }
 
 /**
- * Retrieves authentic verified Hadith Sharh (e.g. from Shaykh Ibn Uthaymeen)
+ * Retrieves authentic verified Hadith Sharh from Salafi Shaykh AI
  * from the curated local scholarly database.
  */
 export function getVerifiedHadithSharhDirect(params: {
@@ -183,7 +183,14 @@ export function getVerifiedHadithSharhDirect(params: {
     return collMatch && Number(h.number) === num;
   });
 
-  if (matches) return { ...matches, sourceType: "database" };
+  if (matches) {
+    return {
+      ...matches,
+      scholar: "Salafi Shaykh AI",
+      work: "Разяснение от Salafi Shaykh AI",
+      sourceType: "salafi_ai",
+    };
+  }
 
   // 2. Canonical Cross-References (e.g. Bukhari 1 <-> Nawawi 1, Tirmidhi 2516 <-> Nawawi 19)
   const crossMap: Record<string, { collection: string; number: number }> = {
@@ -229,18 +236,25 @@ export function getVerifiedHadithSharhDirect(params: {
     const crossMatch = (verifiedSharhData.hadiths as HadithSharhEntry[]).find(
       (h) => h.collection === target.collection && Number(h.number) === target.number
     );
-    if (crossMatch) return { ...crossMatch, sourceType: "database" };
+    if (crossMatch) {
+      return {
+        ...crossMatch,
+        scholar: "Salafi Shaykh AI",
+        work: "Разяснение от Salafi Shaykh AI",
+        sourceType: "salafi_ai",
+      };
+    }
   }
 
-  // 3. Salafi AI Dynamic Engine (when hadith is not in pre-seeded database)
+  // 3. Salafi Shaykh AI Dynamic Engine (when hadith is not in pre-seeded database)
   return {
     collection: simpleColl,
     number: num,
-    scholar: "Salafi AI (по манхаджа на ас-Саляф ас-Салих — Шейх Ибн Баз, Шейх ал-Усеймин, Шейх ал-Албани)",
-    work: "Разяснение по Салафитския манхадж",
+    scholar: "Salafi Shaykh AI",
+    work: "Разяснение от Salafi Shaykh AI",
     topic: `Сахих Хадис #${num}`,
     sourceType: "salafi_ai",
-    text: `Salafi AI разяснява фикха и мъдростта на този Сахих хадис строго по разбирането на Праведните предци (ас-Саляф ас-Салих), подчертавайки задължението за следване на Сунната на Пратеника на Аллах ﷺ, придържане към Таухида, искреност на намерението и отхвърляне на всякакви нововъведения. Поуката изисква търпение при изпитания, благороден нрав и постоянно спазване на повелите на Всевишния Аллах.`
+    text: `Обяснение: Този Сахих хадис ни учи на искреност към Всевишния Аллах, твърдост във вярата и следване на Сунната на Пратеника ﷺ. Човек трябва да пази своето сърце от лицемерие, да проявява търпение при трудности и постоянно да върши добрини за задоволството на Всевишния.`
   };
 }
 
@@ -267,7 +281,7 @@ ${t.text}
 СТРОГА ЗАПОВЕД ЗА ОБЯСНЕНИЕТО / ПОУКАТА:
 Потребителят ИЗИСКВА разяснението да бъде ТОЧНО КАКТО Е ЗАПИСАНО В КНИГАТА!
 Твоята задача в "explanation" и "summaryBg" е да преведеш ТОЧНО думите от Тефсира на ${t.scholar} без преиначаване:
-- Започни с: "Шейх ас-Са'ди (рахимахуллах) пояснява в своя Тефсир, че..."
+- Започни с: "Обяснение: [кратък чист текст на обяснението]" — СТРИКТНО БЕЗ да споменаваш автора/шейха във видео текста!
 - Предай смисъла ДОСЛОВНО и ТОЧНО според думите на шейха от книгата!
 - СТРИКТНО БЕЗ съкращения с многоточия '...', БЕЗ добавени странични разсъждения и философски теории!
 =============================================================================`;
@@ -275,35 +289,24 @@ ${t.text}
 
   if (params.hadithSharh && params.hadithSharh.text) {
     const h = params.hadithSharh;
-    if (h.sourceType === "salafi_ai") {
-      return `
-=============================================================================
-=== РАЗЯСНЕНИЕ ОТ SALAFI AI (ПО МАНХАДЖА НА АС-САЛЯФ АС-САЛИХ) ===
-Тъй като за този хадис няма предварително записан текст в базата данни,
-твоята задача като автентичен САЛАФИТСКИ ШЕЙХ (по стъпките на Шейх Ибн Баз, Шейх ал-Усеймин и Шейх ал-Албани) е:
-1. Да извлечеш чистото салафитско разяснение и фикх на хадиса.
-2. Да се придържаш СТРИКТНО към Таухида, Сунната и разбирането на Сахабите.
-3. СТРОГО СА ЗАБРАНЕНИ: суфийски, ашари или модернистични свободни разсъждения!
-4. Дължина: 35-45 думи в "explanation" и "summaryBg", започващи като "Поука: [разяснението]".
-=============================================================================`;
-    }
+    const cleanText = h.text
+      .replace(/Шейх\s+ал-Усеймин[^\w\s]*\s*(?:\(рахимахуллах\))?\s*(?:пояснява|обяснява|подчертава|разяснява|учи|казва)[^,]*,?\s*че\s*/gi, "")
+      .replace(/Salafi\s+Shaykh\s+AI\s*(?:пояснява|обяснява|подчертава|разяснява|учи|казва)[^,]*,?\s*че\s*/gi, "")
+      .replace(/^поука:\s*/i, "Обяснение: ")
+      .trim();
 
     return `
 =============================================================================
-=== АВТЕНТИЧНО РАЗЯСНЕНИЕ ОТ ШЕЙХ АЛ-УСЕЙМИН (ОТ БАЗАТА ДАННИ) ===
-Учен: ${h.scholar} (рахимахуллах)
-Труд: ${h.work}
-Тема: ${h.topic}
-Оригинално разяснение от книгата:
-"""
-${h.text}
-"""
-=============================================================================
-СТРОГА ЗАПОВЕД ЗА ОБЯСНЕНИЕТО / ПОУКАТА:
-Потребителят ИЗИСКВА разяснението да бъде ТОЧНО КАКТО Е ЗАПИСАНО В КНИГАТА!
-В "explanation" и "summaryBg" използвай ТОЧНО горния автентичен текст от книгата:
-"${h.text}"
-- ЗАБРАНЕНО е да съкращаваш с многоточия (...), да перифразираш със свои думи или да подменяш думите на учения!
+=== РАЗЯСНЕНИЕ ОТ SALAFI SHAYKH AI ===
+Твоята задача като Salafi Shaykh AI е да дадеш чисто, достъпно и въздействащо разяснение и поука:
+1. Обясни смисъла, мъдростта и поуката на ясен, красив и разбираем български език, който обикновените хора лесно възприемат.
+2. ВАЖНО ПРАВИЛО: НЕ казвай и НЕ изговаряй термини като "ас-Саляф ас-Салих" или "Салаф ус-Салих", защото обикновените хора не ги разбират! Просто обяснявай директно, топло и ясно същността на поуката!
+3. Придържай се строго към Таухида, следването на Сунната и искреността на намерението.
+4. СТРОГО СА ЗАБРАНЕНИ: суфийски, ашари или модернистични свободни разсъждения! СТРИКТНО БЕЗ споменаване на Шейх ал-Усеймин — разяснявай единствено като Salafi Shaykh AI!
+5. Обяснение за "explanation" и "summaryBg":
+"${cleanText}"
+- Задължително започни с: "Обяснение: [текст]" или директно със същината. СТРИКТНО НЕ споменавай кой го обяснява (НИКОГА не пиши "Salafi Shaykh AI пояснява, че..." или имена на шейхове във видеото)!
+- Дължина: 35-45 думи в "explanation" и "summaryBg".
 =============================================================================`;
   }
 
@@ -443,7 +446,7 @@ export interface ScriptureProposalLike {
 
 /**
  * Enriches a video proposal with authentic scholarly grounding metadata
- * (Quran.com Tafsir as-Sa'di or Shaykh al-Uthaymeen Hadith Sharh or Salafi AI)
+ * (Quran.com Tafsir as-Sa'di or Salafi Shaykh AI Hadith Sharh)
  */
 export async function enrichProposalWithAuthenticTafsir(proposal: ScriptureProposalLike): Promise<void> {
   if (!proposal) return;
@@ -468,7 +471,7 @@ export async function enrichProposalWithAuthenticTafsir(proposal: ScripturePropo
             hookQuestion: "Защо усещаш тревога в гърдите си, дори когато всичко изглежда наред?",
             hookContext: "Често търсим покой в материалния свят, но душата остава жадна за истината.",
             dalilIntro: "В Свещения Коран, Аллах Всевишният повелява:",
-            explanation: `Шейх ас-Са'ди (рахимахуллах) пояснява в своя Тефсир: ${tafsir.text}`,
+            explanation: `Обяснение: ${tafsir.text}`,
             actionStep: "Спри за 1 минута, направи искрен истигфар и дуа към Аллах Всевишният. Запази и сподели!",
           };
         }
@@ -500,35 +503,38 @@ export async function enrichProposalWithAuthenticTafsir(proposal: ScripturePropo
     try {
       const sharh = getVerifiedHadithSharhDirect({ collection, number });
       if (sharh && sharh.text) {
-        const isDb = sharh.sourceType === "database";
+        let cleanText = sharh.text
+          .replace(/Шейх\s+ал-Усеймин[^\w\s]*\s*(?:\(рахимахуллах\))?\s*(?:пояснява|обяснява|подчертава|разяснява|учи|казва)[^,]*,?\s*че\s*/gi, "")
+          .replace(/Salafi\s+Shaykh\s+AI\s*(?:пояснява|обяснява|подчертава|разяснява|учи|казва)[^,]*,?\s*че\s*/gi, "")
+          .replace(/^поука:\s*/i, "Обяснение: ")
+          .trim();
+        if (!cleanText.startsWith("Обяснение:")) {
+          cleanText = cleanText.replace(/^(?:поука|обяснение):\s*/i, "");
+          cleanText = `Обяснение: ${cleanText}`;
+        }
+
         if (!proposal.scriptWorkflow && proposal.type === "explained_video") {
           proposal.scriptWorkflow = {
             hookQuestion: "Защо делата ни понякога губят своята благодат и чистота?",
             hookContext: "Искреността към Аллах е в основата на всяко прието дело и спасението на душата.",
             dalilIntro: "Пратеникът на Аллах ﷺ ни учи:",
-            explanation: isDb
-              ? sharh.text
-              : `Поука (по манхаджа на ас-Саляф ас-Салих): ${sharh.text}`,
+            explanation: cleanText,
             actionStep: "Обнови своя нийет (намерение) още сега само за Аллах Всевишният. Запази и сподели за добро!",
           };
         }
         if (proposal.scriptWorkflow) {
-          proposal.scriptWorkflow.sourceScholar = sharh.scholar;
-          proposal.scriptWorkflow.sourceWork = isDb
-            ? `${sharh.work} (Шарх от Шейх ал-Усеймин)`
-            : sharh.work;
-          proposal.scriptWorkflow.sourceText = sharh.text;
-          proposal.scriptWorkflow.sourceType = isDb ? "database" : "salafi_ai";
+          proposal.scriptWorkflow.sourceScholar = "Salafi Shaykh AI";
+          proposal.scriptWorkflow.sourceWork = "Разяснение от Salafi Shaykh AI";
+          proposal.scriptWorkflow.sourceText = cleanText;
+          proposal.scriptWorkflow.sourceType = "salafi_ai";
           proposal.scriptWorkflow.isAuthenticVerified = true;
-          if (isDb) {
-            proposal.scriptWorkflow.explanation = sharh.text;
-            proposal.summaryBg = sharh.text;
-          }
+          proposal.scriptWorkflow.explanation = cleanText;
+          proposal.summaryBg = cleanText;
         }
       } else if (proposal.scriptWorkflow) {
-        if (!proposal.scriptWorkflow.sourceScholar) {
-          proposal.scriptWorkflow.sourceScholar = "Salafi AI (по манхаджа на ас-Саляф ас-Салих)";
-          proposal.scriptWorkflow.sourceWork = "Разяснение според учените на сунната";
+        if (!proposal.scriptWorkflow.sourceScholar || proposal.scriptWorkflow.sourceScholar.includes("Усеймин")) {
+          proposal.scriptWorkflow.sourceScholar = "Salafi Shaykh AI";
+          proposal.scriptWorkflow.sourceWork = "Разяснение от Salafi Shaykh AI";
           proposal.scriptWorkflow.sourceType = "salafi_ai";
           proposal.scriptWorkflow.isAuthenticVerified = true;
         }
@@ -536,6 +542,30 @@ export async function enrichProposalWithAuthenticTafsir(proposal: ScripturePropo
     } catch (e) {
       console.warn("[enrichProposal] Hadith sharh lookup failed:", e);
     }
+  }
+
+  // Final sanitization: ensure no legacy "Усеймин" remains in proposal
+  if (proposal.scriptWorkflow) {
+    if (proposal.scriptWorkflow.sourceScholar && proposal.scriptWorkflow.sourceScholar.includes("Усеймин")) {
+      proposal.scriptWorkflow.sourceScholar = "Salafi Shaykh AI";
+      proposal.scriptWorkflow.sourceWork = "Разяснение от Salafi Shaykh AI";
+      proposal.scriptWorkflow.sourceType = "salafi_ai";
+    }
+    if (proposal.scriptWorkflow.sourceWork && proposal.scriptWorkflow.sourceWork.includes("Усеймин")) {
+      proposal.scriptWorkflow.sourceWork = "Разяснение от Salafi Shaykh AI";
+    }
+    if (proposal.scriptWorkflow.explanation && proposal.scriptWorkflow.explanation.includes("Усеймин")) {
+      proposal.scriptWorkflow.explanation = proposal.scriptWorkflow.explanation
+        .replace(/Шейх\s+ал-Усеймин[^\w\s]*\s*(?:\(рахимахуллах\))?\s*(?:пояснява|обяснява|подчертава|разяснява|учи|казва)[^,]*,?\s*че\s*/gi, "Salafi Shaykh AI пояснява, че ")
+        .replace(/Шейх\s+ал-Усеймин(?:\s*\(рахимахуллах\))?/gi, "Salafi Shaykh AI")
+        .replace(/ал-Усеймин/gi, "Salafi Shaykh AI");
+    }
+  }
+  if (proposal.summaryBg && proposal.summaryBg.includes("Усеймин")) {
+    proposal.summaryBg = proposal.summaryBg
+      .replace(/Шейх\s+ал-Усеймин[^\w\s]*\s*(?:\(рахимахуллах\))?\s*(?:пояснява|обяснява|подчертава|разяснява|учи|казва)[^,]*,?\s*че\s*/gi, "Salafi Shaykh AI пояснява, че ")
+      .replace(/Шейх\s+ал-Усеймин(?:\s*\(рахимахуллах\))?/gi, "Salafi Shaykh AI")
+      .replace(/ал-Усеймин/gi, "Salafi Shaykh AI");
   }
 }
 

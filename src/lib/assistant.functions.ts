@@ -34,7 +34,7 @@ export type ExplainedVideoScript = {
   dalilText?: string;   // 2b. Текст на аята или хадиса
   explanation: string;  // 3. Разяснение / Поука / Тефсир
   actionStep: string;   // 4. Практическо действие още днес + призив за споделяне
-  sourceScholar?: string; // напр. "Шейх Абдур-Рахман ас-Са'ди" или "Шейх Мухаммад ибн Салих ал-Усеймин"
+  sourceScholar?: string; // напр. "Шейх Абдур-Рахман ас-Са'ди" или "Salafi Shaykh AI"
   sourceWork?: string;    // напр. "Тефсир ас-Са'ди (Quran.com API)" или "Шарх ал-Арба'ин ан-Навауийя"
   sourceText?: string;    // автентичен текст от базата данни
   sourceType?: "database" | "salafi_ai"; // източник: проверена база данни или Salafi AI
@@ -314,7 +314,7 @@ export const chatWithAssistant = createServerFn({ method: "POST" })
       ? `\n\n${exclusionData.formattedExclusionPrompt}`
       : "";
 
-    // Grounding with Authentic Tafsir & Hadith Sharh (Quran.com & Shaykh al-Uthaymeen)
+    // Grounding with Authentic Tafsir & Hadith Sharh (Quran.com & Salafi Shaykh AI)
     let dynamicGroundingPrompt = "";
     const detectedScripture = detectScriptureFromText(data.prompt);
     if (detectedScripture.type === "quran" && detectedScripture.surah && detectedScripture.ayah) {
@@ -356,7 +356,7 @@ ${memory.learnedFacts.length ? memory.learnedFacts.join("\n") : "Няма зап
 
 
     const systemPrompt = `Ти си ПРОФЕСИОНАЛЕН ПРОДУЦЕНТ на видеа (Reels & TikTok) и ЕКСПЕРТЕН AI АСИСТЕНТ на Български език.
-ТВОЯТА РОЛЯ И ГЛАС: Ти си автентичен САЛАФИТСКИ ШЕЙХ И ДА'ИЯ (учен и проповедник по манхаджа на Праведните предци ас-Саляф ас-Салих – по стъпките на Шейх Ибн Баз, Шейх ал-Усеймин, Шейх ал-Албани - рахимахумуллах).
+ТВОЯТА РОЛЯ И ГЛАС: Ти си автентичен САЛАФИТСКИ ШЕЙХ И ДА'ИЯ (Salafi Shaykh AI – учен и проповедник по манхаджа на Праведните предци ас-Саляф ас-Салих – по стъпките на Шейх Ибн Баз, Шейх ал-Албани - рахимахумуллах).
 Целият текст, който генерираш — коментари, куки, призиви за действие, разяснения — трябва да звучи с дълбоко БЛАГОГОВЕНИЕ (хушу), УБЕДЕНОСТ, АВТОРИТЕТ И ИСКРЕНОСТ (Ихлас), базирани ЕДИНСТВЕНО на Корана и Сунната по разбирането на Салафите. Говори директно към сърцето на мюсюлманина със сериозен, бащински и мъдър тон. Избягвай всякакви суфийски, ашари, бид'а или модернистки изрази.
 
 СТРИКТНО ПРАВИЛО ЗА ТАУХИД И АДАБ КЪМ АЛЛАХ ВСЕВИШНИЯТ:
@@ -412,9 +412,9 @@ ${memoryContext}${historyContext}${oneMonthExclusionContext}${dynamicGroundingPr
    - "hookContext": 1-2 кратки изречения обяснение на ситуацията. Без номерация.
    - "dalilIntro": Кратък въвеждащ преход БЕЗ изрази като 'казва ни се за...' или 'казва ми за...' (напр. "В [Име на сурата], Аллах Всевишният повелява:" или "Пратеникът на Аллах ﷺ ни учи:").
    - "dalilText": Автентичният текст на аята или хадиса на български език В КАВИЧКИ.
-   - "explanation": ТЕФСИР СПОРЕД ТЕМАТА ОТ САЛАФИТСКИ УЧЕНИ (30-50 думи). Тефсирът ЗАДЪЛЖИТЕЛНО трябва да е според конкретната тема на аята/хадиса и основан на признатите салафитски учени (Шейх Абдур-Рахман ас-Са'ди, Ибн Кесир, Ибн ал-Каййим, Шейх ал-Усеймин, Шейх Ибн Баз - рахимахумуллах). ВИНАГИ цитирай и споменавай учения в текста (напр. "Шейх ас-Са'ди (рахимахуллах) пояснява в своя Тефсир, че..." или "Ибн Кесир (рахимахуллах) обяснява, че..."). СТРИКТНО БЕЗ ТОЧКИ И НОМЕРАЦИЯ (започва директно като "Поука: [разяснението]").
+   - "explanation": ОБЯСНЕНИЕ НА СМИСЪЛА СПОРЕД ТЕМАТА (30-50 думи). Във видеото ЗАДЪЛЖИТЕЛНО се изписва и изговаря просто "Обяснение: [чист текст]", КАТО СТРИКТНО НЕ СЕ СПОМЕНАВА ОТ КОГО Е ОБЯСНЕНИЕТО (НИКОГА не пиши "Salafi Shaykh AI пояснява, че...", "Шейх ас-Са'ди пояснява...", "Шейх ал-Усеймин...", "Поука:"). Напиши чисто, достъпно и задълбочено обяснение на смисъла, започващо директно със същината на разяснението или като "Обяснение: [текст]". СТРИКТНО БЕЗ ТОЧКИ И НОМЕРАЦИЯ.
    - "actionStep": Ако е практическо действие, се обозначава като "Действие: [текст]". Ако е молитва, молба или зикр, се обозначава като "Дуа: [текст]". СТРИКТНО БЕЗ ТОЧКИ И НОМЕРАЦИЯ.
-4. В summaryBg напиши сбития тефсир от салафитския учен според темата (30-50 думи) без точки и номерация.
+4. В summaryBg напиши краткото чисто обяснение (30-50 думи) без точки и номерация, без цитиране на имена на шейхове или AI.
 5. В themeBg и searchQuery задай точното тематично движещо се видео от 12-те категории (напр. огън за Джехеннем, реки/градини за Дженнет, тихо езеро за Зикр).
 6. Задай useBRoll: true, bRollInterval: 4, tiktokTheme: "hormozi".
 
@@ -913,7 +913,7 @@ export const suggestExplainedVideoProposal = createServerFn({ method: "POST" })
       }
     }
 
-    const prompt = `Ти си автентичен САЛАФИТСКИ ШЕЙХ И ДА'ИЯ (по манхаджа на ас-Саляф ас-Салих – Шейх Ибн Баз, Шейх ал-Усеймин, Шейх ал-Албани - рахимахумуллах) и елитен продуцент на формат "Ислямско видео с обяснение" (Islamic video with explanation) за TikTok и Reels на български език.
+    const prompt = `Ти си автентичен САЛАФИТСКИ ШЕЙХ И ДА'ИЯ (Salafi Shaykh AI – по манхаджа на ас-Саляф ас-Салих: Шейх Ибн Баз, Шейх ал-Албани - рахимахумуллах) и елитен продуцент на формат "Ислямско видео с обяснение" (Islamic video with explanation) за TikTok и Reels на български език.
 ТВОЯТА РОЛЯ И ГЛАС: Говори с дълбоко благоговение (хушу), бащинска мъдрост, авторитет и непоклатима искреност (Ихлас), базирани САМО на Корана и Сунната по разбирането на Салафите.
 
 СТРИКТНО ПРАВИЛО ЗА ТАУХИД И АДАБ КЪМ АЛЛАХ ВСЕВИШНИЯТ:
@@ -951,13 +951,12 @@ export const suggestExplainedVideoProposal = createServerFn({ method: "POST" })
 - Точен стих от Корана (surah, ayah, count) ИЛИ Сахих Хадис (collection, number).
 - dalilText: Самият текст на аята или хадиса на чист български език в кавички.
 
-ПОУКА И ТЕФСИР (СТРИКТНО ОТ САЛАФИТСКИ УЧЕНИ И СПОРЕД ТЕМАТА):
-- explanation: Дълбоко, прецизно разяснение на Тефсира СПОРЕД ТЕМАТА на аята или хадиса, основано на признатите велики салафитски учени:
-  * За Коран: Тефсир на Ибн Кесир (рахимахуллах), Тефсир на Шейх Абдур-Рахман ас-Са'ди (рахимахуллах), Тефсир на ал-Багауи (рахимахуллах) или поясненията на Шейх Мухаммад ибн Салих ал-Усеймин и Шейх Абдул-Азиз ибн Баз (рахимахумуллах).
-  * За Хадис: Разясненията на Имам Ибн ал-Каййим ал-Джаузийя (рахимахуллах), Ибн Раджаб ал-Ханбали (рахимахуллах), Шейх ал-Албани и Шейх ал-Усеймин (рахимахумуллах).
-  * ВИНАГИ споменавай името на салафитския учен в разяснението (напр. "Шейх ас-Са'ди (рахимахуллах) пояснява в своя Тефсир, че [разяснение]" или "Ибн Кесир (рахимахуллах) обяснява, че [разяснение]" или "Ибн ал-Каййим (рахимахуллах) казва [разяснение]").
-  * Дължина: 30-50 думи. СТРИКТНО БЕЗ МНОГОТОЧИЯ И НОМЕРАЦИЯ, започва директно като "Поука: [текст]".
-  * СТРОГО ЗАБРАНЕНИ са общи житейски съвети или свободно съчинение — единствено автентичен тефсир от Салафитските учени!
+ПОУКА И ТЕФСИР (ЧИСТО ОБЯСНЕНИЕ БЕЗ СПОМЕНАВАНЕ НА АВТОР ВЪВ ВИДЕОТО):
+- explanation: Дълбоко, прецизно разяснение на смисъла и мъдростта СПОРЕД ТЕМАТА на аята или хадиса (30-50 думи):
+  * СТРИКТНО ПРАВИЛО: Във видеото се изписва и изговаря просто "Обяснение: [чист текст]". СТРИКТНО НЕ споменавай кой го обяснява (НИКОГА не пиши "Salafi Shaykh AI пояснява, че...", "Шейх ас-Са'ди пояснява...", "Шейх ал-Усеймин...", "Поука:").
+  * Започва директно със същината на поуката или като "Обяснение: [текст]".
+  * Дължина: 30-50 думи. СТРИКТНО БЕЗ МНОГОТОЧИЯ И НОМЕРАЦИЯ.
+  * СТРОГО ЗАБРАНЕНИ са общи житейски съвети или свободно съчинение — единствено автентично съдържание по Таухид и Сунна!
 
 ДЕЙСТВИЕ ИЛИ ДУА:
 - actionStep: Ако е практическо дело, се обозначава с "Действие: [текст]". Ако е молитва, молба или зикр, се обозначава с "Дуа: [текст]". БЕЗ точки, БЕЗ номерация ('4.', '•'). (15-25 думи).
@@ -968,7 +967,7 @@ ${userTopic}${preGroundingPrompt ? `\n\n${preGroundingPrompt}` : ""}
 - АВТЕНТИЧНИ ИСЛЯМСКИ ТЕРМИНИ: Винаги изписвай 'Астагфируллах' (НИКОГА 'астафирулла'!), 'Субханаллах', 'Алхамдулиллях', 'Аллаху Акбар', 'Ля иляха илляллах', 'истигфар', 'таухид', 'сабр', 'таква'.
 - Заглавието ЗАДЪЛЖИТЕЛНО трябва да съдържа точна референция с ДВОЕТОЧИЕ, например: "[Коран 13:28] Покоят на сърцата" или "[Сахих ал-Бухари #6424] Силата на благодарността" (НИКОГА долна черта в заглавието, само двоеточие!). Горе на екрана на видеото ще се изписва ТЕМАТА (напр. "Покоят на сърцата"), която привлича погледа, а самата референция за сурата или хадиса ще се чуе и види в самото видео.
 - "type": "explained_video"
-- "summaryBg": Кратък обобщен текст на поуката за бърз преглед.
+- "summaryBg": Кратък обобщен текст на обяснението за бърз преглед.
 - "themeBg": Визуално описание за атмосферата (напр. "Звездно небе и планински върхове в мъгла").
 - "searchQuery": Английски термини за Pexels САМО за природа/стихии/джамия според 12-те категории.
 - "tiktokTheme": "hormozi" (златно караоке)
@@ -1127,7 +1126,7 @@ export const suggestAlternativeProposal = createServerFn({ method: "POST" })
 
     const topicHint = data?.topic ? `Желана тема: "${data.topic}".` : "";
 
-    const prompt = `Ти си автентичен САЛАФИТСКИ ШЕЙХ И ДА'ИЯ (по манхаджа на ас-Саляф ас-Салих: Шейх Ибн Баз, Шейх ал-Усеймин, Шейх ал-Албани - рахимахумуллах) и топ продуцент на Ислямски видеа на български език.
+    const prompt = `Ти си автентичен САЛАФИТСКИ ШЕЙХ И ДА'ИЯ (Salafi Shaykh AI – по манхаджа на ас-Саляф ас-Салих: Шейх Ибн Баз, Шейх ал-Албани - рахимахумуллах) и топ продуцент на Ислямски видеа на български език.
 Потребителят поиска алтернативно предложение за видео.
 ${rejectedContext}
 ${topicHint}
@@ -1524,10 +1523,50 @@ export function cleanScriptPrefixes(text: string): string {
   return text
     .replace(/(^|\n)\s*(?:\(\d+\)|\[\d+\]|\d+\.|\*|-|•)\s*/g, "$1")
     .replace(/^(?:поука|обяснение|действие|дуа|призив):\s*/i, "")
+    .replace(/(?:по\s+манхаджа\s+на\s+)?(?:ас[- ]?саляф\s+ас[- ]?салих|салаф\s+ус\s+салих|саляф\s+ас\s+салих)(?:\s*[–—,]\s*)?/gi, "")
+    .replace(/Шейх\s+ал-Усеймин[^\w\s]*\s*(?:\(рахимахуллах\))?\s*(?:пояснява|обяснява|подчертава|разяснява|учи|казва)[^,]*,?\s*че\s*/gi, "Salafi Shaykh AI пояснява, че ")
+    .replace(/Шейх\s+ал-Усеймин(?:\s*\(рахимахуллах\))?/gi, "Salafi Shaykh AI")
+    .replace(/ал-Усеймин/gi, "Salafi Shaykh AI")
     .replace(/\.{2,}/g, " ")
     .replace(/…+/g, " ")
     .replace(/\s{2,}/g, " ")
     .trim();
+}
+
+export function stripScholarAttribution(text: string): string {
+  if (!text) return "";
+  let cleaned = cleanScriptPrefixes(text);
+
+  // Strip leading labels
+  cleaned = cleaned.replace(/^(?:поука|обяснение|разяснение|тефсир):\s*/i, "");
+
+  // Strip attribution clauses like "Salafi Shaykh AI пояснява, че", "Шейх ас-Са'ди пояснява в своя Тефсир, че", "Шейх ал-Усеймин пояснява, че"
+  cleaned = cleaned.replace(
+    /^(?:според\s+)?(?:salafi\s+shaykh\s+ai|шейх\s+[^,.:\n]+|имам\s+[^,.:\n]+|ибн\s+[^,.:\n]+|учените\s+на\s+исляма)\s*(?:\([^)]*\))?\s*(?:пояснява(?:т)?|обяснява(?:т)?|подчертава(?:т)?|разяснява(?:т)?|учи(?:т)?|казва(?:т)?|пише|напомня(?:т)?)[^,.:\n]*,?\s*че\s*/i,
+    "",
+  );
+
+  // Strip "Според Salafi Shaykh AI, " etc.
+  cleaned = cleaned.replace(
+    /^(?:според\s+)(?:salafi\s+shaykh\s+ai|шейх\s+[^,.:\n]+|имам\s+[^,.:\n]+|ибн\s+[^,.:\n]+)[,:\s]+/i,
+    "",
+  );
+
+  // Strip if it starts with "Salafi Shaykh AI: " or similar
+  cleaned = cleaned.replace(
+    /^(?:salafi\s+shaykh\s+ai|шейх\s+[^,.:\n]+|имам\s+[^,.:\n]+|ибн\s+[^,.:\n]+)\s*(?:\([^)]*\))?\s*:\s*/i,
+    "",
+  );
+
+  // Strip any lingering redundant prefix
+  cleaned = cleaned.replace(/^(?:поука|обяснение|разяснение|тефсир):\s*/i, "").trim();
+
+  // Capitalize first character
+  if (cleaned.length > 0) {
+    cleaned = cleaned.charAt(0).toUpperCase() + cleaned.slice(1);
+  }
+
+  return cleaned;
 }
 
 export function buildExplainedNarrationText(params: {
@@ -1556,26 +1595,22 @@ export function buildExplainedNarrationText(params: {
     blocks.push(hookParts.join(" "));
   }
 
-  // Step 2: Dalil (Intro + Sacred Quote)
+  // Step 2: Dalil (Intro + Sacred Quote + Citation spoken at the end)
   const spokenRef = formatSpokenCitation(params.reference, params.isQuran);
   let intro = (sw?.dalilIntro || "").trim();
-  // Strip awkward "казва ни/ми се за..." patterns
   intro = intro.replace(/^(?:чуй\s+какво\s+)?(?:ни\s+)?казва\s+(?:се\s+)?(?:ни\s+)?за\s*[^:]*:\s*/i, "");
 
   if (
     !intro ||
     intro === "Чуй какво казва Аллах Всевишният в Корана:" ||
     intro === "Пратеникът на Аллах ﷺ ни учи:" ||
-    (spokenRef && !intro.includes(spokenRef))
+    intro.includes("сура") ||
+    intro.includes("хадис")
   ) {
     if (params.isQuran) {
-      intro = spokenRef && !spokenRef.startsWith("[")
-        ? `Чуй какво казва Аллах Всевишният в ${spokenRef}:`
-        : "Чуй какво казва Аллах Всевишният в Корана:";
+      intro = "Чуй какво казва Аллах Всевишният в Корана:";
     } else {
-      intro = spokenRef && !spokenRef.startsWith("[")
-        ? `Пратеникът на Аллах ﷺ ни учи в ${spokenRef}:`
-        : "Пратеникът на Аллах ﷺ ни учи:";
+      intro = "Пратеникът на Аллах ﷺ ни учи:";
     }
   }
 
@@ -1587,16 +1622,18 @@ export function buildExplainedNarrationText(params: {
     .replace(/^(?:чуй\s+какво\s+)?(?:ни\s+)?казва\s+(?:се\s+)?(?:ни\s+)?за\s*[^:]*:\s*/i, "")
     .trim();
 
-  blocks.push(`${intro}\n„${cleanDalil}“`);
+  // At the end of the quote, state the exact number/citation of the ayah or hadith
+  const citationAtEnd = spokenRef && !spokenRef.startsWith("[") ? `\n— ${spokenRef}.` : "";
+  blocks.push(`${intro}\n„${cleanDalil}“${citationAtEnd}`);
 
-  // Step 3: Explanation (Поука:) - strictly labeled "Поука:" without dots or numbering
+  // Step 3: Explanation (Обяснение:) - strictly labeled "Обяснение:" without naming who it is from
   let explanation = sw?.explanation?.trim() || "";
   if (!explanation && params.summaryBg) {
     explanation = params.summaryBg.trim();
   }
   if (explanation) {
-    const cleanExpl = cleanScriptPrefixes(explanation);
-    blocks.push(`Поука: ${cleanExpl}`);
+    const cleanExpl = stripScholarAttribution(explanation);
+    blocks.push(`Обяснение: ${cleanExpl}`);
   }
 
   // Step 4: Action or Dua (Действие: или Дуа:) - strictly without dots or numbering
@@ -1678,12 +1715,9 @@ export const confirmAndGenerateVideo = createServerFn({ method: "POST" })
           summaryBg: proposal.summaryBg,
         });
       } else {
-        const cleanExplanation = (proposal.summaryBg || "")
-          .replace(/^обяснение:\s*/i, "")
-          .replace(/^поука:\s*/i, "")
-          .trim();
+        const cleanExplanation = stripScholarAttribution(proposal.summaryBg || "");
         if (cleanExplanation && cleanExplanation.length > 15 && !bulgarian.includes(cleanExplanation)) {
-          bulgarian = `${bulgarian} <break time="0.8s" /> Поука: ${cleanExplanation}`;
+          bulgarian = `${bulgarian} <break time="0.8s" /> Обяснение: ${cleanExplanation}`;
         }
         if (viralTitle) {
           bulgarian = `${viralTitle} <break time="1.0s" />\n\n${bulgarian}`;
@@ -1823,12 +1857,9 @@ export const confirmAndGenerateVideo = createServerFn({ method: "POST" })
             summaryBg: proposal.summaryBg,
           });
         } else {
-          const cleanExplanation = (proposal.summaryBg || "")
-            .replace(/^обяснение:\s*/i, "")
-            .replace(/^поука:\s*/i, "")
-            .trim();
+          const cleanExplanation = stripScholarAttribution(proposal.summaryBg || "");
           if (cleanExplanation && cleanExplanation.length > 15 && !bulgarian.includes(cleanExplanation)) {
-            bulgarian = `${bulgarian} <break time="0.8s" /> Поука: ${cleanExplanation}`;
+            bulgarian = `${bulgarian} <break time="0.8s" /> Обяснение: ${cleanExplanation}`;
           }
           if (viralTitle) {
             bulgarian = `${viralTitle} <break time="1.0s" />\n\n${bulgarian}`;

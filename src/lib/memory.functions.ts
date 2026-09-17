@@ -56,19 +56,31 @@ function withMemoryLock<T>(action: () => Promise<T>): Promise<T> {
 }
 
 async function _readAiMemoryRaw(): Promise<AiMemory> {
+  const sanitizeScholarText = (s: string) =>
+    s
+      .replace(/Шейх\s+(?:Мухаммад\s+ибн\s+Салих\s+)?ал-Усеймин/gi, "Salafi Shaykh AI")
+      .replace(/Ибн\s+Усеймин/gi, "Salafi Shaykh AI");
+
   try {
     const filePath = getMemoryFilePath();
     const txt = await fs.readFile(filePath, "utf-8");
     const parsed = JSON.parse(txt);
+    const rawInstructions: string[] = Array.isArray(parsed.customInstructions)
+      ? parsed.customInstructions.map(sanitizeScholarText)
+      : [
+          "Винаги бъди изключително учтив и уважителен към ислямските текстове.",
+          "Предпочитай красиви фонови видеа с висока резолюция 9:16.",
+          "Тефсирът и Шархът за хадисите да бъдат ИЗЦЯЛО и ЕДИНСТВЕНО от Salafi Shaykh AI (а за Корана от Шейх ас-Са'ди или Salafi Shaykh AI). СТРИКТНО БЕЗ Шейх ал-Усеймин — потребителят изисква само Salafi Shaykh AI да обяснява вместо Шейх Ибн Усеймин.",
+        ];
+    const rawFacts: string[] = Array.isArray(parsed.learnedFacts)
+      ? parsed.learnedFacts.map(sanitizeScholarText)
+      : [
+          "Потребителят изисква САМО Salafi Shaykh AI да дава разясненията и поуките (Шарх) вместо Шейх Ибн Усеймин."
+        ];
+
     return {
-      customInstructions: parsed.customInstructions || [
-        "Винаги бъди изключително учтив и уважителен към ислямските текстове.",
-        "Предпочитай красиви фонови видеа с висока резолюция 9:16.",
-        "Тефсирът и Шархът за всички видеа, сценарии и поуки да бъдат ИЗЦЯЛО и ЕДИНСТВЕНО от признати Салафитски шейхове (ас-Саляф ас-Салих: Шейх Абдур-Рахман ас-Са'ди, Шейх Мухаммад ибн Салих ал-Усеймин, Имам Ибн Кесир, Шейх Ибн Баз, Шейх ал-Албани). Абсолютно са забранени не-салафитски автори или свободни философии.",
-      ],
-      learnedFacts: parsed.learnedFacts || [
-        "Потребителят изисква целият Тефсир и Шарх да бъде изцяло и единствено от признати Салафитски шейхове (Шейх ас-Са'ди, Шейх ал-Усеймин, Ибн Кесир, Шейх Ибн Баз, Шейх ал-Албани)."
-      ],
+      customInstructions: rawInstructions,
+      learnedFacts: rawFacts,
       usageHistory: Array.isArray(parsed.usageHistory) ? parsed.usageHistory : [],
       carouselHistory: Array.isArray(parsed.carouselHistory) ? parsed.carouselHistory : [],
       userName: parsed.userName,
@@ -79,10 +91,10 @@ async function _readAiMemoryRaw(): Promise<AiMemory> {
       customInstructions: [
         "Винаги бъди изключително учтив и уважителен към ислямските текстове.",
         "Предпочитай красиви фонови видеа с висока резолюция 9:16.",
-        "Тефсирът и Шархът за всички видеа, сценарии и поуки да бъдат ИЗЦЯЛО и ЕДИНСТВЕНО от признати Салафитски шейхове (ас-Саляф ас-Салих: Шейх Абдур-Рахман ас-Са'ди, Шейх Мухаммад ибн Салих ал-Усеймин, Имам Ибн Кесир, Шейх Ибн Баз, Шейх ал-Албани). Абсолютно са забранени не-салафитски автори или свободни философии.",
+        "Тефсирът и Шархът за хадисите да бъдат ИЗЦЯЛО и ЕДИНСТВЕНО от Salafi Shaykh AI (а за Корана от Шейх ас-Са'ди или Salafi Shaykh AI). СТРИКТНО БЕЗ Шейх ал-Усеймин — потребителят изисква само Salafi Shaykh AI да обяснява вместо Шейх Ибн Усеймин.",
       ],
       learnedFacts: [
-        "Потребителят изисква целият Тефсир и Шарх да бъде изцяло и единствено от признати Салафитски шейхове (Шейх ас-Са'ди, Шейх ал-Усеймин, Ибн Кесир, Шейх Ибн Баз, Шейх ал-Албани)."
+        "Потребителят изисква САМО Salafi Shaykh AI да дава разясненията и поуките (Шарх) вместо Шейх Ибн Усеймин."
       ],
       usageHistory: [],
       carouselHistory: [],

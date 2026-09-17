@@ -263,6 +263,7 @@ export function normalizeIslamicArabicPhoneticsForTts(text: string): string {
   replaceWord("(?:ibn\\s+al-qayyim|ibn\\s+qayyim|ибн\\s+ал-каййим)", "Ибн ал-Каййим");
   replaceWord("(?:al-albani|albani|ал-албани|албани)", "Ал-Албаани");
   replaceWord("(?:ibn\\s+baz|ибн\\s+баз)", "Ибн Бааз");
+  replaceWord("(?:salafi\\s+shaykh\\s+ai|салафи\\s+шейх\\s+ai|салафи\\s+шейх\\s+аи)", "Салафи Шейх А И");
   replaceWord("(?:ibn\\s+uthaymeen|ibn\\s+uthaimeen|ибн\\s+усеймин|ибн\\s+утаймин)", "Ибн Усаймийн");
 
   // 8. Fix Arabic prefixes that cause Bulgarian TTS to expand them as abbreviations

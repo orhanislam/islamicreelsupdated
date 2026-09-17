@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { copyToClipboardFallback } from "@/lib/utils";
 import { toast } from "sonner";
-import { chatWithAssistant, suggestViralProposal, suggestExplainedVideoProposal, suggestAlternativeProposal, suggestBatchViralProposals, confirmAndGenerateVideo, startBatchViralSeries, startBatchViralHadithSeries, getAssistantHistory, saveAssistantHistory, clearAssistantHistory, startBackgroundPlanGeneration, startBackgroundBatchGeneration, checkActiveBackgroundTasks, cleanProposalTitle, extractTopic, detectActionOrDuaLabel, cleanScriptPrefixes, type VideoProposal, type ExplainedVideoScript } from "@/lib/assistant.functions";
+import { chatWithAssistant, suggestViralProposal, suggestExplainedVideoProposal, suggestAlternativeProposal, suggestBatchViralProposals, confirmAndGenerateVideo, startBatchViralSeries, startBatchViralHadithSeries, getAssistantHistory, saveAssistantHistory, clearAssistantHistory, startBackgroundPlanGeneration, startBackgroundBatchGeneration, checkActiveBackgroundTasks, cleanProposalTitle, extractTopic, detectActionOrDuaLabel, cleanScriptPrefixes, stripScholarAttribution, type VideoProposal, type ExplainedVideoScript } from "@/lib/assistant.functions";
 import { getAiMemory, updateAiMemory, type AiMemory } from "@/lib/memory.functions";
 import { getOneMonthCooldownSummary } from "@/lib/generation-history.functions";
 import { generateViralThumbnail } from "@/lib/thumbnail.functions";
@@ -306,9 +306,9 @@ function AssistantPage() {
     if (scriptWorkflow) {
       const sw = scriptWorkflow;
       const actLabel = detectActionOrDuaLabel(sw.actionStep);
-      const cleanExpl = cleanScriptPrefixes(sw.explanation);
+      const cleanExpl = stripScholarAttribution(sw.explanation);
       const cleanAct = cleanScriptPrefixes(sw.actionStep);
-      text = `${sw.hookQuestion ? `${cleanScriptPrefixes(sw.hookQuestion)}\n${cleanScriptPrefixes(sw.hookContext || "")}\n\n` : ""}📖 ${title}\n„${sw.dalilText || title}“\n\n💡 Поука: ${cleanExpl}\n\n${actLabel === "Дуа" ? "🤍 Дуа:" : "⚡ Действие:"} ${cleanAct}\n\n#islamicreels #коран #хадис #ислям #напомняне #садакаджария #bulgaria #islamicvideo`;
+      text = `${sw.hookQuestion ? `${cleanScriptPrefixes(sw.hookQuestion)}\n${cleanScriptPrefixes(sw.hookContext || "")}\n\n` : ""}📖 ${title}\n„${sw.dalilText || title}“\n\n💡 Обяснение: ${cleanExpl}\n\n${actLabel === "Дуа" ? "🤍 Дуа:" : "⚡ Действие:"} ${cleanAct}\n\n#islamicreels #коран #хадис #ислям #напомняне #садакаджария #bulgaria #islamicvideo`;
     } else {
       const cleanTitle = getThumbTitle(title);
       text = formatViralSocialCaption(cleanTitle, summary);
@@ -1588,7 +1588,7 @@ function AssistantPage() {
                                           )}
                                           <span>
                                             {m.proposal.scriptWorkflow.sourceType === "salafi_ai"
-                                              ? "Разяснение от Salafi AI:"
+                                              ? "Разяснение от:"
                                               : "Проверен източник:"}
                                           </span>
                                           <span className="text-white font-semibold">
@@ -1618,7 +1618,7 @@ function AssistantPage() {
                                           >
                                             <span>
                                               {m.proposal.scriptWorkflow.sourceType === "salafi_ai"
-                                                ? "🌿 Виж салафитската поука и насоки (ас-Саляф ас-Салих)"
+                                                ? "🌿 Виж разяснението и поуката от Salafi AI"
                                                 : "📜 Виж автентичния оригинален текст от базата данни"}
                                             </span>
                                           </summary>

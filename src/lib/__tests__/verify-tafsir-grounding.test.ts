@@ -32,11 +32,11 @@ async function runTests() {
   }
   console.log("   ✓ Retrieved Ibn Kathir text:", ibnKathir13.text.slice(0, 120), "...");
 
-  // 4. Test Verified Hadith Sharh (Shaykh Ibn Uthaymeen)
+  // 4. Test Verified Hadith Sharh (Salafi Shaykh AI)
   console.log("\n4. Testing verified Hadith Sharh for Sahih al-Bukhari #1...");
   const bukhari1 = getVerifiedHadithSharhDirect({ collection: "bukhari", number: 1 });
-  if (!bukhari1 || !bukhari1.scholar.includes("Усеймин")) {
-    throw new Error("Failed to retrieve Shaykh al-Uthaymeen Sharh for Bukhari #1");
+  if (!bukhari1 || !bukhari1.scholar.includes("Salafi Shaykh AI")) {
+    throw new Error("Failed to retrieve Salafi Shaykh AI Sharh for Bukhari #1");
   }
   console.log("   ✓ Scholar:", bukhari1.scholar);
   console.log("   ✓ Work:", bukhari1.work);
@@ -45,8 +45,8 @@ async function runTests() {
   // 5. Test Hadith Sharh for Bukhari 6424 (Two blessings)
   console.log("\n5. Testing verified Hadith Sharh for Sahih al-Bukhari #6424...");
   const bukhari6424 = getVerifiedHadithSharhDirect({ collection: "bukhari", number: 6424 });
-  if (!bukhari6424 || !bukhari6424.topic.includes("времето")) {
-    throw new Error("Failed to retrieve Shaykh al-Uthaymeen Sharh for Bukhari #6424");
+  if (!bukhari6424 || !bukhari6424.scholar.includes("Salafi Shaykh AI")) {
+    throw new Error("Failed to retrieve Salafi Shaykh AI Sharh for Bukhari #6424");
   }
   console.log("   ✓ Retrieved Sharh for Bukhari 6424:", bukhari6424.text);
 
@@ -100,16 +100,19 @@ async function runTests() {
     number: 6424,
   };
   await enrichProposalWithAuthenticTafsir(testHadithProposal);
-  if (!testHadithProposal.scriptWorkflow?.isAuthenticVerified || !testHadithProposal.scriptWorkflow.sourceScholar?.includes("Усеймин")) {
-    throw new Error(`Proposal was not enriched with Shaykh al-Uthaymeen Sharh: ${JSON.stringify(testHadithProposal)}`);
+  if (!testHadithProposal.scriptWorkflow?.isAuthenticVerified || !testHadithProposal.scriptWorkflow.sourceScholar?.includes("Salafi Shaykh AI")) {
+    throw new Error(`Proposal was not enriched with Salafi Shaykh AI Sharh: ${JSON.stringify(testHadithProposal)}`);
   }
-  console.log("   ✓ Enriched Hadith proposal with Shaykh al-Uthaymeen Sharh:", testHadithProposal.scriptWorkflow.sourceScholar);
+  if (testHadithProposal.scriptWorkflow.explanation?.includes("Усеймин")) {
+    throw new Error(`Explanation contains forbidden scholar reference: ${testHadithProposal.scriptWorkflow.explanation}`);
+  }
+  console.log("   ✓ Enriched Hadith proposal with Salafi Shaykh AI Sharh:", testHadithProposal.scriptWorkflow.sourceScholar);
 
   // 9. Test Tirmidhi Sharh (Tirmidhi #1987 and #2516)
   console.log("\n9. Testing Tirmidhi Hadiths Sharh...");
   const tirmidhi1987 = getVerifiedHadithSharhDirect({ collection: "tirmidhi", number: 1987 });
-  if (!tirmidhi1987 || !tirmidhi1987.scholar.includes("Усеймин")) {
-    throw new Error("Failed to retrieve Shaykh al-Uthaymeen Sharh for Tirmidhi #1987");
+  if (!tirmidhi1987 || !tirmidhi1987.scholar.includes("Salafi Shaykh AI")) {
+    throw new Error("Failed to retrieve Salafi Shaykh AI Sharh for Tirmidhi #1987");
   }
   console.log("   ✓ Retrieved Sharh for Tirmidhi 1987:", tirmidhi1987.text.slice(0, 100), "...");
 
@@ -123,20 +126,23 @@ async function runTests() {
   console.log("\n10. Testing coverage of all 42 Nawawi Hadiths...");
   for (let i = 1; i <= 42; i++) {
     const sharh = getVerifiedHadithSharhDirect({ collection: "nawawi40", number: i });
-    if (!sharh || !sharh.scholar.includes("Усеймин")) {
-      throw new Error(`Missing Shaykh al-Uthaymeen Sharh for Nawawi Hadith #${i}`);
+    if (!sharh || !sharh.scholar.includes("Salafi Shaykh AI")) {
+      throw new Error(`Missing Salafi Shaykh AI Sharh for Nawawi Hadith #${i}`);
+    }
+    if (sharh.text.includes("Усеймин")) {
+      throw new Error(`Nawawi #${i} contains Uthaymeen text!`);
     }
   }
-  console.log("   ✓ All 42 Nawawi Hadiths verified with Shaykh al-Uthaymeen Sharh 100%!");
+  console.log("   ✓ All 42 Nawawi Hadiths verified with Salafi Shaykh AI Sharh 100% (0% Uthaymeen)!");
 
-  // 11. Test dynamic Salafi AI fallback for arbitrary hadiths
-  console.log("\n11. Testing dynamic Salafi AI fallback for arbitrary hadith numbers...");
+  // 11. Test dynamic Salafi Shaykh AI fallback for arbitrary hadiths
+  console.log("\n11. Testing dynamic Salafi Shaykh AI fallback for arbitrary hadith numbers...");
   const arbitraryBukhari = getVerifiedHadithSharhDirect({ collection: "bukhari", number: 9999 });
-  if (!arbitraryBukhari || arbitraryBukhari.sourceType !== "salafi_ai" || !arbitraryBukhari.scholar.includes("Salafi AI")) {
-    throw new Error("Failed dynamic Salafi AI fallback for arbitrary Bukhari hadith");
+  if (!arbitraryBukhari || arbitraryBukhari.sourceType !== "salafi_ai" || !arbitraryBukhari.scholar.includes("Salafi Shaykh AI")) {
+    throw new Error("Failed dynamic Salafi Shaykh AI fallback for arbitrary Bukhari hadith");
   }
-  console.log("   ✓ Dynamic Salafi AI fallback active for Bukhari:", arbitraryBukhari.scholar);
-  console.log("   ✓ Salafi AI sourceType verified:", arbitraryBukhari.sourceType);
+  console.log("   ✓ Dynamic Salafi Shaykh AI fallback active for Bukhari:", arbitraryBukhari.scholar);
+  console.log("   ✓ Salafi Shaykh AI sourceType verified:", arbitraryBukhari.sourceType);
 
   const arbitraryProposal: any = {
     title: "[Сахих ал-Бухари #9999] Пример за неприсъстващ в базата хадис",
@@ -145,17 +151,17 @@ async function runTests() {
     number: 9999,
   };
   await enrichProposalWithAuthenticTafsir(arbitraryProposal);
-  if (arbitraryProposal.scriptWorkflow?.sourceType !== "salafi_ai") {
-    throw new Error(`Expected sourceType to be salafi_ai, got ${arbitraryProposal.scriptWorkflow?.sourceType}`);
+  if (arbitraryProposal.scriptWorkflow?.sourceType !== "salafi_ai" || arbitraryProposal.scriptWorkflow?.sourceScholar !== "Salafi Shaykh AI") {
+    throw new Error(`Expected sourceScholar to be Salafi Shaykh AI, got ${arbitraryProposal.scriptWorkflow?.sourceScholar}`);
   }
-  console.log("   ✓ Enriched arbitrary hadith with Salafi AI badge:", arbitraryProposal.scriptWorkflow.sourceScholar);
+  console.log("   ✓ Enriched arbitrary hadith with Salafi Shaykh AI badge:", arbitraryProposal.scriptWorkflow.sourceScholar);
 
-  if (testHadithProposal.scriptWorkflow?.sourceType !== "database") {
-    throw new Error(`Expected testHadithProposal sourceType to be database, got ${testHadithProposal.scriptWorkflow?.sourceType}`);
+  if (testHadithProposal.scriptWorkflow?.sourceType !== "salafi_ai") {
+    throw new Error(`Expected testHadithProposal sourceType to be salafi_ai, got ${testHadithProposal.scriptWorkflow?.sourceType}`);
   }
-  console.log("   ✓ Verified database sourceType for Bukhari #6424:", testHadithProposal.scriptWorkflow.sourceType);
+  console.log("   ✓ Verified salafi_ai sourceType for Bukhari #6424:", testHadithProposal.scriptWorkflow.sourceType);
 
-  console.log("\n🎉 ALL AUTHENTIC TAFSIR & SHARH TESTS (INCLUDING SALAFI AI & DATABASE GROUNDING) PASSED 100%!");
+  console.log("\n🎉 ALL AUTHENTIC TAFSIR & SHARH TESTS (EXCLUSIVELY SALAFI SHAYKH AI) PASSED 100%!");
 }
 
 runTests().catch((err) => {
