@@ -161,7 +161,52 @@ async function runTests() {
   }
   console.log("   ✓ Verified salafi_ai sourceType for Bukhari #6424:", testHadithProposal.scriptWorkflow.sourceType);
 
-  console.log("\n🎉 ALL AUTHENTIC TAFSIR & SHARH TESTS (EXCLUSIVELY SALAFI SHAYKH AI) PASSED 100%!");
+  // 12. Test Clean Video Explanation (No scholar attribution in video narration, strictly "Обяснение:")
+  console.log("\n12. Testing clean video narration explanation (strictly 'Обяснение:', 0 scholar attribution)...");
+  const { stripScholarAttribution, buildExplainedNarrationText } = await import("../assistant.functions");
+
+  const sampleAttributed1 = "Salafi Shaykh AI пояснява, че искреността е основа на вярата.";
+  const cleaned1 = stripScholarAttribution(sampleAttributed1);
+  if (cleaned1.includes("Salafi Shaykh AI") || cleaned1.includes("пояснява, че") || !cleaned1.startsWith("Искреността")) {
+    throw new Error(`stripScholarAttribution failed on Salafi AI intro! Got: ${cleaned1}`);
+  }
+  console.log("   ✓ stripScholarAttribution removed 'Salafi Shaykh AI пояснява, че':", cleaned1);
+
+  const sampleAttributed2 = "Поука: Шейх ас-Са'ди пояснява в своя Тефсир, че сърцата намират покой при споменаване на Аллах.";
+  const cleaned2 = stripScholarAttribution(sampleAttributed2);
+  if (cleaned2.includes("ас-Са'ди") || cleaned2.includes("Поука") || !cleaned2.startsWith("Сърцата")) {
+    throw new Error(`stripScholarAttribution failed on as-Sa'di intro! Got: ${cleaned2}`);
+  }
+  console.log("   ✓ stripScholarAttribution removed as-Sa'di intro and 'Поука:':", cleaned2);
+
+  const narrationText = buildExplainedNarrationText({
+    viralTitle: "Покоят на сърцата",
+    reference: "Коран 13:28",
+    quoteText: "Онези, които вярват и сърцата им намират покой при споменаването на Аллах.",
+    isQuran: true,
+    scriptWorkflow: {
+      hookQuestion: "Защо душата ти се чувства тревожна?",
+      hookContext: "Когато светът те притисне, има едно спасение.",
+      dalilIntro: "В Свещения Коран, Аллах Всевишният повелява:",
+      dalilText: "Онези, които вярват и сърцата им намират покой при споменаването на Аллах.",
+      explanation: "Salafi Shaykh AI пояснява, че истинският мир не идва от богатство, а от връзката с Твореца.",
+      actionStep: "Направи истигфар точно сега. Сподели за садака джария!",
+    },
+  });
+
+  if (narrationText.includes("Поука:")) {
+    throw new Error(`buildExplainedNarrationText still contains 'Поука:'! Got:\n${narrationText}`);
+  }
+  if (!narrationText.includes("Обяснение: Истинският мир не идва от богатство, а от връзката с Твореца.")) {
+    throw new Error(`buildExplainedNarrationText missing clean 'Обяснение:' block! Got:\n${narrationText}`);
+  }
+  if (narrationText.includes("Salafi Shaykh AI пояснява")) {
+    throw new Error(`buildExplainedNarrationText leaked scholar attribution into video! Got:\n${narrationText}`);
+  }
+  console.log("   ✓ Verified buildExplainedNarrationText strictly uses 'Обяснение:' without scholar attribution!");
+
+  console.log("\n🎉 ALL AUTHENTIC TAFSIR & SHARH TESTS (EXCLUSIVELY SALAFI SHAYKH AI & CLEAN EXPLANATION) PASSED 100%!");
+  process.exit(0);
 }
 
 runTests().catch((err) => {

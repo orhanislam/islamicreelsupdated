@@ -514,13 +514,13 @@ function AssistantPage() {
         : "";
       const altActLabel = altAct ? detectActionOrDuaLabel(altAct) : "";
       const altActText = altAct ? `\n${altActLabel === "Дуа" ? "🤍" : "⚡"} **${altActLabel}:** ${altAct}` : "";
-      const altExpl = cleanScriptPrefixes(res.proposal?.scriptWorkflow?.explanation || res.proposal?.summaryBg || "");
+      const altExpl = stripScholarAttribution(res.proposal?.scriptWorkflow?.explanation || res.proposal?.summaryBg || "");
 
       setMessages((prev) => [
         ...prev,
         {
           role: "assistant",
-          text: `🔄 **Алтернативно предложение:**\n\n${res.reply}\n\n📖 **Цитат:** ${res.proposal?.title}\n💡 **Поука:** ${altExpl}${altActText}\n🎨 **Атмосфера:** ${res.proposal?.themeBg}\n\n📌 Натисни **\"✅ Съгласи се / Одобри\"** за да го генерираме, или **\"❌ Откажи / Предложи друг\"** за още едно!`,
+          text: `🔄 **Алтернативно предложение:**\n\n${res.reply}\n\n📖 **Цитат:** ${res.proposal?.title}\n💡 **Обяснение:** ${altExpl}${altActText}\n🎨 **Атмосфера:** ${res.proposal?.themeBg}\n\n📌 Натисни **\"✅ Съгласи се / Одобри\"** за да го генерираме, или **\"❌ Откажи / Предложи друг\"** за още едно!`,
           proposal: res.proposal,
         },
       ]);
@@ -697,7 +697,7 @@ function AssistantPage() {
     try {
       playStudioClick("start");
       setExplainedLoading(true);
-      toast.message("🎬 AI подготвя Ислямско видео с обяснение (цитат + поука)...");
+      toast.message("🎬 AI подготвя Ислямско видео с обяснение (цитат + разяснение)...");
 
       const res = await suggestExplainedVideoProposal({ data: {} });
 
@@ -710,13 +710,13 @@ function AssistantPage() {
         : "";
       const expActLabel = expAct ? detectActionOrDuaLabel(expAct) : "";
       const expActText = expAct ? `\n${expActLabel === "Дуа" ? "🤍" : "⚡"} **${expActLabel}:** ${expAct}` : "";
-      const expExpl = cleanScriptPrefixes(res.proposal?.scriptWorkflow?.explanation || res.proposal?.summaryBg || "");
+      const expExpl = stripScholarAttribution(res.proposal?.scriptWorkflow?.explanation || res.proposal?.summaryBg || "");
 
       setMessages((prev) => [
         ...prev,
         {
           role: "assistant",
-          text: `🎬 **Ислямско видео с обяснение:**\n\n${res.reply}\n\n📖 **Цитат:** ${res.proposal?.title}\n💡 **Поука:** ${expExpl}${expActText}\n🎨 **Атмосфера:** ${res.proposal?.themeBg}${scheduleNote}\n\n📌 Натисни **\"✅ Съгласи се / Одобри\"** за да стартираме видеото, или **\"❌ Откажи / Предложи друг\"** за алтернатива!`,
+          text: `🎬 **Ислямско видео с обяснение:**\n\n${res.reply}\n\n📖 **Цитат:** ${res.proposal?.title}\n💡 **Обяснение:** ${expExpl}${expActText}\n🎨 **Атмосфера:** ${res.proposal?.themeBg}${scheduleNote}\n\n📌 Натисни **\"✅ Съгласи се / Одобри\"** за да стартираме видеото, или **\"❌ Откажи / Предложи друг\"** за алтернатива!`,
           proposal: res.proposal,
         },
       ]);
@@ -1159,7 +1159,7 @@ function AssistantPage() {
         <div className="rounded-2xl border border-emerald-500/40 bg-gradient-to-r from-emerald-500/15 via-teal-500/10 to-transparent p-3.5 sm:p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4 mt-6">
           <div className="flex-1">
             <div className="flex items-center gap-2 text-emerald-400 font-bold text-sm">
-              <Sparkles className="size-4" /> 🎬 ИСЛЯМСКО ВИДЕО С ОБЯСНЕНИЕ (ТЕКСТ + ПОУКА)
+              <Sparkles className="size-4" /> 🎬 ИСЛЯМСКО ВИДЕО С ОБЯСНЕНИЕ (ЦИТАТ + ОБЯСНЕНИЕ)
             </div>
             <p className="text-xs text-muted-foreground mt-1">
               Генерирай готово кинематографично видео: автентичен аят/хадис, последван от дълбоко обяснение и житейска поука със синхронизирани караоке субтитри.
@@ -1547,9 +1547,9 @@ function AssistantPage() {
 
                                   <div className="p-2.5 rounded-lg bg-black/40 border border-sky-500/20">
                                     <div className="font-bold text-sky-300 flex items-center gap-1 mb-1">
-                                      <span>💡 Поука:</span>
+                                      <span>💡 Обяснение:</span>
                                     </div>
-                                    <div className="text-white/90">{cleanScriptPrefixes(m.proposal.scriptWorkflow.explanation)}</div>
+                                    <div className="text-white/90">{stripScholarAttribution(m.proposal.scriptWorkflow.explanation)}</div>
                                   </div>
 
                                   <div className="p-2.5 rounded-lg bg-black/40 border border-emerald-500/30">
@@ -1639,8 +1639,8 @@ function AssistantPage() {
                               ) : (
                                 m.proposal.summaryBg && (
                                   <div className="text-xs">
-                                    <span className="font-semibold text-emerald-400">Поука: </span>
-                                    <span className="text-foreground">{cleanScriptPrefixes(m.proposal.summaryBg)}</span>
+                                    <span className="font-semibold text-emerald-400">Обяснение: </span>
+                                    <span className="text-foreground">{stripScholarAttribution(m.proposal.summaryBg)}</span>
                                   </div>
                                 )
                               )}
