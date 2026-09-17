@@ -1299,10 +1299,10 @@ ${historyContext}${oneMonthExclusionContext}
             hookContext: "Често възприемаме трудностите като наказание, ала забравяме истинската божествена мъдрост.",
             dalilIntro: "Пратеникът на Аллах ﷺ ни учи:",
             dalilText: "Когото Аллах желае да дари с добро, Той го подлага на изпитания.",
-            explanation: "Ибн ал-Каййим (рахимахуллах) пояснява, че изпитанията на вярващия са като лекарство — горчиво на вкус, ала изчистващо сърцето от греховете и въздигащо го при Аллах Всевишният.",
+            explanation: "Обяснение: Изпитанията на вярващия са като лекарство — горчиво на вкус, ала изчистващо сърцето от греховете и въздигащо го при Аллах Всевишният.",
             actionStep: "Направи търпение (сабр) и кажи искрено 'Алхамдулиллях аля кулли хал'. Запази това видео и го сподели за добро!",
           },
-          summaryBg: "Ибн ал-Каййим (рахимахуллах) пояснява, че изпитанията пречистват сърцето на вярващия и го доближават до Аллах.",
+          summaryBg: "Обяснение: Изпитанията пречистват сърцето на вярващия и го доближават до Аллах.",
           themeBg: "Самотен бор в планинска буря и изгряваща светлина",
           searchQuery: "solitary pine tree mountain storm vertical",
           tiktokTheme: "hormozi",
@@ -1791,10 +1791,15 @@ export const confirmAndGenerateVideo = createServerFn({ method: "POST" })
       bulgarian = t.bulgarian;
 
       if (proposal.type === "explained_video" || proposal.scriptWorkflow) {
+        const effectiveDalil =
+          proposal.scriptWorkflow?.dalilText && proposal.scriptWorkflow.dalilText.trim().length > 20
+            ? proposal.scriptWorkflow.dalilText.trim()
+            : bulgarian;
+
         bulgarian = buildExplainedNarrationText({
           viralTitle,
           reference: h.reference,
-          quoteText: bulgarian,
+          quoteText: effectiveDalil,
           isQuran: false,
           scriptWorkflow: proposal.scriptWorkflow,
           summaryBg: proposal.summaryBg,

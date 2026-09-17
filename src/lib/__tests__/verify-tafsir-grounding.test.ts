@@ -226,7 +226,73 @@ async function runTests() {
   }
   console.log("   ✓ Verified buildExplainedNarrationText strictly uses 'Обяснение:' without scholar attribution!");
 
-  console.log("\n🎉 ALL AUTHENTIC TAFSIR & SHARH TESTS (EXCLUSIVELY SALAFI SHAYKH AI & CLEAN EXPLANATION) PASSED 100%!");
+  // 13. Test Hadith 19 (Nawawi 40 / Tirmidhi 2516) Full Text Preservation
+  console.log("\n13. Testing Hadith 19 (Nawawi 40 / Tirmidhi 2516) full authentic text preservation...");
+  const nawawi19 = getVerifiedHadithSharhDirect({ collection: "nawawi40", number: 19 });
+  if (!nawawi19 || !nawawi19.hadithTextBg) {
+    throw new Error("Missing hadithTextBg for Nawawi Hadith #19!");
+  }
+  if (!nawawi19.hadithTextBg.includes("Калемите са вдигнати и страниците са изсъхнали")) {
+    throw new Error(`Hadith 19 is missing the famous pen and pages closing clause! Got: ${nawawi19.hadithTextBg}`);
+  }
+  if (!nawawi19.hadithTextBg.includes("ако целият народ се събере")) {
+    throw new Error(`Hadith 19 is missing the benefit/harm decree clause! Got: ${nawawi19.hadithTextBg}`);
+  }
+  console.log("   ✓ Nawawi 19 has full untruncated Bulgarian text (pens lifted, pages dried).");
+
+  const promptBlock19 = formatTafsirGroundingPrompt({ hadithSharh: nawawi19 });
+  if (!promptBlock19.includes("ОФИЦИАЛЕН АВТЕНТИЧЕН ПЪЛЕН ТЕКСТ НА ХАДИСА") || !promptBlock19.includes("Калемите са вдигнати")) {
+    throw new Error("formatTafsirGroundingPrompt failed to inject full Hadith 19 text!");
+  }
+  console.log("   ✓ formatTafsirGroundingPrompt correctly injects full Hadith 19 into Gemini grounding context.");
+
+  // 14. Test Muslim #2749 (100 parts of Mercy)
+  console.log("\n14. Testing Muslim #2749 (100 parts of Mercy)...");
+  const muslim2749 = getVerifiedHadithSharhDirect({ collection: "muslim", number: 2749 });
+  if (!muslim2749) {
+    throw new Error("Muslim #2749 is missing from verified database!");
+  }
+  if (!muslim2749.hadithTextBg || !muslim2749.hadithTextBg.includes("деветдесет и девет части")) {
+    throw new Error(`Muslim #2749 has invalid hadithTextBg: ${muslim2749.hadithTextBg}`);
+  }
+  if (!muslim2749.text.includes("деветдесет и девет части Всевишният е запазил за Съдния ден")) {
+    throw new Error(`Muslim #2749 has generic explanation: ${muslim2749.text}`);
+  }
+  console.log("   ✓ Muslim #2749 verified with authentic full text and specific Sharh for 99 parts of Mercy.");
+
+  // 15. Test auto-correction of truncated dalilText in enrichProposalWithAuthenticTafsir
+  console.log("\n15. Testing auto-correction of truncated dalilText in enrichProposalWithAuthenticTafsir...");
+  const truncatedProposal: any = {
+    title: "[Хадис 19 от ан-Науауи] Пази Аллах и Той ще те пази",
+    type: "explained_video",
+    collection: "nawawi40",
+    number: 19,
+    scriptWorkflow: {
+      hookQuestion: "Защо се страхуваш от хората, след като Аллах държи съдбата ти?",
+      hookContext: "Често разчитаме на хората, а забравяме Твореца.",
+      dalilIntro: "Пратеникът на Аллах ﷺ ни учи:",
+      dalilText: "Пази Аллах и Той ще те пази! Пази Аллах и ще Го намериш пред себе си...", // Truncated fragment!
+      explanation: "Обяснение: Упованието в Аллах носи спокойствие.",
+      actionStep: "Поискай помощ само от Аллах днес.",
+    },
+  };
+  await enrichProposalWithAuthenticTafsir(truncatedProposal);
+  if (!truncatedProposal.scriptWorkflow.dalilText.includes("Калемите са вдигнати и страниците са изсъхнали")) {
+    throw new Error(`enrichProposalWithAuthenticTafsir failed to replace truncated dalilText! Got: ${truncatedProposal.scriptWorkflow.dalilText}`);
+  }
+  console.log("   ✓ enrichProposalWithAuthenticTafsir successfully corrected truncated dalilText with full authentic text!");
+
+  // 16. Test 0 scholar names in database explanation texts
+  console.log("\n16. Verifying 0 scholar attributions in database texts...");
+  const dbData = (await import("../data/verified-hadith-sharh.json")).default;
+  for (const h of dbData.hadiths) {
+    if (h.text && (h.text.includes("Salafi Shaykh AI разяснява") || h.text.includes("Усеймин"))) {
+      throw new Error(`Forbidden attribution leaked in database for ${h.collection} #${h.number}: ${h.text}`);
+    }
+  }
+  console.log(`   ✓ All ${dbData.hadiths.length} hadiths in database verified clean with 0 scholar attributions!`);
+
+  console.log("\n🎉 ALL AUTHENTIC TAFSIR & SHARH TESTS (INCLUDING HADITH 19 & MUSLIM 2749) PASSED 100%!");
   process.exit(0);
 }
 
