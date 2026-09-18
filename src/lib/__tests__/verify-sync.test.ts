@@ -1,5 +1,5 @@
 import { alignTimestampsToSpeech, clampToSpeechIntervals } from "../audio-align.functions";
-import { generateAssSubtitles, estimateTextWidth } from "../render.functions";
+import { generateAssSubtitles, estimateTextWidth, balanceWordsIntoTwoLines } from "../render.functions";
 import { extractTopic } from "../assistant.functions";
 
 function testMonotonicityAndBounds() {
@@ -356,6 +356,506 @@ async function testDotVerbalizationPrevention() {
   console.log("✔ testDotVerbalizationPrevention passed: Zero spoken dots and clean silent pauses verified!");
 }
 
+async function testBulgarianNumberPhoneticNormalization() {
+  const { normalizeIslamicArabicPhoneticsForTts, integerToBulgarianWords, normalizeBulgarianNumbersForTts } = await import("../tts.functions");
+
+  // 1. User's exact required numbers:
+  // 5 -> "пет"
+  // 50 -> "петдесет"
+  // 500 -> "петстотин"
+  // 5000 -> "пет хиляди"
+  // 5368 -> "пет хиляди триста шестдесет и осем"
+  const exactCases: [number, string][] = [
+    [5, "пет"],
+    [50, "петдесет"],
+    [500, "петстотин"],
+    [5000, "пет хиляди"],
+    [5368, "пет хиляди триста шестдесет и осем"],
+    [0, "нула"],
+    [1, "едно"],
+    [11, "единадесет"],
+    [100, "сто"],
+    [105, "сто и пет"],
+    [125, "сто двадесет и пет"],
+    [1000, "хиляда"],
+    [1001, "хиляда и едно"],
+    [1100, "хиляда и сто"],
+    [1125, "хиляда сто двадесет и пет"],
+    [6424, "шест хиляди четиристотин двадесет и четири"],
+    [1000000, "един милион"],
+  ];
+
+  for (const [num, expected] of exactCases) {
+    const actual = integerToBulgarianWords(num);
+    if (actual !== expected) {
+      throw new Error(`integerToBulgarianWords(${num}) failed! Expected: "${expected}", got: "${actual}"`);
+    }
+  }
+
+  // 2. Direct string normalization:
+  if (normalizeBulgarianNumbersForTts("5") !== "пет") throw new Error("normalizeBulgarianNumbersForTts('5') failed!");
+  if (normalizeBulgarianNumbersForTts("50") !== "петдесет") throw new Error("normalizeBulgarianNumbersForTts('50') failed!");
+  if (normalizeBulgarianNumbersForTts("500") !== "петстотин") throw new Error("normalizeBulgarianNumbersForTts('500') failed!");
+  if (normalizeBulgarianNumbersForTts("5000") !== "пет хиляди") throw new Error("normalizeBulgarianNumbersForTts('5000') failed!");
+  if (normalizeBulgarianNumbersForTts("5368") !== "пет хиляди триста шестдесет и осем") {
+    throw new Error("normalizeBulgarianNumbersForTts('5368') failed!");
+  }
+
+  // 3. Full TTS phonetic normalization integration:
+  const tts1 = normalizeIslamicArabicPhoneticsForTts("Има 5 стълба на исляма.");
+  if (!tts1.includes("пет стълба")) {
+    throw new Error(`Expected 'пет стълба' in TTS text, got: "${tts1}"`);
+  }
+
+  const tts2 = normalizeIslamicArabicPhoneticsForTts("Това се случи преди 5000 години.");
+  if (!tts2.includes("пет хиляди години")) {
+    throw new Error(`Expected 'пет хиляди години' in TTS text, got: "${tts2}"`);
+  }
+
+  const tts3 = normalizeIslamicArabicPhoneticsForTts("Хадис 5368 от Сахих ал-Бухари.");
+  if (!tts3.includes("пет хиляди триста шестдесет и осем")) {
+    throw new Error(`Expected 'пет хиляди триста шестдесет и осем' in TTS text, got: "${tts3}"`);
+  }
+
+  const tts4 = normalizeIslamicArabicPhoneticsForTts("Сура 2, аят 255.");
+  if (!tts4.includes("две") || !tts4.includes("двеста петдесет и пет")) {
+    throw new Error(`Expected 'две' and 'двеста петдесет и пет' in TTS text, got: "${tts4}"`);
+  }
+
+  const tts5 = normalizeIslamicArabicPhoneticsForTts("Хадис #6424.");
+  if (!tts5.includes("номер шест хиляди четиристотин двадесет и четири")) {
+    throw new Error(`Expected 'номер шест хиляди четиристотин двадесет и четири' in TTS text, got: "${tts5}"`);
+  }
+
+  const tts6 = normalizeIslamicArabicPhoneticsForTts("1-ви ден от свещения месец.");
+  if (!tts6.includes("първи ден")) {
+    throw new Error(`Expected 'първи ден' in TTS text, got: "${tts6}"`);
+  }
+
+  console.log("✔ testBulgarianNumberPhoneticNormalization passed: 5, 50, 500, 5000, 5368 & contextual numbers articulate accurately in Bulgarian!");
+}
+
+async function testQuranSurahsAndIslamicPhonetics() {
+  const { normalizeIslamicArabicPhoneticsForTts } = await import("../tts.functions");
+  const { QURAN_SURAHS_PHONETICS } = await import("../islamic-phonetics");
+
+  // 1. Verify all 114 Surahs exist in the registry
+  if (QURAN_SURAHS_PHONETICS.length !== 114) {
+    throw new Error(`Expected 114 Surahs in phonetics registry, got: ${QURAN_SURAHS_PHONETICS.length}`);
+  }
+
+  // 2. Test authentic Arabic pronunciation for iconic Surahs
+  const surahTests: [string, string][] = [
+    ["Сура Ал-Фатиха", "Фаатиха"],
+    ["Сура Ал-Бакара", "Бакара"],
+    ["Сура Али Имран", "Имраан"],
+    ["Сура Ал-Ихляс", "Ихлаас"],
+    ["Сура Ал-Каусар", "Каусар"],
+    ["Сура Ал-Мулк", "Мулк"],
+    ["Сура Ар-Рахман", "Рахмаан"],
+    ["Сура Аш-Шарх", "Шарх"],
+    ["Сура Ан-Нас", "Наас"],
+    ["Сура Ал-Фаляк", "Фаляк"],
+    ["Сура Ясин", "Йаа Сиин"],
+    ["Сура Ал-Кахф", "Кахф"],
+    ["Аят ал-Курси", "Курсии"],
+  ];
+
+  for (const [input, expectedSnippet] of surahTests) {
+    const res = normalizeIslamicArabicPhoneticsForTts(input);
+    if (!res.includes(expectedSnippet)) {
+      throw new Error(`Surah phonetics test failed for "${input}"! Expected snippet "${expectedSnippet}", got: "${res}"`);
+    }
+  }
+
+  // 3. Test authentic Islamic terminologies and formulas
+  const termTests: [string, string][] = [
+    ["Ас-саляму алейкум", "Саляяму 'алейкум"],
+    ["Ва алейкум ас-салам", "'алейкуму с-саляям"],
+    ["Това е чист таухид.", "таухиийд"],
+    ["Рубубийя и Улухийя са основи на вярата.", "Рубуубийя"],
+    ["Вземи вуду преди салят.", "Вудуу'"],
+    ["Рамадан е месец на говеене.", "Рамадаан"],
+    ["Направи таваккул на Аллах.", "таваккуль"],
+    ["Повярвай в Ахирата, не се лъжи от дунята.", "Аахира"],
+    ["Ангел Джибрил донесе знамението.", "Джибриил"],
+  ];
+
+  for (const [input, expectedSnippet] of termTests) {
+    const res = normalizeIslamicArabicPhoneticsForTts(input);
+    if (!res.includes(expectedSnippet)) {
+      throw new Error(`Islamic terminology test failed for "${input}"! Expected snippet "${expectedSnippet}", got: "${res}"`);
+    }
+  }
+
+  console.log("✔ testQuranSurahsAndIslamicPhonetics passed: All 114 Surahs & Islamic terms articulate with authentic Arabic phonetics!");
+}
+
+async function testUnfamiliarQuranicTermsEnrichment() {
+  const { enrichUnfamiliarQuranicTerms } = await import("../islamic-glossary");
+  const { normalizeIslamicTermsBulgarian } = await import("../translate.functions");
+  const { buildExplainedNarrationText } = await import("../assistant.functions");
+
+  // 1. Direct glossary enrichment test
+  const t1 = enrichUnfamiliarQuranicTerms("И Дху-н-Нун, когато си отиде гневен");
+  if (!t1.includes("Дху-н-Нун „човекът на кита — пророкът Юнус“")) {
+    throw new Error(`enrichUnfamiliarQuranicTerms failed on Дху-н-Нун! Got: ${t1}`);
+  }
+
+  const t2 = enrichUnfamiliarQuranicTerms("Разкажи за Дху-л-Карнайн на хората.");
+  if (!t2.includes("Дху-л-Карнайн „притежателят на двете епохи“")) {
+    throw new Error(`enrichUnfamiliarQuranicTerms failed on Дху-л-Карнайн! Got: ${t2}`);
+  }
+
+  const t3 = enrichUnfamiliarQuranicTerms("Муса срещна Ал-Хадир край морето.");
+  if (!t3.includes("Ал-Хадир „праведният раб на Аллах — праведникът Хидр“")) {
+    throw new Error(`enrichUnfamiliarQuranicTerms failed on Ал-Хадир! Got: ${t3}`);
+  }
+
+  const t4 = enrichUnfamiliarQuranicTerms("О, Бану Исраил, спомнете си благодатта.");
+  if (!t4.includes("Бану Исраил „синовете на Исраил — народът на пророка Якуб“")) {
+    throw new Error(`enrichUnfamiliarQuranicTerms failed on Бану Исраил! Got: ${t4}`);
+  }
+
+  // 2. Idempotency test (no duplication if already explained)
+  const alreadyExplained = "И Дху-н-Нун „човекът на кита — пророкът Юнус“, когато си отиде";
+  const tDouble = enrichUnfamiliarQuranicTerms(alreadyExplained);
+  if (tDouble !== alreadyExplained) {
+    throw new Error(`enrichUnfamiliarQuranicTerms duplicated explanation! Got: ${tDouble}`);
+  }
+
+  // 3. Translation pipeline integration
+  const transOut = normalizeIslamicTermsBulgarian("И Дху-н-Нун извика в тъмнините");
+  if (!transOut.includes("„човекът на кита — пророкът Юнус“")) {
+    throw new Error(`normalizeIslamicTermsBulgarian missing quoted explanation for Дху-н-Нун! Got: ${transOut}`);
+  }
+
+  // 4. Video narration builder integration
+  const narration = buildExplainedNarrationText({
+    viralTitle: "Спасението в мрака",
+    reference: "Коран 21:87",
+    quoteText: "И Дху-н-Нун, когато си отиде гневен и си помисли, че Ние не ще го притиснем.",
+    isQuran: true,
+    summaryBg: "Искрената молба избавя вярващия.",
+  });
+
+  if (!narration.includes("Дху-н-Нун „човекът на кита — пророкът Юнус“")) {
+    throw new Error(`buildExplainedNarrationText missing quoted meaning for Дху-н-Нун! Got:\n${narration}`);
+  }
+
+  console.log("✔ testUnfamiliarQuranicTermsEnrichment passed: Unfamiliar Quranic epithets accurately explained in quotation marks!");
+}
+
+async function testPronounGenderAgreementAndRespectfulTone() {
+  const { sanitizeTheologicalRespect, sanitizeProposalFields } = await import("../assistant.functions");
+
+  // 1. Masculine nouns: "вашето" must become "Вашия" / "вашия"
+  const m1 = sanitizeTheologicalRespect("Помнете вашето Господ във вашето живот!");
+  if (m1 !== "Помнете Вашия Господ във Вашия живот!") {
+    throw new Error(`Failed masculine pronoun agreement: ${m1}`);
+  }
+
+  const m2 = sanitizeTheologicalRespect("вашето Творец и вашето път");
+  if (m2 !== "Вашия Творец и Вашия път") {
+    throw new Error(`Failed masculine pronoun agreement: ${m2}`);
+  }
+
+  const m3 = sanitizeTheologicalRespect("вашето собствен живот и вашето истински Господ");
+  if (m3 !== "Вашия собствен живот и Вашия истински Господ") {
+    throw new Error(`Failed masculine compound agreement: ${m3}`);
+  }
+
+  // 2. Feminine nouns: "вашето" / "вашия" must become "Вашата" / "вашата"
+  const f1 = sanitizeTheologicalRespect("вашето душа и вашето молитва");
+  if (f1 !== "Вашата душа и Вашата молитва") {
+    throw new Error(`Failed feminine pronoun agreement: ${f1}`);
+  }
+
+  const f2 = sanitizeTheologicalRespect("вашия вяра и вашия надежда");
+  if (f2 !== "Вашата вяра и Вашата надежда") {
+    throw new Error(`Failed feminine pronoun agreement from вашия: ${f2}`);
+  }
+
+  // 3. Plural nouns: "вашето" / "вашия" must become "Вашите" / "вашите"
+  const p1 = sanitizeTheologicalRespect("вашето дела и вашето грехове");
+  if (p1 !== "Вашите дела и Вашите грехове") {
+    throw new Error(`Failed plural pronoun agreement: ${p1}`);
+  }
+
+  const p2 = sanitizeTheologicalRespect("вашия дела и вашия стъпки");
+  if (p2 !== "Вашите дела и Вашите стъпки") {
+    throw new Error(`Failed plural pronoun agreement from вашия: ${p2}`);
+  }
+
+  // 4. Neuter preservation: "вашето сърце" must remain correct
+  const n1 = sanitizeTheologicalRespect("Пазете вашето сърце за добро дело.");
+  if (!n1.includes("вашето сърце")) {
+    throw new Error(`Neuter noun incorrectly altered: ${n1}`);
+  }
+
+  // 5. VideoProposal scriptWorkflow & carouselSlides sanitization
+  const testProposal: any = {
+    title: "Пътят към вашето Господ",
+    type: "carousel",
+    scriptWorkflow: {
+      hookQuestion: "Защо вашето живот е пълен с изпитания?",
+      hookContext: "Отворете вашето душа към светлината.",
+      dalilIntro: "Аллах Всевишният вижда вашето дела.",
+      dalilText: "И Дху-н-Нун извика в тъмнините.",
+      explanation: "Това укрепва вашето вяра.",
+      actionStep: "Поправете вашето грехове.",
+    },
+    carouselSlides: [
+      {
+        topTitle: "Урок за вашето живот",
+        mainText: "Помнете вашето Господ във всеки миг.",
+        bottomText: "Пречистете вашето дела.",
+        footerText: "Следвайте вашето път.",
+        imagePrompt: "peaceful nature vertical",
+      },
+    ],
+  };
+
+  sanitizeProposalFields(testProposal);
+
+  if (testProposal.title !== "Пътят към Вашия Господ") {
+    throw new Error(`Proposal title failed pronoun sanitization: ${testProposal.title}`);
+  }
+  if (!testProposal.scriptWorkflow.hookQuestion.includes("Вашия живот")) {
+    throw new Error(`Proposal hookQuestion failed: ${testProposal.scriptWorkflow.hookQuestion}`);
+  }
+  if (!testProposal.scriptWorkflow.hookContext.includes("Вашата душа")) {
+    throw new Error(`Proposal hookContext failed: ${testProposal.scriptWorkflow.hookContext}`);
+  }
+  if (!testProposal.scriptWorkflow.dalilIntro.includes("Вашите дела")) {
+    throw new Error(`Proposal dalilIntro failed: ${testProposal.scriptWorkflow.dalilIntro}`);
+  }
+  if (!testProposal.carouselSlides[0].mainText.includes("Вашия Господ")) {
+    throw new Error(`Carousel slide mainText failed: ${testProposal.carouselSlides[0].mainText}`);
+  }
+  if (!testProposal.carouselSlides[0].bottomText.includes("Вашите дела")) {
+    throw new Error(`Carousel slide bottomText failed: ${testProposal.carouselSlides[0].bottomText}`);
+  }
+
+  console.log("✔ testPronounGenderAgreementAndRespectfulTone passed: Correct grammatical gender (Вашия/Вашата/Вашите) and respectful official form enforced!");
+}
+
+async function testTikTokTitleAndCaptionDashAndStripeRemoval() {
+  const { formatViralSocialCaption, generateTikTokSEOTitle, extractTopicFromTitle } = await import("../caption.functions");
+  const { cleanProposalTitle } = await import("../assistant.functions");
+
+  // 1. Long stripe removal from title
+  const rawWithStripes = "[Коран 2:255] --------------------------- Аят ал-Курси";
+  const cleanedTitle = cleanProposalTitle(rawWithStripes);
+  if (cleanedTitle.includes("---") || cleanedTitle.includes("---------------------------")) {
+    throw new Error(`cleanProposalTitle failed to remove long stripes: ${cleanedTitle}`);
+  }
+
+  // 2. Dash between parts converted to clean bullet
+  const titleWithDash = "[Коран 13:28] Покоят на сърцата - Силата на вярата";
+  const seoTitle = generateTikTokSEOTitle(titleWithDash);
+  if (seoTitle.includes(" - ") || seoTitle.includes("---")) {
+    throw new Error(`generateTikTokSEOTitle failed to eliminate dashes: ${seoTitle}`);
+  }
+  if (!seoTitle.includes("•")) {
+    throw new Error(`generateTikTokSEOTitle expected bullet separator: ${seoTitle}`);
+  }
+
+  // 3. Caption generation has ZERO long divider lines (━━━━━━━━━━━━ or ---------------------------)
+  const caption = formatViralSocialCaption("[Сахих ал-Бухари #6424] Двете блага", "Мъдрост за здравето и свободното време");
+  if (caption.includes("━━━━") || caption.includes("----") || caption.includes("---------------------------")) {
+    throw new Error(`formatViralSocialCaption contains long divider lines/stripes!\n${caption}`);
+  }
+  if (caption.includes("— Сахих Муслим")) {
+    throw new Error(`formatViralSocialCaption contains em-dash in hadith reference!\n${caption}`);
+  }
+  if (caption.includes("ЗАПАЗИ —")) {
+    throw new Error(`formatViralSocialCaption contains em-dash in CTA!\n${caption}`);
+  }
+
+  // 4. Topic extraction with stripes
+  const topicWithStripes = extractTopicFromTitle("━━━━━━━━━━━━━━━━━━━━━━━━━━ Вяра в Аллах ---------------------------");
+  if (topicWithStripes.includes("━━") || topicWithStripes.includes("--")) {
+    throw new Error(`extractTopicFromTitle failed to clean stripes: ${topicWithStripes}`);
+  }
+  if (!topicWithStripes.includes("Вяра в Аллах")) {
+    throw new Error(`extractTopicFromTitle lost the topic: ${topicWithStripes}`);
+  }
+
+  console.log("✔ testTikTokTitleAndCaptionDashAndStripeRemoval passed: Zero long stripes (━━━━━━━━ / ------), clean bullets, and no unwanted dashes in TikTok titles/captions!");
+}
+
+async function testRespectfulAndOfficialIslamicEmojis() {
+  const { sanitizeTheologicalRespect } = await import("../theological-sanitizer");
+  const { formatViralSocialCaption } = await import("../caption.functions");
+  const { sanitizeProposalFields } = await import("../assistant.functions");
+
+  // 1. Direct normalization in sanitizeTheologicalRespect
+  const rawDisrespectful = "⚡ Бързо действие! 🔥 Вайръл съвет 🚀 Пусни веднага 💡 Идея за деня 💥 Ударно ❤️ Обич 🤲 Молитва 👉 Натисни тук 🎶 Музика 🕋 Кааба";
+  const sanitized = sanitizeTheologicalRespect(rawDisrespectful);
+
+  if (sanitized.includes("⚡") || sanitized.includes("🔥") || sanitized.includes("🚀") || sanitized.includes("💡") || sanitized.includes("💥")) {
+    throw new Error(`sanitizeTheologicalRespect failed to replace hype/casual emojis:\n${sanitized}`);
+  }
+  if (sanitized.includes("🤲") || sanitized.includes("👉") || sanitized.includes("🎶") || sanitized.includes("🕋")) {
+    throw new Error(`sanitizeTheologicalRespect failed to strip prohibited emojis:\n${sanitized}`);
+  }
+  if (!sanitized.includes("📌 Бързо действие!")) {
+    throw new Error(`Expected 📌 replacement for ⚡:\n${sanitized}`);
+  }
+  if (!sanitized.includes("✨ Вайръл съвет")) {
+    throw new Error(`Expected ✨ replacement for 🔥:\n${sanitized}`);
+  }
+  if (!sanitized.includes("🎬 Пусни веднага")) {
+    throw new Error(`Expected 🎬 replacement for 🚀:\n${sanitized}`);
+  }
+  if (!sanitized.includes("💎 Идея за деня")) {
+    throw new Error(`Expected 💎 replacement for 💡:\n${sanitized}`);
+  }
+  if (!sanitized.includes("🤍 Обич")) {
+    throw new Error(`Expected 🤍 replacement for ❤️:\n${sanitized}`);
+  }
+
+  // 2. formatViralSocialCaption emoji & label respectfulness
+  const captionWithAction = formatViralSocialCaption(
+    "[Коран 2:255] Аят ал-Курси",
+    "Величието на Твореца",
+    {
+      title: "[Коран 2:255] Аят ал-Курси",
+      explanation: "Този аят разкрива абсолютната власт на Аллах.",
+      actionStep: "Започнете деня си с искреност и милосърдие към хората.",
+    }
+  );
+
+  if (captionWithAction.includes("💡 Шейхово разяснение:")) {
+    throw new Error(`Caption must NOT contain casual 💡 Шейхово разяснение: ${captionWithAction}`);
+  }
+  if (!captionWithAction.includes("💎 Богословско разяснение:")) {
+    throw new Error(`Caption expected 💎 Богословско разяснение: ${captionWithAction}`);
+  }
+  if (captionWithAction.includes("⚡ Действие:")) {
+    throw new Error(`Caption must NOT contain ⚡ Действие: ${captionWithAction}`);
+  }
+  if (!captionWithAction.includes("📌 Напътствие:")) {
+    throw new Error(`Caption expected 📌 Напътствие: ${captionWithAction}`);
+  }
+
+  const captionWithDua = formatViralSocialCaption(
+    "[Коран 2:255] Аят ал-Курси",
+    "Величието на Твореца",
+    {
+      title: "[Коран 2:255] Аят ал-Курси",
+      explanation: "Този аят разкрива абсолютната власт на Аллах.",
+      actionStep: "Казвайте тази дуа след всяка молитва.",
+    }
+  );
+  if (!captionWithDua.includes("🤍 Дуа:")) {
+    throw new Error(`Caption expected 🤍 Дуа: ${captionWithDua}`);
+  }
+
+  // 3. sanitizeProposalFields cleanses any incoming emojis
+  const testProp: any = {
+    title: "⚡ Вайръл Хадис 🔥",
+    summaryBg: "🚀 Пълна автоматизация 💡 Знание",
+    scriptWorkflow: {
+      hookQuestion: "⚡ Чудили ли сте се някога?",
+      explanation: "💡 Шейхът пояснява мъдростта.",
+      actionStep: "⚡ Правете това всеки ден 🤲.",
+    },
+  };
+  sanitizeProposalFields(testProp);
+
+  if (testProp.title.includes("⚡") || testProp.title.includes("🔥")) {
+    throw new Error(`sanitizeProposalFields failed on title: ${testProp.title}`);
+  }
+  if (testProp.scriptWorkflow.explanation.includes("💡")) {
+    throw new Error(`sanitizeProposalFields failed on explanation: ${testProp.scriptWorkflow.explanation}`);
+  }
+  if (testProp.scriptWorkflow.actionStep.includes("⚡") || testProp.scriptWorkflow.actionStep.includes("🤲")) {
+    throw new Error(`sanitizeProposalFields failed on actionStep: ${testProp.scriptWorkflow.actionStep}`);
+  }
+
+  console.log("✔ testRespectfulAndOfficialIslamicEmojis passed: Official & dignified Islamic emojis enforced everywhere!");
+}
+
+function testTwoLineSentenceSubtitlesAndContiguousTiming() {
+  // 1. Test balanceWordsIntoTwoLines helper
+  const twoWords = balanceWordsIntoTwoLines(["Аллах", "Чува"], 72, 640);
+  if (twoWords.length !== 2 || twoWords[0] !== "Аллах" || twoWords[1] !== "Чува") {
+    throw new Error(`balanceWordsIntoTwoLines failed on 2 words: ${JSON.stringify(twoWords)}`);
+  }
+
+  const sixWords = balanceWordsIntoTwoLines(
+    ["Наистина,", "с", "трудността", "има", "и", "улеснение."],
+    72,
+    640,
+  );
+  if (sixWords.length !== 2) {
+    throw new Error(`balanceWordsIntoTwoLines failed on 6 words: expected 2 lines, got ${sixWords.length}`);
+  }
+  if (!sixWords[0].trim() || !sixWords[1].trim()) {
+    throw new Error(`balanceWordsIntoTwoLines produced an empty line: ${JSON.stringify(sixWords)}`);
+  }
+
+  // 2. Test generateAssSubtitles with full sentences and a speech gap between them
+  const sentence1 = "Който се уповава на Аллах, Той му е достатъчен.";
+  const sentence2 = "Наистина Неговото обещание е истина.";
+  const fullText = `${sentence1} ${sentence2}`;
+
+  const words1 = sentence1.split(/\s+/);
+  const words2 = sentence2.split(/\s+/);
+
+  const timings: { word: string; start: number; end: number }[] = [];
+  // Sentence 1 spoken from 0.5s to 3.0s
+  for (let i = 0; i < words1.length; i++) {
+    const s = 0.5 + i * 0.3;
+    const e = s + 0.28;
+    timings.push({ word: words1[i], start: Number(s.toFixed(2)), end: Number(e.toFixed(2)) });
+  }
+
+  // Speech gap: pause from 3.0s to 4.5s (1.5 seconds silence)
+  // Sentence 2 spoken from 4.5s to 6.8s
+  for (let i = 0; i < words2.length; i++) {
+    const s = 4.5 + i * 0.45;
+    const e = s + 0.42;
+    timings.push({ word: words2[i], start: Number(s.toFixed(2)), end: Number(e.toFixed(2)) });
+  }
+
+  const ass = generateAssSubtitles(
+    {
+      bulgarian: fullText,
+      bulgarianWordTimings: timings,
+      subtitlePosition: "tiktok",
+    },
+    8.0,
+  );
+
+  const lines = ass.split("\n").filter((l) => l.startsWith("Dialogue:") && l.includes(",Bulgarian,"));
+  if (lines.length === 0) {
+    throw new Error("generateAssSubtitles produced zero Bulgarian Dialogue lines!");
+  }
+
+  // Verify that phrases with >= 2 words format into exactly two lines (\N)
+  const hasTwoLineBreaks = lines.some((l) => l.includes("\\N"));
+  if (!hasTwoLineBreaks) {
+    throw new Error("Subtitles did not format into two lines (missing \\N line break)!");
+  }
+
+  // Verify that sentence 1 stays on screen across the 1.5s speech gap until sentence 2 starts (0:00:04.50)
+  const contiguousTransition = lines.some((l) => l.includes(",0:00:04.50,") && l.includes("достатъчен"));
+  if (!contiguousTransition) {
+    throw new Error(`Contiguous timing failed: Sentence 1 did not hold until Sentence 2 start (0:00:04.50)! Lines were:\n${lines.join("\n")}`);
+  }
+
+  // Verify that sentence 2 begins immediately at 0:00:04.50
+  const sentence2ImmediateStart = lines.some((l) => l.includes(",0:00:04.50,") && l.includes("Наистина"));
+  if (!sentence2ImmediateStart) {
+    throw new Error(`Sentence 2 did not start at 0:00:04.50! Lines were:\n${lines.join("\n")}`);
+  }
+
+  console.log("✔ testTwoLineSentenceSubtitlesAndContiguousTiming passed: 2-line layout and seamless contiguous sentence transitions verified!");
+}
+
 async function runAllTests() {
   console.log("Running subtitle synchronization verification tests...");
   testMonotonicityAndBounds();
@@ -363,9 +863,16 @@ async function runAllTests() {
   testTikTokSafeSubtitleWidth();
   testTopicTopHeaderDisplay();
   testAudioDurationSafeguards();
+  testTwoLineSentenceSubtitlesAndContiguousTiming();
   await testSalafiArabicPhoneticNormalization();
   await testArabicTransliterationAndDalilIntegrity();
   await testDotVerbalizationPrevention();
+  await testBulgarianNumberPhoneticNormalization();
+  await testQuranSurahsAndIslamicPhonetics();
+  await testUnfamiliarQuranicTermsEnrichment();
+  await testPronounGenderAgreementAndRespectfulTone();
+  await testTikTokTitleAndCaptionDashAndStripeRemoval();
+  await testRespectfulAndOfficialIslamicEmojis();
   console.log("✔ All subtitle synchronization verification tests passed successfully!");
   process.exit(0);
 }

@@ -16,8 +16,8 @@ import {
   type ServerJobRecord as ServerJob,
 } from "@/lib/render.functions";
 import { generateViralThumbnail } from "@/lib/thumbnail.functions";
-import { formatViralSocialCaption } from "@/lib/caption.functions";
-import { clearAllBackgroundTasks } from "@/lib/assistant.functions";
+import { formatViralSocialCaption, generateTikTokSEOTitle } from "@/lib/caption.functions";
+import { cleanProposalTitle, clearAllBackgroundTasks } from "@/lib/assistant.functions";
 import { saveMediaBlob, saveMediaFromUrl, isIOSMediaDevice, sanitizeFilename } from "@/lib/download-media";
 import { Download, Trash2, CheckCircle2, ArrowLeft, Video, Film, RefreshCw, Loader2, AlertCircle, CloudCheck, Image as ImageIcon, Sparkles, Copy, Package, MoreVertical } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -75,7 +75,7 @@ function DownloadsPage() {
   const preloadingRef = useRef<Set<string>>(new Set());
 
   const handleCopyTikTokCaption = (title: string) => {
-    copyToClipboardFallback(formatViralSocialCaption(title));
+    copyToClipboardFallback(formatViralSocialCaption(cleanProposalTitle(title)));
   };
 
   const handleCleanServerDisk = async () => {
@@ -628,7 +628,7 @@ function DownloadsPage() {
                       <div className="flex items-center justify-between text-xs font-semibold text-blue-400">
                         <span className="flex items-center gap-1.5">
                           <Loader2 className="size-3.5 animate-spin text-blue-400" />
-                          {job.status === "rendering" ? "🚀 Сървърен фонов рендер..." : "⏳ В опашка за последователно рендиране..."}
+                          {job.status === "rendering" ? "🎬 Сървърен фонов рендер..." : "⏳ В опашка за последователно рендиране..."}
                         </span>
                         <span className="font-mono">{job.status === "rendering" ? "65% • Live" : "Опашка"}</span>
                       </div>
@@ -641,8 +641,8 @@ function DownloadsPage() {
                       </div>
                       <p className="text-[11px] text-muted-foreground text-center">
                         {job.status === "rendering"
-                          ? "⚡ 100% автономно на Clouding.io — можеш спокойно да затвориш браузъра и да се върнеш по-късно!"
-                          : "🚀 Ще стартира автоматично веднага щом предходното видео завърши (за да не се претовари диска)."}
+                          ? "✨ 100% автономно на Clouding.io — можете спокойно да затворите браузъра и да се върнете по-късно!"
+                          : "⏳ Ще стартира автоматично веднага щом предходното видео завърши (за да не се претовари диска)."}
                       </p>
                     </div>
                   ) : (
@@ -759,12 +759,12 @@ function DownloadsPage() {
                       <DropdownMenuItem
                         onSelect={(e) => {
                           e.preventDefault();
-                          copyToClipboardFallback(item.title || "islamic-reel", "Заглавието е копирано!");
+                          copyToClipboardFallback(generateTikTokSEOTitle(cleanProposalTitle(item.title || "islamic-reel")), "TikTok SEO Заглавието е копирано!");
                         }}
                         className="cursor-pointer"
                       >
                         <Copy className="size-4 mr-2" />
-                        <span>Copy Link / Заглавие</span>
+                        <span>Копирай TikTok Заглавие</span>
                       </DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>

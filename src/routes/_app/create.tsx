@@ -29,7 +29,7 @@ import { renderPhoto, blobToBase64, type RenderOptions } from "@/lib/render-phot
 import { renderVideo } from "@/lib/render-video";
 import { enqueueDownload } from "@/lib/downloads-queue";
 import { synthesizeHadithNarration } from "@/lib/tts.functions";
-import { runServerRender, startServerRenderJob } from "@/lib/render.functions";
+import { runServerRender, startServerRenderJob, balanceWordsIntoTwoLines } from "@/lib/render.functions";
 import {
   addGenerationHistoryEntry,
   checkScriptureCooldown,
@@ -987,7 +987,7 @@ function CreatePage() {
       let currentBulgarian = bulgarian;
       if (!currentBulgarian || !currentBulgarian.trim()) {
         setAutoViralStep("1/4: Превод на професионален български...");
-        toast.message("⚡ 1-Click: Изготвяне на български превод...");
+        toast.message("✨ 1-Click: Изготвяне на български превод...");
         const t = await runTranslate({
           data: {
             arabic: content.arabic,
@@ -1000,7 +1000,7 @@ function CreatePage() {
       }
 
       setAutoViralStep("2/4: Избор на кинематографични B-Roll кадри...");
-      toast.message("⚡ 1-Click: Подбор на вертикални Pexels видеа без хора...");
+      toast.message("🎬 1-Click: Подбор на вертикални Pexels видеа без хора...");
       let activeBgVideoUrl = bgVideoUrl;
       let activeMultiUrls = multiSceneUrls;
       try {
@@ -1034,7 +1034,7 @@ function CreatePage() {
       let activeTimings = narrationTimings;
       if (!activeAudioUrl && currentBulgarian.trim().length > 0) {
         setAutoViralStep("3/4: Генериране на глас и акустично караоке...");
-        toast.message("⚡ 1-Click: Синхронизиране на българска навигация...");
+        toast.message("✨ 1-Click: Синхронизиране на българска навигация...");
         const r = await runNarrate({
           data: { text: currentBulgarian, reference: content.source_ref },
         });
@@ -1045,7 +1045,7 @@ function CreatePage() {
       }
 
       setAutoViralStep("4/4: Стартиране на сървърно рендиране във формат Hormozi...");
-      toast.message("⚡ 1-Click: Изпращане за рендиране на сървъра!");
+      toast.message("🎬 1-Click: Изпращане за рендиране на сървъра!");
       setTiktokTheme("hormozi");
       setCaptionStyle("lower-third");
       setPacingMode("punchy");
@@ -1384,7 +1384,7 @@ function CreatePage() {
               <div className="space-y-1">
                 <div className="flex items-center gap-2 font-bold text-amber-500 text-lg">
                   <Sparkles className="size-5 text-amber-400 animate-pulse" />
-                  <span>⚡ 1-Click Auto-Viral Studio (Пълна Автоматизация)</span>
+                  <span>✨ 1-Click Auto-Viral Studio (Пълна Автоматизация)</span>
                 </div>
                 <p className="text-sm text-muted-foreground max-w-2xl font-ui">
                   С едно кликване системата автоматично изпълнява всичко за{" "}
@@ -1407,14 +1407,14 @@ function CreatePage() {
                 ) : (
                   <>
                     <Wand2 className="size-5 mr-2" />
-                    <span>⚡ 1-Click Автоматизация</span>
+                    <span>✨ 1-Click Автоматизация</span>
                   </>
                 )}
               </Button>
             </div>
             {autoViralRunning && (
               <div className="bg-background/80 p-3 rounded-xl border border-amber-500/30 flex items-center justify-between text-xs font-mono text-amber-400 animate-pulse">
-                <span>🚀 В процес на изпълнение: {autoViralStep}</span>
+                <span>⏳ В процес на изпълнение: {autoViralStep}</span>
                 <span>Моля изчакайте...</span>
               </div>
             )}
@@ -1596,10 +1596,10 @@ function CreatePage() {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="server">
-                        🚀 Сървърно рендиране (Препоръчано 1080p, Фонов режим за всички устройства)
+                        🎬 Сървърно рендиране (Препоръчано 1080p, Фонов режим за всички устройства)
                       </SelectItem>
                       <SelectItem value="client">
-                        ⚡ Клиентско в браузъра (Чернова / Бърз преглед за PC/Mac)
+                        💻 Клиентско в браузъра (Чернова / Бърз преглед за PC/Mac)
                       </SelectItem>
                     </SelectContent>
                   </Select>
@@ -1670,12 +1670,12 @@ function CreatePage() {
                       <SelectItem value="emerald">
                         💎 Изумруд (#32CD32) — Ислямско зелено + Златен акцент
                       </SelectItem>
-                      <SelectItem value="neon">⚡ Неон (#00FFFF) — Модерен кибер-циан</SelectItem>
+                      <SelectItem value="neon">✨ Неон (#00FFFF) — Модерен циан</SelectItem>
                       <SelectItem value="classic">
                         ❄️ Класически бял — Минималистичен стил
                       </SelectItem>
                       <SelectItem value="fire">
-                        🔥 Огнен Оранжев (#FF6600) — Енергичен акцент
+                        ✨ Оранжев кехлибар (#FF6600) — Изразен акцент
                       </SelectItem>
                       <SelectItem value="box">
                         📦 Box Style (Тъмна подложка за 100% четливост)
@@ -1699,7 +1699,7 @@ function CreatePage() {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="punchy">
-                        🚀 Ударен темп (2-4 думи на ред — TikTok/Reels)
+                        🎬 Динамичен темп (2-4 думи на ред — TikTok/Reels)
                       </SelectItem>
                       <SelectItem value="ayah">
                         📖 Пълен аят / дълга фраза — класическо четене
@@ -1745,10 +1745,10 @@ function CreatePage() {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="phrase">
-                        ⚡ Фразово (2-4 думи с микро-скок на активната)
+                        ✨ Фразово (2-4 думи с микро-скок на активната)
                       </SelectItem>
                       <SelectItem value="single">
-                        💥 Дума по дума (1 дума на екран - Viral Pop)
+                        ✨ Дума по дума (1 дума на екран — прецизен темп)
                       </SelectItem>
                     </SelectContent>
                   </Select>
@@ -1771,7 +1771,7 @@ function CreatePage() {
                     ) : (
                       <Wand2 className="size-3.5 mr-1.5 text-amber-500" />
                     )}
-                    ⚡ Авто-синхронизация на таймингите
+                    ✨ Авто-синхронизация на таймингите
                   </Button>
                   {narrationTimings && narrationTimings.length > 0 && (
                     <Button
@@ -2244,30 +2244,151 @@ function CreatePage() {
                                       ]
                                     : null);
                                 if (activeTimings && activeTimings.length > 0) {
-                                  const currentWord = activeTimings.find(
-                                    (t) => previewTime >= t.start && previewTime <= t.end,
-                                  );
-                                  if (currentWord && currentWord.word) {
-                                    const titleWordCount = bulgarian
-                                      ? bulgarian.split("\n\n")[0].split(/\s+/).filter(Boolean)
-                                          .length
-                                      : 0;
-                                    const currentWordIndex = activeTimings.indexOf(currentWord);
-                                    const isTitle =
-                                      currentWordIndex !== -1 && currentWordIndex < titleWordCount;
-                                    const wordColor = isTitle ? "#FFFFFF" : "#FFB700";
-                                    return (
-                                      <span style={{ color: wordColor }}>{currentWord.word}</span>
+                                  const themeColor =
+                                    tiktokTheme === "emerald"
+                                      ? "#32CD32"
+                                      : tiktokTheme === "neon"
+                                        ? "#00FFFF"
+                                        : "#FFB700";
+
+                                  if (subtitleSlicingMode === "single") {
+                                    const currentWord = activeTimings.find(
+                                      (t) => previewTime >= t.start && previewTime <= t.end,
                                     );
-                                  }
-                                  // If audio has started but we are in a gap, show nothing
-                                  if (narrationTimings && previewTime > 0) {
+                                    if (currentWord && currentWord.word) {
+                                      return (
+                                        <span style={{ color: themeColor }}>{currentWord.word}</span>
+                                      );
+                                    }
                                     return "";
                                   }
-                                  // Fallback phrase if not exactly on a word
+
+                                  // Phrase mode: group into 2-line balanced sentences with contiguous timing
+                                  type PreviewPhrase = {
+                                    words: { word: string; start: number; end: number; globalIdx: number }[];
+                                    start: number;
+                                    end: number;
+                                    lines: string[];
+                                  };
+
+                                  const phrases: PreviewPhrase[] = [];
+                                  let cur: { word: string; start: number; end: number; globalIdx: number }[] = [];
+                                  const flushPhrase = () => {
+                                    if (!cur.length) return;
+                                    const pWords = cur.map((w) => w.word);
+                                    const lines =
+                                      pWords.length >= 2
+                                        ? balanceWordsIntoTwoLines(pWords, 64, 600)
+                                        : [pWords.join(" ")];
+                                    phrases.push({
+                                      words: cur,
+                                      start: cur[0].start,
+                                      end: cur[cur.length - 1].end,
+                                      lines,
+                                    });
+                                    cur = [];
+                                  };
+
+                                  const MAX_WORDS = 8;
+                                  const MIN_CLAUSE = 4;
+                                  for (let i = 0; i < activeTimings.length; i++) {
+                                    const item = activeTimings[i];
+                                    if (cur.length >= MIN_CLAUSE && i > 0 && item.start - activeTimings[i - 1].end >= 0.65) {
+                                      flushPhrase();
+                                    }
+                                    cur.push({ ...item, globalIdx: i });
+                                    const w = item.word || "";
+                                    const isSentenceEnd = /[.!?…]$/.test(w);
+                                    const isClauseBreak = /[,;:—]$/.test(w) && cur.length >= MIN_CLAUSE;
+                                    if ((isSentenceEnd && cur.length >= 2) || isClauseBreak || cur.length >= MAX_WORDS) {
+                                      flushPhrase();
+                                    }
+                                  }
+                                  flushPhrase();
+
+                                  // Seamless contiguous timing: eliminate blank pauses between sentences
+                                  for (let i = 0; i < phrases.length - 1; i++) {
+                                    phrases[i].end = phrases[i + 1].start;
+                                  }
+                                  if (phrases.length > 0) {
+                                    phrases[phrases.length - 1].end = Math.max(
+                                      phrases[phrases.length - 1].end + 2.0,
+                                      phrases[phrases.length - 1].start + 2.5,
+                                    );
+                                  }
+
+                                  // Pick active phrase
+                                  let activePhrase = phrases.find(
+                                    (p) => previewTime >= p.start && previewTime < p.end,
+                                  );
+                                  if (!activePhrase && phrases.length > 0) {
+                                    if (previewTime <= phrases[0].start) {
+                                      activePhrase = phrases[0];
+                                    } else if (previewTime >= phrases[phrases.length - 1].end) {
+                                      activePhrase = phrases[phrases.length - 1];
+                                    }
+                                  }
+
+                                  if (activePhrase) {
+                                    let wordCounter = 0;
+                                    return (
+                                      <span className="block text-center">
+                                        {activePhrase.lines.map((lineText, lIdx) => {
+                                          const lineTokens = lineText.split(/\s+/).filter(Boolean);
+                                          return (
+                                            <span key={lIdx} className="block">
+                                              {lineTokens.map((token, tIdx) => {
+                                                const wordIdxInPhrase = wordCounter++;
+                                                const wordObj = activePhrase!.words[wordIdxInPhrase];
+                                                const isActive =
+                                                  wordObj &&
+                                                  previewTime >= wordObj.start &&
+                                                  previewTime <= wordObj.end;
+                                                return (
+                                                  <span
+                                                    key={tIdx}
+                                                    style={{
+                                                      color: isActive ? themeColor : "#FFFFFF",
+                                                      textShadow: isActive
+                                                        ? `0 0 14px ${themeColor}, 0 2px 8px rgba(0,0,0,0.8)`
+                                                        : undefined,
+                                                      fontWeight: isActive ? 800 : 700,
+                                                    }}
+                                                  >
+                                                    {token}
+                                                    {tIdx < lineTokens.length - 1 ? " " : ""}
+                                                  </span>
+                                                );
+                                              })}
+                                            </span>
+                                          );
+                                        })}
+                                      </span>
+                                    );
+                                  }
+
                                   return bulgarian ? bulgarian.substring(0, 40) + "..." : "";
                                 }
-                                return bulgarian ? bulgarian.substring(0, 40) + "..." : "";
+
+                                if (bulgarian) {
+                                  const clean = bulgarian.replace(/<[^>]+>/g, "").trim();
+                                  const firstSentence = clean.split(/[.!?…\n]/)[0] || clean.substring(0, 40);
+                                  const words = firstSentence.split(/\s+/).filter(Boolean).slice(0, 8);
+                                  const lines =
+                                    words.length >= 2
+                                      ? balanceWordsIntoTwoLines(words, 64, 600)
+                                      : [words.join(" ")];
+                                  return (
+                                    <span className="block text-center">
+                                      {lines.map((line, idx) => (
+                                        <span key={idx} className="block text-white">
+                                          {line}
+                                        </span>
+                                      ))}
+                                    </span>
+                                  );
+                                }
+                                return "";
                               })()}
                             </p>
                           </div>
@@ -2308,7 +2429,7 @@ function CreatePage() {
                       className="w-full h-8 [&::-webkit-media-controls-panel]:bg-transparent"
                     />
                     <div className="flex items-center justify-between text-[11px] text-muted-foreground">
-                      <span>⚡ Управлява караоке анимацията и смяната на сцените</span>
+                      <span>✨ Управлява караоке анимацията и смяната на сцените</span>
                       <button
                         type="button"
                         onClick={() => {

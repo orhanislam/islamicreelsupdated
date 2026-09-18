@@ -11,6 +11,7 @@ import { toast } from "sonner";
 import { saveMediaBlob } from "@/lib/download-media";
 import JSZip from "jszip";
 import { autoSplitSlides } from "@/lib/split-slides";
+import { copyToClipboardFallback } from "@/lib/utils";
 import { buildCarouselVideo } from "@/lib/carousel-video.functions";
 import { fetchCarouselSlideVideos, getCarouselSlideVideos } from "@/lib/pexels.functions";
 import { addGenerationHistoryEntry } from "@/lib/generation-history.functions";
@@ -241,41 +242,13 @@ export function CarouselRendererButton({ slides: initialSlides, title }: { slide
       explanation,
       actionStep,
     });
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText(text).catch((err) => console.error(err));
-    } else {
-      const ta = document.createElement("textarea");
-      ta.value = text;
-      ta.style.position = "fixed";
-      ta.style.left = "-999999px";
-      ta.style.top = "-999999px";
-      document.body.appendChild(ta);
-      ta.focus();
-      ta.select();
-      try { document.execCommand("copy"); } catch {}
-      document.body.removeChild(ta);
-    }
-    toast.success("✅ TikTok SEO текстът (Salafi AI Shaykh) е копиран!");
+    copyToClipboardFallback(text, "✅ TikTok SEO текстът (Salafi AI Shaykh) е копиран!");
   };
 
   /** Copy just the clean 1-line TikTok SEO headline */
   const handleCopyTitle = () => {
     const seoTitle = generateTikTokSEOTitle(cleanTitle);
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText(seoTitle).catch((err) => console.error(err));
-    } else {
-      const ta = document.createElement("textarea");
-      ta.value = seoTitle;
-      ta.style.position = "fixed";
-      ta.style.left = "-999999px";
-      ta.style.top = "-999999px";
-      document.body.appendChild(ta);
-      ta.focus();
-      ta.select();
-      try { document.execCommand("copy"); } catch {}
-      document.body.removeChild(ta);
-    }
-    toast.success("✅ TikTok SEO заглавието е копирано!");
+    copyToClipboardFallback(seoTitle, "✅ TikTok SEO заглавието е копирано!");
   };
 
 

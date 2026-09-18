@@ -17,11 +17,22 @@ export function extractTopicFromTitle(rawTitle: string): string {
   // Strip leading bracketed citations like [Коран 13:28], [Сахих ал-Бухари #6424]
   let topic = rawTitle
     .replace(/^\s*\[[^\]]*\]\s*/g, "")
-    .replace(/^[:\-–—•]\s*/, "")
+    .replace(/^[:\-–—•_━═─\s]+/, "")
     .trim();
+
+  // Strip any long divider stripes or repeated hyphens/dashes (e.g. --------------------------- or ━━━━━━━━━━━━━━━━)
+  topic = topic.replace(/[-–—_━═─]{2,}/g, " ").trim();
+
+  // Replace standalone dashes used as separators (e.g. " - ", " — ", " – ") with clean bullet " • "
+  topic = topic.replace(/\s+[-–—]+\s+/g, " • ").trim();
+
   // Fallback: split on "•" or "—"
   if (!topic && rawTitle.includes("•")) topic = rawTitle.split("•").slice(1).join("•").trim();
   if (!topic && rawTitle.includes("—")) topic = rawTitle.split("—").slice(1).join("—").trim();
+
+  // Clean trailing punctuation
+  topic = topic.replace(/[:\-–—•_━═─\s]+$/, "").trim();
+
   return topic || rawTitle.trim();
 }
 
@@ -37,7 +48,7 @@ export function extractCitationFromTitle(rawTitle: string): string {
 }
 
 /**
- * Generates an elite TikTok-search-optimized SEO headline.
+ * Generates an elite TikTok-search-optimized SEO headline without dashes or long stripes.
  * Follows TikTok Search ranking best practices (front-loaded keyword, authentic Dalil citation,
  * emotional/spiritual hook, max ~80 chars).
  *
@@ -46,10 +57,28 @@ export function extractCitationFromTitle(rawTitle: string): string {
  *   "✨ Скритата милост | Сахих ал-Бухари #6424 📜"
  */
 export function generateTikTokSEOTitle(rawTitle: string): string {
-  const topic = extractTopicFromTitle(rawTitle);
-  const citation = extractCitationFromTitle(rawTitle);
+  if (!rawTitle || typeof rawTitle !== "string") return "✨ Ислямска мъдрост 📖";
 
-  if (!topic) return rawTitle || "✨ Ислямска мъдрост 📖";
+  // Clean any long stripes or multiple dashes first
+  const cleanRaw = rawTitle
+    .replace(/[-–—_━═─]{2,}/g, " ")
+    .replace(/\s+[-–—]+\s+/g, " • ")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+
+  const topic = extractTopicFromTitle(cleanRaw);
+  const citation = extractCitationFromTitle(cleanRaw) || extractCitationFromTitle(rawTitle);
+
+  if (!topic) return cleanRaw || "✨ Ислямска мъдрост 📖";
+
+  // Ensure topic has no lingering dashes/stripes
+  const sanitizedTopic = topic
+    .replace(/[-–—_━═─]{2,}/g, " ")
+    .replace(/\s+[-–—]+\s+/g, " • ")
+    .replace(/^[:\-–—•\s]+/, "")
+    .replace(/[:\-–—•\s]+$/, "")
+    .replace(/\s{2,}/g, " ")
+    .trim();
 
   // Determine emoji suffix by citation type
   let suffix = "";
@@ -76,9 +105,9 @@ export function generateTikTokSEOTitle(rawTitle: string): string {
   }
 
   if (citationLabel) {
-    return `✨ ${topic} | ${citationLabel}${suffix}`;
+    return `✨ ${sanitizedTopic} | ${citationLabel}${suffix}`;
   }
-  return `✨ ${topic}${suffix}`;
+  return `✨ ${sanitizedTopic}${suffix}`;
 }
 
 /**
@@ -88,8 +117,8 @@ export function generateTikTokSEOTitle(rawTitle: string): string {
  * 1. 🏆 SEO Headline (TikTok Search-indexed, high-CTR)
  * 2. 🎯 Curiosity Hook
  * 3. 📖 Authentic Dalil (Quran Ayah or Sahih Hadith)
- * 4. 💡 Salafi AI Shaykh Sharh (Explanation)
- * 5. ⚡ Sunnah Action OR Dua
+ * 4. 💎 Salafi AI Shaykh Sharh (Explanation)
+ * 5. 📌 Sunnah Action OR Dua
  * 6. 🔄 Save & Share CTA (Sadaka Jariya hadith от Сахих Муслим)
  * 7. 🔍 TikTok SEO Search Queries
  * 8. #️⃣ Tiered Viral Hashtags
@@ -146,9 +175,9 @@ export function formatViralSocialCaption(
     if (/бухари|муслим|тирмизи|навауи|хадис|hadith/i.test(citation + title)) {
       dalilIntroLabel = `📜 Пратеникът на Аллах ﷺ ни учи:`;
     }
-    // Citation label for the end of the dalil
-    const citationEnd = citation ? ` — ${citation.replace(/^\[|\]$/g, "")}` : "";
-    dalilBlock = `\n\n${dalilIntroLabel}\n„${dalilText}"${citationEnd}`;
+    // Citation label for the end of the dalil (in parentheses without dashes)
+    const citationEnd = citation ? ` (${citation.replace(/^\[|\]$/g, "")})` : "";
+    dalilBlock = `\n\n${dalilIntroLabel}\n„${dalilText}“${citationEnd}`;
     // Suppress hookBlock if already covered by dalil topic
     if (!hookBlock && topic) {
       hookBlock = `\n\n${topic}`;
@@ -164,7 +193,7 @@ export function formatViralSocialCaption(
       .replace(/^Шейх\s+[^:]+:\s*/i, "")
       .trim();
     if (cleanExpl) {
-      sharhBlock = `\n\n💡 Шейхово разяснение:\n${cleanExpl}`;
+      sharhBlock = `\n\n💎 Богословско разяснение:\n${cleanExpl}`;
     }
   }
 
@@ -175,12 +204,13 @@ export function formatViralSocialCaption(
       .replace(/^(?:действие|дуа|action|dua)\s*:\s*/i, "")
       .trim();
     const isDua = /астагфируллах|субханаллах|алхамдулиллях|аллаху|ля иляха|дуа|молитва|зикр|дуа:/i.test(actionStep);
-    const actionLabel = isDua ? "🤍 Дуа:" : "⚡ Действие:";
+    const actionLabel = isDua ? "🤍 Дуа:" : "📌 Напътствие:";
     actionBlock = `\n\n${actionLabel} ${cleanAction}`;
   }
 
   // ── 6. Save & Share CTA (Algorithmic Retention + Sadaka Jariya) ──────────
-  const ctaBlock = `\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n📌 ЗАПАЗИ — за да се върнеш към тази мъдрост в момент на нужда!\n🔄 СПОДЕЛИ с приятел или в Story:\n„Който насочи към добро, получава награда колкото онзи, който го е извършил."\n— Сахих Муслим #1893\n💬 Напиши „Амин" или „Субханаллах" ⬇️\n━━━━━━━━━━━━━━━━━━━━━━━━━━`;
+  // Note: NO long divider lines (━━━━━━━━━━━━ or ------------) or dashes
+  const ctaBlock = `\n\n📌 ЗАПАЗИ, за да се върнете към тази мъдрост в момент на нужда!\n🔄 СПОДЕЛИ с приятел или в Story:\n„Който насочи към добро, получава награда колкото онзи, който го е извършил.“\n(Сахих Муслим #1893)\n💬 Напишете „Амин“ или „Субханаллах“ ⬇️`;
 
   // ── 7. TikTok SEO Search Queries ─────────────────────────────────────────
   const topic = extractTopicFromTitle(title);
@@ -196,5 +226,11 @@ export function formatViralSocialCaption(
   // ── Compose Full Caption ──────────────────────────────────────────────────
   const rawCaption = `${seoTitle}${hookBlock}${dalilBlock}${sharhBlock}${actionBlock}${ctaBlock}${seoBlock}${hashtags}`;
 
-  return sanitizeTheologicalRespect(rawCaption);
+  // Strip any accidental long divider stripes, repeated hyphens/dashes
+  const cleanCaption = rawCaption
+    .replace(/[-–—_━═─]{2,}/g, "")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+
+  return sanitizeTheologicalRespect(cleanCaption);
 }

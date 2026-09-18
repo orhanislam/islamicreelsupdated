@@ -3,6 +3,10 @@ import { createServerFn } from "@tanstack/react-start";
 import * as googleTTS from "google-tts-api";
 import mp3Duration from "mp3-duration";
 import { sanitizeTheologicalRespect } from "./theological-sanitizer";
+import { normalizeBulgarianNumbersForTts, integerToBulgarianWords } from "./bulgarian-numbers";
+import { normalizeAllIslamicPhonetics, normalizeIslamicPhoneticsToDisplayWord } from "./islamic-phonetics";
+
+export { normalizeBulgarianNumbersForTts, integerToBulgarianWords, normalizeAllIslamicPhonetics };
 
 export type WordTiming = { start: number; end: number; word: string };
 
@@ -149,7 +153,7 @@ export function normalizeIslamicArabicPhoneticsForTts(text: string): string {
   let res = text;
 
   const replaceWord = (pattern: string, replacement: string) => {
-    const reg = new RegExp(`(?<=^|[^\\p{L}\\p{N}])${pattern}(?=[^\\p{L}\\p{N}]|$)`, "gui");
+    const reg = new RegExp(`(?<=^|[^\\p{L}\\p{N}])(?:${pattern})(?=[^\\p{L}\\p{N}]|$)`, "gui");
     res = res.replace(reg, replacement);
   };
 
@@ -164,6 +168,15 @@ export function normalizeIslamicArabicPhoneticsForTts(text: string): string {
     .replace(/(?<=^|[^\p{L}\p{N}])(?:с\.в\.т\.|swt|свт)(?=[^\p{L}\p{N}]|$)/gui, " Субхаанаху ва Та'ааля ")
     .replace(/(?:\(\s*(?:р\.а\.|ra|ра)\s*\)|(?<=^|[^\p{L}\p{N}])(?:р\.а\.)(?=[^\p{L}\p{N}]|$))/gui, " Радийаллааху 'анху ")
     .replace(/(?<=^|[^\p{L}\p{N}])(?:radiyallahu\s+anhu|радияллаху\s+анху)(?=[^\p{L}\p{N}]|$)/gui, " Радийаллааху 'анху ");
+
+  // 1.5. Bulgarian Number Normalization for TTS
+  // Articulates numbers into standard Bulgarian words (e.g. 5 -> пет, 50 -> петдесет, 500 -> петстотин, 5000 -> пет хиляди, 5368 -> пет хиляди триста шестдесет и осем)
+  res = normalizeBulgarianNumbersForTts(res);
+
+  // 1.6. Authentic Arabic Quran Surah Names & Islamic Terminologies Normalization
+  // Ensures all 114 Quran Surah names (e.g. Ал-Фатиха, Ал-Бакара, Ал-Ихляс, Аш-Шарх, Ал-Мулк, Ар-Рахман)
+  // and Islamic concepts/phrases are pronounced with authentic Arabic tajweed/salafi diction
+  res = normalizeAllIslamicPhonetics(res);
 
   // 2. Astaghfirullah & Istighfar (Salafi Arabic Diction - user requirement)
   // Replaces "astafirullah", "астафируллах", "астафирулла", "astaghfirullah" with authentic Arabic Salafi "Астагфируллаах"
@@ -289,6 +302,7 @@ export function normalizePhoneticsToDisplayWord(word: string): string {
   let clean = word.replace(/[\[\]]/g, "").trim();
   clean = clean.replace(/^\.{2,}|\.{2,}$/g, "").replace(/\.{2,}/g, "").trim();
   clean = clean.replace(/(?<=^|[^\p{L}\p{N}])Ар-Раад(?=[^\p{L}\p{N}]|$)/gui, "Ар-Ра'д");
+  clean = normalizeIslamicPhoneticsToDisplayWord(clean);
   return clean
     .replace(/(?<=^|[^\p{L}\p{N}])Астагфируллаах(?=[^\p{L}\p{N}]|$)/gui, "Астагфируллах")
     .replace(/(?<=^|[^\p{L}\p{N}])Субхааналлаах(?=[^\p{L}\p{N}]|$)/gui, "Субханаллах")

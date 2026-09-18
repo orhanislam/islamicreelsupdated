@@ -81,7 +81,7 @@ export function autoSplitSlides(slides: Slide[]): Slide[] {
         };
         
         if (!isLastChunkOfLastItem) {
-          newSlide.bottomText = "Продължава 👉";
+          newSlide.bottomText = "Продължава -->";
         }
         
         result.push(newSlide);

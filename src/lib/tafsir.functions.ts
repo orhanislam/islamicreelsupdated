@@ -5,6 +5,7 @@ import path from "node:path";
 import verifiedSharhData from "./data/verified-hadith-sharh.json";
 import { geminiChat } from "./gemini";
 import { sanitizeTheologicalRespect } from "./theological-sanitizer";
+import { enrichUnfamiliarQuranicTerms } from "./islamic-glossary";
 
 export interface TafsirEntry {
   surah: number;
@@ -261,6 +262,25 @@ export function getVerifiedHadithSharhDirect(params: {
     sourceType: "salafi_ai",
     text: "",
   };
+}
+
+/**
+ * Returns a compact prompt block with all verified hadiths from the database
+ * to strictly prevent LLM number hallucination.
+ */
+export function getVerifiedHadithCatalogPrompt(): string {
+  const list = (verifiedSharhData.hadiths as HadithSharhEntry[]).map((h) => {
+    const label =
+      h.collection === "nawawi40"
+        ? "40 Хадиса на ан-Навауи"
+        : h.collection === "bukhari"
+        ? "Сахих ал-Бухари"
+        : h.collection === "muslim"
+        ? "Сахих Муслим"
+        : "Джами ат-Тирмизи";
+    return `- [${label} #${h.number}] "${h.topic}": ${h.hadithTextBg ? h.hadithTextBg.slice(0, 90) + "..." : ""}`;
+  });
+  return `=== ГАРАНТИРАНО ВЕРИФИЦИРАНИ ХАДИСИ ОТ БАЗАТА ДАННИ (ЗАДЪЛЖИТЕЛНО ИЗБИРАЙ САМО ОТ ТОЗИ СПИСЪК ЗА ХАДИСИ) ===\n${list.join("\n")}\n==============================================================================================`;
 }
 
 /**
@@ -757,8 +777,8 @@ export async function enrichProposalWithAuthenticTafsir(proposal: ScripturePropo
     if (sw.hookQuestion) sw.hookQuestion = sanitizeTheologicalRespect(sw.hookQuestion);
     if (sw.hookContext) sw.hookContext = sanitizeTheologicalRespect(sw.hookContext);
     if (sw.dalilIntro) sw.dalilIntro = sanitizeTheologicalRespect(sw.dalilIntro);
-    if (sw.dalilText) sw.dalilText = sanitizeTheologicalRespect(sw.dalilText);
-    if (sw.explanation) sw.explanation = sanitizeTheologicalRespect(sw.explanation);
+    if (sw.dalilText) sw.dalilText = sanitizeTheologicalRespect(enrichUnfamiliarQuranicTerms(sw.dalilText));
+    if (sw.explanation) sw.explanation = sanitizeTheologicalRespect(enrichUnfamiliarQuranicTerms(sw.explanation));
     if (sw.actionStep) sw.actionStep = sanitizeTheologicalRespect(sw.actionStep);
     if (sw.sourceText) sw.sourceText = sanitizeTheologicalRespect(sw.sourceText);
   }

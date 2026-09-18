@@ -120,14 +120,24 @@ const showManualCopyModal = (text: string, msg: string) => {
 export const copyToClipboardFallback = (text: string, successMsg?: string) => {
   const msg = successMsg || "📋 Професионалният TikTok/Reels текст е копиран в клипборда!";
   
+  // Clean out any long divider stripes (━━━━━━━━━━━━ or ---------------------------)
+  // unless text is a URL
+  let sanitizedText = text;
+  if (!/^https?:\/\//i.test(sanitizedText.trim())) {
+    sanitizedText = sanitizedText
+      .replace(/[-–—_━═─]{2,}/g, "")
+      .replace(/\n{3,}/g, "\n\n")
+      .trim();
+  }
+
   try {
-    const success = copy(text, { format: 'text/plain' });
+    const success = copy(sanitizedText, { format: 'text/plain' });
     if (success) {
       toast.success(msg);
     } else {
-      showManualCopyModal(text, msg);
+      showManualCopyModal(sanitizedText, msg);
     }
   } catch (err) {
-    showManualCopyModal(text, msg);
+    showManualCopyModal(sanitizedText, msg);
   }
 };

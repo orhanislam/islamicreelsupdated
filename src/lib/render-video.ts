@@ -16,6 +16,7 @@ import {
   type PlatformSafeZoneProfile,
 } from "./safe-zone";
 import { analyzeAndFixRenderPayloadSync } from "./render-analyzer";
+import { normalizeBulgarianNumbersForTts } from "./bulgarian-numbers";
 
 export type WordSegment = { start: number; end: number };
 
@@ -207,6 +208,34 @@ function wrapWords(ctx: CanvasRenderingContext2D, words: string[], maxWidth: num
   }
   if (cur.length) lines.push(cur);
   return lines;
+}
+
+function balanceWordsIntoTwoLinesCanvas(
+  ctx: CanvasRenderingContext2D,
+  words: string[],
+  maxWidth: number,
+): string[][] {
+  if (!words || words.length <= 1) return [words];
+  let bestSplit = Math.ceil(words.length / 2);
+  let bestScore = Infinity;
+
+  for (let i = 1; i < words.length; i++) {
+    const l1 = words.slice(0, i).join(" ");
+    const l2 = words.slice(i).join(" ");
+    const w1 = ctx.measureText(l1).width;
+    const w2 = ctx.measureText(l2).width;
+
+    const overflow = Math.max(0, w1 - maxWidth) + Math.max(0, w2 - maxWidth);
+    const diff = Math.abs(w1 - w2);
+    const score = diff + overflow * 50;
+
+    if (score < bestScore) {
+      bestScore = score;
+      bestSplit = i;
+    }
+  }
+
+  return [words.slice(0, bestSplit), words.slice(bestSplit)];
 }
 
 /**
@@ -676,18 +705,20 @@ export async function renderVideo(opts: VideoOptions): Promise<{ blob: Blob; mim
     // Split the Bulgarian text into subtitle-style PHRASES (one chunk shown
     // at a time, like real subtitles). Phrases break on punctuation, with a
     // soft cap on words per phrase so nothing overflows the safe area.
-    const cleanBulgarianText = (opts.bulgarian || "")
-      .replace(/<break[^>]*\/>/gi, " ")
-      .replace(/<[^>]+>/g, " ")
-      .replace(/\.{2,}/g, " ")
-      .replace(/…+/g, " ")
-      .trim();
+    const cleanBulgarianText = normalizeBulgarianNumbersForTts(
+      (opts.bulgarian || "")
+        .replace(/<break[^>]*\/>/gi, " ")
+        .replace(/<[^>]+>/g, " ")
+        .replace(/\.{2,}/g, " ")
+        .replace(/…+/g, " ")
+        .trim()
+    );
     const allWords = cleanBulgarianText.split(/\s+/).filter(Boolean);
     const maxW = sz.W_SAFE;
     const verticalForText = sz.H_SAFE;
 
-    const MAX_WORDS_PER_PHRASE = 7;
-    const MIN_WORDS_PER_PHRASE = 3;
+    const MAX_WORDS_PER_PHRASE = 8;
+    const MIN_WORDS_PER_PHRASE = 4;
     type Phrase = {
       words: string[];
       startWord: number;
@@ -737,10 +768,11 @@ export async function renderVideo(opts: VideoOptions): Promise<{ blob: Blob; mim
       for (let i = 0; i < allWords.length; i++) {
         const w = allWords[i];
         cur.push(w);
-        const endsPunct =
-          /[.!?…]$/.test(w) || (/[,;:—]$/.test(w) && cur.length >= MIN_WORDS_PER_PHRASE);
+        const endsSentence = /[.!?…]$/.test(w);
+        const endsClause = /[,;:—]$/.test(w) && cur.length >= MIN_WORDS_PER_PHRASE;
         if (
-          (endsPunct && cur.length >= MIN_WORDS_PER_PHRASE) ||
+          (endsSentence && cur.length >= 2) ||
+          endsClause ||
           cur.length >= MAX_WORDS_PER_PHRASE
         ) {
           flush();
@@ -920,15 +952,31 @@ export async function renderVideo(opts: VideoOptions): Promise<{ blob: Blob; mim
       const start = p.exactStart ?? wordTimes[p.startWord]?.start ?? 0;
       const end = p.exactEnd ?? wordTimes[p.endWord - 1]?.end ?? revealDuration;
       const text = p.words.join(" ");
-      const { fontSize: fs, lineHeight: lh } = chooseFontSize(
+      const { fontSize: initialFs } = chooseFontSize(
         ctx,
         text,
         maxW,
         availableVertical,
         scale,
       );
+      let fs = initialFs;
       ctx.font = `700 ${fs}px 'Outfit', 'Inter', sans-serif`;
-      const lines = wrapWords(ctx, p.words, maxW);
+      let lines =
+        p.words.length >= 2
+          ? balanceWordsIntoTwoLinesCanvas(ctx, p.words, maxW)
+          : wrapWords(ctx, p.words, maxW);
+
+      while (fs > Math.round(36 * scale)) {
+        const widestLine = Math.max(...lines.map((l) => ctx.measureText(l.join(" ")).width));
+        if (widestLine <= maxW) break;
+        fs -= 2;
+        ctx.font = `700 ${fs}px 'Outfit', 'Inter', sans-serif`;
+        lines =
+          p.words.length >= 2
+            ? balanceWordsIntoTwoLinesCanvas(ctx, p.words, maxW)
+            : wrapWords(ctx, p.words, maxW);
+      }
+      const lh = Math.round(fs * 1.34);
       return { ...p, start, end, fontSize: fs, lineHeight: lh, lines };
     });
     if (phraseRender.length) {

@@ -2,6 +2,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import type { Buffer } from "node:buffer";
 import { verifyAndCorrectSubtitleSync } from "./subtitle-sync.functions";
+import { normalizeBulgarianNumbersForTts } from "./bulgarian-numbers";
 import {
   getSafeZone,
   getASSSubtitlePlacement,
@@ -68,6 +69,47 @@ export function wrapTextToSafeWidth(
     lines.push(curLine.join(" "));
   }
   return lines;
+}
+
+/**
+ * Balances an array of words into exactly two lines of visually balanced width,
+ * strictly respecting maxLineWidth. Used for professional 2-line TikTok/Reels subtitles.
+ */
+export function balanceWordsIntoTwoLines(
+  words: string[],
+  fontSize: number = 72,
+  maxLineWidth: number = 640,
+): string[] {
+  if (!words || words.length === 0) return [];
+  if (words.length === 1) return [words[0]];
+
+  let bestSplit = Math.ceil(words.length / 2);
+  let bestScore = Infinity;
+
+  for (let i = 1; i < words.length; i++) {
+    const line1 = words.slice(0, i).join(" ");
+    const line2 = words.slice(i).join(" ");
+    const w1 = estimateTextWidth(line1, fontSize);
+    const w2 = estimateTextWidth(line2, fontSize);
+
+    // Penalize lines exceeding maxLineWidth heavily
+    const overflow1 = Math.max(0, w1 - maxLineWidth);
+    const overflow2 = Math.max(0, w2 - maxLineWidth);
+    const overflowPenalty = (overflow1 + overflow2) * 50;
+
+    // Visual balance score: minimize width difference between line 1 and line 2
+    const diff = Math.abs(w1 - w2);
+    const score = diff + overflowPenalty;
+
+    if (score < bestScore) {
+      bestScore = score;
+      bestSplit = i;
+    }
+  }
+
+  const line1 = words.slice(0, bestSplit).join(" ");
+  const line2 = words.slice(bestSplit).join(" ");
+  return [line1, line2];
 }
 
 /**
@@ -185,13 +227,15 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
   }
 
   if (data.bulgarian) {
-    data.bulgarian = data.bulgarian
-      .replace(/<[^>]+>/g, "")
-      .replace(/\[(?:коран|сура|хадис|бухари|муслим|тирмизи|навауи)[^\]]*\]/gi, "")
-      .replace(/[\[\]]/g, "")
-      .replace(/\.{2,}/g, "")
-      .replace(/…+/g, "")
-      .trim();
+    data.bulgarian = normalizeBulgarianNumbersForTts(
+      data.bulgarian
+        .replace(/<[^>]+>/g, "")
+        .replace(/\[(?:коран|сура|хадис|бухари|муслим|тирмизи|навауи)[^\]]*\]/gi, "")
+        .replace(/[\[\]]/g, "")
+        .replace(/\.{2,}/g, "")
+        .replace(/…+/g, "")
+        .trim()
+    );
     let words = data.bulgarian.split(/\s+/).filter(Boolean);
     let timings = data.bulgarianWordTimings;
     if (timings && timings.length > 0) {
@@ -424,8 +468,8 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
       }
     } else {
       const isSingleWordMode = data.subtitleSlicingMode === "single";
-      const MAX_WORDS = isSingleWordMode ? 1 : 4;
-      const MIN_WORDS = isSingleWordMode ? 1 : 2;
+      const MAX_WORDS = isSingleWordMode ? 1 : 8;
+      const MIN_CLAUSE_WORDS = isSingleWordMode ? 1 : 4;
 
       const cleanBulgarian = (data.bulgarian || "").replace(/<[^>]+>/g, "").trim();
       const textParts = cleanBulgarian.split(/\n\n+/);
@@ -452,17 +496,25 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 
       for (let i = 0; i < words.length; i++) {
         const w = words[i];
-        if (!isSingleWordMode && cur.length > 0 && timings[i] && timings[i - 1]) {
+        if (!isSingleWordMode && cur.length >= MIN_CLAUSE_WORDS && timings[i] && timings[i - 1]) {
           const gap = timings[i].start - timings[i - 1].end;
-          if (gap > 0.25) {
+          // Only split on audio gap if it's a major pause (>= 0.65s) and we have a full clause
+          if (gap >= 0.65) {
             flush();
           }
         }
         cur.push(w);
-        const endsPunct = /[.!?…]$/.test(w) || (/[,;:—]$/.test(w) && cur.length >= MIN_WORDS);
+        const endsSentence = /[.!?…]$/.test(w);
+        const endsClause = /[,;:—]$/.test(w) && cur.length >= MIN_CLAUSE_WORDS;
         const isLastTitleWord = hasTitle && curStart + cur.length === titleWordCount;
 
-        if ((endsPunct && cur.length >= MIN_WORDS) || cur.length >= MAX_WORDS || isLastTitleWord) {
+        if (
+          isSingleWordMode ||
+          isLastTitleWord ||
+          (endsSentence && cur.length >= 2) ||
+          endsClause ||
+          cur.length >= MAX_WORDS
+        ) {
           flush();
         }
       }
@@ -485,32 +537,58 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             : audioDur;
 
         const lastWordEnd = timings[p.endIdx - 1]?.end ?? start + 1.5;
-        const end = Math.min(
-          nextPhraseStart,
-          Math.max(start + 0.2, lastWordEnd + (isSingleWordMode ? 0.06 : 0.12)),
-        );
+        let end: number;
+        if (isSingleWordMode) {
+          end = Math.min(
+            nextPhraseStart,
+            Math.max(start + 0.2, lastWordEnd + 0.06),
+          );
+        } else if (!isLastPhrase) {
+          // Contiguous seamless transition: keep subtitle on screen across speech pauses
+          const gapToNext = nextPhraseStart - lastWordEnd;
+          if (gapToNext > 2.5) {
+            end = Math.min(nextPhraseStart, Math.max(start + 0.2, lastWordEnd + 2.0));
+          } else {
+            end = Math.max(start + 0.2, nextPhraseStart);
+          }
+        } else {
+          // Last phrase: keep on screen so viewer can read to the end
+          end = Math.min(audioDur, Math.max(start + 0.2, lastWordEnd + 1.2));
+          if (end <= start) end = Math.min(audioDur, start + 1.0);
+        }
 
         const posTag = `\\an${placement.alignment}\\pos(${placement.posX},${placement.posY})`;
         const safeLineWidth = Math.min(sz.W_SAFE, 640);
 
-        // 1. Initial base font size (titles 88, regular phrases 80)
-        let phraseFs = p.isTitle ? 88 : 80;
+        // 1. Initial base font size (titles 88, regular phrases 76)
+        let phraseFs = p.isTitle ? 88 : 76;
 
         // 2. Dynamic auto-scale down if ANY single word in the phrase exceeds safeLineWidth
         const longestWordWidth = Math.max(...p.words.map((w) => estimateTextWidth(w, phraseFs)));
         if (longestWordWidth > safeLineWidth) {
           const scale = safeLineWidth / longestWordWidth;
-          phraseFs = Math.max(46, Math.floor(phraseFs * scale * 0.94));
+          phraseFs = Math.max(44, Math.floor(phraseFs * scale * 0.94));
         }
 
-        // 3. Wrap words into lines with safeLineWidth and the adapted font size
-        let linesOfWords = wrapTextToSafeWidth(p.words, phraseFs, safeLineWidth);
+        // 3. Arrange words into 2 balanced lines when words >= 2 (or single line if 1 word)
+        let linesOfWords =
+          !isSingleWordMode && p.words.length >= 2
+            ? balanceWordsIntoTwoLines(p.words, phraseFs, safeLineWidth)
+            : wrapTextToSafeWidth(p.words, phraseFs, safeLineWidth);
 
-        // 4. Verify widest line after wrapping; scale down and re-wrap if necessary
-        const maxLineWidth = Math.max(...linesOfWords.map((line) => estimateTextWidth(line, phraseFs)));
-        if (maxLineWidth > safeLineWidth) {
+        // 4. Verify widest line; scale down phraseFs if necessary so both lines fit cleanly
+        let maxLineWidth = Math.max(...linesOfWords.map((line) => estimateTextWidth(line, phraseFs)));
+        while (maxLineWidth > safeLineWidth && phraseFs > 44) {
           const scale = safeLineWidth / maxLineWidth;
-          phraseFs = Math.max(44, Math.floor(phraseFs * scale * 0.94));
+          phraseFs = Math.max(44, Math.floor(phraseFs * Math.min(0.96, scale)));
+          linesOfWords =
+            !isSingleWordMode && p.words.length >= 2
+              ? balanceWordsIntoTwoLines(p.words, phraseFs, safeLineWidth)
+              : wrapTextToSafeWidth(p.words, phraseFs, safeLineWidth);
+          maxLineWidth = Math.max(...linesOfWords.map((line) => estimateTextWidth(line, phraseFs)));
+        }
+
+        if (maxLineWidth > safeLineWidth) {
           linesOfWords = wrapTextToSafeWidth(p.words, phraseFs, safeLineWidth);
         }
 

@@ -35,7 +35,7 @@ type ChatMsg = {
 const DEFAULT_MESSAGES: ChatMsg[] = [
   {
     role: "assistant",
-    text: "Ас-саляму алейкум уа рахматуллахи уа баракатух, брат Муслим! 🌿\n\nАз съм **Шейх Салафи AI (Salafi Shaykh AI)** – твоят главен мениджър на това видео студио и духовно-оперативен наставник по манхаджа на Праведните предци (ас-Саляф ас-Салих – по стъпките на Шейх Ибн Баз, Шейх ал-Албани и Шейх Ибн Усеймин, рахимахумуллах).\n\nКато Главен Мениджър на студиото, аз **управлявам и изпълнявам абсолютно всичко директно от тази страница**:\n- 🎬 **Генериране и пускане на видеа** – Коран, Сахих Хадиси и 4-степенни видеа с обяснение и Тафсир.\n- 📱 **Вайръл карусели за Таухид** – 4 до 7 балансирани слайда с цитати и поуки.\n- 🚀 **Пакетни серии** – автоматично планиране и рендиране на цели серии (от 1 до 10 видеа).\n- 📊 **Мониторинг на рендирането** – проверка на активните фонови задачи на сървъра в реално време.\n- 🎨 **Вайръл корици и описания** – генериране на thumbnails и описания с хаштагове за социалните мрежи.\n- 📖 **Богословски консултации** – автентични ислямски отговори и съвети за съдържанието.\n\nКажи ми какво искаш да направим или напиши директна команда (напр. *„Пусни серия от 3 хадиса“*, *„Направи карусел за Таухид“*, *„Какво се рендира?“*), и аз веднага ще поема изпълнението!",
+    text: "Ас-саляму алейкум уа рахматуллахи уа баракатух! 🌿\n\nАз съм **Шейх Салафи AI (Salafi Shaykh AI)** – Вашият главен мениджър на това видео студио и духовно-оперативен наставник по манхаджа на Праведните предци (ас-Саляф ас-Салих – по стъпките на Шейх Ибн Баз, Шейх ал-Албани и Шейх Ибн Усеймин, рахимахумуллах).\n\nКато Главен Мениджър на студиото, аз **управлявам и изпълнявам абсолютно всичко директно от тази страница**:\n- 🎬 **Генериране и пускане на видеа** – Коран, Сахих Хадиси и 4-степенни видеа с обяснение и Тафсир.\n- 📱 **Вайръл карусели за Таухид** – 4 до 7 балансирани слайда с цитати и поуки.\n- 🎬 **Пакетни серии** – автоматично планиране и рендиране на цели серии (от 1 до 10 видеа).\n- 📊 **Мониторинг на рендирането** – проверка на активните фонови задачи на сървъра в реално време.\n- 🎨 **Вайръл корици и описания** – генериране на thumbnails и описания с хаштагове за социалните мрежи.\n- 📖 **Богословски консултации** – автентични ислямски отговори и съвети за съдържанието.\n\nСподелете какво желаете да реализираме или напишете директна команда (напр. *„Пусни серия от 3 хадиса“*, *„Направи карусел за Таухид“*, *„Какво се рендира?“*), и аз веднага ще поема изпълнението!",
   },
 ];
 
@@ -54,7 +54,7 @@ export const VIRAL_QURAN_PRESETS = [
 
 export const VIRAL_HADITH_PRESETS = [
   { collection: "nawawi40", number: 1, title: "Хадис № 1 на Навауи (Намеренията)", prompt: "Направи вирално TikTok видео за Хадис № 1 на Навауи (Делата се ценят според намеренията)" },
-  { collection: "bukhari", number: 6424, title: "Сахих ал-Бухари #6424 (Изпитанията)", prompt: "Направи вирално TikTok видео за Сахих ал-Бухари #6424 за скритата милост в изпитанията" },
+  { collection: "bukhari", number: 5645, title: "Сахих ал-Бухари #5645 (Изпитанията)", prompt: "Направи вирално TikTok видео за Сахих ал-Бухари #5645 за скритата милост в изпитанията (Когото Аллах желае да дари с добро, Той го подлага на изпитания)" },
   { collection: "nawawi40", number: 5, title: "Хадис № 5 на Навауи (Чистота на вярата)", prompt: "Направи вирално TikTok видео за Хадис № 5 на Навауи за искреността в религията" },
   { collection: "muslim", number: 2564, title: "Сахих Муслим #2564 (Добротата)", prompt: "Направи вирално TikTok видео за Сахих Муслим #2564 за силата на благородните обръщения" },
   { collection: "tirmidhi", number: 1987, title: "Сунан Ат-Тирмизи #1987 (Търпението)", prompt: "Направи вирално TikTok видео за Сахих Хадис от Тирмизи за вътрешния мир и сабр" },
@@ -303,17 +303,20 @@ function AssistantPage() {
     scriptWorkflow?: ExplainedVideoScript,
   ) => {
     if (e) e.stopPropagation();
+    const cleanTitle = cleanProposalTitle(title);
     let text = "";
     if (scriptWorkflow) {
       const sw = scriptWorkflow;
       const cleanExpl = stripScholarAttribution(sw.explanation);
       const cleanAct = sw.actionStep ? cleanScriptPrefixes(sw.actionStep) : "";
-      const actLabel = cleanAct ? detectActionOrDuaLabel(cleanAct) : "";
-      const hookPrefix = sw.hookQuestion ? cleanScriptPrefixes(sw.hookQuestion) + "\n" + cleanScriptPrefixes(sw.hookContext || "") + "\n\n" : "";
-      const actLine = cleanAct ? "\n\n" + (actLabel === "Дуа" ? "🤍 Дуа:" : "⚡ Действие:") + " " + cleanAct : "";
-      text = hookPrefix + "📖 " + title + "\n„" + (sw.dalilText || title) + "“\n\n💡 Обяснение: " + cleanExpl + actLine + "\n\n#islamicreels #коран #хадис #ислям #напомняне #садакаджария #bulgaria #islamicvideo";
+      text = formatViralSocialCaption(cleanTitle, summary, {
+        title: cleanTitle,
+        hookQuestion: sw.hookQuestion ? cleanScriptPrefixes(sw.hookQuestion) : undefined,
+        dalilText: sw.dalilText ? cleanScriptPrefixes(sw.dalilText) : undefined,
+        explanation: cleanExpl,
+        actionStep: cleanAct,
+      });
     } else {
-      const cleanTitle = getThumbTitle(title);
       text = formatViralSocialCaption(cleanTitle, summary);
     }
     copyToClipboardFallback(text);
@@ -479,7 +482,7 @@ function AssistantPage() {
     if (confirmingIdx !== null) return;
     playStudioClick("start");
     setConfirmingIdx(msgIdx);
-    toast.message("Генерирам видеото по твоето одобрено предложение...");
+    toast.message("Генерирам видеото по Вашето одобрено предложение...");
 
     try {
       const res = await confirmAndGenerateVideo({
@@ -540,14 +543,14 @@ function AssistantPage() {
         ? cleanScriptPrefixes(res.proposal.scriptWorkflow.actionStep)
         : "";
       const altActLabel = altAct ? detectActionOrDuaLabel(altAct) : "";
-      const altActText = altAct ? `\n${altActLabel === "Дуа" ? "🤍" : "⚡"} **${altActLabel}:** ${altAct}` : "";
+      const altActText = altAct ? `\n${altActLabel === "Дуа" ? "🤍" : "📌"} **${altActLabel}:** ${altAct}` : "";
       const altExpl = stripScholarAttribution(res.proposal?.scriptWorkflow?.explanation || res.proposal?.summaryBg || "");
 
       setMessages((prev) => [
         ...prev,
         {
           role: "assistant",
-          text: `🔄 **Алтернативно предложение:**\n\n${res.reply}\n\n📖 **Цитат:** ${res.proposal?.title}\n💡 **Обяснение:** ${altExpl}${altActText}\n🎨 **Атмосфера:** ${res.proposal?.themeBg}\n\n📌 Натисни **\"✅ Съгласи се / Одобри\"** за да го генерираме, или **\"❌ Откажи / Предложи друг\"** за още едно!`,
+          text: `🔄 **Алтернативно предложение:**\n\n${res.reply}\n\n📖 **Цитат:** ${res.proposal?.title}\n💎 **Обяснение:** ${altExpl}${altActText}\n🎨 **Атмосфера:** ${res.proposal?.themeBg}\n\n📌 Натиснете **\"✅ Съгласи се / Одобри\"** за да стартираме видеото, или **\"❌ Откажи / Предложи друг\"** за ново предложение!`,
           proposal: res.proposal,
         },
       ]);
@@ -839,7 +842,7 @@ function AssistantPage() {
     try {
       playStudioClick("start");
       setViralLoading(true);
-      toast.message("🔥 AI търси уникална вайръл тема (без банални текстове)...");
+      toast.message("✨ AI подготвя тематично предложение (по автентичен източник)...");
 
       const res = await suggestViralProposal();
 
@@ -847,7 +850,7 @@ function AssistantPage() {
         ...prev,
         {
           role: "assistant",
-          text: `🔥 **Вайръл Предложение:**\n\n${res.reply}\n\n📋 **Тема:** ${res.proposal?.title}\n🎨 **Атмосфера:** ${res.proposal?.themeBg}\n\n📌 Натисни **\"✅ Съгласи се / Одобри\"** за да генерираме видеото, или **\"❌ Откажи / Предложи друг\"** за ново предложение!`,
+          text: `✨ **Тематично Предложение:**\n\n${res.reply}\n\n📋 **Тема:** ${res.proposal?.title}\n🎨 **Атмосфера:** ${res.proposal?.themeBg}\n\n📌 Натиснете **\"✅ Съгласи се / Одобри\"** за да стартираме видеото, или **\"❌ Откажи / Предложи друг\"** за ново предложение!`,
           proposal: res.proposal,
         },
       ]);
@@ -879,14 +882,14 @@ function AssistantPage() {
         ? cleanScriptPrefixes(res.proposal.scriptWorkflow.actionStep)
         : "";
       const expActLabel = expAct ? detectActionOrDuaLabel(expAct) : "";
-      const expActText = expAct ? `\n${expActLabel === "Дуа" ? "🤍" : "⚡"} **${expActLabel}:** ${expAct}` : "";
+      const expActText = expAct ? `\n${expActLabel === "Дуа" ? "🤍" : "📌"} **${expActLabel}:** ${expAct}` : "";
       const expExpl = stripScholarAttribution(res.proposal?.scriptWorkflow?.explanation || res.proposal?.summaryBg || "");
 
       setMessages((prev) => [
         ...prev,
         {
           role: "assistant",
-          text: `🎬 **Ислямско видео с обяснение:**\n\n${res.reply}\n\n📖 **Цитат:** ${res.proposal?.title}\n💡 **Обяснение:** ${expExpl}${expActText}\n🎨 **Атмосфера:** ${res.proposal?.themeBg}${scheduleNote}\n\n📌 Натисни **\"✅ Съгласи се / Одобри\"** за да стартираме видеото, или **\"❌ Откажи / Предложи друг\"** за алтернатива!`,
+          text: `🎬 **Ислямско видео с обяснение:**\n\n${res.reply}\n\n📖 **Цитат:** ${res.proposal?.title}\n💎 **Обяснение:** ${expExpl}${expActText}\n🎨 **Атмосфера:** ${res.proposal?.themeBg}${scheduleNote}\n\n📌 Натиснете **\"✅ Съгласи се / Одобри\"** за да стартираме видеото, или **\"❌ Откажи / Предложи друг\"** за алтернатива!`,
           proposal: res.proposal,
         },
       ]);
@@ -915,8 +918,8 @@ function AssistantPage() {
     try {
       playStudioClick("start");
       setViralLoading(true);
-      toast.message(`⚡ Стартирам фоново изготвяне на план с ${countToSuggest} вайръл идеи... Може да затворите браузъра!`);
-      const userText = `⚡ Изготви ми план с точно ${countToSuggest} вайръл идеи (Коран, Хадиси и TikTok теми) за одобрение.`;
+      toast.message(`📋 Стартирам изготвяне на план с ${countToSuggest} ислямски теми... Може да затворите браузъра.`);
+      const userText = `📋 Изготви ми план с точно ${countToSuggest} ислямски теми (Коран, Хадиси и TikTok теми) за одобрение.`;
       await startBackgroundPlanGeneration({
         data: { count: countToSuggest, userMsgText: userText },
       });
@@ -998,7 +1001,7 @@ function AssistantPage() {
               </span>
             </div>
             <p className="text-xs sm:text-sm text-muted-foreground mt-0.5">
-              Твоят духовен наставник и главен мениджър по манхаджа на ас-Саляф ас-Салих. Управлява студиото, планира и рендира видеа и прави всичко директно през чата.
+              Вашият духовен наставник и главен мениджър по манхаджа на ас-Саляф ас-Салих. Управлява студиото, планира и рендира видеа и прави всичко директно през чата.
             </p>
           </div>
         </div>
@@ -1043,7 +1046,7 @@ function AssistantPage() {
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2 font-semibold text-amber-500 text-sm">
               <Loader2 className="size-4 animate-spin" />
-              <span>🚀 Активни автономни задачи на облачния сървър ({activeTasks.length})</span>
+              <span>📊 Активни автономни задачи на облачния сървър ({activeTasks.length})</span>
             </div>
             <span className="text-xs text-muted-foreground font-mono">Може спокойно да затворите браузъра (iPhone/Mobile)</span>
           </div>
@@ -1206,7 +1209,7 @@ function AssistantPage() {
                       hadithSchedule === "now" ? "bg-blue-500 text-white shadow-sm" : "text-muted-foreground hover:text-foreground"
                     }`}
                   >
-                    ⚡ Генерирай Сега
+                    🎬 Генерирай Сега
                   </button>
                   <button
                     type="button"
@@ -1249,7 +1252,7 @@ function AssistantPage() {
               </>
             ) : (
               <>
-                <Video className="size-4" /> 🚀 {hadithBatchCount === 0 ? "Избрани са 0 видеа" : `Генерирай Серия от ${hadithBatchCount} Видеа`}
+                <Video className="size-4" /> 🎬 {hadithBatchCount === 0 ? "Избрани са 0 видеа" : `Генерирай Серия от ${hadithBatchCount} Видеа`}
               </>
             )}
           </button>
@@ -1290,7 +1293,7 @@ function AssistantPage() {
                       quranSchedule === "now" ? "bg-amber-500 text-black shadow-sm" : "text-muted-foreground hover:text-foreground"
                     }`}
                   >
-                    ⚡ Генерирай Сега
+                    🎬 Генерирай Сега
                   </button>
                   <button
                     type="button"
@@ -1333,7 +1336,7 @@ function AssistantPage() {
               </>
             ) : (
               <>
-                <Video className="size-4" /> 🚀 {batchCount === 0 ? "Избрани са 0 видеа" : `Генерирай Серия от ${batchCount} Видеа`}
+                <Video className="size-4" /> 🎬 {batchCount === 0 ? "Избрани са 0 видеа" : `Генерирай Серия от ${batchCount} Видеа`}
               </>
             )}
           </button>
@@ -1374,7 +1377,7 @@ function AssistantPage() {
                       explainedSchedule === "now" ? "bg-emerald-500 text-white shadow-sm" : "text-muted-foreground hover:text-foreground"
                     }`}
                   >
-                    ⚡ Генерирай Сега
+                    🎬 Генерирай Сега
                   </button>
                   <button
                     type="button"
@@ -1449,7 +1452,7 @@ function AssistantPage() {
                       carouselSchedule === "now" ? "bg-blue-500 text-white shadow-sm" : "text-muted-foreground hover:text-foreground"
                     }`}
                   >
-                    ⚡ Генерирай Сега
+                    🎬 Генерирай Сега
                   </button>
                   <button
                     type="button"
@@ -1530,7 +1533,7 @@ function AssistantPage() {
                       planSchedule === "now" ? "bg-teal-500 text-black shadow-sm" : "text-muted-foreground hover:text-foreground"
                     }`}
                   >
-                    ⚡ Генерирай Сега
+                    🎬 Генерирай Сега
                   </button>
                   <button
                     type="button"
@@ -1579,7 +1582,7 @@ function AssistantPage() {
       </div>
 
       <div className="mb-3 sm:mb-4 flex items-center gap-2 overflow-x-auto pb-1.5 max-w-full">
-        <span className="text-xs font-semibold text-muted-foreground mr-1 shrink-0">⚡ Бързи TikTok идеи:</span>
+        <span className="text-xs font-semibold text-muted-foreground mr-1 shrink-0">📌 Препоръчани TikTok теми:</span>
         <Button
           variant="outline"
           size="sm"
@@ -1739,7 +1742,7 @@ function AssistantPage() {
 
                                   <div className="p-2.5 rounded-lg bg-black/40 border border-sky-500/20">
                                     <div className="font-bold text-sky-300 flex items-center gap-1 mb-1">
-                                      <span>💡 Обяснение:</span>
+                                      <span>💎 Обяснение:</span>
                                     </div>
                                     <div className="text-white/90">{stripScholarAttribution(m.proposal.scriptWorkflow.explanation)}</div>
                                   </div>
@@ -1750,7 +1753,7 @@ function AssistantPage() {
                                         <span>
                                           {detectActionOrDuaLabel(m.proposal.scriptWorkflow.actionStep) === "Дуа"
                                             ? "🤍 Дуа:"
-                                            : "⚡ Действие:"}
+                                            : "📌 Напътствие:"}
                                         </span>
                                       </div>
                                       <div className="text-emerald-100/90 font-medium">
@@ -1859,7 +1862,7 @@ function AssistantPage() {
                           {m.proposal.tiktokTheme === "emerald"
                             ? "🌿 Ислямски Изумруд (Emerald Glow)"
                             : m.proposal.tiktokTheme === "neon"
-                            ? "🔥 Динамичен Неон (Neon Cyan)"
+                            ? "✨ Неонов Циан (Neon Cyan)"
                             : m.proposal.tiktokTheme === "classic"
                             ? "⚪ Класически Бял (Classic Crisp)"
                             : "🌟 Златно Караоке (Hormozi Gold)"}
@@ -2015,12 +2018,12 @@ function AssistantPage() {
                         <span>План с {m.proposals.length} вайръл предложения за одобрение</span>
                       </div>
                       <span className="rounded-full bg-teal-500/15 px-3 py-0.5 text-xs font-semibold text-teal-300 border border-teal-500/30">
-                        Очаква твоето одобрение
+                        Очаква Вашето одобрение
                       </span>
                     </div>
 
                     <p className="text-xs text-muted-foreground">
-                      Отбележи с чекбокс (☑️) идеите, които искаш да генерираме, и натисни бутона за групово одобрение:
+                      Отбележете с чекбокс (☑️) идеите, които желаете да генерираме, и натиснете бутона за одобрение:
                     </p>
 
                     <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
@@ -2071,7 +2074,7 @@ function AssistantPage() {
                               {prop.summaryBg && <p className="text-muted-foreground">{prop.summaryBg}</p>}
                               <div className="flex flex-wrap gap-3 text-[11px] text-amber-400/90 pt-0.5">
                                 <span>🎨 {prop.themeBg || "Кино фон"}</span>
-                                <span>⚡ Стил: {prop.tiktokTheme || "hormozi"}</span>
+                                <span>✨ Стил: {prop.tiktokTheme || "hormozi"}</span>
                               </div>
                               <div className="flex items-center gap-1.5 pt-1.5 border-t border-border/30 mt-1" onClick={(e) => e.stopPropagation()}>
                                 <button
