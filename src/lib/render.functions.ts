@@ -468,8 +468,8 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
       }
     } else {
       const isSingleWordMode = data.subtitleSlicingMode === "single";
-      const MAX_WORDS = isSingleWordMode ? 1 : 8;
-      const MIN_CLAUSE_WORDS = isSingleWordMode ? 1 : 4;
+      const MAX_WORDS = isSingleWordMode ? 1 : 25;
+      const MIN_CLAUSE_WORDS = isSingleWordMode ? 1 : 2;
 
       const cleanBulgarian = (data.bulgarian || "").replace(/<[^>]+>/g, "").trim();
       const textParts = cleanBulgarian.split(/\n\n+/);
@@ -561,36 +561,17 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         const safeLineWidth = Math.min(sz.W_SAFE, 640);
 
         // 1. Initial base font size (titles 88, regular phrases 76)
-        let phraseFs = p.isTitle ? 88 : 76;
+        let phraseFs = p.isTitle ? 88 : 72; // normal stable size
 
-        // 2. Dynamic auto-scale down if ANY single word in the phrase exceeds safeLineWidth
+        // 2. Dynamic auto-scale down ONLY if a SINGLE word exceeds safeLineWidth
         const longestWordWidth = Math.max(...p.words.map((w) => estimateTextWidth(w, phraseFs)));
         if (longestWordWidth > safeLineWidth) {
           const scale = safeLineWidth / longestWordWidth;
           phraseFs = Math.max(44, Math.floor(phraseFs * scale * 0.94));
         }
 
-        // 3. Arrange words into 2 balanced lines when words >= 2 (or single line if 1 word)
-        let linesOfWords =
-          !isSingleWordMode && p.words.length >= 2
-            ? balanceWordsIntoTwoLines(p.words, phraseFs, safeLineWidth)
-            : wrapTextToSafeWidth(p.words, phraseFs, safeLineWidth);
-
-        // 4. Verify widest line; scale down phraseFs if necessary so both lines fit cleanly
-        let maxLineWidth = Math.max(...linesOfWords.map((line) => estimateTextWidth(line, phraseFs)));
-        while (maxLineWidth > safeLineWidth && phraseFs > 44) {
-          const scale = safeLineWidth / maxLineWidth;
-          phraseFs = Math.max(44, Math.floor(phraseFs * Math.min(0.96, scale)));
-          linesOfWords =
-            !isSingleWordMode && p.words.length >= 2
-              ? balanceWordsIntoTwoLines(p.words, phraseFs, safeLineWidth)
-              : wrapTextToSafeWidth(p.words, phraseFs, safeLineWidth);
-          maxLineWidth = Math.max(...linesOfWords.map((line) => estimateTextWidth(line, phraseFs)));
-        }
-
-        if (maxLineWidth > safeLineWidth) {
-          linesOfWords = wrapTextToSafeWidth(p.words, phraseFs, safeLineWidth);
-        }
+        // 3. Arrange words naturally wrapping them to safe width, so the font stays consistent
+        let linesOfWords = wrapTextToSafeWidth(p.words, phraseFs, safeLineWidth);
 
         for (let wIdx = 0; wIdx < p.words.length; wIdx++) {
           const globalIdx = p.startIdx + wIdx;

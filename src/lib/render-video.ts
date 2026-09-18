@@ -717,8 +717,8 @@ export async function renderVideo(opts: VideoOptions): Promise<{ blob: Blob; mim
     const maxW = sz.W_SAFE;
     const verticalForText = sz.H_SAFE;
 
-    const MAX_WORDS_PER_PHRASE = 8;
-    const MIN_WORDS_PER_PHRASE = 4;
+    const MAX_WORDS_PER_PHRASE = 25;
+    const MIN_WORDS_PER_PHRASE = 2;
     type Phrase = {
       words: string[];
       startWord: number;
@@ -951,31 +951,18 @@ export async function renderVideo(opts: VideoOptions): Promise<{ blob: Blob; mim
     const phraseRender: RenderPhrase[] = phrases.map((p) => {
       const start = p.exactStart ?? wordTimes[p.startWord]?.start ?? 0;
       const end = p.exactEnd ?? wordTimes[p.endWord - 1]?.end ?? revealDuration;
-      const text = p.words.join(" ");
-      const { fontSize: initialFs } = chooseFontSize(
-        ctx,
-        text,
-        maxW,
-        availableVertical,
-        scale,
-      );
-      let fs = initialFs;
+      let fs = Math.round(72 * scale); // Stable normal font size
       ctx.font = `700 ${fs}px 'Outfit', 'Inter', sans-serif`;
-      let lines =
-        p.words.length >= 2
-          ? balanceWordsIntoTwoLinesCanvas(ctx, p.words, maxW)
-          : wrapWords(ctx, p.words, maxW);
 
+      // Scale down only if a single word is wider than maxW
       while (fs > Math.round(36 * scale)) {
-        const widestLine = Math.max(...lines.map((l) => ctx.measureText(l.join(" ")).width));
-        if (widestLine <= maxW) break;
+        const longestWordWidth = Math.max(...p.words.map((w) => ctx.measureText(w).width));
+        if (longestWordWidth <= maxW) break;
         fs -= 2;
         ctx.font = `700 ${fs}px 'Outfit', 'Inter', sans-serif`;
-        lines =
-          p.words.length >= 2
-            ? balanceWordsIntoTwoLinesCanvas(ctx, p.words, maxW)
-            : wrapWords(ctx, p.words, maxW);
       }
+      
+      const lines = wrapWords(ctx, p.words, maxW);
       const lh = Math.round(fs * 1.34);
       return { ...p, start, end, fontSize: fs, lineHeight: lh, lines };
     });

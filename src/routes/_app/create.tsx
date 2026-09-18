@@ -29,7 +29,7 @@ import { renderPhoto, blobToBase64, type RenderOptions } from "@/lib/render-phot
 import { renderVideo } from "@/lib/render-video";
 import { enqueueDownload } from "@/lib/downloads-queue";
 import { synthesizeHadithNarration } from "@/lib/tts.functions";
-import { runServerRender, startServerRenderJob, balanceWordsIntoTwoLines } from "@/lib/render.functions";
+import { runServerRender, startServerRenderJob, balanceWordsIntoTwoLines, wrapTextToSafeWidth } from "@/lib/render.functions";
 import {
   addGenerationHistoryEntry,
   checkScriptureCooldown,
@@ -2276,10 +2276,7 @@ function CreatePage() {
                                   const flushPhrase = () => {
                                     if (!cur.length) return;
                                     const pWords = cur.map((w) => w.word);
-                                    const lines =
-                                      pWords.length >= 2
-                                        ? balanceWordsIntoTwoLines(pWords, 64, 600)
-                                        : [pWords.join(" ")];
+                                    const lines = wrapTextToSafeWidth(pWords, 64, 600);
                                     phrases.push({
                                       words: cur,
                                       start: cur[0].start,
@@ -2289,8 +2286,8 @@ function CreatePage() {
                                     cur = [];
                                   };
 
-                                  const MAX_WORDS = 8;
-                                  const MIN_CLAUSE = 4;
+                                  const MAX_WORDS = 25;
+                                  const MIN_CLAUSE = 2;
                                   for (let i = 0; i < activeTimings.length; i++) {
                                     const item = activeTimings[i];
                                     if (cur.length >= MIN_CLAUSE && i > 0 && item.start - activeTimings[i - 1].end >= 0.65) {
