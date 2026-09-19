@@ -2289,15 +2289,23 @@ function CreatePage() {
                                     cur = [];
                                   };
 
-                                  const MAX_WORDS = 10;
+                                  const MAX_WORDS = 15;
                                   const MIN_CLAUSE = 2;
                                   for (let i = 0; i < activeTimings.length; i++) {
                                     const item = activeTimings[i];
+                                    const w = item.word || "";
+                                    
+                                    const pWordsTest = [...cur.map(x => x.word), w];
+                                    const testLines = wrapTextToSafeWidth(pWordsTest, 72, 600);
+                                    if (testLines.length > 2 && cur.length > 0) {
+                                      flushPhrase();
+                                    }
+
                                     if (cur.length >= MIN_CLAUSE && i > 0 && item.start - activeTimings[i - 1].end >= 0.65) {
                                       flushPhrase();
                                     }
                                     cur.push({ ...item, globalIdx: i });
-                                    const w = item.word || "";
+                                    
                                     const isSentenceEnd = /[.!?…]$/.test(w);
                                     const isClauseBreak = /[,;:—]$/.test(w) && cur.length >= MIN_CLAUSE;
                                     if ((isSentenceEnd && cur.length >= 2) || isClauseBreak || cur.length >= MAX_WORDS) {

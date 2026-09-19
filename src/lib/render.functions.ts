@@ -468,7 +468,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
       }
     } else {
       const isSingleWordMode = data.subtitleSlicingMode === "single";
-      const MAX_WORDS = isSingleWordMode ? 1 : 10;
+      const MAX_WORDS = isSingleWordMode ? 1 : 15;
       const MIN_CLAUSE_WORDS = isSingleWordMode ? 1 : 2;
 
       const cleanBulgarian = (data.bulgarian || "").replace(/<[^>]+>/g, "").trim();
@@ -496,6 +496,17 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 
       for (let i = 0; i < words.length; i++) {
         const w = words[i];
+
+        // Check if adding this word would exceed 2 lines at the target font size
+        const isTitleNext = curStart < titleWordCount;
+        const testFs = isTitleNext ? 92 : 84;
+        const testCur = [...cur, w];
+        const testLines = wrapTextToSafeWidth(testCur, testFs, Math.min(sz.W_SAFE, 640));
+
+        if (!isSingleWordMode && testLines.length > 2 && cur.length > 0) {
+          flush();
+        }
+
         if (!isSingleWordMode && cur.length >= MIN_CLAUSE_WORDS && timings[i] && timings[i - 1]) {
           const gap = timings[i].start - timings[i - 1].end;
           // Only split on audio gap if it's a major pause (>= 0.65s) and we have a full clause
@@ -503,7 +514,9 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             flush();
           }
         }
+
         cur.push(w);
+
         const endsSentence = /[.!?…]$/.test(w);
         const endsClause = /[,;:—]$/.test(w) && cur.length >= MIN_CLAUSE_WORDS;
         const isLastTitleWord = hasTitle && curStart + cur.length === titleWordCount;

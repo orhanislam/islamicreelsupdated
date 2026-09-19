@@ -767,13 +767,22 @@ export async function renderVideo(opts: VideoOptions): Promise<{ blob: Blob; mim
       };
       for (let i = 0; i < allWords.length; i++) {
         const w = allWords[i];
+        
+        const testCur = [...cur, w];
+        const testFs = Math.round(84 * scale);
+        ctx.font = `700 ${testFs}px 'Outfit', 'Inter', sans-serif`;
+        const testLines = wrapWords(ctx, testCur, maxW);
+        if (testLines.length > 2 && cur.length > 0) {
+          flush();
+        }
+
         cur.push(w);
         const endsSentence = /[.!?…]$/.test(w);
         const endsClause = /[,;:—]$/.test(w) && cur.length >= MIN_WORDS_PER_PHRASE;
         if (
           (endsSentence && cur.length >= 2) ||
           endsClause ||
-          cur.length >= MAX_WORDS_PER_PHRASE
+          cur.length >= 15
         ) {
           flush();
         }
