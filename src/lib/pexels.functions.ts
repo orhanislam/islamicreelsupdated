@@ -932,7 +932,7 @@ export async function analyzeVisualThemes(text: string, avoid: string[] = []): P
 
   try {
     const raw = await geminiChat(
-      "gemini-1.5-pro",
+      "gemini-3.1-pro",
       [
         {
           role: "system",
@@ -1428,7 +1428,7 @@ STRICT SALAFI RULES: NO humans, NO faces, NO animals, NO musical instruments, NO
 Return JSON ONLY: { "theme": string (Bulgarian), "queries": string[] }`;
 
         const raw = await geminiChat(
-          "gemini-1.5-pro",
+          "gemini-3.1-pro",
           [
             { role: "system", content: sysPrompt },
             { role: "user", content: fullText },

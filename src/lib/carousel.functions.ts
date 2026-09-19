@@ -125,7 +125,7 @@ export async function generateCarouselScriptDirect(
   // 4. Call Gemini AI
   try {
     const raw = await geminiChat(
-      "gemini-1.5-pro",
+      "gemini-3.1-pro",
       [
         { role: "system", content: systemPrompt },
         {

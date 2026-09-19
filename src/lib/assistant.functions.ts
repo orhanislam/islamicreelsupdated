@@ -595,7 +595,7 @@ CAPCUT-ПОДОБНИ ИНСТРУКЦИИ ЗА РЕДАКТИРАНЕ:
       { role: "user", content: data.prompt },
     ];
 
-    const raw = await geminiChat("gemini-1.5-pro", msgs, true, true);
+    const raw = await geminiChat("gemini-3.1-pro", msgs, true, true);
     let parsed: {
       reply?: string;
       proposal?: VideoProposal | null;
@@ -643,7 +643,7 @@ CAPCUT-ПОДОБНИ ИНСТРУКЦИИ ЗА РЕДАКТИРАНЕ:
               content: `ВНИМАНИЕ! Предложението за „${parsed.proposal.title}“ НАРУШАВА строгото 30-дневно правило за уникалност: ${cooldownCheck.reason}. Предложи НАПЪЛНО РАЗЛИЧЕН и неповторен аят или Сахих хадис, който НЕ е бил генериран през последния 1 месец! Върни валиден JSON.`,
             },
           ];
-          const retryRaw = await geminiChat("gemini-1.5-pro", retryMsgs, true, true);
+          const retryRaw = await geminiChat("gemini-3.1-pro", retryMsgs, true, true);
           let cleanRetry = retryRaw.replace(/```json\s*|\s*```/g, "").trim();
           const fBrace = cleanRetry.indexOf("{");
           const lBrace = cleanRetry.lastIndexOf("}");
@@ -821,7 +821,7 @@ SALAFI HALAL ПРИНЦИПИ (СТРИКТНО ЗАДЪЛЖИТЕЛНО):
         "Предложи 1 вирусна Ислямска тема сега според системните инструкции и върни валиден JSON.",
     },
   ];
-  const raw = await geminiChat("gemini-1.5-pro", msgs, true);
+  const raw = await geminiChat("gemini-3.1-pro", msgs, true);
   let parsed: { reply?: string; proposal?: VideoProposal | null };
   try {
     let clean = raw.replace(/```json\s*|\s*```/g, "").trim();
@@ -867,7 +867,7 @@ SALAFI HALAL ПРИНЦИПИ (СТРИКТНО ЗАДЪЛЖИТЕЛНО):
             content: `ВНИМАНИЕ! Предложението „${parsed.proposal.title}“ НАРУШАВА 30-дневното правило за уникалност: ${cooldownCheck.reason}. Предложи ДРУГ Сахих Хадис или Аят, който НЕ е в забранения списък! Върни валиден JSON.`,
           },
         ];
-        const retryRaw = await geminiChat("gemini-1.5-pro", retryMsgs, true);
+        const retryRaw = await geminiChat("gemini-3.1-pro", retryMsgs, true);
         let cleanRetry = retryRaw.replace(/```json\s*|\s*```/g, "").trim();
         const fBrace = cleanRetry.indexOf("{");
         const lBrace = cleanRetry.lastIndexOf("}");
@@ -1160,7 +1160,7 @@ ${userTopic}${preGroundingPrompt ? `\n\n${preGroundingPrompt}` : ""}
       { role: "user", content: userPromptText },
     ];
 
-    const raw = await geminiChat("gemini-1.5-pro", msgs, true);
+    const raw = await geminiChat("gemini-3.1-pro", msgs, true);
     let parsed: { reply?: string; proposal?: VideoProposal | null };
     try {
       let clean = raw.replace(/```json\s*|\s*```/g, "").trim();
@@ -1219,7 +1219,7 @@ ${userTopic}${preGroundingPrompt ? `\n\n${preGroundingPrompt}` : ""}
               content: `ВНИМАНИЕ! Предложението за „${parsed.proposal.title}“ НАРУШАВА 30-дневното правило за уникалност: ${cooldownCheck.reason}. Предложи ДРУГ Сахих Хадис или Аят за видео с обяснение, който НЕ е в забранения списък! Върни валиден JSON.`,
             },
           ];
-          const retryRaw = await geminiChat("gemini-1.5-pro", retryMsgs, true);
+          const retryRaw = await geminiChat("gemini-3.1-pro", retryMsgs, true);
           let cleanRetry = retryRaw.replace(/```json\s*|\s*```/g, "").trim();
           const fBrace = cleanRetry.indexOf("{");
           const lBrace = cleanRetry.lastIndexOf("}");
@@ -1360,7 +1360,7 @@ ${historyContext}${oneMonthExclusionContext}
       },
     ];
 
-    const raw = await geminiChat("gemini-1.5-pro", msgs, true);
+    const raw = await geminiChat("gemini-3.1-pro", msgs, true);
     let parsed: { reply?: string; proposal?: VideoProposal | null };
     try {
       let clean = raw.replace(/```json\s*|\s*```/g, "").trim();
@@ -1415,7 +1415,7 @@ ${historyContext}${oneMonthExclusionContext}
               content: `ВНИМАНИЕ! Алтернативното предложение „${parsed.proposal.title}“ НАРУШАВА 30-дневното правило за уникалност: ${cooldownCheck.reason}. Предложи ДРУГ Сахих Хадис или Аят, който НЕ е в забранения списък! Върни валиден JSON.`,
             },
           ];
-          const retryRaw = await geminiChat("gemini-1.5-pro", retryMsgs, true);
+          const retryRaw = await geminiChat("gemini-3.1-pro", retryMsgs, true);
           let cleanRetry = retryRaw.replace(/```json\s*|\s*```/g, "").trim();
           const fBrace = cleanRetry.indexOf("{");
           const lBrace = cleanRetry.lastIndexOf("}");
@@ -1578,7 +1578,7 @@ ${getVerifiedHadithCatalogPrompt()}
         },
       ];
 
-      const raw = await geminiChat("gemini-1.5-pro", msgs, true);
+      const raw = await geminiChat("gemini-3.1-pro", msgs, true);
       let parsed: { reply?: string; proposals?: VideoProposal[] | null };
       try {
         let clean = raw.replace(/```json\s*|\s*```/g, "").trim();
@@ -2665,7 +2665,7 @@ if (typeof process !== "undefined" && typeof window === "undefined") {
             const prompt =
               "Ти си AI TikTok продуцент. Направи бързо търсене в интернет и ми кажи: какви ислямски теми за таухид, мотивация или трудности задържат най-много вниманието на зрителите в TikTok в момента? Анализирай какво се търси и какво се гледа най-много. Избери САМО една тема, която е най-вирална. Върни само името на темата в 3 до 5 думи, без обяснения.";
             const res = await geminiChat(
-              "gemini-1.5-pro",
+              "gemini-3.1-pro",
               [{ role: "user", content: prompt }],
               false,
               true,

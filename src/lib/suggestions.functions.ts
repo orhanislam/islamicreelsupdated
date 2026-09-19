@@ -22,7 +22,7 @@ export const suggestViral = createServerFn({ method: "POST" })
 
     const constraint = data.kind === "ayah" ? "Само аяти." : data.kind === "hadith" ? "Само сахих хадиси." : "Аяти или сахих хадиси.";
     const raw = await geminiChat(
-      "gemini-1.5-pro",
+      "gemini-3.1-pro",
       [
         { role: "system", content: `${SYS}${exclusionPrompt}` },
         { role: "user", content: `Тема/настроение: ${data.theme}\n${constraint}` },

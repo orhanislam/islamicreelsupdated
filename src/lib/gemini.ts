@@ -89,13 +89,13 @@ export async function geminiChat(
     });
   };
 
-  // Prioritize gemini-1.5-pro first
+  // Prioritize gemini-3.1-pro first
   const validModels = [
-    "gemini-1.5-pro",
+    "gemini-3.1-pro",
     "gemini-3.5-flash-lite",
     "gemini-omni-flash-preview"
   ];
-  const targetModel = model || "gemini-1.5-pro";
+  const targetModel = model || "gemini-3.1-pro";
   const uniqueModels = Array.from(new Set([targetModel, ...validModels]));
   let lastErrorMsg = "";
 
@@ -115,9 +115,9 @@ export async function geminiChat(
     }
   }
 
-  // Pass 2: Wait 2 seconds and retry gemini-1.5-pro
+  // Pass 2: Wait 2 seconds and retry gemini-3.1-pro
   await new Promise((r) => setTimeout(r, 2000));
-  const retryRes = await fetchWithModel("gemini-1.5-pro", apiKeys[apiKeys.length - 1]).catch(() => null);
+  const retryRes = await fetchWithModel("gemini-3.1-pro", apiKeys[apiKeys.length - 1]).catch(() => null);
   if (retryRes && retryRes.ok) {
     const json = await retryRes.json();
     const content = (json.candidates?.[0]?.content?.parts?.[0]?.text ?? "").trim();
@@ -159,7 +159,7 @@ export async function geminiImageAnalysis(
   for (const apiKey of apiKeys) {
     try {
       const body = { contents, generationConfig: { temperature: 0.1 } };
-      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent?key=${apiKey}`, {
+      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-pro:generateContent?key=${apiKey}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
@@ -266,7 +266,7 @@ ${ayahBounds.map(a => `
 `;
 
   try {
-    const rawResponse = await geminiChat("gemini-1.5-pro", [
+    const rawResponse = await geminiChat("gemini-3.1-pro", [
       { role: "user", content: promptText }
     ], false);
     
