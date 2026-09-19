@@ -227,15 +227,13 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
   }
 
   if (data.bulgarian) {
-    data.bulgarian = normalizeBulgarianNumbersForTts(
-      data.bulgarian
-        .replace(/<[^>]+>/g, "")
-        .replace(/\[(?:коран|сура|хадис|бухари|муслим|тирмизи|навауи)[^\]]*\]/gi, "")
-        .replace(/[\[\]]/g, "")
-        .replace(/\.{2,}/g, "")
-        .replace(/…+/g, "")
-        .trim()
-    );
+    data.bulgarian = (data.bulgarian || "")
+      .replace(/<[^>]+>/g, "")
+      .replace(/\[(?:коран|сура|хадис|бухари|муслим|тирмизи|навауи)[^\]]*\]/gi, "")
+      .replace(/[\[\]]/g, "")
+      .replace(/\.{2,}/g, "")
+      .replace(/…+/g, "")
+      .trim();
     let words = data.bulgarian.split(/\s+/).filter(Boolean);
     let timings = data.bulgarianWordTimings;
     if (timings && timings.length > 0) {

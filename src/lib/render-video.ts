@@ -705,14 +705,12 @@ export async function renderVideo(opts: VideoOptions): Promise<{ blob: Blob; mim
     // Split the Bulgarian text into subtitle-style PHRASES (one chunk shown
     // at a time, like real subtitles). Phrases break on punctuation, with a
     // soft cap on words per phrase so nothing overflows the safe area.
-    const cleanBulgarianText = normalizeBulgarianNumbersForTts(
-      (opts.bulgarian || "")
-        .replace(/<break[^>]*\/>/gi, " ")
-        .replace(/<[^>]+>/g, " ")
-        .replace(/\.{2,}/g, " ")
-        .replace(/…+/g, " ")
-        .trim()
-    );
+    const cleanBulgarianText = (opts.bulgarian || "")
+      .replace(/<break[^>]*\/>/gi, " ")
+      .replace(/<[^>]+>/g, " ")
+      .replace(/\.{2,}/g, " ")
+      .replace(/…+/g, " ")
+      .trim();
     const allWords = cleanBulgarianText.split(/\s+/).filter(Boolean);
     const maxW = sz.W_SAFE;
     const verticalForText = sz.H_SAFE;

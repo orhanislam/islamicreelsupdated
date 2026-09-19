@@ -270,19 +270,11 @@ export function normalizeBulgarianNumbersForTts(text: string): string {
     }
   );
 
-  // 9. Standalone integers (with grammatical gender agreement for the following noun)
-  res = res.replace(
-    /(?<=^|[^\p{L}\p{N}])(\d+)(?=[^\p{L}\p{N}]|$)/gu,
-    (match, numStr, offset, fullStr) => {
-      const val = parseInt(numStr, 10);
-      if (isNaN(val)) return match;
-      const rest = fullStr.slice(offset + match.length).trim();
-      const nextWordMatch = rest.match(/^([^\s.,!?:;—–\-]+)/);
-      const nextWord = nextWordMatch ? nextWordMatch[1] : "";
-      const gender = inferGender(nextWord);
-      return integerToBulgarianWords(val, gender);
-    }
-  );
+  // 9. Standalone integers (Disabled to preserve digits for 1:1 TTS timing sync)
+  // res = res.replace(
+  //   /(?<=^|[^\p{L}\p{N}])(\d+)(?=[^\p{L}\p{N}]|$)/gu,
+  //   ...
+  // );
 
   return res;
 }

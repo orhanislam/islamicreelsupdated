@@ -169,10 +169,7 @@ export function normalizeIslamicArabicPhoneticsForTts(text: string): string {
     .replace(/(?:\(\s*(?:р\.а\.|ra|ра)\s*\)|(?<=^|[^\p{L}\p{N}])(?:р\.а\.)(?=[^\p{L}\p{N}]|$))/gui, " Радийаллааху 'анху ")
     .replace(/(?<=^|[^\p{L}\p{N}])(?:radiyallahu\s+anhu|радияллаху\s+анху)(?=[^\p{L}\p{N}]|$)/gui, " Радийаллааху 'анху ");
 
-  // 1.5. Bulgarian Number Normalization for TTS
-  // Articulates numbers into standard Bulgarian words (e.g. 5 -> пет, 50 -> петдесет, 500 -> петстотин, 5000 -> пет хиляди, 5368 -> пет хиляди триста шестдесет и осем)
-  res = normalizeBulgarianNumbersForTts(res);
-
+  // Disabled: We let the TTS engine natively read digits to keep subtitle timings 1:1 with digits.
   // 1.6. Authentic Arabic Quran Surah Names & Islamic Terminologies Normalization
   // Ensures all 114 Quran Surah names (e.g. Ал-Фатиха, Ал-Бакара, Ал-Ихляс, Аш-Шарх, Ал-Мулк, Ар-Рахман)
   // and Islamic concepts/phrases are pronounced with authentic Arabic tajweed/salafi diction

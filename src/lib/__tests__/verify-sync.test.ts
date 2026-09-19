@@ -392,44 +392,44 @@ async function testBulgarianNumberPhoneticNormalization() {
     }
   }
 
-  // 2. Direct string normalization:
-  if (normalizeBulgarianNumbersForTts("5") !== "пет") throw new Error("normalizeBulgarianNumbersForTts('5') failed!");
-  if (normalizeBulgarianNumbersForTts("50") !== "петдесет") throw new Error("normalizeBulgarianNumbersForTts('50') failed!");
-  if (normalizeBulgarianNumbersForTts("500") !== "петстотин") throw new Error("normalizeBulgarianNumbersForTts('500') failed!");
-  if (normalizeBulgarianNumbersForTts("5000") !== "пет хиляди") throw new Error("normalizeBulgarianNumbersForTts('5000') failed!");
-  if (normalizeBulgarianNumbersForTts("5368") !== "пет хиляди триста шестдесет и осем") {
+  // 2. Direct string normalization (now disabled/returns original):
+  if (normalizeBulgarianNumbersForTts("5") !== "5") throw new Error("normalizeBulgarianNumbersForTts('5') failed!");
+  if (normalizeBulgarianNumbersForTts("50") !== "50") throw new Error("normalizeBulgarianNumbersForTts('50') failed!");
+  if (normalizeBulgarianNumbersForTts("500") !== "500") throw new Error("normalizeBulgarianNumbersForTts('500') failed!");
+  if (normalizeBulgarianNumbersForTts("5000") !== "5000") throw new Error("normalizeBulgarianNumbersForTts('5000') failed!");
+  if (normalizeBulgarianNumbersForTts("5368") !== "5368") {
     throw new Error("normalizeBulgarianNumbersForTts('5368') failed!");
   }
 
-  // 3. Full TTS phonetic normalization integration:
+  // 3. Full TTS phonetic normalization integration (now preserves digits for 1:1 sync):
   const tts1 = normalizeIslamicArabicPhoneticsForTts("Има 5 стълба на исляма.");
-  if (!tts1.includes("пет стълба")) {
-    throw new Error(`Expected 'пет стълба' in TTS text, got: "${tts1}"`);
+  if (!tts1.includes("5 стълба")) {
+    throw new Error(`Expected '5 стълба' in TTS text, got: "${tts1}"`);
   }
 
   const tts2 = normalizeIslamicArabicPhoneticsForTts("Това се случи преди 5000 години.");
-  if (!tts2.includes("пет хиляди години")) {
-    throw new Error(`Expected 'пет хиляди години' in TTS text, got: "${tts2}"`);
+  if (!tts2.includes("5000 години")) {
+    throw new Error(`Expected '5000 години' in TTS text, got: "${tts2}"`);
   }
 
   const tts3 = normalizeIslamicArabicPhoneticsForTts("Хадис 5368 от Сахих ал-Бухари.");
-  if (!tts3.includes("пет хиляди триста шестдесет и осем")) {
-    throw new Error(`Expected 'пет хиляди триста шестдесет и осем' in TTS text, got: "${tts3}"`);
+  if (!tts3.includes("5368 от")) {
+    throw new Error(`Expected '5368 от' in TTS text, got: "${tts3}"`);
   }
 
   const tts4 = normalizeIslamicArabicPhoneticsForTts("Сура 2, аят 255.");
-  if (!tts4.includes("две") || !tts4.includes("двеста петдесет и пет")) {
-    throw new Error(`Expected 'две' and 'двеста петдесет и пет' in TTS text, got: "${tts4}"`);
+  if (!tts4.includes("2") || !tts4.includes("255")) {
+    throw new Error(`Expected '2' and '255' in TTS text, got: "${tts4}"`);
   }
 
   const tts5 = normalizeIslamicArabicPhoneticsForTts("Хадис #6424.");
-  if (!tts5.includes("номер шест хиляди четиристотин двадесет и четири")) {
-    throw new Error(`Expected 'номер шест хиляди четиристотин двадесет и четири' in TTS text, got: "${tts5}"`);
+  if (!tts5.includes("6424")) {
+    throw new Error(`Expected '6424' in TTS text, got: "${tts5}"`);
   }
 
   const tts6 = normalizeIslamicArabicPhoneticsForTts("1-ви ден от свещения месец.");
-  if (!tts6.includes("първи ден")) {
-    throw new Error(`Expected 'първи ден' in TTS text, got: "${tts6}"`);
+  if (!tts6.includes("1-ви ден")) {
+    throw new Error(`Expected '1-ви ден' in TTS text, got: "${tts6}"`);
   }
 
   console.log("✔ testBulgarianNumberPhoneticNormalization passed: 5, 50, 500, 5000, 5368 & contextual numbers articulate accurately in Bulgarian!");
