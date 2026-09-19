@@ -717,7 +717,7 @@ export async function renderVideo(opts: VideoOptions): Promise<{ blob: Blob; mim
     const maxW = sz.W_SAFE;
     const verticalForText = sz.H_SAFE;
 
-    const MAX_WORDS_PER_PHRASE = 25;
+    const MAX_WORDS_PER_PHRASE = 10;
     const MIN_WORDS_PER_PHRASE = 2;
     type Phrase = {
       words: string[];
@@ -951,7 +951,7 @@ export async function renderVideo(opts: VideoOptions): Promise<{ blob: Blob; mim
     const phraseRender: RenderPhrase[] = phrases.map((p) => {
       const start = p.exactStart ?? wordTimes[p.startWord]?.start ?? 0;
       const end = p.exactEnd ?? wordTimes[p.endWord - 1]?.end ?? revealDuration;
-      let fs = Math.round(72 * scale); // Stable normal font size
+      let fs = Math.round(84 * scale); // Increased normal font size
       ctx.font = `700 ${fs}px 'Outfit', 'Inter', sans-serif`;
 
       // Scale down only if a single word is wider than maxW
@@ -962,7 +962,10 @@ export async function renderVideo(opts: VideoOptions): Promise<{ blob: Blob; mim
         ctx.font = `700 ${fs}px 'Outfit', 'Inter', sans-serif`;
       }
       
-      const lines = wrapWords(ctx, p.words, maxW);
+      const lines =
+        p.words.length >= 2
+          ? balanceWordsIntoTwoLinesCanvas(ctx, p.words, maxW)
+          : wrapWords(ctx, p.words, maxW);
       const lh = Math.round(fs * 1.34);
       return { ...p, start, end, fontSize: fs, lineHeight: lh, lines };
     });

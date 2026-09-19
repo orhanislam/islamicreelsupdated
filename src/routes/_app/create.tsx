@@ -2276,7 +2276,10 @@ function CreatePage() {
                                   const flushPhrase = () => {
                                     if (!cur.length) return;
                                     const pWords = cur.map((w) => w.word);
-                                    const lines = wrapTextToSafeWidth(pWords, 64, 600);
+                                    const lines =
+                                      pWords.length >= 2
+                                        ? balanceWordsIntoTwoLines(pWords, 72, 600)
+                                        : wrapTextToSafeWidth(pWords, 72, 600);
                                     phrases.push({
                                       words: cur,
                                       start: cur[0].start,
@@ -2286,7 +2289,7 @@ function CreatePage() {
                                     cur = [];
                                   };
 
-                                  const MAX_WORDS = 25;
+                                  const MAX_WORDS = 10;
                                   const MIN_CLAUSE = 2;
                                   for (let i = 0; i < activeTimings.length; i++) {
                                     const item = activeTimings[i];

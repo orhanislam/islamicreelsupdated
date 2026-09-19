@@ -468,7 +468,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
       }
     } else {
       const isSingleWordMode = data.subtitleSlicingMode === "single";
-      const MAX_WORDS = isSingleWordMode ? 1 : 25;
+      const MAX_WORDS = isSingleWordMode ? 1 : 10;
       const MIN_CLAUSE_WORDS = isSingleWordMode ? 1 : 2;
 
       const cleanBulgarian = (data.bulgarian || "").replace(/<[^>]+>/g, "").trim();
@@ -560,8 +560,8 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         const posTag = `\\an${placement.alignment}\\pos(${placement.posX},${placement.posY})`;
         const safeLineWidth = Math.min(sz.W_SAFE, 640);
 
-        // 1. Initial base font size (titles 88, regular phrases 76)
-        let phraseFs = p.isTitle ? 88 : 72; // normal stable size
+        // 1. Initial base font size (titles 88, regular phrases 84)
+        let phraseFs = p.isTitle ? 92 : 84; // increased stable size
 
         // 2. Dynamic auto-scale down ONLY if a SINGLE word exceeds safeLineWidth
         const longestWordWidth = Math.max(...p.words.map((w) => estimateTextWidth(w, phraseFs)));
@@ -570,8 +570,11 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
           phraseFs = Math.max(44, Math.floor(phraseFs * scale * 0.94));
         }
 
-        // 3. Arrange words naturally wrapping them to safe width, so the font stays consistent
-        let linesOfWords = wrapTextToSafeWidth(p.words, phraseFs, safeLineWidth);
+        // 3. Arrange words into exactly 2 lines
+        let linesOfWords =
+          !isSingleWordMode && p.words.length >= 2
+            ? balanceWordsIntoTwoLines(p.words, phraseFs, safeLineWidth)
+            : wrapTextToSafeWidth(p.words, phraseFs, safeLineWidth);
 
         for (let wIdx = 0; wIdx < p.words.length; wIdx++) {
           const globalIdx = p.startIdx + wIdx;
