@@ -22,6 +22,7 @@ import {
 import {
   fetchAuthenticTafsirDirect,
   getVerifiedHadithSharhDirect,
+  getAllVerifiedHadithSharhs,
   formatTafsirGroundingPrompt,
   detectScriptureFromText,
   enrichProposalWithAuthenticTafsir,
@@ -692,6 +693,16 @@ CAPCUT-ПОДОБНИ ИНСТРУКЦИИ ЗА РЕДАКТИРАНЕ:
     if (parsed.proposal) proposalsToRecord.push(parsed.proposal);
     if (Array.isArray(parsed.proposals)) proposalsToRecord.push(...parsed.proposals);
     for (const p of proposalsToRecord) {
+      if (p && p.surah && p.ayah && (p.type === "explained_video" || p.scriptWorkflow)) {
+        const freshBg = await preFetchQuranDalilBg(
+          Number(p.surah),
+          Number(p.ayah),
+          Number(p.count) || 1,
+        );
+        if (freshBg && p.scriptWorkflow) {
+          p.scriptWorkflow.dalilText = freshBg;
+        }
+      }
       await enrichProposalWithAuthenticTafsir(p);
     }
     await injectAuthenticCarouselText(proposalsToRecord);
@@ -899,169 +910,302 @@ SALAFI HALAL ПРИНЦИПИ (СТРИКТНО ЗАДЪЛЖИТЕЛНО):
   };
 });
 
-export async function generateExplainedVideoProposalDirect(data?: { topic?: string }): Promise<{
+async function preFetchQuranDalilBg(surah: number, ayah: number, count = 1): Promise<string> {
+  try {
+    const ayahEnd = ayah + Math.max(1, count) - 1;
+    const q = await fetchAyah({ data: { surah, ayah, ayahEnd } });
+    const ref = `Сура ${q.surahName} (${surah}:${ayah}${count > 1 ? `-${ayahEnd}` : ""})`;
+    const t = await translateToBulgarian({
+      data: {
+        english: q.english,
+        sourceRef: ref,
+        arabic: q.arabic,
+        ayahBounds: q.ayahBounds,
+      },
+    });
+    const clean = t.bulgarian.replace(/(^|\n)\s*(?:\(\d+\)|\[\d+\]|\d+\.)\s*/g, "$1").trim();
+    return sanitizeTheologicalRespect(enrichUnfamiliarQuranicTerms(clean));
+  } catch (err) {
+    console.warn(`[preFetchQuranDalilBg] Failed for ${surah}:${ayah}:`, err);
+    return "";
+  }
+}
+
+export async function generateExplainedVideoProposalDirect(data?: {
+  topic?: string;
+  sourcePreference?: "auto" | "quran" | "hadith";
+}): Promise<{
   reply: string;
   proposal: VideoProposal | null;
 }> {
   const memory = await readAiMemory();
-    const exclusionData = await getExcludedScripturesOneMonth();
-    const historyList = (memory.usageHistory || []).map((x) => `- ${x.identifier}`).join("\n");
-    const historyContext = historyList
-      ? `\n\nСКОРОШНО ИЗПОЛЗВАНИ ТЕМИ (СТРИКТНО ЗАБРАНЕНО Е ДА ГИ ПРЕДЛАГАШ ОТНОВО):\n${historyList}`
-      : "";
-    const oneMonthExclusionContext = exclusionData.formattedExclusionPrompt
-      ? `\n\n${exclusionData.formattedExclusionPrompt}`
-      : "";
+  const exclusionData = await getExcludedScripturesOneMonth();
+  const historyList = (memory.usageHistory || []).map((x) => `- ${x.identifier}`).join("\n");
+  const historyContext = historyList
+    ? `\n\nСКОРОШНО ИЗПОЛЗВАНИ ТЕМИ (СТРИКТНО ЗАБРАНЕНО Е ДА ГИ ПРЕДЛАГАШ ОТНОВО):\n${historyList}`
+    : "";
+  const oneMonthExclusionContext = exclusionData.formattedExclusionPrompt
+    ? `\n\n${exclusionData.formattedExclusionPrompt}`
+    : "";
 
-    const userTopic = data?.topic ? `Тема по желание на потребителя: "${data.topic}"` : "";
+  const sourcePref = data?.sourcePreference || "auto";
+  const rawTopic = (data?.topic || "").trim();
+  const userTopic = rawTopic ? `Тема по желание на потребителя: "${rawTopic}"` : "";
 
-    let preGroundingPrompt = "";
-    let chosenCandidateInfo: {
-      type: "quran" | "hadith";
-      title: string;
-      surah?: number;
-      ayah?: number;
-      collection?: string;
-      number?: number;
-    } | null = null;
+  let preGroundingPrompt = "";
+  let preFetchedDalilBg = "";
+  let chosenCandidateInfo: {
+    type: "quran" | "hadith";
+    title: string;
+    surah?: number;
+    ayah?: number;
+    collection?: string;
+    number?: number;
+  } | null = null;
 
-    const detected = detectScriptureFromText(data?.topic || "");
-    if (detected.type === "quran" && detected.surah && detected.ayah) {
-      const tafsir = await fetchAuthenticTafsirDirect({
+  const detected = detectScriptureFromText(rawTopic);
+  if (detected.type === "quran" && detected.surah && detected.ayah) {
+    const [tafsir, dalilBg] = await Promise.all([
+      fetchAuthenticTafsirDirect({
         surah: detected.surah,
         ayah: detected.ayah,
         scholarId: 91,
-      });
+      }),
+      preFetchQuranDalilBg(detected.surah, detected.ayah, 1),
+    ]);
+    preFetchedDalilBg = dalilBg;
+    if (tafsir) {
+      preGroundingPrompt = formatTafsirGroundingPrompt({ tafsir, ayahTextBg: dalilBg || undefined });
+    }
+    chosenCandidateInfo = {
+      type: "quran",
+      title: `Сура ${detected.surah}:${detected.ayah}`,
+      surah: detected.surah,
+      ayah: detected.ayah,
+    };
+  } else if (detected.type === "hadith" && detected.collection && detected.number) {
+    const sharh = getVerifiedHadithSharhDirect({
+      collection: detected.collection,
+      number: detected.number,
+    });
+    if (sharh?.hadithTextBg) {
+      preFetchedDalilBg = sharh.hadithTextBg;
+    }
+    if (sharh) {
+      preGroundingPrompt = formatTafsirGroundingPrompt({ hadithSharh: sharh });
+    }
+    chosenCandidateInfo = {
+      type: "hadith",
+      title: `${detected.collection} #${detected.number}`,
+      collection: detected.collection,
+      number: Number(detected.number),
+    };
+  } else {
+    // Extensive verified pools of authentic Quran verses (60+ high-retention verses) and all verified Sahih hadiths
+    const candidateVerses = [
+      // Тревожност, тъга и покой на сърцето (Сакина и Зикр)
+      { surah: 13, ayah: 28, title: "Коран 13:28 (Покоят на сърцата при споменаването на Аллах)", keywords: "покой тревожност сърце зикр спокойствие стрес тъга" },
+      { surah: 94, ayah: 5, title: "Коран 94:5 (С всяка трудност има облекчение)", keywords: "трудност облекчение изпитание тревожност тежест" },
+      { surah: 3, ayah: 139, title: "Коран 3:139 (Не унивайте и не тъгувайте)", keywords: "тъга униние слабост кураж вяра покой" },
+      { surah: 9, ayah: 40, title: "Коран 9:40 (Не тъгувай, Аллах е с нас)", keywords: "тъга страх самота закрила покой" },
+      { surah: 20, ayah: 25, title: "Коран 20:25-26 (Дуата на Муса за разширяване на гърдите и лекота)", keywords: "дуа тежест гърди тревожност лекота" },
+      { surah: 15, ayah: 97, title: "Коран 15:97-99 (Лекарството, когато сърцето се свива от думите на хората)", keywords: "хора обиди болка сърце тъга покой" },
+      { surah: 48, ayah: 4, title: "Коран 48:4 (Той е, Който низпосла спокойствието Сакина в сърцата)", keywords: "сакина покой сърце иман тревожност" },
+      { surah: 10, ayah: 62, title: "Коран 10:62 (За приближените на Аллах няма страх и не ще скърбят)", keywords: "страх скръб тъга таква покой" },
+      { surah: 89, ayah: 27, title: "Коран 89:27-30 (О, успокоена душо, върни се при своя Господар)", keywords: "душа покой смърт ахирет дженнет" },
+
+      // Изпитания, Сабр (Търпение) и Скрита Божествена Мъдрост
+      { surah: 2, ayah: 153, title: "Коран 2:153 (Търсете помощ чрез търпение и молитва)", keywords: "сабр търпение намаз молитва изпитание помощ" },
+      { surah: 2, ayah: 155, title: "Коран 2:155 (Изпитанията със страх и загуба и благата вест за търпеливите)", keywords: "сабр изпитание загуба страх търпение" },
+      { surah: 2, ayah: 214, title: "Коран 2:214 (Кога ще дойде помощта на Аллах? Наистина тя е близо)", keywords: "помощ изпитание трудност надежда сабр" },
+      { surah: 2, ayah: 216, title: "Коран 2:216 (Може да мразите нещо, а то да е добро за вас)", keywords: "мъдрост съдба кадар изпитание добро" },
+      { surah: 2, ayah: 286, title: "Коран 2:286 (Аллах не възлага на никоя душа товар по-голям от силите й)", keywords: "товар сили изпитание тежест милост" },
+      { surah: 29, ayah: 2, title: "Коран 29:2 (Нима хората мислят, че ще бъдат оставени без да бъдат изпитани)", keywords: "изпитание иман сабр проверка" },
+      { surah: 29, ayah: 69, title: "Коран 29:69 (Които се борят по Нашия път, ще ги насочим по Нашите пътища)", keywords: "път борба напътствие сабр" },
+      { surah: 39, ayah: 10, title: "Коран 39:10 (На търпеливите се въздава наградата им без сметка)", keywords: "сабр търпение награда изпитание" },
+
+      // Забавена Дуа и Близостта на Аллах Всевишния
+      { surah: 2, ayah: 186, title: "Коран 2:186 (Аз съм наблизо и откликвам на зова на молещия се)", keywords: "дуа молитва близост отговор молба" },
+      { surah: 40, ayah: 60, title: "Коран 40:60 (Зовете Ме с дуа и Аз ще ви откликна)", keywords: "дуа молба отговор ибадет" },
+      { surah: 21, ayah: 87, title: "Коран 21:87 (Зовът на пророка Юнус в мрака — Ля иляха илля Анта)", keywords: "дуа юнус мрак беда спасение таухид" },
+      { surah: 21, ayah: 83, title: "Коран 21:83-84 (Молитвата на пророка Аюб при тежко страдание)", keywords: "дуа болест страдание сабр милост" },
+      { surah: 27, ayah: 62, title: "Коран 27:62 (Кой откликва на изпадналия в беда, когато Го призове)", keywords: "дуа беда помощ таухид спасение" },
+      { surah: 19, ayah: 4, title: "Коран 19:4 (Никога не съм бил нещастен в дуата си към Теб, Господи)", keywords: "дуа надежда закария милост" },
+      { surah: 50, ayah: 16, title: "Коран 50:16 (Ние знаем какво му нашепва душата му)", keywords: "душа мисли близост шепот знание" },
+
+      // Ризк (Препитание), Благодарност и Изход от безизходица
+      { surah: 65, ayah: 2, title: "Коран 65:2-3 (На който се бои от Аллах, Той му дава изход и препитание)", keywords: "ризк препитание таква изход пари бедност" },
+      { surah: 14, ayah: 7, title: "Коран 14:7 (Ако сте благодарни, непременно ще ви надбавя)", keywords: "благодарност шукр ризк изобилие блага" },
+      { surah: 11, ayah: 6, title: "Коран 11:6 (Няма живо същество на земята, чието препитание да не е от Аллах)", keywords: "ризк препитание страх бъдеще" },
+      { surah: 51, ayah: 58, title: "Коран 51:58 (Аллах е Даряващият препитание, Владетелят на силата)", keywords: "ризк препитание таухид сила" },
+      { surah: 55, ayah: 13, title: "Коран 55:13 (И кое от благата на своя Господар ще отречете)", keywords: "блага благодарност милост шукр" },
+      { surah: 93, ayah: 5, title: "Коран 93:5 (Твоят Господар ще ти дари и ти ще бъдеш доволен)", keywords: "надежда тъга милост дарове покой" },
+      { surah: 2, ayah: 152, title: "Коран 2:152 (Помнете Ме, за да ви помня и Аз, и бъдете Ми благодарни)", keywords: "зикр благодарност памет покой" },
+
+      // Покаяние (Тауба), Прошка и Надежда след грях
+      { surah: 39, ayah: 53, title: "Коран 39:53 (Не губете надежда за милостта на Аллах — Той прощава всички грехове)", keywords: "покаяние тауба грях прошка милост надежда" },
+      { surah: 25, ayah: 70, title: "Коран 25:70 (На които се покаят, Аллах заменя лошите им дела с добри)", keywords: "покаяние тауба грях прошка добрини" },
+      { surah: 66, ayah: 8, title: "Коран 66:8 (Покайте се пред Аллах с искрено покаяние — Тауба Насуха)", keywords: "покаяние тауба прошка дженнет" },
+      { surah: 4, ayah: 110, title: "Коран 4:110 (Който извърши зло и после моли Аллах за прошка, ще Го намери Опрощаващ)", keywords: "прошка истигфар грях покаяние" },
+      { surah: 11, ayah: 114, title: "Коран 11:114 (Наистина добрите дела заличават лошите)", keywords: "намаз добрини грях покаяние" },
+      { surah: 71, ayah: 10, title: "Коран 71:10-12 (Молете своя Господар за прошка — истигфарът носи берекет и ризк)", keywords: "истигфар прошка ризк берекет покаяние" },
+
+      // Тауаккул (Упование) и Свобода от страха
+      { surah: 3, ayah: 173, title: "Коран 3:173 (Аллах ни е достатъчен и Той е най-прекрасният Покровител)", keywords: "тауаккул упование страх хора закрила" },
+      { surah: 8, ayah: 30, title: "Коран 8:30 (Аллах е най-добрият в Своите планове)", keywords: "тауаккул план съдба упование" },
+      { surah: 9, ayah: 51, title: "Коран 9:51 (Нищо няма да ни сполети освен предписаното от Аллах за нас)", keywords: "кадар съдба тауаккул упование страх" },
+      { surah: 3, ayah: 160, title: "Коран 3:160 (Ако Аллах ви помогне, никой не ще ви надвие)", keywords: "тауаккул помощ сила упование" },
+      { surah: 26, ayah: 62, title: "Коран 26:62 (С мен е моят Господар, Той ще ме напъти)", keywords: "тауаккул упование безизходица надежда" },
+
+      // Преходност на Дуня, Ахирет и Смисълът на Живота
+      { surah: 103, ayah: 1, title: "Коран 103:1-3 (Кълна се във Времето — спасението чрез вяра, дела и търпение)", keywords: "време дуня ахирет спасение сабр" },
+      { surah: 57, ayah: 20, title: "Коран 57:20 (Земният живот е само наслада на заблудата)", keywords: "дуня ахирет преходност живот" },
+      { surah: 3, ayah: 185, title: "Коран 3:185 (Всяка душа ще вкуси смъртта и в Съдния ден ще получите наградата си)", keywords: "смърт ахирет дуня съдния ден" },
+      { surah: 67, ayah: 2, title: "Коран 67:2 (Който сътвори смъртта и живота, за да ви изпита кой е по-добър в делата)", keywords: "живот смърт изпитание дела ихлас" },
+      { surah: 79, ayah: 40, title: "Коран 79:40-41 (Който се е страхувал да застане пред своя Господар и е възпрял душата си)", keywords: "таква страх страсти дженнет ахирет" },
+      { surah: 99, ayah: 7, title: "Коран 99:7-8 (Който извърши добро колкото прашинка, ще го види)", keywords: "ахирет дела справедливост съдния ден" },
+
+      // Чистият Таухид и Величието на Единствения Творец
+      { surah: 2, ayah: 255, title: "Коран 2:255 (Аят ал-Курси — Абсолютното Величие и Власт на Аллах)", keywords: "таухид величие закрила курси" },
+      { surah: 112, ayah: 1, title: "Коран 112:1-4 (Сура Ал-Ихлас — Чистият Таухид)", keywords: "таухид ихлас единобожие" },
+      { surah: 59, ayah: 22, title: "Коран 59:22-23 (Той е Аллах, Знаещият скритото и явното, Всемилостивият)", keywords: "таухид имена величие милост" },
+      { surah: 6, ayah: 59, title: "Коран 6:59 (У Него са ключовете на неведомото и никое листо не пада без Негово знание)", keywords: "таухид знание кадар мъдрост" },
+      { surah: 35, ayah: 15, title: "Коран 35:15 (О, хора, вие сте нуждаещите се от Аллах, а Аллах е Пребогатият)", keywords: "таухид смирение нужда дуа" },
+    ];
+
+    const allVerifiedHadiths = getAllVerifiedHadithSharhs();
+    const candidateSharhs = allVerifiedHadiths.map((h) => {
+      const collLabel =
+        h.collection === "nawawi40"
+          ? "40 Хадиса на ан-Науауи"
+          : h.collection === "bukhari"
+          ? "Сахих ал-Бухари"
+          : h.collection === "muslim"
+          ? "Сахих Муслим"
+          : "Джами ат-Тирмизи";
+      return {
+        collection: h.collection,
+        number: Number(h.number),
+        title: `${collLabel} #${h.number} (${h.topic})`,
+        keywords: `${h.topic} ${h.hadithTextBg || ""} ${h.text || ""}`.toLowerCase(),
+      };
+    });
+
+    // Filter out candidates within 30-day cooldown
+    let unexcludedVerses = candidateVerses.filter(
+      (v) =>
+        !exclusionData.ayahKeys.has(`${v.surah}:${v.ayah}`) &&
+        !exclusionData.items.some(
+          (ex) =>
+            (ex.type === "ayah" || (ex as { type?: string }).type === "quran") &&
+            Number(ex.surah) === v.surah &&
+            Number(ex.ayah) === v.ayah,
+        ),
+    );
+
+    let unexcludedHadiths = candidateSharhs.filter(
+      (h) =>
+        !exclusionData.hadithKeys.has(`${h.collection.toLowerCase().trim()}:${h.number}`) &&
+        !exclusionData.items.some(
+          (ex) =>
+            ex.type === "hadith" &&
+            (ex.collection || "bukhari").toLowerCase().trim() === h.collection.toLowerCase().trim() &&
+            String(ex.hadithNumber ?? (ex as { number?: string | number }).number ?? "") === String(h.number),
+        ),
+    );
+
+    // If user specified a thematic topic, filter candidates matching topic keywords
+    if (rawTopic) {
+      const topicWords = rawTopic
+        .toLowerCase()
+        .replace(/[^\p{L}\p{N}\s]/gu, " ")
+        .split(/\s+/)
+        .filter((w) => w.length >= 3 && !["видео", "обяснение", "ислямско", "направи", "искам", "тема", "само", "върху"].includes(w));
+
+      if (topicWords.length > 0) {
+        const matchedVerses = unexcludedVerses.filter((v) => {
+          const hay = `${v.title} ${v.keywords}`.toLowerCase();
+          return topicWords.some((w) => hay.includes(w.slice(0, Math.max(3, w.length - 1))));
+        });
+        const matchedHadiths = unexcludedHadiths.filter((h) => {
+          const hay = `${h.title} ${h.keywords}`.toLowerCase();
+          return topicWords.some((w) => hay.includes(w.slice(0, Math.max(3, w.length - 1))));
+        });
+        if (matchedVerses.length > 0 || matchedHadiths.length > 0) {
+          unexcludedVerses = matchedVerses;
+          unexcludedHadiths = matchedHadiths;
+        } else {
+          // Custom topic not in preset keywords: let Gemini pick based on topic while still providing verified hadith catalog
+          unexcludedVerses = [];
+          unexcludedHadiths = [];
+        }
+      }
+    }
+
+    // Apply sourcePreference ("auto" | "quran" | "hadith")
+    const pickVerse =
+      sourcePref === "quran"
+        ? unexcludedVerses.length > 0
+        : sourcePref === "hadith"
+        ? false
+        : unexcludedVerses.length > 0 && (unexcludedHadiths.length === 0 || Math.random() < 0.5);
+
+    if (pickVerse && unexcludedVerses.length > 0) {
+      const randomIndex = Math.floor(Math.random() * unexcludedVerses.length);
+      const selected = unexcludedVerses[randomIndex];
+      const [tafsir, dalilBg] = await Promise.all([
+        fetchAuthenticTafsirDirect({
+          surah: selected.surah,
+          ayah: selected.ayah,
+          scholarId: 91,
+        }),
+        preFetchQuranDalilBg(selected.surah, selected.ayah, 1),
+      ]);
+      preFetchedDalilBg = dalilBg;
       if (tafsir) {
-        preGroundingPrompt = formatTafsirGroundingPrompt({ tafsir });
+        preGroundingPrompt = formatTafsirGroundingPrompt({ tafsir, ayahTextBg: dalilBg || undefined });
       }
       chosenCandidateInfo = {
         type: "quran",
-        title: `Сура ${detected.surah}:${detected.ayah}`,
-        surah: detected.surah,
-        ayah: detected.ayah,
+        title: selected.title,
+        surah: selected.surah,
+        ayah: selected.ayah,
       };
-    } else if (detected.type === "hadith" && detected.collection && detected.number) {
+    } else if (sourcePref !== "quran" && unexcludedHadiths.length > 0) {
+      const randomIndex = Math.floor(Math.random() * unexcludedHadiths.length);
+      const selected = unexcludedHadiths[randomIndex];
       const sharh = getVerifiedHadithSharhDirect({
-        collection: detected.collection,
-        number: detected.number,
+        collection: selected.collection,
+        number: selected.number,
       });
+      if (sharh?.hadithTextBg) {
+        preFetchedDalilBg = sharh.hadithTextBg;
+      }
       if (sharh) {
         preGroundingPrompt = formatTafsirGroundingPrompt({ hadithSharh: sharh });
       }
       chosenCandidateInfo = {
         type: "hadith",
-        title: `${detected.collection} #${detected.number}`,
-        collection: detected.collection,
-        number: Number(detected.number),
+        title: selected.title,
+        collection: selected.collection,
+        number: selected.number,
       };
-    } else if (!data?.topic) {
-      // Extensive verified pools of authentic Quran verses and Sahih hadiths
-      const candidateVerses = [
-        { surah: 13, ayah: 28, title: "Коран 13:28 (Покоят на сърцата при споменаването на Аллах)" },
-        { surah: 2, ayah: 255, title: "Коран 2:255 (Аят ал-Курси - Величието на Аллах)" },
-        { surah: 94, ayah: 5, title: "Коран 94:5-6 (С всяка трудност има облекчение)" },
-        { surah: 39, ayah: 53, title: "Коран 39:53 (Не губете надежда за милостта на Аллах)" },
-        { surah: 65, ayah: 2, title: "Коран 65:2-3 (Изход от всяко затруднение и препитание)" },
-        { surah: 3, ayah: 139, title: "Коран 3:139 (Не унивайте и не тъгувайте)" },
-        { surah: 2, ayah: 152, title: "Коран 2:152 (Помнете Ме, и Аз ще ви помня)" },
-        { surah: 2, ayah: 186, title: "Коран 2:186 (Аз съм наблизо, откликвам на зова на молещия се)" },
-        { surah: 2, ayah: 286, title: "Коран 2:286 (Аллах не възлага товар над силите)" },
-        { surah: 3, ayah: 173, title: "Коран 3:173 (Аллах ни е достатъчен и Той е най-прекрасният Защитник)" },
-        { surah: 8, ayah: 30, title: "Коран 8:30 (Аллах е най-добрият от кроящите)" },
-        { surah: 9, ayah: 51, title: "Коран 9:51 (Нищо няма да ни сполети освен предписаното от Аллах)" },
-        { surah: 14, ayah: 7, title: "Коран 14:7 (Ако сте благодарни, непременно ще ви надбавя)" },
-        { surah: 21, ayah: 87, title: "Коран 21:87 (Дуата на пророка Юнус - Ля иляха илля анта)" },
-        { surah: 40, ayah: 60, title: "Коран 40:60 (Зовете Ме с дуа и Аз ще ви откликна)" },
-        { surah: 50, ayah: 16, title: "Коран 50:16 (По-близо сме до човека от шийната му артерия)" },
-        { surah: 55, ayah: 13, title: "Коран 55:13 (И кое от благата на своя Господар ще отречете)" },
-        { surah: 103, ayah: 1, title: "Коран 103:1-3 (Кълна се във Времето - спасението чрез иман и сабр)" },
-        { surah: 112, ayah: 1, title: "Коран 112:1-4 (Сура Ал-Ихлас - Чистият Таухид)" },
-      ];
-
-      const candidateSharhs = [
-        { collection: "bukhari", number: 1, title: "Сахих ал-Бухари #1 (Делата зависят от намеренията)" },
-        { collection: "bukhari", number: 6412, title: "Сахих ал-Бухари #6412 (Две блага - здраве и свободно време)" },
-        { collection: "muslim", number: 1, title: "Сахих Муслим #1 (Хадисът на Джибрил - Ислям, Иман, Ихсан)" },
-        { collection: "muslim", number: 2749, title: "Сахих Муслим #2749 (99-те части от Милостта на Аллах Всевишния)" },
-        { collection: "nawawi40", number: 18, title: "Хадис 18 от ан-Науауи (Бой се от Аллах където и да се намираш)" },
-        { collection: "nawawi40", number: 19, title: "Хадис 19 от ан-Науауи (Пази заповедите на Аллах и Той ще те пази)" },
-        { collection: "nawawi40", number: 21, title: "Хадис 21 от ан-Науауи (Кажи 'Повярвах в Аллах' и бъди непоколебим)" },
-        { collection: "bukhari", number: 52, title: "Сахих ал-Бухари #52 (Парчето плът - пречистването на сърцето)" },
-        { collection: "bukhari", number: 13, title: "Сахих ал-Бухари #13 (Желай за брата си това, което желаеш за себе си)" },
-        { collection: "bukhari", number: 6018, title: "Сахих ал-Бухари #6018 (Говори добро или мълчи)" },
-        { collection: "bukhari", number: 6416, title: "Сахих ал-Бухари #6416 (Бъди на този свят като чужденец или пътник)" },
-      ];
-
-      // Filter out candidates within 30-day cooldown
-      const unexcludedVerses = candidateVerses.filter(
-        (v) =>
-          !exclusionData.ayahKeys.has(`${v.surah}:${v.ayah}`) &&
-          !exclusionData.items.some(
-            (ex) =>
-              (ex.type === "ayah" || (ex as { type?: string }).type === "quran") &&
-              Number(ex.surah) === v.surah &&
-              Number(ex.ayah) === v.ayah,
-          ),
-      );
-
-      const unexcludedHadiths = candidateSharhs.filter(
-        (h) =>
-          !exclusionData.hadithKeys.has(`${h.collection.toLowerCase().trim()}:${h.number}`) &&
-          !exclusionData.items.some(
-            (ex) =>
-              ex.type === "hadith" &&
-              (ex.collection || "bukhari").toLowerCase().trim() === h.collection.toLowerCase().trim() &&
-              String(ex.hadithNumber ?? (ex as { number?: string | number }).number ?? "") === String(h.number),
-          ),
-      );
-
-      // Randomly pick candidate among unexcluded to guarantee fresh diversity
-      const pickVerse =
-        unexcludedVerses.length > 0 &&
-        (unexcludedHadiths.length === 0 || Math.random() < 0.5);
-
-      if (pickVerse && unexcludedVerses.length > 0) {
-        const randomIndex = Math.floor(Math.random() * unexcludedVerses.length);
-        const selected = unexcludedVerses[randomIndex];
-        const tafsir = await fetchAuthenticTafsirDirect({
-          surah: selected.surah,
-          ayah: selected.ayah,
-          scholarId: 91,
-        });
-        if (tafsir) {
-          preGroundingPrompt = formatTafsirGroundingPrompt({ tafsir });
-        }
-        chosenCandidateInfo = {
-          type: "quran",
-          title: selected.title,
-          surah: selected.surah,
-          ayah: selected.ayah,
-        };
-      } else if (unexcludedHadiths.length > 0) {
-        const randomIndex = Math.floor(Math.random() * unexcludedHadiths.length);
-        const selected = unexcludedHadiths[randomIndex];
-        const sharh = getVerifiedHadithSharhDirect({
-          collection: selected.collection,
-          number: selected.number,
-        });
-        if (sharh) {
-          preGroundingPrompt = formatTafsirGroundingPrompt({ hadithSharh: sharh });
-        }
-        chosenCandidateInfo = {
-          type: "hadith",
-          title: selected.title,
-          collection: selected.collection,
-          number: selected.number,
-        };
-      }
     }
+  }
 
-    const prompt = `Ти си автентичен САЛАФИТСКИ ШЕЙХ И ДА'ИЯ (Salafi Shaykh AI – по манхаджа на ас-Саляф ас-Салих: Шейх Ибн Баз, Шейх ал-Албани - рахимахумуллах) и елитен продуцент на формат "Ислямско видео с обяснение" (Islamic video with explanation) за TikTok и Reels на български език.
+  const catalogFallbackPrompt = !chosenCandidateInfo ? `\n\n${getVerifiedHadithCatalogPrompt()}` : "";
+  const sourcePreferenceRule =
+    sourcePref === "quran"
+      ? "\nСТРИКТНО ИЗИСКВАНЕ ЗА ИЗТОЧНИК: Потребителят избра САМО КОРАН! Задължително избери автентичен аят от Свещения Коран (surah, ayah, count)!"
+      : sourcePref === "hadith"
+      ? "\nСТРИКТНО ИЗИСКВАНЕ ЗА ИЗТОЧНИК: Потребителят избра САМО САХИХ ХАДИС! Задължително избери проверен хадис от каталога (collection, number)!"
+      : "";
+
+  const prompt = `Ти си автентичен САЛАФИТСКИ ШЕЙХ И ДА'ИЯ (Salafi Shaykh AI – по манхаджа на ас-Саляф ас-Салих: Шейх Ибн Баз, Шейх ал-Албани - рахимахумуллах) и елитен продуцент на формат "Ислямско видео с обяснение" (Islamic video with explanation) за TikTok и Reels на български език.
 ТВОЯТА РОЛЯ И ГЛАС: Говори с дълбоко благоговение (хушу), бащинска мъдрост, авторитет и непоклатима искреност (Ихлас), базирани САМО на Корана и Сунната по разбирането на Салафите. Говори по официален, уважителен и напълно разбираем начин за обикновените хора.
 
 СТРИКТНО ПРАВИЛО ЗА УЧТИВ, ОФИЦИАЛЕН И ПРОФЕСИОНАЛЕН ЕЗИК И СЪГЛАСУВАНЕ НА МЕСТОИМЕНИЯТА:
-1. Говори официално, почтително и професионално с учтива форма: „Вие“, „Вас“, „Ви“, „Вашият / Вашия“, „Вашата“, „Вашето“, „Вашите“.
+1. Говори ВИНАГИ официално, почтително и професионално с учтива форма: „Вие“, „Вас“, „Ви“, „Вашият / Вашия“, „Вашата“, „Вашето“, „Вашите“ (напр. „Защо усещате...“, „Когато застанете...“, „Вашето сърце“). НИКОГА не смесвай „ти“ и „Вие“!
 2. СТРИКТНО СПАЗВАЙ РОДА (КАТЕГОРИЧНО Е ЗАБРАНЕНО „вашето Господ“): За думи от мъжки род (Господ, Творец, Създател, живот, път, грях, намаз) използвай САМО „Вашия / Вашият“! За женски род (душа, вяра, молитва, дуа) използвай „Вашата“. За среден род (сърце, дело, спасение) използвай „Вашето“. За множествено число (дела, грехове, стъпки) използвай „Вашите“.
 
 СТРИКТНО ПРАВИЛО ЗА ТАУХИД, БОГОСЛОВСКА ПРЕЦИЗНОСТ И АДАБ КЪМ АЛЛАХ ВСЕВИШНИЯТ:
@@ -1091,31 +1235,33 @@ export async function generateExplainedVideoProposalDirect(data?: { topic?: stri
 0% музикални инструменти (piano, music) или книги с ноти.
 ЕМОДЖИТА: Разрешени САМО официални и уважителни ислямски символи: 📖, 📜, 🕌, 🌿, 💎, 🤍, ✨, 📌, 📋, 🎬, 📊, ⏳, 🔄, 💬, 🛡️, ✅, ❌ и "-->". СТРОГО ЗАБРАНЕНИ: ⚡, 🔥, 🚀, 💡, ръце (🤲, 👉, 👆, ✍️, 👏, 🤝, 🙏), музикални ноти (🎶, 🎵, 🎼), Кааба (🕋).
 
-ТВОЯТА ЦЕЛ: Да създадеш високоефективен сценарий за видео с обяснение (СТРИКТНО БЕЗ МНОГОТОЧИЯ '...', '....', БЕЗ НОМЕРАЦИЯ '1.', '2.', '3.', '4.', БЕЗ БУЛЕТИ, БЕЗ 'казва ни се за...'):
+ТВОЯТА ЦЕЛ: Да създадеш МАКСИМАЛНО СИЛЕН, ДЪЛБОК И ВЪЗДЕЙСТВАЩ сценарий за видео с обяснение (СТРИКТНО БЕЗ МНОГОТОЧИЯ '...', '....', БЕЗ НОМЕРАЦИЯ '1.', '2.', '3.', '4.', БЕЗ БУЛЕТИ, БЕЗ 'казва ни се за...'):
 
-КУКА (HOOK):
-- hookQuestion: Мощен, интригуващ въпрос в първите 2-3 секунди (насочен към тревожност, стрес, грях, търпение, молитва, страх от бъдещето). Без номерация и без точки.
-- hookContext: 1-2 кратки изречения, разясняващи ситуацията. Без номерация и без многоточия.
+АРХИТЕКТУРА НА СЦЕНАРИЯ (3-СЛОЕН ШАРХ И ВИСОКО ЗАДЪРЖАНЕ НА ВНИМАНИЕТО):
+1. ПСИХОЛОГИЧЕСКА КУКА (HOOK — Първите 3 секунди):
+- hookQuestion: Пронизващ, дълбоко личен въпрос в учтива форма („Вие / Вас / Вашето сърце“), който спира скролването веднага — докосва скрита тревога, забавена дуа, тежко изпитание, страх от бъдещето или копнеж за прошка (10-18 думи). Без номерация и без многоточия.
+- hookContext: 1-2 силни изречения в учтива форма, които назовават човешката болка и насочват вниманието към отговора в Божественото откровение (15-25 думи). Без номерация и без многоточия.
 
-СВЕЩЕН ДАЛИЛ (АЕТ ИЛИ ХАДИС):
-- dalilIntro: Кратък преход (напр. "В Свещения Коран, Аллах Всевишният повелява:" или "Пратеникът на Аллах ﷺ ни учи:"). НИКОГА не използвай изрази като 'казва ни се за...' или 'казва ми за...'.
+2. СВЕЩЕН ДАЛИЛ (АЕТ ИЛИ ХАДИС):
+- dalilIntro: Кратък, благоговеен преход (напр. "В Свещения Коран, Аллах Всевишният повелява:" или "Пратеникът на Аллах ﷺ ни учи:"). НИКОГА не използвай изрази като 'казва ни се за...' или 'казва ми за...'.
 - Точен стих от Корана (surah, ayah, count) ИЛИ Сахих Хадис (collection, number).
-- dalilText: Самият текст на аята или хадиса на чист български език в кавички. СТРИКТНО ПРАВИЛО ЗА НЕПОЗНАТИ КОРАНИЧЕСКИ ПРОЗВИЩА В КАВИЧКИ: Ако в аята или хадиса се среща кораническо прозвище или епитет (напр. „Дху-н-Нун“, „Сахиб ал-Хут“, „Дху-л-Карнайн“, „Ал-Хадир“), ЗАДЪЛЖИТЕЛНО веднага след него сложи в кавички неговото значение, напр. „Дху-н-Нун „човекът на кита — пророкът Юнус““, за да бъде веднага ясно на обикновените зрители за кого се говори!
+- dalilText: Самият пълен текст на аята или хадиса на чист български език. СТРИКТНО ПРАВИЛО ЗА НЕПОЗНАТИ КОРАНИЧЕСКИ ПРОЗВИЩА В КАВИЧКИ: Ако в аята или хадиса се среща кораническо прозвище или епитет (напр. „Дху-н-Нун“, „Сахиб ал-Хут“, „Дху-л-Карнайн“, „Ал-Хадир“), ЗАДЪЛЖИТЕЛНО веднага след него сложи в кавички неговото значение, напр. „Дху-н-Нун „човекът на кита — пророкът Юнус““, за да бъде веднага ясно на обикновените зрители за кого се говори!
 
-ПОУКА И ТЕФСИР (ЧИСТО ОБЯСНЕНИЕ БЕЗ СПОМЕНАВАНЕ НА АВТОР ВЪВ ВИДЕОТО):
-- explanation: Дълбоко, прецизно разяснение на смисъла и мъдростта СПОРЕД ТЕМАТА на аята или хадиса (35-60 думи). Разясни точно и ясно това, което трябва:
+3. ДЪЛБОКО 3-СЛОЙНО ОБЯСНЕНИЕ (ЧИСТО ОБЯСНЕНИЕ БЕЗ СПОМЕНАВАНЕ НА АВТОР ВЪВ ВИДЕОТО):
+- explanation: Дълбоко, богословски прецизно и докосващо сърцето разяснение на смисъла (45-65 думи), изградено в 3 естествено свързани слоя:
+  * Слой 1 (Смисъл на думите): Разясни конкретните думи и образи от самия аят или хадис според автентичния Тефсир/Шарх (без общи клишета!).
+  * Слой 2 (Таухид и Имената на Единствения Творец): Свържи поуката с Величието, Мъдростта, Всемогъществото или Милостта на Единствения Творец.
+  * Слой 3 (Лекарство за сърцето): Покажи как тази истина преобразява Вашето сърце, носи покой и прогонва отчаянието.
   * СТРИКТНО ПРАВИЛО: Във видеото се изписва и изговаря просто "Обяснение: [чист текст]". СТРИКТНО НЕ споменавай кой го обяснява (НИКОГА не пиши "Salafi Shaykh AI пояснява, че...", "Шейх ас-Са'ди пояснява...", "Шейх ал-Усеймин...", "Поука:").
-  * Започва директно със същината на поуката или като "Обяснение: [текст]".
-  * Дължина: 35-60 думи. СТРИКТНО БЕЗ МНОГОТОЧИЯ И НОМЕРАЦИЯ.
-  * СТРОГО ЗАБРАНЕНИ са общи житейски съвети или свободно съчинение — единствено автентично съдържание по Таухид и Сунна!
+  * Дължина: 45-65 думи. СТРИКТНО БЕЗ МНОГОТОЧИЯ И НОМЕРАЦИЯ.
 - СТРИКТНО ПРАВИЛО ЗА ВИДЕОТО: Във видеото НЯМА стъпка „Действие“! Цялото внимание на видеото е фокусирано върху автентичното Обяснение на смисъла.
-- actionStep: Опционално, ако има допълнителен съвет за текстовото описание на поста (напр. "Дуа: [текст]"), но във видеото НЕ се изговаря и показва.
-${historyContext}${oneMonthExclusionContext}
+- actionStep: Кратка дуа или напътствие в учтива форма за текстовото описание на поста (във видеото НЕ се изговаря и показва).
+${historyContext}${oneMonthExclusionContext}${catalogFallbackPrompt}${sourcePreferenceRule}
 ${userTopic}${preGroundingPrompt ? `\n\n${preGroundingPrompt}` : ""}
 
 ИЗКЛЮЧИТЕЛНИ ПРАВИЛА:
 - АВТЕНТИЧНИ ИСЛЯМСКИ ТЕРМИНИ: Винаги изписвай 'Астагфируллах' (НИКОГА 'астафирулла'!), 'Субханаллах', 'Алхамдулиллях', 'Аллаху Акбар', 'Ля иляха илляллах', 'истигфар', 'таухид', 'сабр', 'таква'.
-- Заглавието ЗАДЪЛЖИТЕЛНО трябва да съдържа точна референция с ДВОЕТОЧИЕ, например: "[Коран 13:28] Покоят на сърцата" или "[Сахих ал-Бухари #6424] Силата на благодарността" (НИКОГА долна черта в заглавието, само двоеточие!). Горе на екрана на видеото ще се изписва ТЕМАТА (напр. "Покоят на сърцата"), която привлича погледа, а самата референция за сурата или хадиса ще се чуе и види в самото видео.
+- Заглавието ЗАДЪЛЖИТЕЛНО трябва да съдържа точна референция с ДВОЕТОЧИЕ, например: "[Коран 13:28] Покоят на сърцата" или "[Сахих ал-Бухари #6412] Двете забравени блага" (НИКОГА долна черта в заглавието, само двоеточие!). Горе на екрана на видеото ще се изписва ТЕМАТА (напр. "Покоят на сърцата"), която привлича погледа, а самата референция за сурата или хадиса ще се чуе и види в самото видео.
 - "type": "explained_video"
 - "summaryBg": Кратък обобщен текст на обяснението за бърз преглед.
 - "themeBg": Визуално описание за атмосферата (напр. "Звездно небе и планински върхове в мъгла").
@@ -1130,7 +1276,7 @@ ${userTopic}${preGroundingPrompt ? `\n\n${preGroundingPrompt}` : ""}
 
 Върни валиден JSON със следната структура:
 {
-  "reply": "Вълнуващо представяне на български защо този 4-степенен сценарий е толкова въздействащ.",
+  "reply": "Вълнуващо и авторитетно представяне на български в учтива форма защо този сценарий с обяснение докосва сърцето толкова дълбоко.",
   "proposal": {
     "title": "[Коран 13:28] Покоят на Сърцата",
     "type": "explained_video",
@@ -1138,14 +1284,14 @@ ${userTopic}${preGroundingPrompt ? `\n\n${preGroundingPrompt}` : ""}
     "ayah": 28,
     "count": 1,
     "scriptWorkflow": {
-      "hookQuestion": "Защо усещаш тежест и безпокойство в гърдите си, дори когато имаш всичко?",
-      "hookContext": "Често търсим мир в социалните мрежи, в почивки или материални неща, но душата остава празна.",
+      "hookQuestion": "Защо усещате необяснима тежест и безпокойство в гърдите си, дори когато привидно имате всичко?",
+      "hookContext": "Често търсите утеха в преходните неща на този свят, но Вашата душа остава жадна за своя истински източник на живот.",
       "dalilIntro": "В Свещения Коран, Аллах Всевишният повелява:",
       "dalilText": "Онези, които вярват и сърцата им се успокояват при споменаването на Аллах. А нима не със споменаването на Аллах се успокояват сърцата?",
-      "explanation": "Обяснение: Сърцето не може да намери истински покой, сигурност и наслада в нищо земно, освен чрез споменаването на Аллах, обичта към Него и отдаването единствено на Него.",
-      "actionStep": "Спри за 1 минута точно сега, кажи искрено 'Субханаллах' и направи дуа. Запази това видео и го сподели за садака джария!"
+      "explanation": "Обяснение: Човешкото сърце е сътворено така, че не може да намери истински покой, сигурност и сладост в нищо земно, освен чрез познаването на Единствения Творец, искреното Му споменаване и пълното упование в Неговата милост, които разсейват всяка тревога.",
+      "actionStep": "Спрете за минута още сега, кажете искрено 'Субханаллах' и направете дуа към Единствения Творец. Запазете и споделете това видео за садака джария!"
     },
-    "summaryBg": "Обяснение: Сърцето намира истински покой и спасение единствено в споменаването на Аллах и Таухида.",
+    "summaryBg": "Обяснение: Човешкото сърце намира истински покой и сигурност единствено в споменаването на Единствения Творец и Таухида.",
     "themeBg": "Спокойно огледално езеро с утринна мъгла на зазоряване",
     "searchQuery": "tranquil peaceful lake morning sunrise mist calm water nature",
     "tiktokTheme": "hormozi",
@@ -1156,121 +1302,252 @@ ${userTopic}${preGroundingPrompt ? `\n\n${preGroundingPrompt}` : ""}
 }
 Върни САМО валиден JSON без маркдаун кавички.`;
 
-    const userPromptText = chosenCandidateInfo
-      ? `Генерирай 1 ново и уникално Ислямско видео с обяснение за: ${chosenCandidateInfo.title}. Спазвай СТРИКТНО автентичния тефсир/шарх от контекста по-горе!`
-      : "Генерирай 1 ново и уникално Ислямско видео с обяснение сега според 4-степенния workflow.";
+  const userPromptText = chosenCandidateInfo
+    ? `Генерирай 1 ново и уникално Ислямско видео с обяснение за: ${chosenCandidateInfo.title}. Спазвай СТРИКТНО автентичния далил и тефсир/шарх от контекста по-горе!`
+    : `Генерирай 1 ново и уникално Ислямско видео с обяснение сега според 4-степенния workflow${rawTopic ? ` по темата: "${rawTopic}"` : ""}.`;
 
-    const msgs: ChatMessage[] = [
-      { role: "system", content: prompt },
-      { role: "user", content: userPromptText },
-    ];
+  const msgs: ChatMessage[] = [
+    { role: "system", content: prompt },
+    { role: "user", content: userPromptText },
+  ];
 
-    const raw = await geminiChat("gemini-3.1-pro", msgs, true);
-    let parsed: { reply?: string; proposal?: VideoProposal | null };
-    try {
-      let clean = raw.replace(/```json\s*|\s*```/g, "").trim();
-      const firstBrace = clean.indexOf("{");
-      const lastBrace = clean.lastIndexOf("}");
-      if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
-        clean = clean.substring(firstBrace, lastBrace + 1);
-      }
-      parsed = JSON.parse(clean);
-    } catch {
-      const fallbackTitle = chosenCandidateInfo?.title || "[Коран 94:5] С всяка трудност има облекчение";
-      parsed = {
-        reply: `Предлагам Ви благороден цитат: ${fallbackTitle} с автентично разяснение от Шейх AI.`,
-        proposal: {
-          title: fallbackTitle,
-          type: "explained_video",
-          surah: chosenCandidateInfo?.surah || (chosenCandidateInfo?.type === "quran" ? 94 : undefined),
-          ayah: chosenCandidateInfo?.ayah || (chosenCandidateInfo?.type === "quran" ? 5 : undefined),
-          collection: chosenCandidateInfo?.collection,
-          number: chosenCandidateInfo?.number,
-          count: 1,
-          scriptWorkflow: {
-            hookQuestion: "Усещаш ли тежест и безсилие пред житейските изпитания?",
-            hookContext: "Често забравяме, че всяка трудност крие в себе си божествена мъдрост и близко облекчение.",
-            dalilIntro: chosenCandidateInfo?.type === "hadith" ? "Пратеникът на Аллах ﷺ ни учи:" : "В Свещения Коран, Аллах Всевишният повелява:",
-            dalilText: "Наистина, с всяка трудност има облекчение. Наистина, с всяка трудност има облекчение.",
-            explanation: "Обяснение: Изпитанията в живота не траят вечно. Всеки вярващ, който проявява сабр и упование в Твореца, намира лекота и избавление точно тогава, когато най-малко очаква.",
-            actionStep: "Направи търпение точно днес, кажи 'Алхамдулиллях' и направи дуа за облекчение. Сподели видеото за добро!",
-          },
-          summaryBg: "Обяснение: Всяко изпитание е последвано от двойно облекчение и милост от Аллах Всевишния.",
-          themeBg: "Величествен планински изгрев със златисти слънчеви лъчи над буря",
-          searchQuery: "mountain sunrise golden sun rays nature vertical",
-          tiktokTheme: "hormozi",
-          useBRoll: true,
-          bRollInterval: 4,
-          quality: "high",
+  const raw = await geminiChat("gemini-3.1-pro", msgs, true);
+  let parsed: { reply?: string; proposal?: VideoProposal | null };
+  try {
+    let clean = raw.replace(/```json\s*|\s*```/g, "").trim();
+    const firstBrace = clean.indexOf("{");
+    const lastBrace = clean.lastIndexOf("}");
+    if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+      clean = clean.substring(firstBrace, lastBrace + 1);
+    }
+    parsed = JSON.parse(clean);
+  } catch {
+    const fallbackTitle = chosenCandidateInfo?.title || "[Коран 94:5] С всяка трудност има облекчение";
+    parsed = {
+      reply: `Предлагам Ви благороден цитат: ${fallbackTitle} с автентично разяснение от Salafi Shaykh AI.`,
+      proposal: {
+        title: fallbackTitle,
+        type: "explained_video",
+        surah: chosenCandidateInfo?.surah || (chosenCandidateInfo?.type === "quran" ? 94 : undefined),
+        ayah: chosenCandidateInfo?.ayah || (chosenCandidateInfo?.type === "quran" ? 5 : undefined),
+        collection: chosenCandidateInfo?.collection,
+        number: chosenCandidateInfo?.number,
+        count: 1,
+        scriptWorkflow: {
+          hookQuestion: "Усещате ли тежест и безсилие пред житейските изпитания, които Ви връхлитат?",
+          hookContext: "Често забравяте, че всяка трудност крие в себе си Божествена мъдрост и обещано близко облекчение.",
+          dalilIntro: chosenCandidateInfo?.type === "hadith" ? "Пратеникът на Аллах ﷺ ни учи:" : "В Свещения Коран, Аллах Всевишният повелява:",
+          dalilText: preFetchedDalilBg || "Наистина, с всяка трудност има облекчение. Наистина, с всяка трудност има облекчение.",
+          explanation: "Обяснение: Изпитанията в живота не траят вечно. Когато проявявате търпение (сабр) и упование в Единствения Творец, Той отваря за Вашето сърце лекота и изход дори от най-тежкото положение.",
+          actionStep: "Проявете търпение точно днес, кажете 'Алхамдулиллях' и направете дуа за облекчение. Споделете видеото за добро!",
         },
-      };
-    }
+        summaryBg: "Обяснение: Всяко изпитание е последвано от двойно облекчение и милост от Единствения Творец.",
+        themeBg: "Величествен планински изгрев със златисти слънчеви лъчи над буря",
+        searchQuery: "mountain sunrise golden sun rays nature vertical",
+        tiktokTheme: "hormozi",
+        useBRoll: true,
+        bRollInterval: 4,
+        quality: "high",
+      },
+    };
+  }
 
-    if (parsed.proposal && parsed.proposal.title) {
-      parsed.proposal.title = cleanProposalTitle(parsed.proposal.title);
-    }
+  if (parsed.proposal && parsed.proposal.title) {
+    parsed.proposal.title = cleanProposalTitle(parsed.proposal.title);
+  }
 
-    // 1-Month Cooldown Verification & Auto-Correction
-    if (parsed.proposal) {
-      const cooldownCheck = checkProposalOneMonthCooldown(parsed.proposal, exclusionData.items);
-      if (cooldownCheck.isBlocked) {
-        console.warn("[suggestExplainedVideoProposal] Collision with 30-day cooldown history:", cooldownCheck.reason);
-        try {
-          const retryMsgs: ChatMessage[] = [
-            ...msgs,
-            { role: "model", content: raw },
-            {
-              role: "user",
-              content: `ВНИМАНИЕ! Предложението за „${parsed.proposal.title}“ НАРУШАВА 30-дневното правило за уникалност: ${cooldownCheck.reason}. Предложи ДРУГ Сахих Хадис или Аят за видео с обяснение, който НЕ е в забранения списък! Върни валиден JSON.`,
-            },
-          ];
-          const retryRaw = await geminiChat("gemini-3.1-pro", retryMsgs, true);
-          let cleanRetry = retryRaw.replace(/```json\s*|\s*```/g, "").trim();
-          const fBrace = cleanRetry.indexOf("{");
-          const lBrace = cleanRetry.lastIndexOf("}");
-          if (fBrace !== -1 && lBrace !== -1 && lBrace > fBrace) {
-            cleanRetry = cleanRetry.substring(fBrace, lBrace + 1);
-          }
-          const parsedRetry = JSON.parse(cleanRetry);
-          if (parsedRetry?.proposal) {
-            const secondCheck = checkProposalOneMonthCooldown(parsedRetry.proposal, exclusionData.items);
-            if (!secondCheck.isBlocked) {
-              parsed.proposal = parsedRetry.proposal;
-              if (parsed.proposal?.title) parsed.proposal.title = cleanProposalTitle(parsed.proposal.title);
-              if (parsedRetry.reply) parsed.reply = parsedRetry.reply;
-            }
-          }
-        } catch (retryErr) {
-          console.warn("[suggestExplainedVideoProposal] Retry error:", retryErr);
+  // 1-Month Cooldown Verification & Auto-Correction
+  if (parsed.proposal) {
+    const cooldownCheck = checkProposalOneMonthCooldown(parsed.proposal, exclusionData.items);
+    if (cooldownCheck.isBlocked) {
+      console.warn("[suggestExplainedVideoProposal] Collision with 30-day cooldown history:", cooldownCheck.reason);
+      try {
+        const retryMsgs: ChatMessage[] = [
+          ...msgs,
+          { role: "model", content: raw },
+          {
+            role: "user",
+            content: `ВНИМАНИЕ! Предложението за „${parsed.proposal.title}“ НАРУШАВА 30-дневното правило за уникалност: ${cooldownCheck.reason}. Предложи ДРУГ Сахих Хадис или Аят за видео с обяснение, който НЕ е в забранения списък! Върни валиден JSON.`,
+          },
+        ];
+        const retryRaw = await geminiChat("gemini-3.1-pro", retryMsgs, true);
+        let cleanRetry = retryRaw.replace(/```json\s*|\s*```/g, "").trim();
+        const fBrace = cleanRetry.indexOf("{");
+        const lBrace = cleanRetry.lastIndexOf("}");
+        if (fBrace !== -1 && lBrace !== -1 && lBrace > fBrace) {
+          cleanRetry = cleanRetry.substring(fBrace, lBrace + 1);
         }
+        const parsedRetry = JSON.parse(cleanRetry);
+        if (parsedRetry?.proposal) {
+          const secondCheck = checkProposalOneMonthCooldown(parsedRetry.proposal, exclusionData.items);
+          if (!secondCheck.isBlocked) {
+            parsed.proposal = parsedRetry.proposal;
+            if (parsed.proposal?.title) parsed.proposal.title = cleanProposalTitle(parsed.proposal.title);
+            if (parsedRetry.reply) parsed.reply = parsedRetry.reply;
+          }
+        }
+      } catch (retryErr) {
+        console.warn("[suggestExplainedVideoProposal] Retry error:", retryErr);
       }
     }
+  }
 
-    if (parsed.proposal && !parsed.proposal.scriptWorkflow) {
-      parsed.proposal.scriptWorkflow = {
-        hookQuestion: "Защо усещаш тревога в гърдите си, дори когато всичко изглежда наред?",
-        hookContext: "Често търсим спокойствие на грешните места, но душата остава жадна за истината.",
-        dalilIntro: parsed.proposal.surah ? "В Свещения Коран, Аллах Всевишният повелява:" : "Пратеникът на Аллах ﷺ ни учи:",
-        explanation: parsed.proposal.summaryBg || "Обяснение: Истинският покой на душата се постига единствено чрез помнене на Аллах, спазване на Таухида и следване на Сунната.",
-        actionStep: "Спри за 1 минута, направи искрен истигфар и дуа. Запази това видео и сподели за добро!",
-      };
-    }
-
-    if (parsed.proposal) {
-      await enrichProposalWithAuthenticTafsir(parsed.proposal);
-      await recordProposalUsagesDirect([parsed.proposal]).catch(() => {});
-    }
-
-    return {
-      reply: sanitizeTheologicalRespect(parsed.reply || ""),
-      proposal: parsed.proposal ? sanitizeProposalFields(parsed.proposal as VideoProposal) : null,
+  if (parsed.proposal && !parsed.proposal.scriptWorkflow) {
+    parsed.proposal.scriptWorkflow = {
+      hookQuestion: "Защо усещате тревога в гърдите си, дори когато всичко изглежда наред?",
+      hookContext: "Често търсите спокойствие на грешните места, но Вашата душа остава жадна за истината.",
+      dalilIntro: parsed.proposal.surah ? "В Свещения Коран, Аллах Всевишният повелява:" : "Пратеникът на Аллах ﷺ ни учи:",
+      explanation: parsed.proposal.summaryBg || "Обяснение: Истинският покой на душата се постига единствено чрез помнене на Единствения Творец, спазване на Таухида и следване на Сунната.",
+      actionStep: "Спрете за 1 минута, направете искрен истигфар и дуа. Запазете това видео и споделете за добро!",
     };
+  }
+
+  // Ensure exact WYSIWYG Bulgarian Dalil text when pre-fetched or for Quran proposals
+  if (parsed.proposal && parsed.proposal.scriptWorkflow) {
+    const matchesPreChosenQuran =
+      chosenCandidateInfo?.type === "quran" &&
+      Number(parsed.proposal.surah) === Number(chosenCandidateInfo.surah) &&
+      Number(parsed.proposal.ayah) === Number(chosenCandidateInfo.ayah);
+
+    if (matchesPreChosenQuran && preFetchedDalilBg) {
+      parsed.proposal.scriptWorkflow.dalilText = preFetchedDalilBg;
+    } else if (parsed.proposal.surah && parsed.proposal.ayah) {
+      const freshBg = await preFetchQuranDalilBg(
+        Number(parsed.proposal.surah),
+        Number(parsed.proposal.ayah),
+        Number(parsed.proposal.count) || 1,
+      );
+      if (freshBg) {
+        parsed.proposal.scriptWorkflow.dalilText = freshBg;
+      }
+    }
+  }
+
+  if (parsed.proposal) {
+    await enrichProposalWithAuthenticTafsir(parsed.proposal);
+    await recordProposalUsagesDirect([parsed.proposal]).catch(() => {});
+  }
+
+  return {
+    reply: sanitizeTheologicalRespect(parsed.reply || ""),
+    proposal: parsed.proposal ? sanitizeProposalFields(parsed.proposal as VideoProposal) : null,
+  };
 }
 
 export const suggestExplainedVideoProposal = createServerFn({ method: "POST" })
-  .validator((input?: { topic?: string }) => input || {})
+  .validator(
+    (input?: { topic?: string; sourcePreference?: "auto" | "quran" | "hadith" }) => input || {},
+  )
   .handler(async ({ data }) => {
     return generateExplainedVideoProposalDirect(data);
+  });
+
+export const refineExplainedScriptSection = createServerFn({ method: "POST" })
+  .validator(
+    (input: {
+      proposal: VideoProposal;
+      target: "hook" | "explanation" | "all";
+      customInstruction?: string;
+    }) => input,
+  )
+  .handler(async ({ data: { proposal, target, customInstruction } }) => {
+    let groundingPrompt = "";
+    if (proposal.surah && proposal.ayah) {
+      const tafsir = await fetchAuthenticTafsirDirect({
+        surah: Number(proposal.surah),
+        ayah: Number(proposal.ayah),
+        scholarId: 91,
+      });
+      if (tafsir) {
+        groundingPrompt = formatTafsirGroundingPrompt({
+          tafsir,
+          ayahTextBg: proposal.scriptWorkflow?.dalilText,
+        });
+      }
+    } else if (proposal.collection && proposal.number) {
+      const sharh = getVerifiedHadithSharhDirect({
+        collection: proposal.collection,
+        number: proposal.number,
+      });
+      if (sharh) {
+        groundingPrompt = formatTafsirGroundingPrompt({ hadithSharh: sharh });
+      }
+    }
+
+    const sw = proposal.scriptWorkflow || {
+      hookQuestion: "",
+      hookContext: "",
+      dalilIntro: proposal.surah ? "В Свещения Коран, Аллах Всевишният повелява:" : "Пратеникът на Аллах ﷺ ни учи:",
+      dalilText: proposal.title,
+      explanation: proposal.summaryBg || "",
+      actionStep: "",
+    };
+
+    const targetDesc =
+      target === "hook"
+        ? "Направи КУКАТА (hookQuestion и hookContext) още по-силна, психологически пронизваща и спираща скролването в първите 3 секунди, като запазиш explanation без промяна."
+        : target === "explanation"
+        ? "Направи ОБЯСНЕНИЕТО (explanation) още по-дълбоко, богословски въздействащо и докосващо сърцето (45-65 думи, 3-слоен шарх: смисъл на думите -> Таухид/Имената на Единствения Творец -> лекарство за сърцето), като запазиш hookQuestion и hookContext без промяна."
+        : "Подобри и усъвършенствай целия сценарий (hookQuestion, hookContext, explanation и actionStep), за да бъде максимално въздействащ, дълбок и задържащ вниманието.";
+
+    const prompt = `Ти си автентичен САЛАФИТСКИ ШЕЙХ (Salafi Shaykh AI) и главен сценарист на "Ислямско видео с обяснение".
+Текущо видео: "${proposal.title}"
+Свещен Далил (dalilText): "${sw.dalilText || ""}"
+Текуща кука-въпрос (hookQuestion): "${sw.hookQuestion || ""}"
+Текущ контекст на куката (hookContext): "${sw.hookContext || ""}"
+Текущо обяснение (explanation): "${sw.explanation || ""}"
+Текуща дуа/напътствие (actionStep): "${sw.actionStep || ""}"
+${groundingPrompt}
+
+ЗАДАЧА:
+${targetDesc}
+${customInstruction ? `Допълнително изискване от потребителя: "${customInstruction}"` : ""}
+
+СТРИКТНИ ПРАВИЛА:
+1. Използвай САМО учтива и официална форма: „Вие“, „Вас“, „Ви“, „Вашият / Вашия“, „Вашата“, „Вашето“, „Вашите“!
+2. За Аллах използвай САМО възвишени имена като „Единственият Творец“, „Аллах Всевишният“, „Господарят на световете“ (СТРИКТНО ЗАБРАНЕНИ са умалителни форми като „единичкият“!).
+3. В "explanation" ЗАДЪЛЖИТЕЛНО започни с "Обяснение: [текст]" без да споменаваш име на учен или AI!
+4. СТРИКТНО БЕЗ многоточия '...' и без номерация '1.', '2.'.
+
+Върни САМО валиден JSON със следната структура:
+{
+  "hookQuestion": "...",
+  "hookContext": "...",
+  "explanation": "Обяснение: ...",
+  "actionStep": "..."
+}`;
+
+    const raw = await geminiChat("gemini-3.1-pro", [{ role: "user", content: prompt }], true);
+    let clean = raw.replace(/```json\s*|\s*```/g, "").trim();
+    const firstBrace = clean.indexOf("{");
+    const lastBrace = clean.lastIndexOf("}");
+    if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+      clean = clean.substring(firstBrace, lastBrace + 1);
+    }
+    const parsed = JSON.parse(clean);
+
+    const updatedWorkflow: ExplainedVideoScript = {
+      ...sw,
+      hookQuestion: sanitizeTheologicalRespect(
+        target === "explanation" && sw.hookQuestion ? sw.hookQuestion : parsed.hookQuestion || sw.hookQuestion,
+      ),
+      hookContext: sanitizeTheologicalRespect(
+        target === "explanation" && sw.hookContext ? sw.hookContext : parsed.hookContext || sw.hookContext,
+      ),
+      explanation: sanitizeTheologicalRespect(
+        enrichUnfamiliarQuranicTerms(
+          target === "hook" && sw.explanation
+            ? sw.explanation
+            : `Обяснение: ${stripScholarAttribution(parsed.explanation || sw.explanation)}`,
+        ),
+      ),
+      actionStep: sanitizeTheologicalRespect(parsed.actionStep || sw.actionStep || ""),
+    };
+
+    return {
+      scriptWorkflow: updatedWorkflow,
+      summaryBg: updatedWorkflow.explanation,
+    };
   });
 
 export const suggestAlternativeProposal = createServerFn({ method: "POST" })
@@ -1307,9 +1584,12 @@ ${rejectedContext}
 ${topicHint}
 ${historyContext}${oneMonthExclusionContext}
 
-СТРИКТНО ПРАВИЛО ЗА ТАУХИД И АДАБ КЪМ АЛЛАХ ВСЕВИШНИЯТ:
-ВИНАГИ използвай „Аллах Всевишният“, „Твоят Създател“, „Господът на световете“, „Всемилостивият“. СТРОГО ЗАБРАНЕНО е да използваш разговорни или непочтителни думи като „оня“, „тоя“, „онзи“!
-АВТЕНТИЧНИ ТЕРМИНИ: „Астагфируллах“ (с 'г'), „Субханаллах“, „Алхамдулиллях“, „Аллаху Акбар“, „Ля иляха илляллах“.
+${getVerifiedHadithCatalogPrompt()}
+
+СТРИКТНО ПРАВИЛО ЗА УЧТИВ ЕЗИК, ТАУХИД И АДАБ КЪМ АЛЛАХ ВСЕВИШНИЯТ:
+1. Говори ВИНАГИ в учтива форма: „Вие“, „Вас“, „Ви“, „Вашият / Вашия“, „Вашата“, „Вашето“, „Вашите“.
+2. ВИНАГИ използвай „Единственият Творец“, „Аллах Всевишният“, „Вашият Създател“, „Господът на световете“, „Всемилостивият“. СТРОГО ЗАБРАНЕНО е да използваш умалителни форми като „единичкият“ или непочтителни думи като „оня“, „тоя“, „онзи“!
+3. АВТЕНТИЧНИ ТЕРМИНИ: „Астагфируллах“ (с 'г'), „Субханаллах“, „Алхамдулиллях“, „Аллаху Акбар“, „Ля иляха илляллах“.
 
 12 ТЕМАТИЧНИ ВИДЕО КАТЕГОРИИ (ТОЧНО СЪОТВЕТСТВИЕ):
 Задай движещо се 9:16 видео за фон:
@@ -1340,14 +1620,14 @@ ${historyContext}${oneMonthExclusionContext}
     "ayah": 28,
     "count": 1,
     "scriptWorkflow": {
-      "hookQuestion": "Кука-въпрос в първите 2-3 секунди (без точки или номерация)",
-      "hookContext": "Кратко въведение в проблема (без точки или номерация)",
+      "hookQuestion": "Кука-въпрос в първите 2-3 секунди в учтива форма Вие/Вас (без точки или номерация)",
+      "hookContext": "Кратко въведение в проблема в учтива форма (без точки или номерация)",
       "dalilIntro": "В Свещения Коран, Аллах Всевишният повелява:",
-      "dalilText": "Самият текст на аята или хадиса в кавички",
-      "explanation": "Обяснение: Истинският покой на душата се постига единствено чрез таухид и помненето на Аллах Всевишния.",
-      "actionStep": "Действие: [практическа стъпка] ИЛИ Дуа: [молитва/зикр/молба]"
+      "dalilText": "Самият пълен текст на аята или хадиса",
+      "explanation": "Обяснение: Дълбоко 3-слойно разяснение на конкретните думи от далила, връзката с Единствения Творец и лекарството за Вашето сърце (45-65 думи).",
+      "actionStep": "Дуа или напътствие в учтива форма за описанието на поста"
     },
-    "summaryBg": "Автентичен тефсир от салафитския учен според темата (30-50 думи)",
+    "summaryBg": "Обяснение: Автентично разяснение според темата (45-65 думи)",
     "themeBg": "Визуална атмосфера на български",
     "searchQuery": "ключови думи за Pexels на английски според 12-те категории",
     "tiktokTheme": "hormozi",
@@ -1378,21 +1658,21 @@ ${historyContext}${oneMonthExclusionContext}
       parsed = JSON.parse(clean);
     } catch {
       parsed = {
-        reply: "Предлагам Ви този благороден хадис от Сахих ал-Бухари за искреното търпение и упование в Аллах Всевишният.",
+        reply: "Предлагам Ви този благороден хадис от Сахих ал-Бухари за искреното търпение и упование в Единствения Творец.",
         proposal: {
           title: "[Сахих ал-Бухари #5645] Скритата милост в изпитанията",
           type: "explained_video",
           collection: "bukhari",
           number: 5645,
           scriptWorkflow: {
-            hookQuestion: "Защо изпитанията те връхлитат точно тогава, когато най-малко очакваш?",
-            hookContext: "Често възприемаме трудностите като наказание, ала забравяме истинската божествена мъдрост.",
+            hookQuestion: "Защо изпитанията Ви връхлитат точно тогава, когато най-малко очаквате?",
+            hookContext: "Често възприемате трудностите като наказание, ала забравяте истинската Божествена мъдрост.",
             dalilIntro: "Пратеникът на Аллах ﷺ ни учи:",
             dalilText: "Когото Аллах желае да дари с добро, Той го подлага на изпитания.",
-            explanation: "Обяснение: Изпитанията на вярващия са като лекарство — горчиво на вкус, ала изчистващо сърцето от греховете и въздигащо го при Аллах Всевишният.",
-            actionStep: "Направи търпение (сабр) и кажи искрено 'Алхамдулиллях аля кулли хал'. Запази това видео и го сподели за добро!",
+            explanation: "Обяснение: Изпитанията на вярващия са като лекарство — горчиво на вкус, ала изчистващо Вашето сърце от греховете и въздигащо степента Ви при Единствения Творец.",
+            actionStep: "Проявете търпение (сабр) и кажете искрено 'Алхамдулиллях аля кулли хал'. Запазете това видео и го споделете за добро!",
           },
-          summaryBg: "Обяснение: Изпитанията пречистват сърцето на вярващия и го доближават до Аллах.",
+          summaryBg: "Обяснение: Изпитанията пречистват сърцето на вярващия и го доближават до Единствения Творец.",
           themeBg: "Самотен бор в планинска буря и изгряваща светлина",
           searchQuery: "solitary pine tree mountain storm vertical",
           tiktokTheme: "hormozi",
@@ -1449,13 +1729,24 @@ ${historyContext}${oneMonthExclusionContext}
       (parsed.proposal.type === "explained_video" || data?.type === "explained_video")
     ) {
       parsed.proposal.scriptWorkflow = {
-        hookQuestion: "Защо усещаш тревога в гърдите си, дори когато всичко изглежда наред?",
-        hookContext: "Често търсим спокойствие на грешните места, но душата остава жадна за истината.",
+        hookQuestion: "Защо усещате тревога в гърдите си, дори когато всичко изглежда наред?",
+        hookContext: "Често търсите спокойствие на грешните места, но Вашата душа остава жадна за истината.",
         dalilIntro: parsed.proposal.surah ? "В Свещения Коран, Аллах Всевишният повелява:" : "Пратеникът на Аллах ﷺ ни учи:",
         dalilText: parsed.proposal.title,
-        explanation: parsed.proposal.summaryBg || "Обяснение: Истинският покой на душата се постига единствено чрез помнене на Аллах, спазване на Таухида и следване на Сунната.",
-        actionStep: "Спри за 1 минута, направи искрен истигфар и дуа. Запази това видео и сподели за добро!",
+        explanation: parsed.proposal.summaryBg || "Обяснение: Истинският покой на душата се постига единствено чрез помнене на Единствения Творец, спазване на Таухида и следване на Сунната.",
+        actionStep: "Спрете за 1 минута, направете искрен истигфар и дуа. Запазете това видео и споделете за добро!",
       };
+    }
+
+    if (parsed.proposal && parsed.proposal.surah && parsed.proposal.ayah && parsed.proposal.scriptWorkflow) {
+      const freshBg = await preFetchQuranDalilBg(
+        Number(parsed.proposal.surah),
+        Number(parsed.proposal.ayah),
+        Number(parsed.proposal.count) || 1,
+      );
+      if (freshBg) {
+        parsed.proposal.scriptWorkflow.dalilText = freshBg;
+      }
     }
 
     if (parsed.proposal) {
@@ -2082,10 +2373,19 @@ export const confirmAndGenerateVideo = createServerFn({ method: "POST" })
         bulgarian = t.bulgarian.replace(/(^|\n)\s*(?:\(\d+\)|\[\d+\]|\d+\.)\s*/g, "$1").trim();
 
         if (proposal.type === "explained_video" || proposal.scriptWorkflow) {
+          const candidateDalil = (proposal.scriptWorkflow?.dalilText || "").trim();
+          const effectiveDalil =
+            candidateDalil.length > 20 &&
+            !candidateDalil.includes("...") &&
+            !candidateDalil.includes("…") &&
+            candidateDalil !== proposal.title
+              ? candidateDalil
+              : bulgarian;
+
           bulgarian = buildExplainedNarrationText({
             viralTitle,
             reference,
-            quoteText: bulgarian,
+            quoteText: effectiveDalil,
             isQuran: true,
             scriptWorkflow: proposal.scriptWorkflow,
             summaryBg: proposal.summaryBg,

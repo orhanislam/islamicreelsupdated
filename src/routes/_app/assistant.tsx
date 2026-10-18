@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { copyToClipboardFallback } from "@/lib/utils";
 import { toast } from "sonner";
-import { chatWithAssistant, suggestViralProposal, suggestExplainedVideoProposal, suggestAlternativeProposal, suggestBatchViralProposals, confirmAndGenerateVideo, startBatchViralSeries, startBatchViralHadithSeries, getAssistantHistory, saveAssistantHistory, clearAssistantHistory, startBackgroundPlanGeneration, startBackgroundBatchGeneration, checkActiveBackgroundTasks, cleanProposalTitle, extractTopic, detectActionOrDuaLabel, cleanScriptPrefixes, stripScholarAttribution, type VideoProposal, type ExplainedVideoScript, type ManagerAction } from "@/lib/assistant.functions";
+import { chatWithAssistant, suggestViralProposal, suggestExplainedVideoProposal, refineExplainedScriptSection, suggestAlternativeProposal, suggestBatchViralProposals, confirmAndGenerateVideo, startBatchViralSeries, startBatchViralHadithSeries, getAssistantHistory, saveAssistantHistory, clearAssistantHistory, startBackgroundPlanGeneration, startBackgroundBatchGeneration, checkActiveBackgroundTasks, cleanProposalTitle, extractTopic, detectActionOrDuaLabel, cleanScriptPrefixes, stripScholarAttribution, type VideoProposal, type ExplainedVideoScript, type ManagerAction } from "@/lib/assistant.functions";
 import { getAiMemory, updateAiMemory, type AiMemory } from "@/lib/memory.functions";
 import { getOneMonthCooldownSummary, recordRejectedProposalToHistory } from "@/lib/generation-history.functions";
 import { generateViralThumbnail } from "@/lib/thumbnail.functions";
@@ -61,6 +61,18 @@ export const VIRAL_HADITH_PRESETS = [
   { collection: "nawawi40", number: 13, title: "Хадис № 13 на Навауи (Братска обич)", prompt: "Направи вирално TikTok видео за Хадис № 13 на Навауи - Никога не си истински вярващ, докато не пожелаеш за брата си това, което желаеш за себе си" }
 ];
 
+export const EXPLAINED_VIDEO_THEME_PILLS = [
+  { label: "✨ Изненадай ме (Топ избор)", value: "" },
+  { label: "🤍 Покой и тревожност", value: "Тревожност, тъга и покой на сърцето" },
+  { label: "⏳ Забавена дуа", value: "Забавена дуа и близостта на Аллах" },
+  { label: "🛡️ Изпитания и сабр", value: "Изпитания, търпение сабр и скрита мъдрост" },
+  { label: "🌾 Ризк и препитание", value: "Ризк, препитание и благодарност" },
+  { label: "💧 Покаяние и прошка", value: "Покаяние тауба, прошка и надежда след грях" },
+  { label: "⛰️ Упование (Тауаккул)", value: "Тауаккул, упование и свобода от страха" },
+  { label: "🌌 Чист Таухид", value: "Чистият Таухид и величието на Единствения Творец" },
+  { label: "⚖️ Дуня и Ахирет", value: "Преходност на Дуня, Ахирет и смисълът на живота" },
+];
+
 function AssistantPage() {
   const navigate = useNavigate();
   const [prompt, setPrompt] = useState("");
@@ -69,6 +81,13 @@ function AssistantPage() {
   const [batchCount, setBatchCount] = useState<number>(1);
   const [hadithBatchCount, setHadithBatchCount] = useState<number>(1);
   const [explainedCount, setExplainedCount] = useState<number>(1);
+  const [explainedTopic, setExplainedTopic] = useState<string>("");
+  const [explainedSourcePref, setExplainedSourcePref] = useState<"auto" | "quran" | "hadith">("auto");
+  const [editingScriptMsgIdx, setEditingScriptMsgIdx] = useState<number | null>(null);
+  const [refiningScriptTarget, setRefiningScriptTarget] = useState<{
+    msgIdx: number;
+    target: "hook" | "explanation" | "all";
+  } | null>(null);
   const [carouselCount, setCarouselCount] = useState<number>(1);
   const [planBatchCount, setPlanBatchCount] = useState<number>(1);
 
@@ -874,35 +893,137 @@ function AssistantPage() {
     try {
       playStudioClick("start");
       setExplainedLoading(true);
-      toast.message("🎬 AI подготвя Ислямско видео с обяснение (цитат + разяснение)...");
-
-      const res = await suggestExplainedVideoProposal({ data: {} });
-
+      const totalToGenerate = Math.max(1, Math.min(10, explainedCount));
       const scheduleNote = explainedSchedule === "scheduled" && explainedScheduleDate
         ? `\n\n📅 **Планирано време за рендиране:** ${new Date(explainedScheduleDate).toLocaleString("bg-BG")}`
         : "";
 
-      const expAct = res.proposal?.scriptWorkflow?.actionStep
-        ? cleanScriptPrefixes(res.proposal.scriptWorkflow.actionStep)
-        : "";
-      const expActLabel = expAct ? detectActionOrDuaLabel(expAct) : "";
-      const expActText = expAct ? `\n${expActLabel === "Дуа" ? "🤍" : "📌"} **${expActLabel}:** ${expAct}` : "";
-      const expExpl = stripScholarAttribution(res.proposal?.scriptWorkflow?.explanation || res.proposal?.summaryBg || "");
+      for (let i = 0; i < totalToGenerate; i++) {
+        toast.message(
+          totalToGenerate > 1
+            ? `🎬 AI подготвя Ислямско видео с обяснение (${i + 1}/${totalToGenerate})...`
+            : "🎬 AI подготвя Ислямско видео с обяснение (цитат + 3-слойно разяснение)...",
+        );
 
-      setMessages((prev) => [
-        ...prev,
-        {
+        const res = await suggestExplainedVideoProposal({
+          data: {
+            topic: explainedTopic.trim() || undefined,
+            sourcePreference: explainedSourcePref,
+          },
+        });
+
+        const expAct = res.proposal?.scriptWorkflow?.actionStep
+          ? cleanScriptPrefixes(res.proposal.scriptWorkflow.actionStep)
+          : "";
+        const expActLabel = expAct ? detectActionOrDuaLabel(expAct) : "";
+        const expActText = expAct ? `\n${expActLabel === "Дуа" ? "🤍" : "📌"} **${expActLabel}:** ${expAct}` : "";
+        const expExpl = stripScholarAttribution(res.proposal?.scriptWorkflow?.explanation || res.proposal?.summaryBg || "");
+
+        const newMsg: ChatMsg = {
           role: "assistant",
-          text: `🎬 **Ислямско видео с обяснение:**\n\n${res.reply}\n\n📖 **Цитат:** ${res.proposal?.title}\n💎 **Обяснение:** ${expExpl}${expActText}\n🎨 **Атмосфера:** ${res.proposal?.themeBg}${scheduleNote}\n\n📌 Натиснете **\"✅ Съгласи се / Одобри\"** за да стартираме видеото, или **\"❌ Откажи / Предложи друг\"** за алтернатива!`,
+          text: `🎬 **Ислямско видео с обяснение${totalToGenerate > 1 ? ` (${i + 1}/${totalToGenerate})` : ""}:**\n\n${res.reply}\n\n📖 **Цитат:** ${res.proposal?.title}\n💎 **Обяснение:** ${expExpl}${expActText}\n🎨 **Атмосфера:** ${res.proposal?.themeBg}${scheduleNote}\n\n📌 Натиснете **\"✅ Съгласи се / Одобри\"** за да стартираме видеото, използвайте бутоните за **AI подобрение / редакция**, или **\"❌ Откажи / Предложи друг\"** за алтернатива!`,
           proposal: res.proposal,
-        },
-      ]);
+        };
+
+        setMessages((prev) => {
+          const next = [...prev, newMsg];
+          saveAssistantHistory({ data: { messages: next } }).catch(() => {});
+          return next;
+        });
+      }
+      refreshCooldownSummary();
       playStudioClick("success");
     } catch (e: any) {
       toast.error(e?.message || "Грешка при генериране на предложение за видео с обяснение");
     } finally {
       setExplainedLoading(false);
     }
+  };
+
+  const handleRefineScriptSection = async (
+    msgIdx: number,
+    target: "hook" | "explanation" | "all",
+  ) => {
+    const msg = messages[msgIdx];
+    if (!msg?.proposal || refiningScriptTarget !== null) return;
+    try {
+      playStudioClick("click");
+      setRefiningScriptTarget({ msgIdx, target });
+      toast.message(
+        target === "hook"
+          ? "🎯 Salafi Shaykh AI създава още по-силна кука (Hook)..."
+          : target === "explanation"
+          ? "💎 Salafi Shaykh AI задълбочава обяснението по Тефсира/Шарха..."
+          : "✨ Salafi Shaykh AI усъвършенства целия сценарий...",
+      );
+
+      const res = await refineExplainedScriptSection({
+        data: {
+          proposal: msg.proposal,
+          target,
+        },
+      });
+
+      setMessages((prev) => {
+        const next = [...prev];
+        const targetMsg = next[msgIdx];
+        if (targetMsg && targetMsg.proposal) {
+          targetMsg.proposal = {
+            ...targetMsg.proposal,
+            scriptWorkflow: res.scriptWorkflow,
+            summaryBg: res.summaryBg,
+          };
+        }
+        saveAssistantHistory({ data: { messages: next } }).catch(() => {});
+        return next;
+      });
+      playStudioClick("success");
+      toast.success(
+        target === "hook"
+          ? "Куката беше обновена успешно!"
+          : target === "explanation"
+          ? "Обяснението беше задълбочено успешно!"
+          : "Сценарият беше обновен успешно!",
+      );
+    } catch (err: any) {
+      toast.error(err?.message || "Грешка при подобряване на сценария");
+    } finally {
+      setRefiningScriptTarget(null);
+    }
+  };
+
+  const handleUpdateScriptField = (
+    msgIdx: number,
+    field: keyof ExplainedVideoScript,
+    value: string,
+  ) => {
+    setMessages((prev) => {
+      const next = [...prev];
+      const targetMsg = next[msgIdx];
+      if (targetMsg && targetMsg.proposal) {
+        const prevSw = targetMsg.proposal.scriptWorkflow || {
+          hookQuestion: "",
+          hookContext: "",
+          dalilIntro: targetMsg.proposal.surah
+            ? "В Свещения Коран, Аллах Всевишният повелява:"
+            : "Пратеникът на Аллах ﷺ ни учи:",
+          dalilText: targetMsg.proposal.title,
+          explanation: targetMsg.proposal.summaryBg || "",
+          actionStep: "",
+        };
+        const updatedSw = {
+          ...prevSw,
+          [field]: value,
+        };
+        targetMsg.proposal = {
+          ...targetMsg.proposal,
+          scriptWorkflow: updatedSw,
+          summaryBg: field === "explanation" ? value : targetMsg.proposal.summaryBg,
+        };
+      }
+      saveAssistantHistory({ data: { messages: next } }).catch(() => {});
+      return next;
+    });
   };
 
   const handleClearChat = async () => {
@@ -1347,78 +1468,153 @@ function AssistantPage() {
         </div>
 
         {/* Islamic Video with Explanation Quick Action Toolbar */}
-        <div className="rounded-2xl border border-emerald-500/40 bg-gradient-to-r from-emerald-500/15 via-teal-500/10 to-transparent p-3.5 sm:p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4 mt-6">
-          <div className="flex-1">
-            <div className="flex items-center gap-2 text-emerald-400 font-bold text-sm">
-              <Sparkles className="size-4" /> 🎬 ИСЛЯМСКО ВИДЕО С ОБЯСНЕНИЕ (ЦИТАТ + ОБЯСНЕНИЕ)
+        <div className="rounded-2xl border border-emerald-500/40 bg-gradient-to-r from-emerald-500/15 via-teal-500/10 to-transparent p-3.5 sm:p-4 flex flex-col gap-3.5 mt-6">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4">
+            <div className="flex-1">
+              <div className="flex items-center gap-2 text-emerald-400 font-bold text-sm">
+                <Sparkles className="size-4" /> 🎬 ИСЛЯМСКО ВИДЕО С ОБЯСНЕНИЕ (ЦИТАТ + 3-СЛОЕН ШАРХ)
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">
+                Генерирай готово кинематографично видео: психологическа кука, автентичен аят/хадис (100% точен превод) и дълбоко 3-слойно обяснение със синхронизирани караоке субтитри.
+              </p>
             </div>
-            <p className="text-xs text-muted-foreground mt-1">
-              Генерирай готово кинематографично видео: автентичен аят/хадис, последван от дълбоко обяснение и житейска поука със синхронизирани караоке субтитри.
-            </p>
-            <div className="flex flex-wrap items-center gap-3 mt-2.5">
-              <div className="flex items-center gap-1.5">
-                <span className="text-xs font-semibold text-muted-foreground">Брой:</span>
-                <select
-                  value={explainedCount}
-                  onChange={(e) => setExplainedCount(Number(e.target.value))}
-                  className="bg-black/60 border border-emerald-500/40 rounded-lg px-2 py-1 text-xs font-bold text-emerald-300 cursor-pointer focus:outline-none focus:ring-1 focus:ring-emerald-400"
-                >
-                  {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((num) => (
-                    <option key={num} value={num} className="bg-neutral-900 text-white">
-                      {num} {num === 1 ? "видео" : "видеа"} {num === 1 ? "(по подразбиране)" : ""}
-                    </option>
-                  ))}
-                </select>
-              </div>
+            <button
+              onClick={handleExplainedVideoSuggest}
+              disabled={explainedLoading}
+              className="inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 px-5 py-3 text-xs font-bold text-white shadow-lg hover:from-emerald-400 hover:to-teal-500 transition shrink-0 cursor-pointer self-stretch sm:self-auto"
+            >
+              {explainedLoading ? (
+                <>
+                  <Loader2 className="size-4 animate-spin" /> Генериране...
+                </>
+              ) : (
+                <>
+                  <Video className="size-4" />{" "}
+                  {explainedCount === 0
+                    ? "Избрани са 0 видеа"
+                    : explainedCount === 1
+                    ? "Създай Видео с Обяснение"
+                    : `Създай ${explainedCount} Видеа с Обяснение`}
+                </>
+              )}
+            </button>
+          </div>
 
-              <div className="flex items-center gap-1.5 flex-wrap">
-                <span className="text-xs font-semibold text-muted-foreground">График:</span>
-                <div className="inline-flex rounded-lg border border-border/50 bg-black/40 p-0.5">
+          {/* Theme Quick-Pills & Custom Topic/Citation Input */}
+          <div className="space-y-2 pt-1 border-t border-emerald-500/20">
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="text-[11px] font-semibold text-emerald-300/90 mr-1">🎯 Тема:</span>
+              {EXPLAINED_VIDEO_THEME_PILLS.map((pill) => {
+                const isActive = explainedTopic === pill.value;
+                return (
                   <button
+                    key={pill.label}
                     type="button"
-                    onClick={() => setExplainedSchedule("now")}
-                    className={`px-2.5 py-1 rounded-md text-[11px] font-semibold transition cursor-pointer ${
-                      explainedSchedule === "now" ? "bg-emerald-500 text-white shadow-sm" : "text-muted-foreground hover:text-foreground"
+                    onClick={() => setExplainedTopic(pill.value)}
+                    className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold transition cursor-pointer border ${
+                      isActive
+                        ? "bg-emerald-500/25 border-emerald-400 text-emerald-200 shadow-sm"
+                        : "bg-black/40 border-emerald-500/20 text-muted-foreground hover:text-white hover:border-emerald-500/40"
                     }`}
                   >
-                    🎬 Генерирай Сега
+                    {pill.label}
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => setExplainedSchedule("scheduled")}
-                    className={`px-2.5 py-1 rounded-md text-[11px] font-semibold transition cursor-pointer ${
-                      explainedSchedule === "scheduled" ? "bg-emerald-500 text-white shadow-sm" : "text-muted-foreground hover:text-foreground"
-                    }`}
-                  >
-                    📅 Планирай
-                  </button>
-                </div>
-                {explainedSchedule === "scheduled" && (
-                  <input
-                    type="datetime-local"
-                    value={explainedScheduleDate}
-                    onChange={(e) => setExplainedScheduleDate(e.target.value)}
-                    className="bg-black/60 border border-emerald-500/40 rounded-lg px-2 py-1 text-xs text-emerald-300 focus:outline-none focus:ring-1 focus:ring-emerald-400 cursor-pointer"
-                  />
-                )}
-              </div>
+                );
+              })}
+            </div>
+
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+              <input
+                type="text"
+                value={explainedTopic}
+                onChange={(e) => setExplainedTopic(e.target.value)}
+                placeholder="Или напишете своя тема / точен цитат (напр. „Коран 2:286“, „Бухари 6412“, „страх от бедност“)..."
+                className="flex-1 bg-black/50 border border-emerald-500/30 rounded-xl px-3 py-1.5 text-xs text-white placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-emerald-400"
+              />
+              {explainedTopic && (
+                <button
+                  type="button"
+                  onClick={() => setExplainedTopic("")}
+                  className="px-2.5 py-1.5 rounded-xl bg-black/40 border border-border/50 text-[11px] text-muted-foreground hover:text-white cursor-pointer shrink-0"
+                >
+                  Изчисти темата
+                </button>
+              )}
             </div>
           </div>
-          <button
-            onClick={handleExplainedVideoSuggest}
-            disabled={explainedLoading}
-            className="inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 px-5 py-3 text-xs font-bold text-white shadow-lg hover:from-emerald-400 hover:to-teal-500 transition shrink-0 cursor-pointer self-stretch sm:self-auto"
-          >
-            {explainedLoading ? (
-              <>
-                <Loader2 className="size-4 animate-spin" /> Генериране...
-              </>
-            ) : (
-              <>
-                <Video className="size-4" /> {explainedCount === 0 ? "Избрани са 0 видеа" : "Създай Видео с Обяснение"}
-              </>
-            )}
-          </button>
+
+          <div className="flex flex-wrap items-center gap-3 pt-1">
+            <div className="flex items-center gap-1.5">
+              <span className="text-xs font-semibold text-muted-foreground">Източник:</span>
+              <div className="inline-flex rounded-lg border border-emerald-500/30 bg-black/40 p-0.5">
+                {[
+                  { id: "auto" as const, label: "✨ Авто (Коран/Хадис)" },
+                  { id: "quran" as const, label: "📖 Само Коран" },
+                  { id: "hadith" as const, label: "📜 Само Хадис" },
+                ].map((src) => (
+                  <button
+                    key={src.id}
+                    type="button"
+                    onClick={() => setExplainedSourcePref(src.id)}
+                    className={`px-2.5 py-1 rounded-md text-[11px] font-semibold transition cursor-pointer ${
+                      explainedSourcePref === src.id
+                        ? "bg-emerald-500 text-white shadow-sm"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    {src.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="flex items-center gap-1.5">
+              <span className="text-xs font-semibold text-muted-foreground">Брой:</span>
+              <select
+                value={explainedCount}
+                onChange={(e) => setExplainedCount(Number(e.target.value))}
+                className="bg-black/60 border border-emerald-500/40 rounded-lg px-2 py-1 text-xs font-bold text-emerald-300 cursor-pointer focus:outline-none focus:ring-1 focus:ring-emerald-400"
+              >
+                {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((num) => (
+                  <option key={num} value={num} className="bg-neutral-900 text-white">
+                    {num} {num === 1 ? "видео" : "видеа"} {num === 1 ? "(по подразбиране)" : ""}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <span className="text-xs font-semibold text-muted-foreground">График:</span>
+              <div className="inline-flex rounded-lg border border-border/50 bg-black/40 p-0.5">
+                <button
+                  type="button"
+                  onClick={() => setExplainedSchedule("now")}
+                  className={`px-2.5 py-1 rounded-md text-[11px] font-semibold transition cursor-pointer ${
+                    explainedSchedule === "now" ? "bg-emerald-500 text-white shadow-sm" : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  🎬 Генерирай Сега
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setExplainedSchedule("scheduled")}
+                  className={`px-2.5 py-1 rounded-md text-[11px] font-semibold transition cursor-pointer ${
+                    explainedSchedule === "scheduled" ? "bg-emerald-500 text-white shadow-sm" : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  📅 Планирай
+                </button>
+              </div>
+              {explainedSchedule === "scheduled" && (
+                <input
+                  type="datetime-local"
+                  value={explainedScheduleDate}
+                  onChange={(e) => setExplainedScheduleDate(e.target.value)}
+                  className="bg-black/60 border border-emerald-500/40 rounded-lg px-2 py-1 text-xs text-emerald-300 focus:outline-none focus:ring-1 focus:ring-emerald-400 cursor-pointer"
+                />
+              )}
+            </div>
+          </div>
         </div>
 
         {/* Carousel Quick Action Toolbar */}
@@ -1718,125 +1914,252 @@ function AssistantPage() {
                         <>
                           {m.proposal.type === 'explained_video' ? (
                             <div className="mt-2.5 mb-3 rounded-xl border border-emerald-500/30 bg-emerald-950/20 p-3.5 space-y-2.5">
-                              <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 font-bold text-xs">
-                                <Sparkles className="size-3.5" /> 🎬 4-СТЕПЕНЕН WORKFLOW С ОБЯСНЕНИЕ
+                              <div className="flex flex-wrap items-center justify-between gap-2">
+                                <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 font-bold text-xs">
+                                  <Sparkles className="size-3.5" /> 🎬 4-СТЕПЕНЕН WORKFLOW С ОБЯСНЕНИЕ
+                                </div>
+
+                                {!m.isRejected && (
+                                  <div className="flex flex-wrap items-center gap-1.5">
+                                    <button
+                                      type="button"
+                                      onClick={() => handleRefineScriptSection(idx, "hook")}
+                                      disabled={refiningScriptTarget !== null}
+                                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-amber-500/15 border border-amber-500/40 text-amber-300 hover:bg-amber-500/25 text-[11px] font-semibold transition cursor-pointer disabled:opacity-50"
+                                      title="Нека Salafi Shaykh AI напише още по-силна и пронизваща кука за първите 3 секунди"
+                                    >
+                                      {refiningScriptTarget?.msgIdx === idx && refiningScriptTarget?.target === "hook" ? (
+                                        <Loader2 className="size-3 animate-spin" />
+                                      ) : (
+                                        <Sparkles className="size-3" />
+                                      )}
+                                      🎯 По-силна кука (AI)
+                                    </button>
+
+                                    <button
+                                      type="button"
+                                      onClick={() => handleRefineScriptSection(idx, "explanation")}
+                                      disabled={refiningScriptTarget !== null}
+                                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-sky-500/15 border border-sky-500/40 text-sky-300 hover:bg-sky-500/25 text-[11px] font-semibold transition cursor-pointer disabled:opacity-50"
+                                      title="Нека Salafi Shaykh AI задълбочи обяснението по автентичния Тефсир/Шарх"
+                                    >
+                                      {refiningScriptTarget?.msgIdx === idx && refiningScriptTarget?.target === "explanation" ? (
+                                        <Loader2 className="size-3 animate-spin" />
+                                      ) : (
+                                        <Sparkles className="size-3" />
+                                      )}
+                                      💎 По-дълбоко обяснение (AI)
+                                    </button>
+
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        setEditingScriptMsgIdx(editingScriptMsgIdx === idx ? null : idx)
+                                      }
+                                      className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border text-[11px] font-semibold transition cursor-pointer ${
+                                        editingScriptMsgIdx === idx
+                                          ? "bg-emerald-500 text-white border-emerald-400"
+                                          : "bg-black/40 border-emerald-500/40 text-emerald-300 hover:bg-emerald-500/15"
+                                      }`}
+                                    >
+                                      <Pencil className="size-3" />
+                                      {editingScriptMsgIdx === idx ? "✅ Запази редакцията" : "✏️ Редактирай текста тук"}
+                                    </button>
+                                  </div>
+                                )}
                               </div>
 
                               {m.proposal.scriptWorkflow ? (
-                                <div className="space-y-2 text-xs">
-                                  {m.proposal.scriptWorkflow.hookQuestion && (
-                                    <div className="p-2.5 rounded-lg bg-black/40 border border-amber-500/20">
-                                      <div className="font-semibold text-white/95">„{cleanScriptPrefixes(m.proposal.scriptWorkflow.hookQuestion)}“</div>
-                                      {m.proposal.scriptWorkflow.hookContext && (
-                                        <div className="text-white/70 mt-0.5">{cleanScriptPrefixes(m.proposal.scriptWorkflow.hookContext)}</div>
-                                      )}
+                                editingScriptMsgIdx === idx ? (
+                                  <div className="space-y-2.5 text-xs bg-black/50 p-3 rounded-xl border border-emerald-500/40">
+                                    <div>
+                                      <label className="block font-bold text-amber-300 mb-1">
+                                        🎯 Кука — Въпрос (Първите 3 секунди):
+                                      </label>
+                                      <input
+                                        type="text"
+                                        value={m.proposal.scriptWorkflow.hookQuestion || ""}
+                                        onChange={(e) =>
+                                          handleUpdateScriptField(idx, "hookQuestion", e.target.value)
+                                        }
+                                        className="w-full rounded-lg bg-black/70 border border-amber-500/40 px-2.5 py-1.5 text-xs text-white focus:outline-none focus:ring-1 focus:ring-amber-400"
+                                      />
                                     </div>
-                                  )}
-
-                                  <div className="p-2.5 rounded-lg bg-black/40 border border-teal-500/20">
-                                    <div className="font-bold text-teal-300 flex items-center gap-1 mb-1">
-                                      <span>📖 Свещен цитат</span>
+                                    <div>
+                                      <label className="block font-bold text-amber-200/80 mb-1">
+                                        💬 Контекст на куката:
+                                      </label>
+                                      <textarea
+                                        rows={2}
+                                        value={m.proposal.scriptWorkflow.hookContext || ""}
+                                        onChange={(e) =>
+                                          handleUpdateScriptField(idx, "hookContext", e.target.value)
+                                        }
+                                        className="w-full rounded-lg bg-black/70 border border-amber-500/30 px-2.5 py-1.5 text-xs text-white focus:outline-none focus:ring-1 focus:ring-amber-400"
+                                      />
                                     </div>
-                                    {m.proposal.scriptWorkflow.dalilText ? (
-                                      <div className="font-medium text-white/90">„{cleanScriptPrefixes(m.proposal.scriptWorkflow.dalilText)}“</div>
-                                    ) : (
-                                      <div className="font-semibold text-primary">{m.proposal.title}</div>
-                                    )}
+                                    <div>
+                                      <label className="block font-bold text-teal-300 mb-1">
+                                        📖 Свещен цитат (Далил във видеото):
+                                      </label>
+                                      <textarea
+                                        rows={3}
+                                        value={m.proposal.scriptWorkflow.dalilText || ""}
+                                        onChange={(e) =>
+                                          handleUpdateScriptField(idx, "dalilText", e.target.value)
+                                        }
+                                        className="w-full rounded-lg bg-black/70 border border-teal-500/40 px-2.5 py-1.5 text-xs text-white focus:outline-none focus:ring-1 focus:ring-teal-400"
+                                      />
+                                    </div>
+                                    <div>
+                                      <label className="block font-bold text-sky-300 mb-1">
+                                        💎 Обяснение (Поука във видеото):
+                                      </label>
+                                      <textarea
+                                        rows={3}
+                                        value={stripScholarAttribution(
+                                          m.proposal.scriptWorkflow.explanation || "",
+                                        )}
+                                        onChange={(e) =>
+                                          handleUpdateScriptField(
+                                            idx,
+                                            "explanation",
+                                            `Обяснение: ${e.target.value.replace(/^обяснение:\s*/i, "")}`,
+                                          )
+                                        }
+                                        className="w-full rounded-lg bg-black/70 border border-sky-500/40 px-2.5 py-1.5 text-xs text-white focus:outline-none focus:ring-1 focus:ring-sky-400"
+                                      />
+                                    </div>
+                                    <div>
+                                      <label className="block font-bold text-emerald-300 mb-1">
+                                        🤍 Дуа / Напътствие (За TikTok описанието):
+                                      </label>
+                                      <input
+                                        type="text"
+                                        value={m.proposal.scriptWorkflow.actionStep || ""}
+                                        onChange={(e) =>
+                                          handleUpdateScriptField(idx, "actionStep", e.target.value)
+                                        }
+                                        className="w-full rounded-lg bg-black/70 border border-emerald-500/40 px-2.5 py-1.5 text-xs text-white focus:outline-none focus:ring-1 focus:ring-emerald-400"
+                                      />
+                                    </div>
                                   </div>
-
-                                  <div className="p-2.5 rounded-lg bg-black/40 border border-sky-500/20">
-                                    <div className="font-bold text-sky-300 flex items-center gap-1 mb-1">
-                                      <span>💎 Обяснение:</span>
-                                    </div>
-                                    <div className="text-white/90">{stripScholarAttribution(m.proposal.scriptWorkflow.explanation)}</div>
-                                  </div>
-
-                                  {m.proposal.scriptWorkflow.actionStep && (
-                                    <div className="p-2.5 rounded-lg bg-black/40 border border-emerald-500/30">
-                                      <div className="font-bold text-emerald-300 flex items-center gap-1 mb-1">
-                                        <span>
-                                          {detectActionOrDuaLabel(m.proposal.scriptWorkflow.actionStep) === "Дуа"
-                                            ? "🤍 Дуа:"
-                                            : "📌 Напътствие:"}
-                                        </span>
-                                      </div>
-                                      <div className="text-emerald-100/90 font-medium">
-                                        {cleanScriptPrefixes(m.proposal.scriptWorkflow.actionStep)}
-                                      </div>
-                                    </div>
-                                  )}
-
-                                  {m.proposal.scriptWorkflow.sourceScholar && (
-                                    <div
-                                      className={`rounded-lg p-2.5 space-y-1.5 ${
-                                        m.proposal.scriptWorkflow.sourceType === "salafi_ai"
-                                          ? "bg-amber-950/30 border border-amber-500/30"
-                                          : "bg-emerald-950/40 border border-emerald-500/30"
-                                      }`}
-                                    >
-                                      <div className="flex items-center justify-between gap-2 flex-wrap">
-                                        <div
-                                          className={`flex items-center gap-1.5 text-[11px] font-bold ${
-                                            m.proposal.scriptWorkflow.sourceType === "salafi_ai"
-                                              ? "text-amber-400"
-                                              : "text-emerald-400"
-                                          }`}
-                                        >
-                                          {m.proposal.scriptWorkflow.sourceType === "salafi_ai" ? (
-                                            <Sparkles className="size-3.5 text-amber-400 shrink-0" />
-                                          ) : (
-                                            <ShieldCheck className="size-3.5 text-emerald-400 shrink-0" />
-                                          )}
-                                          <span>
-                                            {m.proposal.scriptWorkflow.sourceType === "salafi_ai"
-                                              ? "Разяснение от:"
-                                              : "Проверен източник:"}
-                                          </span>
-                                          <span className="text-white font-semibold">
-                                            {m.proposal.scriptWorkflow.sourceScholar}
-                                          </span>
-                                        </div>
-                                        {m.proposal.scriptWorkflow.sourceWork && (
-                                          <span
-                                            className={`text-[10px] px-2 py-0.5 rounded-full font-medium border ${
-                                              m.proposal.scriptWorkflow.sourceType === "salafi_ai"
-                                                ? "bg-amber-500/20 text-amber-300 border-amber-500/30"
-                                                : "bg-emerald-500/20 text-emerald-300 border-emerald-500/30"
-                                            }`}
-                                          >
-                                            {m.proposal.scriptWorkflow.sourceWork}
-                                          </span>
+                                ) : (
+                                  <div className="space-y-2 text-xs">
+                                    {m.proposal.scriptWorkflow.hookQuestion && (
+                                      <div className="p-2.5 rounded-lg bg-black/40 border border-amber-500/20">
+                                        <div className="font-semibold text-white/95">„{cleanScriptPrefixes(m.proposal.scriptWorkflow.hookQuestion)}“</div>
+                                        {m.proposal.scriptWorkflow.hookContext && (
+                                          <div className="text-white/70 mt-0.5">{cleanScriptPrefixes(m.proposal.scriptWorkflow.hookContext)}</div>
                                         )}
                                       </div>
-                                      {m.proposal.scriptWorkflow.sourceText && (
-                                        <details className="group mt-1">
-                                          <summary
-                                            className={`text-[10px] cursor-pointer select-none font-medium flex items-center gap-1 ${
-                                              m.proposal.scriptWorkflow.sourceType === "salafi_ai"
-                                                ? "text-amber-400/90 hover:text-amber-300"
-                                                : "text-emerald-400/90 hover:text-emerald-300"
-                                            }`}
-                                          >
-                                            <span>
-                                              {m.proposal.scriptWorkflow.sourceType === "salafi_ai"
-                                                ? "🌿 Виж разяснението и поуката от Salafi AI"
-                                                : "📜 Виж автентичния оригинален текст от базата данни"}
-                                            </span>
-                                          </summary>
-                                          <div
-                                            className={`mt-1.5 p-2 rounded bg-black/50 border text-[11px] text-white/85 leading-relaxed italic max-h-36 overflow-y-auto whitespace-pre-wrap ${
-                                              m.proposal.scriptWorkflow.sourceType === "salafi_ai"
-                                                ? "border-amber-500/20"
-                                                : "border-emerald-500/20"
-                                            }`}
-                                          >
-                                            „{m.proposal.scriptWorkflow.sourceText}“
-                                          </div>
-                                        </details>
+                                    )}
+
+                                    <div className="p-2.5 rounded-lg bg-black/40 border border-teal-500/20">
+                                      <div className="font-bold text-teal-300 flex items-center gap-1 mb-1">
+                                        <span>📖 Свещен цитат</span>
+                                      </div>
+                                      {m.proposal.scriptWorkflow.dalilText ? (
+                                        <div className="font-medium text-white/90">„{cleanScriptPrefixes(m.proposal.scriptWorkflow.dalilText)}“</div>
+                                      ) : (
+                                        <div className="font-semibold text-primary">{m.proposal.title}</div>
                                       )}
                                     </div>
-                                  )}
-                                </div>
+
+                                    <div className="p-2.5 rounded-lg bg-black/40 border border-sky-500/20">
+                                      <div className="font-bold text-sky-300 flex items-center gap-1 mb-1">
+                                        <span>💎 Обяснение:</span>
+                                      </div>
+                                      <div className="text-white/90">{stripScholarAttribution(m.proposal.scriptWorkflow.explanation)}</div>
+                                    </div>
+
+                                    {m.proposal.scriptWorkflow.actionStep && (
+                                      <div className="p-2.5 rounded-lg bg-black/40 border border-emerald-500/30">
+                                        <div className="font-bold text-emerald-300 flex items-center gap-1 mb-1">
+                                          <span>
+                                            {detectActionOrDuaLabel(m.proposal.scriptWorkflow.actionStep) === "Дуа"
+                                              ? "🤍 Дуа:"
+                                              : "📌 Напътствие:"}
+                                          </span>
+                                        </div>
+                                        <div className="text-emerald-100/90 font-medium">
+                                          {cleanScriptPrefixes(m.proposal.scriptWorkflow.actionStep)}
+                                        </div>
+                                      </div>
+                                    )}
+
+                                    {m.proposal.scriptWorkflow.sourceScholar && (
+                                      <div
+                                        className={`rounded-lg p-2.5 space-y-1.5 ${
+                                          m.proposal.scriptWorkflow.sourceType === "salafi_ai"
+                                            ? "bg-amber-950/30 border border-amber-500/30"
+                                            : "bg-emerald-950/40 border border-emerald-500/30"
+                                        }`}
+                                      >
+                                        <div className="flex items-center justify-between gap-2 flex-wrap">
+                                          <div
+                                            className={`flex items-center gap-1.5 text-[11px] font-bold ${
+                                              m.proposal.scriptWorkflow.sourceType === "salafi_ai"
+                                                ? "text-amber-400"
+                                                : "text-emerald-400"
+                                            }`}
+                                          >
+                                            {m.proposal.scriptWorkflow.sourceType === "salafi_ai" ? (
+                                              <Sparkles className="size-3.5 text-amber-400 shrink-0" />
+                                            ) : (
+                                              <ShieldCheck className="size-3.5 text-emerald-400 shrink-0" />
+                                            )}
+                                            <span>
+                                              {m.proposal.scriptWorkflow.sourceType === "salafi_ai"
+                                                ? "Разяснение от:"
+                                                : "Проверен източник:"}
+                                            </span>
+                                            <span className="text-white font-semibold">
+                                              {m.proposal.scriptWorkflow.sourceScholar}
+                                            </span>
+                                          </div>
+                                          {m.proposal.scriptWorkflow.sourceWork && (
+                                            <span
+                                              className={`text-[10px] px-2 py-0.5 rounded-full font-medium border ${
+                                                m.proposal.scriptWorkflow.sourceType === "salafi_ai"
+                                                  ? "bg-amber-500/20 text-amber-300 border-amber-500/30"
+                                                  : "bg-emerald-500/20 text-emerald-300 border-emerald-500/30"
+                                              }`}
+                                            >
+                                              {m.proposal.scriptWorkflow.sourceWork}
+                                            </span>
+                                          )}
+                                        </div>
+                                        {m.proposal.scriptWorkflow.sourceText && (
+                                          <details className="group mt-1">
+                                            <summary
+                                              className={`text-[10px] cursor-pointer select-none font-medium flex items-center gap-1 ${
+                                                m.proposal.scriptWorkflow.sourceType === "salafi_ai"
+                                                  ? "text-amber-400/90 hover:text-amber-300"
+                                                  : "text-emerald-400/90 hover:text-emerald-300"
+                                              }`}
+                                            >
+                                              <span>
+                                                {m.proposal.scriptWorkflow.sourceType === "salafi_ai"
+                                                  ? "🌿 Виж разяснението и поуката от Salafi AI"
+                                                  : "📜 Виж автентичния оригинален текст от базата данни"}
+                                              </span>
+                                            </summary>
+                                            <div
+                                              className={`mt-1.5 p-2 rounded bg-black/50 border text-[11px] text-white/85 leading-relaxed italic max-h-36 overflow-y-auto whitespace-pre-wrap ${
+                                                m.proposal.scriptWorkflow.sourceType === "salafi_ai"
+                                                  ? "border-amber-500/20"
+                                                  : "border-emerald-500/20"
+                                              }`}
+                                            >
+                                              „{m.proposal.scriptWorkflow.sourceText}“
+                                            </div>
+                                          </details>
+                                        )}
+                                      </div>
+                                    )}
+                                  </div>
+                                )
                               ) : (
                                 m.proposal.summaryBg && (
                                   <div className="text-xs">
