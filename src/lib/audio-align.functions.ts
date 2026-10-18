@@ -1,13 +1,4 @@
 import { createServerFn } from "@tanstack/react-start";
-import fs from "node:fs/promises";
-import os from "node:os";
-import path from "node:path";
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
-import ffmpegInstaller from "@ffmpeg-installer/ffmpeg";
-
-const execFileAsync = promisify(execFile);
-const ffmpegPath = ffmpegInstaller.path;
 
 export type SpeechInterval = {
   start: number;
@@ -29,6 +20,15 @@ export async function detectSpeechIntervals(
   silenceThresholdDb = -33,
   minSilenceDurationSec = 0.15
 ): Promise<SpeechInterval[]> {
+  const fs = (await import("node:fs/promises")).default;
+  const os = (await import("node:os")).default;
+  const path = (await import("node:path")).default;
+  const { execFile } = await import("node:child_process");
+  const { promisify } = await import("node:util");
+  const ffmpegInstaller = (await import("@ffmpeg-installer/ffmpeg")).default;
+  const execFileAsync = promisify(execFile);
+  const ffmpegPath = ffmpegInstaller.path;
+
   let tmpPath = "";
   let isTemp = false;
 
