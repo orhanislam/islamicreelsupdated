@@ -8,7 +8,7 @@ type NavigatorWithFileShare = Navigator & {
 };
 
 export function sanitizeFilename(input: string, fallback = "post") {
-  const clean = input.replace(/[^a-z0-9._-]+/gi, "_").replace(/^_+|_+$/g, "");
+  const clean = input.replace(/[^a-zA-Z0-9а-яА-ЯёЁ._-]+/gi, "_").replace(/^_+|_+$/g, "");
   return clean || fallback;
 }
 

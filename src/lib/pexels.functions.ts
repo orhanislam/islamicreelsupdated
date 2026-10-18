@@ -288,7 +288,9 @@ export async function checkVideoForHaram(video: PexelsVideo): Promise<boolean> {
   }
 
   try {
-    const indices = [0, Math.floor(pics.length / 2), pics.length - 1];
+    // Sample 5 frames across the video to better catch moving people
+    const len = pics.length;
+    const indices = [0, Math.floor(len * 0.25), Math.floor(len * 0.5), Math.floor(len * 0.75), len - 1];
     const uniqueIndices = [...new Set(indices)];
 
     const downloadedImages = await Promise.all(
@@ -319,15 +321,13 @@ export async function checkVideoForHaram(video: PexelsVideo): Promise<boolean> {
     }
 
     const prompt = `You are an uncompromising Islamic compliance auditor adhering to orthodox Salafi standards.
-Inspect these video keyframes. 
-REJECT AND REPLY 'HARAM: <reason>' IF ANY OF THE FOLLOWING ARE VISIBLE IN ANY FRAME:
-1. ANY human beings (men, women, children, faces, hands, legs, body parts, silhouettes, shadows of people).
-2. ANY animals or living creatures with faces (mammals, birds, reptiles, fish, pets, wildlife).
-3. Musical instruments or concert/stage settings.
-4. Statues, idols, figurines, crosses, or non-Islamic religious iconography.
-5. Inappropriate clothing or revealing attire.
+Inspect these video keyframes with EXTREME ATTENTION TO THE BACKGROUND and DISTANCE. 
+REJECT AND REPLY 'HARAM: <reason>' IF ANY OF THE FOLLOWING ARE VISIBLE IN ANY FRAME, NO MATTER HOW SMALL, FAR AWAY, BLURRY, OR OBSCURED:
+1. ANY human beings (men, women, children, crowds, faces, silhouettes, shadows of people, people walking far away in the background). Even a tiny speck that looks like a person is HARAM.
+2. ANY animals, birds in the sky, or living creatures.
+3. Musical instruments, concerts, statues, crosses, or inappropriate clothing.
 
-REPLY 'HALAL' ONLY IF ALL FRAMES ARE 100% PURE NATURE (mountains, oceans, clouds, rivers, trees, starry skies, deserts) OR ARCHITECTURE/GEOMETRIC DESIGNS COMPLETELY FREE OF ANIMATE BEINGS.
+REPLY 'HALAL' ONLY IF ALL FRAMES ARE 100% EMPTY NATURE (mountains, oceans, clouds, deserts, etc) OR EMPTY ARCHITECTURE, WITH ABSOLUTELY ZERO ANIMATE BEINGS. Look extremely closely at the background before answering!
 Reply with exactly 'HARAM: <reason>' or 'HALAL'.`;
 
     const answer = await geminiImageAnalysis(images, prompt);
@@ -942,7 +942,8 @@ export async function analyzeVisualThemes(text: string, avoid: string[] = []): P
             'ВАЖНО ЗА ЦВЕТОВЕТЕ: НИКОГА не предлагай черно-бели, тъмни или мрачни (black and white / monochrome / grayscale / dark / gloomy / shadow / silhouette / storm / fog) видеа! Всички заявки ТРЯБВА да търсят ВАЙБРАНТНИ, СВЕТЛИ и ЦВЕТНИ кадри (напр. "vibrant sunset", "golden hour nature", "colorful sky", "emerald green valley", "turquoise water", "warm sunlight").\n' +
             "Предпочитай красива цветна природа (вода, слънчева светлина, планини, зелени гори, небе, изгрев/залез), архитектурни детайли, златен час, океан.\n" +
             "Извличаш СМИСЪЛА — ако текстът говори за търпение → тиха вода на слънце; за милост → дъжд над зелена долина със слънчева светлина; за светлина/напътствие → топъл изгрев, фенер, звезди; за съдния ден → бурен океан със залез; за знание → отворена книга на топла светлина; за рай → водопад, цветя, слънчева градина; за смърт/отвъдното → спокоен златен залез.\n" +
-            'Върни СТРИКТЕН JSON: {"theme": string (на български, 2-4 думи), "mood": "calm"|"majestic"|"reflective"|"hopeful"|"solemn", "queries": string[3..5] (английски Pexels заявки, най-конкретната първа, всяка 2-4 думи)}.\n' +
+            'МНОГО ВАЖНО: ВСЯКА една заявка в масива "queries" задължително трябва да завършва с "no people empty" за да филтрираме резултатите в Pexels.\n' +
+            'Върни СТРИКТЕН JSON: {"theme": string (на български, 2-4 думи), "mood": "calm"|"majestic"|"reflective"|"hopeful"|"solemn", "queries": string[3..5] (английски Pexels заявки, завършващи с " no people empty")}.\n' +
             (avoidLine ? avoidLine + "\n" : ""),
         },
         { role: "user", content: text.slice(0, 1200) },

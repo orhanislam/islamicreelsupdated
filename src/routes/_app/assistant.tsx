@@ -109,7 +109,7 @@ function AssistantPage() {
   const [cooldownSummary, setCooldownSummary] = useState<{
     totalBlocked: number;
     ayahs: Array<{ key: string; surah?: number; ayah?: number; daysRemaining: number; title: string }>;
-    hadiths: Array<{ key: string; collection?: string; number?: number; daysRemaining: number; title: string }>;
+    hadiths: Array<{ key: string; collection?: string; number?: string | number; daysRemaining: number; title: string }>;
   } | null>(null);
 
   const [usedQuranKeys, setUsedQuranKeys] = useState<string[]>(() => {
@@ -364,6 +364,10 @@ function AssistantPage() {
         const serverMsgs = checkRes.history && checkRes.history.length > 0 ? checkRes.history : await getAssistantHistory();
         if (Array.isArray(serverMsgs) && serverMsgs.length > 0) {
           setMessages((prev) => {
+            const hasRunningServerTasks = Array.isArray(checkRes.activeTasks) && checkRes.activeTasks.length > 0;
+            if (!hasRunningServerTasks && serverMsgs.length <= prev.length) {
+              return prev;
+            }
             if (JSON.stringify(prev) !== JSON.stringify(serverMsgs)) {
               if (typeof window !== "undefined" && window.localStorage) {
                 window.localStorage.setItem("islamic_assistant_chat_history_v3", JSON.stringify(serverMsgs));

@@ -370,7 +370,7 @@ export function analyzeAndFixRenderPayloadSync(payload: any): {
     timingSyncValid = true;
 
     // Check Safe Zone line width
-    const maxSafeWidth = TIKTOK_SAFE_ZONE.SAFE_WIDTH; // 760px
+    const maxSafeWidth = TIKTOK_SAFE_ZONE.W_SAFE; // 760px
     for (const t of cleanedTimings) {
       const w = estimateTextWidth(t.word, 80);
       if (w > maxSafeWidth) {

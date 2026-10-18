@@ -1,6 +1,22 @@
+let sharedAudioCtx: AudioContext | null = null;
+
+function getSharedAudioContext(): AudioContext | null {
+  if (typeof window === "undefined") return null;
+  if (!sharedAudioCtx || sharedAudioCtx.state === "closed") {
+    const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+    if (!AudioCtx) return null;
+    sharedAudioCtx = new AudioCtx();
+  }
+  if (sharedAudioCtx.state === "suspended") {
+    sharedAudioCtx.resume().catch(() => {});
+  }
+  return sharedAudioCtx;
+}
+
 export function playStudioClick(type: "click" | "success" | "start" = "click") {
   try {
-    const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+    const ctx = getSharedAudioContext();
+    if (!ctx) return;
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
     osc.connect(gain);
@@ -36,3 +52,4 @@ export function playStudioClick(type: "click" | "success" | "start" = "click") {
     // Browser might block AudioContext before interaction
   }
 }
+

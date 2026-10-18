@@ -10,7 +10,7 @@ export { TIKTOK_SAFE_ZONE, CAROUSEL_SAFE_ZONE, type SafeZoneGeometry };
 export type CarouselSlideOptions = {
   backgroundUrl?: string; // Optional for overlayOnly
   topTitle: string;
-  mainText: string;
+  mainText?: string;
   bottomText: string;
   footerText?: string;
   quoteText?: string;
@@ -37,9 +37,9 @@ export interface TextSegment {
 export interface SlideSegments {
   isQuoteSlide: boolean;
   segments: TextSegment[];
-  quoteText?: string;
-  commentaryText?: string;
-  normalText?: string;
+  quoteText: string;
+  commentaryText: string;
+  normalText: string;
 }
 
 export function stripEmojis(text: string): string {

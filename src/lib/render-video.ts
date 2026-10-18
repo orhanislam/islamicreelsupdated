@@ -943,7 +943,11 @@ export async function renderVideo(opts: VideoOptions): Promise<{ blob: Blob; mim
       lineHeight: number;
       lines: string[][];
     };
-    const isCenter = opts.subtitlePosition === "center" || opts.style === "center";
+    const isCenter =
+      opts.subtitlePosition === "center" ||
+      (opts.subtitlePosition as string) === "middle" ||
+      opts.style === "centered" ||
+      (opts.style as string) === "center";
     const rawAnchorY = getSubtitleAnchorY(sz, opts.style || opts.subtitlePosition);
     const pillTotalHeight = Math.round(
       (REFERENCE_PILL_STANDARDS.FONT_SIZE +
@@ -1194,7 +1198,11 @@ export async function renderVideo(opts: VideoOptions): Promise<{ blob: Blob; mim
         ctx.lineJoin = "round";
 
         const blockH = activePhrase.lines.length * activePhrase.lineHeight;
-        const isCenter = opts.subtitlePosition === "center" || opts.style === "center";
+        const isCenter =
+          opts.subtitlePosition === "center" ||
+          (opts.subtitlePosition as string) === "middle" ||
+          opts.style === "centered" ||
+          (opts.style as string) === "center";
         const rawAnchorY = getSubtitleAnchorY(sz, opts.style || opts.subtitlePosition);
         let baseY: number;
         let centerY: number;
@@ -1241,7 +1249,13 @@ export async function renderVideo(opts: VideoOptions): Promise<{ blob: Blob; mim
             ? "#32CD32"
             : opts.tiktokTheme === "neon"
               ? "#00FFFF"
-              : "#FFD700";
+              : opts.tiktokTheme === "fire"
+                ? "#FF6B00"
+                : opts.tiktokTheme === "box"
+                  ? "#FF3B30"
+                  : opts.tiktokTheme === "classic"
+                    ? "#FFFFFF"
+                    : "#FFD700";
 
         let currentWordOffset = 0;
         for (let i = 0; i < activePhrase.lines.length; i++) {

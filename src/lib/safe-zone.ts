@@ -262,7 +262,9 @@ export const REFERENCE_PILL_STANDARDS = Object.freeze({
  */
 export function getSafeZone(platform?: PlatformSafeZoneProfile | string | null): SafeZoneGeometry {
   if (!platform || typeof platform !== "string") return TIKTOK_SAFE_ZONE;
-  const key = platform.trim().toLowerCase() as PlatformSafeZoneProfile;
+  const rawKey = platform.trim().toLowerCase();
+  if (rawKey === "middle" || rawKey === "centered") return CENTER_SAFE_ZONE;
+  const key = rawKey as PlatformSafeZoneProfile;
   return SOCIAL_SAFE_ZONES[key] || TIKTOK_SAFE_ZONE;
 }
 
@@ -483,7 +485,13 @@ export function getSafeAssStyles(
   style?: "minimal" | "centered" | "lower-third" | "bottom" | string,
 ): SafeAssStyleConfig {
   const g = getSafeZone(platform);
-  const isCenter = platform === "center" || style === "centered" || style === "minimal";
+  const isCenter =
+    platform === "center" ||
+    platform === "middle" ||
+    style === "centered" ||
+    style === "center" ||
+    style === "middle" ||
+    style === "minimal";
   const align = isCenter ? 5 : 2; // 5 = middle-center, 2 = bottom-center
   const posY = isCenter ? g.SAFE_TOP + Math.round(g.H_SAFE / 2) : g.BOTTOM_MAX_Y;
 
@@ -513,7 +521,12 @@ export function getSubtitleAnchorY(
 
   if (
     style === "center" ||
-    (typeof platformOrGeometry === "string" && platformOrGeometry === "center")
+    style === "centered" ||
+    style === "middle" ||
+    (typeof platformOrGeometry === "string" &&
+      (platformOrGeometry === "center" ||
+        platformOrGeometry === "middle" ||
+        platformOrGeometry === "centered"))
   ) {
     return Math.round(sz.H / 2);
   }

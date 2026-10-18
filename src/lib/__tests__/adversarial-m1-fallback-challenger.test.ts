@@ -478,8 +478,8 @@ async function runAdversarialM1ChallengerSuite() {
       const cycleVal = extremeIntegers[Math.floor(Math.random() * extremeIntegers.length)];
 
       const res = await getCarouselBackgroundsDirect({
-        count: countVal,
-        cycleIndex: cycleVal,
+        count: countVal as any,
+        cycleIndex: cycleVal as any,
       });
 
       assert(Array.isArray(res.backgrounds), `res.backgrounds must be array at iteration ${i}`);
@@ -669,7 +669,7 @@ async function runAdversarialM1ChallengerSuite() {
       const obj = parsed as { version?: number; records?: Record<string, { status?: string }> };
       assert(obj.version === 1, "Restored cache has version 1");
       assert(obj.records !== undefined, "Restored cache has records dictionary");
-      assert(obj.records[String(healId)]?.status === "HALAL", "Healed cache contains the saved record");
+      assert(obj.records![String(healId)]?.status === "HALAL", "Healed cache contains the saved record");
 
       // Step 4: Verify read matches
       const readBack = await getCachedHalalStatus(healId);

@@ -1074,23 +1074,34 @@ export async function executeRenderTask(opts: any): Promise<any> {
             "-color_trc bt709",
             "-color_primaries bt709",
             "-movflags +faststart",
-            "-preset veryfast",
-            "-crf 20",
-            "-maxrate 28M",
-            "-bufsize 56M",
-            "-r 60",
-            "-g 120",
+            "-preset ultrafast",
+            "-crf 24",
+            "-maxrate 20M",
+            "-bufsize 40M",
+            "-r 30",
+            "-g 60",
             "-c:a aac",
             "-profile:a aac_low",
             "-b:a 192k",
             "-ar 48000",
             "-ac 2",
             `-t ${Number(audioDur).toFixed(2)}`,
-            "-threads 0",
+            "-threads 1",
           ])
           .outputFormat("mp4")
           .on("start", (commandLine: string) => {
             console.log(`[server-render] FFmpeg started with command: ${commandLine}`);
+            // Lower FFmpeg priority to prevent it from completely starving the web server on a 1-core VPS
+            import("child_process").then(({ exec }) => {
+              exec('pidof ffmpeg', (err, stdout) => {
+                if (!err && stdout) {
+                  const pids = stdout.trim().split(' ').join(' ');
+                  exec(`renice -n 19 -p ${pids}`, () => {
+                    console.log(`[server-render] Reniced FFmpeg (PIDs: ${pids}) to priority 19`);
+                  });
+                }
+              });
+            });
           })
           .on("stderr", (line: string) => {
             ffmpegStderr += line + "\n";
@@ -1214,7 +1225,21 @@ async function aggressivelyCleanServerDisk(forceAll = false) {
     for (const tmpDir of tmpDirs) {
       try {
         const tmpFiles = await fs.readdir(tmpDir).catch(() => []);
-        const prefixes = ["reel_", "render_", "audio_", "frame_", "bg_", "export_"];
+        const prefixes = [
+          "reel_",
+          "render_",
+          "audio_",
+          "frame_",
+          "bg_",
+          "export_",
+          "islamic-tts-",
+          "islamic-align-",
+          "broll_",
+          "sub_",
+          "concat_",
+          "out_",
+          "merged_",
+        ];
         for (const f of tmpFiles) {
           const matchesPrefix = prefixes.some((p) => f.startsWith(p));
           if (matchesPrefix) {
@@ -1370,6 +1395,9 @@ export type ServerJobRecord = {
   createdAt: number;
   completedAt?: number;
   data?: any;
+  payload?: any;
+  auditReport?: any;
+  downloadUrl?: string;
   error?: string;
 };
 
@@ -1589,8 +1617,17 @@ export const startServerRenderJob = createServerFn({ method: "POST" })
     processRenderQueue().catch((e) => console.error("[server-queue] Queue processing error:", e));
 
     // Record into persistent generation history
+    const refStr = String(data?.reference || title || "");
+    const inferredType =
+      data?.type === "hadith" ||
+      data?.collection ||
+      /бухари|муслим|тирмизи|навауи|хадис|bukhari|muslim|tirmidhi|nawawi/i.test(refStr)
+        ? "hadith"
+        : "ayah";
+
     recordGenerationEntryDirect({
       id: jobId,
+      type: inferredType,
       title: title || data?.reference || "Ислямско видео",
       reference: data?.reference || title || "Ислямско видео",
       arabicText: data?.arabic,
@@ -1608,7 +1645,7 @@ export const retryServerRenderJob = createServerFn({ method: "POST" })
   .validator((input: { id: string }) => input)
   .handler(async ({ data: { id } }) => {
     let jobData: any;
-    let jobTitle: string;
+    let jobTitle = id;
     await withJobsLock(async () => {
       const jobs = await loadJobs();
       const idx = jobs.findIndex((j: any) => j.id === id);

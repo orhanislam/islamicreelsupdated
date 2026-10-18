@@ -131,8 +131,20 @@ export const copyToClipboardFallback = (text: string, successMsg?: string) => {
   }
 
   try {
-    const success = copy(sanitizedText, { format: 'text/plain' });
-    if (success) {
+    const result: unknown = copy(sanitizedText, { format: "text/plain" });
+    if (result && typeof (result as Promise<boolean>).then === "function") {
+      (result as Promise<boolean>)
+        .then((ok) => {
+          if (ok) {
+            toast.success(msg);
+          } else {
+            showManualCopyModal(sanitizedText, msg);
+          }
+        })
+        .catch(() => {
+          showManualCopyModal(sanitizedText, msg);
+        });
+    } else if (result === true) {
       toast.success(msg);
     } else {
       showManualCopyModal(sanitizedText, msg);

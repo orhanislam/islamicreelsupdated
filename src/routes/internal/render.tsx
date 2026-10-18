@@ -26,7 +26,11 @@ function HeadlessRenderPage() {
         
         setStatus("Encoding to Base64...");
         const reader = new FileReader();
-        reader.readAsDataURL(result.blob);
+        reader.onerror = () => {
+          const msg = "FileReader failed to encode video blob";
+          setStatus("Error: " + msg);
+          if (window.onRenderError) window.onRenderError(msg);
+        };
         reader.onloadend = () => {
           setStatus("Sending back to Node...");
           const base64data = (reader.result as string).split(',')[1];
@@ -36,12 +40,16 @@ function HeadlessRenderPage() {
             console.error("onVideoRendered is not defined by Puppeteer");
           }
         };
+        reader.readAsDataURL(result.blob);
       } catch (err: unknown) {
         setStatus("Error: " + String(err));
         if (window.onRenderError) {
           window.onRenderError(String(err));
         }
       }
+    };
+    return () => {
+      delete (window as Partial<Window>).startHeadlessRender;
     };
   }, []);
 

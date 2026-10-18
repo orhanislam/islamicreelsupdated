@@ -112,6 +112,25 @@ async function scrape(collection: SunnahCollection, number: number): Promise<Sun
 
   let reference = `${COLLECTIONS[collection].label} • Хадис № ${number}`;
 
+  let extractedGrade: string | null = COLLECTIONS[collection].allSahih ? "Sahih" : null;
+  if (!extractedGrade) {
+    const gradesArr = Array.isArray(engMatch.grades)
+      ? engMatch.grades
+      : Array.isArray(araMatch.grades)
+        ? araMatch.grades
+        : [];
+    if (gradesArr.length > 0) {
+      extractedGrade = gradesArr
+        .map((g: any) => (typeof g === "string" ? g : g?.grade || ""))
+        .filter(Boolean)
+        .join(", ");
+    } else if (typeof engMatch.grade === "string") {
+      extractedGrade = engMatch.grade;
+    } else {
+      extractedGrade = "Sahih";
+    }
+  }
+
   return {
     collection,
     collectionLabel: COLLECTIONS[collection].label,
@@ -120,7 +139,7 @@ async function scrape(collection: SunnahCollection, number: number): Promise<Sun
     english,
     reference,
     inBookReference: null,
-    grade: COLLECTIONS[collection].allSahih ? "Sahih" : null,
+    grade: extractedGrade,
     sourceUrl: `https://sunnah.com/${collection}:${number}`, // Keep sunnah.com as the UI source reference
   };
 }

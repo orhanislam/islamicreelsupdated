@@ -517,8 +517,8 @@ function runTier1FeatureCoverage() {
       bottomText: "Плъзни наляво 👉",
     });
 
-    const quoteLine = layout.lines.find((l) => l.type === "quote");
-    const commentaryLine = layout.lines.find((l) => l.type === "commentary");
+    const quoteLine = layout.lines.find((l) => l.type === "quote")!;
+    const commentaryLine = layout.lines.find((l) => l.type === "commentary")!;
 
     assert(!!quoteLine, "Sacred quote line must be present");
     assert(!!commentaryLine, "Commentary line must be present");
@@ -534,8 +534,8 @@ function runTier1FeatureCoverage() {
       bottomText: "Запази за напомняне",
     });
 
-    const lastQuoteLine = layout.lines.filter((l) => l.type === "quote").pop();
-    const firstCommentaryLine = layout.lines.find((l) => l.type === "commentary");
+    const lastQuoteLine = layout.lines.filter((l) => l.type === "quote").pop()!;
+    const firstCommentaryLine = layout.lines.find((l) => l.type === "commentary")!;
 
     assert(!!lastQuoteLine && !!firstCommentaryLine, "Both quote and commentary lines must exist");
     const verticalGap = firstCommentaryLine.y - lastQuoteLine.y;
@@ -557,7 +557,7 @@ function runTier1FeatureCoverage() {
       bottomText: "Плъзни наляво",
     });
 
-    const titleLine = layout.lines.find((l) => l.type === "title");
+    const titleLine = layout.lines.find((l) => l.type === "title")!;
     assert(!!titleLine, "Title line must be rendered");
     assert(titleLine.fontSize >= 60, "Top title font size must be large (>=60px)");
     assert(titleLine.y >= 300 && titleLine.y <= layout.endY, "Top title must be positioned within safe area bounds");
@@ -571,8 +571,8 @@ function runTier1FeatureCoverage() {
       bottomText: "Плъзнете",
     });
 
-    const quoteLine = layout.lines.find((l) => l.type === "quote");
-    const commLine = layout.lines.find((l) => l.type === "commentary");
+    const quoteLine = layout.lines.find((l) => l.type === "quote")!;
+    const commLine = layout.lines.find((l) => l.type === "commentary")!;
 
     assert(!!quoteLine && !!commLine, "Lines must exist");
     assert(quoteLine.fontSize >= commLine.fontSize, "Sacred quote font size must be >= commentary font size");

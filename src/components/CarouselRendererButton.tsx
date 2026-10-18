@@ -283,9 +283,10 @@ export function CarouselRendererButton({ slides: initialSlides, title }: { slide
       const fullNarrationScript = scriptParts.join(". ").replace(/\s+/g, " ").replace(/\.+/g, ".").trim();
 
       setProgress("Търсене на кинематографични видео сцени (Халал B-Roll)...");
+      const splitSlidesForVideo = autoSplitSlides(initialSlides);
       let videoUrls: string[] = [];
       try {
-        const videoResults = await runFetchVideos({ data: { slides: initialSlides as any } });
+        const videoResults = await runFetchVideos({ data: { slides: splitSlidesForVideo as any } });
         if (Array.isArray(videoResults)) {
           videoUrls = videoResults.map((v: any) => v?.videoUrl).filter(Boolean);
         }
@@ -296,7 +297,7 @@ export function CarouselRendererButton({ slides: initialSlides, title }: { slide
       setProgress("Генериране на видео със синхронизирани субтитри и аудио...");
       const res = await runBuildVideo({
         data: {
-          slides: initialSlides as any,
+          slides: splitSlidesForVideo as any,
           script: fullNarrationScript,
           title: cleanTitle,
           bRollUrls: videoUrls,

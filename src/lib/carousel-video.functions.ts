@@ -23,7 +23,7 @@ export const buildCarouselVideo = createServerFn({ method: "POST" })
     const fs = await import("fs/promises");
     const path = await import("path");
     const os = await import("os");
-    const { executeRenderTask } = await import("./render.functions");
+    const { executeRenderTask, withJobsLock } = await import("./render.functions");
     const { synthesizeHadithNarration } = await import("./tts.functions");
     const { fetchMultiSceneBRoll } = await import("./pexels.functions");
 
@@ -112,10 +112,30 @@ export const buildCarouselVideo = createServerFn({ method: "POST" })
       "https://videos.pexels.com/video-files/30054113/12891205_1080_1920_30fps.mp4";
     const primaryBg = bRollClips[0] || fallbackBg;
 
-    // 4. Render using the battle-tested executeRenderTask engine
     const primaryDir = path.join(os.homedir(), ".islamicreels_jobs");
     await fs.mkdir(primaryDir, { recursive: true });
     const targetMp4 = path.join(primaryDir, `${jobId}.mp4`);
+    const jobsFile = path.join(primaryDir, "jobs.json");
+    const finalFilename = `${safeFileTitle}.mp4`;
+    const downloadUrl = `/api/download/${jobId}?filename=${encodeURIComponent(finalFilename)}`;
+
+    // Register as "rendering" first so aggressivelyCleanServerDisk treats it as active
+    await withJobsLock(async () => {
+      let jobs: any[] = [];
+      try {
+        const raw = await fs.readFile(jobsFile, "utf-8");
+        jobs = JSON.parse(raw);
+        if (!Array.isArray(jobs)) jobs = [];
+      } catch {}
+      jobs.unshift({
+        id: jobId,
+        title: displayTitle || "Ислямско видео от карусел",
+        status: "rendering",
+        createdAt: Date.now(),
+        downloadUrl,
+      });
+      await fs.writeFile(jobsFile, JSON.stringify(jobs.slice(0, 100), null, 2), "utf-8");
+    }).catch(() => {});
 
     await executeRenderTask({
       data: {
@@ -137,28 +157,33 @@ export const buildCarouselVideo = createServerFn({ method: "POST" })
       },
     });
 
-    const finalFilename = `${safeFileTitle}.mp4`;
-    const downloadUrl = `/api/download/${jobId}?filename=${encodeURIComponent(finalFilename)}`;
-
-    // 5. Register in jobs.json so it immediately appears in the Downloads tab
+    // 5. Update status to completed in jobs.json under lock
     try {
-      const jobsFile = path.join(primaryDir, "jobs.json");
-      let jobs: any[] = [];
-      try {
-        const raw = await fs.readFile(jobsFile, "utf-8");
-        jobs = JSON.parse(raw);
-        if (!Array.isArray(jobs)) jobs = [];
-      } catch {}
+      await withJobsLock(async () => {
+        let jobs: any[] = [];
+        try {
+          const raw = await fs.readFile(jobsFile, "utf-8");
+          jobs = JSON.parse(raw);
+          if (!Array.isArray(jobs)) jobs = [];
+        } catch {}
 
-      jobs.unshift({
-        id: jobId,
-        title: displayTitle || "Ислямско видео от карусел",
-        status: "completed",
-        createdAt: Date.now(),
-        completedAt: Date.now(),
-        downloadUrl,
+        const existingIdx = jobs.findIndex((j: any) => j.id === jobId);
+        if (existingIdx !== -1) {
+          jobs[existingIdx].status = "completed";
+          jobs[existingIdx].completedAt = Date.now();
+          jobs[existingIdx].downloadUrl = downloadUrl;
+        } else {
+          jobs.unshift({
+            id: jobId,
+            title: displayTitle || "Ислямско видео от карусел",
+            status: "completed",
+            createdAt: Date.now(),
+            completedAt: Date.now(),
+            downloadUrl,
+          });
+        }
+        await fs.writeFile(jobsFile, JSON.stringify(jobs.slice(0, 100), null, 2), "utf-8");
       });
-      await fs.writeFile(jobsFile, JSON.stringify(jobs.slice(0, 100), null, 2));
     } catch (jobsErr) {
       console.warn("[carousel-video] Could not record in jobs.json:", jobsErr);
     }

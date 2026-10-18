@@ -149,7 +149,7 @@ function HistoryPage() {
 
   const handleOpenInCreate = (item: GenerationHistoryItem) => {
     const proposal: Record<string, any> = {
-      type: item.type === "hadith" ? "hadith" : "quran",
+      type: item.type === "hadith" ? "hadith" : item.type === "carousel" ? "general" : "quran",
       title: item.title,
       reference: item.reference,
       surah: item.surah,
@@ -157,6 +157,9 @@ function HistoryPage() {
       count: item.ayahEnd && item.ayah ? item.ayahEnd - item.ayah + 1 : 1,
       collection: item.collection,
       number: item.hadithNumber,
+      arabicText: item.arabicText,
+      bulgarianText: item.bulgarianText,
+      summaryBg: item.bulgarianText || item.title,
       themeBg: item.title,
       tiktokTheme: item.theme || "hormozi",
       autoGenerate: false,

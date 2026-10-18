@@ -655,7 +655,7 @@ CAPCUT-ПОДОБНИ ИНСТРУКЦИИ ЗА РЕДАКТИРАНЕ:
             const secondCheck = checkProposalOneMonthCooldown(parsedRetry.proposal, exclusionData.items);
             if (!secondCheck.isBlocked) {
               parsed.proposal = parsedRetry.proposal;
-              if (parsed.proposal.title) parsed.proposal.title = cleanProposalTitle(parsed.proposal.title);
+              if (parsed.proposal?.title) parsed.proposal.title = cleanProposalTitle(parsed.proposal.title);
               if (parsedRetry.reply) parsed.reply = parsedRetry.reply;
             }
           }
@@ -879,7 +879,7 @@ SALAFI HALAL ПРИНЦИПИ (СТРИКТНО ЗАДЪЛЖИТЕЛНО):
           const secondCheck = checkProposalOneMonthCooldown(parsedRetry.proposal, exclusionData.items);
           if (!secondCheck.isBlocked) {
             parsed.proposal = parsedRetry.proposal;
-            if (parsed.proposal.title) parsed.proposal.title = cleanProposalTitle(parsed.proposal.title);
+            if (parsed.proposal?.title) parsed.proposal.title = cleanProposalTitle(parsed.proposal.title);
             if (parsedRetry.reply) parsed.reply = parsedRetry.reply;
           }
         }
@@ -996,18 +996,23 @@ export async function generateExplainedVideoProposalDirect(data?: { topic?: stri
       // Filter out candidates within 30-day cooldown
       const unexcludedVerses = candidateVerses.filter(
         (v) =>
+          !exclusionData.ayahKeys.has(`${v.surah}:${v.ayah}`) &&
           !exclusionData.items.some(
-            (ex) => ex.type === "quran" && Number(ex.surah) === v.surah && Number(ex.ayah) === v.ayah,
+            (ex) =>
+              (ex.type === "ayah" || (ex as { type?: string }).type === "quran") &&
+              Number(ex.surah) === v.surah &&
+              Number(ex.ayah) === v.ayah,
           ),
       );
 
       const unexcludedHadiths = candidateSharhs.filter(
         (h) =>
+          !exclusionData.hadithKeys.has(`${h.collection.toLowerCase().trim()}:${h.number}`) &&
           !exclusionData.items.some(
             (ex) =>
               ex.type === "hadith" &&
               (ex.collection || "bukhari").toLowerCase().trim() === h.collection.toLowerCase().trim() &&
-              String(ex.number) === String(h.number),
+              String(ex.hadithNumber ?? (ex as { number?: string | number }).number ?? "") === String(h.number),
           ),
       );
 
@@ -1231,7 +1236,7 @@ ${userTopic}${preGroundingPrompt ? `\n\n${preGroundingPrompt}` : ""}
             const secondCheck = checkProposalOneMonthCooldown(parsedRetry.proposal, exclusionData.items);
             if (!secondCheck.isBlocked) {
               parsed.proposal = parsedRetry.proposal;
-              if (parsed.proposal.title) parsed.proposal.title = cleanProposalTitle(parsed.proposal.title);
+              if (parsed.proposal?.title) parsed.proposal.title = cleanProposalTitle(parsed.proposal.title);
               if (parsedRetry.reply) parsed.reply = parsedRetry.reply;
             }
           }
@@ -1244,6 +1249,7 @@ ${userTopic}${preGroundingPrompt ? `\n\n${preGroundingPrompt}` : ""}
     if (parsed.proposal && !parsed.proposal.scriptWorkflow) {
       parsed.proposal.scriptWorkflow = {
         hookQuestion: "Защо усещаш тревога в гърдите си, дори когато всичко изглежда наред?",
+        hookContext: "Често търсим спокойствие на грешните места, но душата остава жадна за истината.",
         dalilIntro: parsed.proposal.surah ? "В Свещения Коран, Аллах Всевишният повелява:" : "Пратеникът на Аллах ﷺ ни учи:",
         explanation: parsed.proposal.summaryBg || "Обяснение: Истинският покой на душата се постига единствено чрез помнене на Аллах, спазване на Таухида и следване на Сунната.",
         actionStep: "Спри за 1 минута, направи искрен истигфар и дуа. Запази това видео и сподели за добро!",
@@ -1427,7 +1433,7 @@ ${historyContext}${oneMonthExclusionContext}
             const secondCheck = checkProposalOneMonthCooldown(parsedRetry.proposal, exclusionData.items);
             if (!secondCheck.isBlocked) {
               parsed.proposal = parsedRetry.proposal;
-              if (parsed.proposal.title) parsed.proposal.title = cleanProposalTitle(parsed.proposal.title);
+              if (parsed.proposal?.title) parsed.proposal.title = cleanProposalTitle(parsed.proposal.title);
               if (parsedRetry.reply) parsed.reply = parsedRetry.reply;
             }
           }
@@ -1775,15 +1781,19 @@ export function stripScholarAttribution(text: string): string {
 
 export function buildExplainedNarrationText(params: {
   viralTitle?: string;
-  reference: string;
+  reference?: string;
   quoteText: string;
-  isQuran: boolean;
+  isQuran?: boolean;
   scriptWorkflow?: ExplainedVideoScript;
   summaryBg?: string;
+  themeBg?: string;
+  actionStep?: string;
   includeActionInVideo?: boolean;
 }): string {
   const sw = params.scriptWorkflow;
   const blocks: string[] = [];
+  const effectiveRef = params.reference || params.viralTitle || "";
+  const effectiveIsQuran = params.isQuran ?? !/бухари|муслим|тирмизи|навауи|хадис|bukhari|muslim|tirmidhi|nawawi/i.test(effectiveRef);
 
   // Step 1: Hook (Question & Short Context) - strictly clean, without numbered dots
   const hookParts: string[] = [];
@@ -1801,7 +1811,7 @@ export function buildExplainedNarrationText(params: {
   }
 
   // Step 2: Dalil (Intro + Sacred Quote + Citation spoken at the end)
-  const spokenRef = formatSpokenCitation(params.reference, params.isQuran);
+  const spokenRef = formatSpokenCitation(effectiveRef, effectiveIsQuran);
   let intro = (sw?.dalilIntro || "").trim();
   intro = intro.replace(/^(?:чуй\s+какво\s+)?(?:ни\s+)?казва\s+(?:се\s+)?(?:ни\s+)?за\s*[^:]*:\s*/i, "");
 
@@ -1812,7 +1822,7 @@ export function buildExplainedNarrationText(params: {
     intro.includes("сура") ||
     intro.includes("хадис")
   ) {
-    if (params.isQuran) {
+    if (effectiveIsQuran) {
       intro = "Чуй какво казва Аллах Всевишният в Корана:";
     } else {
       intro = "Пратеникът на Аллах ﷺ ни учи:";
@@ -1842,8 +1852,9 @@ export function buildExplainedNarrationText(params: {
   }
 
   // Note: In the video narration there is NO "Действие" (Action step) - per user instruction, the video ends cleanly with the explanation
-  if (params.includeActionInVideo && sw?.actionStep?.trim()) {
-    const cleanAct = sanitizeTheologicalRespect(cleanScriptPrefixes(sw.actionStep));
+  const rawAct = sw?.actionStep?.trim() || params.actionStep?.trim();
+  if (params.includeActionInVideo && rawAct) {
+    const cleanAct = sanitizeTheologicalRespect(cleanScriptPrefixes(rawAct));
     const label = detectActionOrDuaLabel(cleanAct);
     blocks.push(`${label}: ${cleanAct}`);
   }
@@ -2266,7 +2277,7 @@ export const VIRAL_SERIES_PRESETS = [
     ayahEnd: 3,
     ref: "Сура Ан-Наср (110:1-3)",
     summary: "Победата и прошката на Аллах",
-    query: "triumph golden sunlight birds flying",
+    query: "triumph golden sunlight rays clouds sky nature",
   },
   {
     surah: 109,
@@ -2334,7 +2345,7 @@ export const VIRAL_HADITH_SERIES_PRESETS = [
     title: "Хадис № 13 на Навауи (Братска обич)",
     summaryBg:
       "Никога не си истински вярващ, докато не пожелаеш за брата си това, което желаеш за себе си.",
-    query: "two birds flying together cinematic nature",
+    query: "lush green forest sunlight rays cinematic nature",
   },
   {
     collection: "nawawi40",
@@ -2439,7 +2450,11 @@ export async function triggerBackgroundTaskWorker() {
         try {
           await updateTask(nextTask.id, { progress: 30, message: "AI генерира вайръл идеи..." });
           const res = await suggestBatchViralProposals({
-            data: { count: nextTask.payload.count, topic: nextTask.payload.topic },
+            data: {
+              count: nextTask.payload.count,
+              topic: nextTask.payload.topic,
+              targetType: nextTask.payload.targetType,
+            },
           });
 
           await updateTask(nextTask.id, {

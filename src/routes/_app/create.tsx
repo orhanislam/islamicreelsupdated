@@ -113,6 +113,7 @@ function CreatePage() {
   const runNarrate = useServerFn(synthesizeHadithNarration);
   const runFetchMultiScene = useServerFn(fetchMultiSceneBRoll);
   const runCheckCooldown = useServerFn(checkScriptureCooldown);
+  const runAlignTimestamps = useServerFn(alignAudioTimestamps);
 
   // sources
   const [tab, setTab] = useState<"ayah" | "hadith" | "viral">("ayah");
@@ -232,8 +233,19 @@ function CreatePage() {
         const proposal = JSON.parse(saved);
         console.log("Loaded proposal from storage:", proposal);
         if (proposal.tiktokTheme) setTiktokTheme(proposal.tiktokTheme);
-        if (proposal.quality) setVideoQuality(proposal.quality);
-        if (proposal.subtitlePosition) setSubtitlePosition(proposal.subtitlePosition);
+        if (proposal.quality) {
+          setVideoQuality(proposal.quality === "720p" ? "720p" : "1080p");
+        }
+        if (proposal.subtitlePosition) {
+          const rawPos = String(proposal.subtitlePosition).toLowerCase();
+          if (rawPos === "middle" || rawPos === "center" || rawPos === "centered") {
+            setSubtitlePosition("center");
+          } else if (rawPos === "reels" || rawPos === "shorts" || rawPos === "tiktok") {
+            setSubtitlePosition(rawPos);
+          } else {
+            setSubtitlePosition("tiktok");
+          }
+        }
         if (proposal.searchQuery) setPexelsQuery(proposal.searchQuery);
         if (proposal.autoGenerate) setPendingAutoGenerate(true);
 
@@ -268,6 +280,11 @@ function CreatePage() {
             collection = "muslim";
             const numMatch = title.match(/#(\d+)/);
             if (numMatch) number = parseInt(numMatch[1], 10);
+          } else if (title.includes("Тирмизи") || title.toLowerCase().includes("tirmidhi")) {
+            pType = "hadith";
+            collection = "tirmidhi";
+            const numMatch = title.match(/#(\d+)/);
+            if (numMatch) number = parseInt(numMatch[1], 10);
           } else if (title.includes("Навауи") || title.toLowerCase().includes("nawawi")) {
             pType = "hadith";
             collection = "nawawi40";
@@ -297,6 +314,20 @@ function CreatePage() {
           setTimeout(() => {
             loadSunnah(collection as SunnahCollection, number, true, cleanTitle);
           }, 100);
+        } else if (proposal.scriptWorkflow || proposal.summaryBg || proposal.bulgarianText) {
+          const sw = proposal.scriptWorkflow;
+          const composedBg = sw
+            ? [sw.hookQuestion, sw.hookContext, sw.dalilIntro, sw.dalilText, sw.explanation, sw.actionStep]
+                .filter(Boolean)
+                .join(" ")
+            : proposal.bulgarianText || proposal.summaryBg || "";
+          setContent({
+            source_type: "ayah",
+            arabic: proposal.arabicText || "",
+            english: composedBg,
+            source_ref: cleanTitle || proposal.reference || "Ислямско напомняне",
+          });
+          setBulgarian(composedBg);
         } else {
           toast.error(`Непознат формат на предложението: липсват Сура/Аят или Хадис номер.`);
         }
@@ -401,8 +432,10 @@ function CreatePage() {
       const stripped = t.bulgarian.replace(/(^|\n)\s*(?:\(\d+\)|\[\d+\]|\d+\.)\s*/g, "$1").trim();
       setBulgarian(stripped);
       toast.success(t.cached ? "От кеша" : "Преведено");
+      return true;
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : "Грешка");
+      return false;
     } finally {
       setLoading(false);
       setTranslating(false);
@@ -758,8 +791,10 @@ function CreatePage() {
     if (f.size > 25 * 1024 * 1024) return toast.error("Файлът е твърде голям (макс 25MB)");
     try {
       toast.message("Зареждане и конвертиране на аудиото...");
-      const base64Url = await blobToBase64(f);
-      setCustomAudioUrl(base64Url);
+      const rawBase64 = await blobToBase64(f);
+      const mime = f.type && f.type.startsWith("audio/") ? f.type : "audio/mp3";
+      const dataUrl = rawBase64.startsWith("data:") ? rawBase64 : `data:${mime};base64,${rawBase64}`;
+      setCustomAudioUrl(dataUrl);
       toast.success("Аудиото е заредено и готово за авто-синхронизация!");
     } catch (err) {
       toast.error("Не успях да заредя аудио файла");
@@ -995,13 +1030,14 @@ function CreatePage() {
             sourceRef: content.source_ref,
           },
         });
-        currentBulgarian = t.translated || t.bulgarian || content.english;
+        currentBulgarian = t.bulgarian || content.english;
         setBulgarian(currentBulgarian);
       }
 
       setAutoViralStep("2/4: Избор на кинематографични B-Roll кадри...");
       toast.message("🎬 1-Click: Подбор на вертикални Pexels видеа без хора...");
       let activeBgVideoUrl = bgVideoUrl;
+      let activeBgPosterUrl = bgUrl;
       let activeMultiUrls = multiSceneUrls;
       try {
         const query = pexelsQuery || content.source_ref || "islamic nature";
@@ -1009,6 +1045,7 @@ function CreatePage() {
         if (multiRes.clips && multiRes.clips.length > 0) {
           activeMultiUrls = multiRes.clips;
           activeBgVideoUrl = multiRes.clips[0];
+          activeBgPosterUrl = null;
           setMultiSceneUrls(multiRes.clips);
           setBgVideoUrl(activeBgVideoUrl);
           setBgUrl(null);
@@ -1022,19 +1059,20 @@ function CreatePage() {
           });
           if (r.videos && r.videos[0]) {
             activeBgVideoUrl = r.videos[0].link;
+            activeBgPosterUrl = r.videos[0].poster || null;
             setBgVideoUrl(activeBgVideoUrl);
-            setBgUrl(r.videos[0].poster || null);
+            setBgUrl(activeBgPosterUrl);
           }
         }
       } catch {
         // Ignore fallback video fetch failure
       }
 
-      let activeAudioUrl = customAudioUrl ?? narrationUrl ?? content.audioUrl ?? null;
+      let activeAudioUrl = customAudioUrl ?? narrationUrl ?? null;
       let activeTimings = narrationTimings;
       if (!activeAudioUrl && currentBulgarian.trim().length > 0) {
         setAutoViralStep("3/4: Генериране на глас и акустично караоке...");
-        toast.message("✨ 1-Click: Синхронизиране на българска навигация...");
+        toast.message("✨ 1-Click: Синхронизиране на българско озвучаване...");
         const r = await runNarrate({
           data: { text: currentBulgarian, reference: content.source_ref },
         });
@@ -1042,6 +1080,9 @@ function CreatePage() {
         activeTimings = r.wordTimings ?? null;
         setNarrationUrl(activeAudioUrl);
         setNarrationTimings(activeTimings);
+      }
+      if (!activeAudioUrl) {
+        activeAudioUrl = content.audioUrl ?? null;
       }
 
       setAutoViralStep("4/4: Стартиране на сървърно рендиране във формат Hormozi...");
@@ -1058,7 +1099,7 @@ function CreatePage() {
       const effectiveTopic = topic.trim() || undefined;
       const displayRef = effectiveTopic || content.source_ref;
       const opts = {
-        backgroundUrl: bgUrl,
+        backgroundUrl: activeBgPosterUrl,
         backgroundVideoUrl: activeBgVideoUrl,
         arabic: content.arabic,
         bulgarian: currentBulgarian,
@@ -1072,6 +1113,7 @@ function CreatePage() {
         fallbackDuration: 8,
         ayahBounds: content.ayahBounds,
         arabicWordCount: content.arabicWordCount,
+        wordSegments: content.wordSegments,
         bulgarianWordTimings: activeTimingsFinal,
         quality: videoQuality,
         bRollUrls: activeMultiUrls.length > 1 ? activeMultiUrls : undefined,
@@ -2249,7 +2291,13 @@ function CreatePage() {
                                       ? "#32CD32"
                                       : tiktokTheme === "neon"
                                         ? "#00FFFF"
-                                        : "#FFB700";
+                                        : tiktokTheme === "fire"
+                                          ? "#FF6B00"
+                                          : tiktokTheme === "box"
+                                            ? "#FF3B30"
+                                            : tiktokTheme === "classic"
+                                              ? "#FFFFFF"
+                                              : "#FFB700";
 
                                   if (subtitleSlicingMode === "single") {
                                     const currentWord = activeTimings.find(
@@ -2304,7 +2352,7 @@ function CreatePage() {
                                     if (cur.length >= MIN_CLAUSE && i > 0 && item.start - activeTimings[i - 1].end >= 0.65) {
                                       flushPhrase();
                                     }
-                                    cur.push({ ...item, globalIdx: i });
+                                    cur.push({ ...item, word: w, globalIdx: i });
                                     
                                     const isSentenceEnd = /[.!?…]$/.test(w);
                                     const isClauseBreak = /[,;:—]$/.test(w) && cur.length >= MIN_CLAUSE;

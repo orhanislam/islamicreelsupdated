@@ -132,20 +132,16 @@ function DownloadsPage() {
   }, [items]);
 
   const triggerDownload = async (item: DownloadItem, manual = false) => {
+    setDownloadedIds((prev) => new Set([...prev, item.id]));
     try {
       if (manual) {
         copyToClipboardFallback(formatViralSocialCaption(item.title || "Ислямска мъдрост"));
       }
       await saveMediaBlob(item.blob, `${item.title || "nur-studio-video"}.${item.ext}`, item.mimeType);
-      setDownloadedIds((prev) => new Set([...prev, item.id]));
       if (manual) {
         toast.success("Изтеглянето е успешно!");
       } else {
         toast.success(`Изтегляне: ${item.title}.${item.ext}`);
-        setTimeout(async () => {
-          await deleteDownloadItem(item.id);
-          setItems((prev) => prev.filter((x) => x.id !== item.id));
-        }, 8000);
       }
     } catch (err) {
       toast.error("Грешка при изтегляне на видеото");
@@ -155,18 +151,19 @@ function DownloadsPage() {
   const handleDownloadServerJob = async (job: ServerJob) => {
     setDownloadingServerId(job.id);
     try {
-      const filename = (job.title || "islamic-reel").replace(/[^a-z0-9._-]+/gi, "_") + ".mp4";
+      const filename = sanitizeFilename(job.title || "islamic-reel", "islamic-reel") + ".mp4";
       const downloadUrl = `/api/download/${job.id}?filename=${encodeURIComponent(filename)}`;
 
-      toast.message("Подготовка за изтегляне (взимане на видеото)...");
-      const res = await fetch(downloadUrl);
-      if (!res.ok) throw new Error("Файлът не е намерен");
-      const blob = await res.blob();
-      await saveMediaBlob(blob, filename, "video/mp4");
+      toast.message("Изтеглянето стартира... (Провери мениджъра за изтегляния на браузъра)");
       copyToClipboardFallback(formatViralSocialCaption(job.title || "Ислямска мъдрост"));
+      
+      // Use direct navigation for server files to trigger native OS download manager.
+      // Fetching 30MB into a Blob loses the user gesture for navigator.share anyway.
+      window.location.href = downloadUrl;
+      
       toast.success("Изтеглянето стартира веднага! (Текстът за TikTok е копиран)");
     } catch (e) {
-      toast.error("Възникна грешка при изтеглянето. Възможно е файлът да е изчистен.");
+      toast.error("Възникна грешка при изтеглянето.");
     } finally {
       setTimeout(() => setDownloadingServerId(null), 1000);
     }
@@ -242,7 +239,7 @@ function DownloadsPage() {
         const captionText = formatViralSocialCaption(job.title || "Ислямска мъдрост");
         folder.file(`${folderName}_tiktok_caption.txt`, captionText);
         try {
-          const thumbTitle = getThumbTitle(job.title, job.payload?.data?.viralTitle);
+          const thumbTitle = getThumbTitle(job.title, job.data?.viralTitle || job.payload?.data?.viralTitle);
           const thumbRes = await generateViralThumbnail({ data: { title: thumbTitle } });
           if (thumbRes && thumbRes.dataUrl && thumbRes.dataUrl.includes("base64,")) {
             const thumbBase64 = thumbRes.dataUrl.split("base64,")[1];
@@ -596,7 +593,7 @@ function DownloadsPage() {
                           </DropdownMenuItem>
                           <DropdownMenuItem
                             className="cursor-pointer font-medium"
-                            onClick={() => handleDownloadThumbnail(job.id, job.title, job.payload?.data?.viralTitle)}
+                            onClick={() => handleDownloadThumbnail(job.id, job.title, job.data?.viralTitle || job.payload?.data?.viralTitle)}
                             disabled={generatingThumbId === job.id}
                           >
                             <ImageIcon className="size-4 mr-2 text-amber-400" />
@@ -613,7 +610,7 @@ function DownloadsPage() {
                           <DropdownMenuItem
                             onSelect={(e) => {
                               e.preventDefault();
-                              copyToClipboardFallback(`${window.location.origin}/api/download/${job.id}?filename=${encodeURIComponent((job.title || "islamic-reel").replace(/[^a-z0-9._-]+/gi, "_") + ".mp4")}`, "Линкът е копиран! Отвори браузъра Safari и го постави там, за да изтеглиш.");
+                              copyToClipboardFallback(`${window.location.origin}/api/download/${job.id}?filename=${encodeURIComponent(sanitizeFilename(job.title || "islamic-reel", "islamic-reel") + ".mp4")}`, "Линкът е копиран! Отвори браузъра Safari и го постави там, за да изтеглиш.");
                             }}
                             className="cursor-pointer"
                           >

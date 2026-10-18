@@ -204,7 +204,7 @@ export function clampToSpeechIntervals<T extends TimedItem>(
 }
 
 export const alignAudioTimestamps = createServerFn({ method: "POST" })
-  .inputValidator((input: { audioUrl: string; items: TimedItem[] }) => input)
+  .inputValidator((input: { audioUrl: string; items: TimedItem[]; text?: string }) => input)
   .handler(async ({ data }) => {
     const intervals = await detectSpeechIntervals(data.audioUrl);
     if (!intervals.length) {

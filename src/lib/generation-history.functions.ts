@@ -3,7 +3,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
-export type GenerationType = "ayah" | "hadith" | "carousel";
+export type GenerationType = "ayah" | "quran" | "hadith" | "carousel";
 
 export interface GenerationHistoryItem {
   id: string;
@@ -14,6 +14,7 @@ export interface GenerationHistoryItem {
   ayah?: number;
   ayahEnd?: number;
   collection?: string;
+  hadithCollection?: string;
   hadithNumber?: string | number;
   arabicText?: string;
   bulgarianText?: string;
@@ -24,6 +25,8 @@ export interface GenerationHistoryItem {
   videoUrl?: string;
   status?: "completed" | "rendering" | "queued" | "error";
 }
+
+export type HistoryItem = GenerationHistoryItem;
 
 const getHistoryFilePath = () => {
   const dir = path.join(os.homedir(), ".islamicreels_jobs");
@@ -477,8 +480,8 @@ export async function recordRejectedScriptureDirect(proposal: {
   const cleanTitle =
     proposal.title ||
     proposal.reference ||
-    (isAyah
-      ? `Сура ${surah}:${ayah}${ayahEnd && ayahEnd > ayah ? `-${ayahEnd}` : ""}`
+    (isAyah && ayah !== undefined
+      ? `Сура ${surah}:${ayah}${ayahEnd !== undefined && ayahEnd > ayah ? `-${ayahEnd}` : ""}`
       : isHadith
       ? `Хадис ${collection || "Сахих"} #${hadithNumber}`
       : "Отхвърлено предложение");
@@ -607,7 +610,7 @@ export async function getExcludedScripturesOneMonth(now = Date.now()): Promise<E
 
   for (const item of recentItems) {
     const daysRemaining = getCooldownDaysRemaining(item.timestamp, now);
-    if (item.type === "ayah" || (item.surah && item.ayah)) {
+    if (item.type === "ayah" || item.type === "quran" || (item.surah && item.ayah)) {
       const s = Number(item.surah);
       const a = Number(item.ayah);
       const aEnd = item.ayahEnd ? Number(item.ayahEnd) : undefined;
@@ -642,8 +645,8 @@ export async function getExcludedScripturesOneMonth(now = Date.now()): Promise<E
           });
         }
       }
-    } else if (item.type === "hadith" || (item.collection && item.hadithNumber)) {
-      const c = (item.collection || "bukhari").toLowerCase().trim();
+    } else if (item.type === "hadith" || ((item.collection || item.hadithCollection) && item.hadithNumber)) {
+      const c = (item.collection || item.hadithCollection || "bukhari").toLowerCase().trim();
       const n = item.hadithNumber || "";
       const key = `${c}:${n}`;
 
@@ -745,6 +748,7 @@ export function checkProposalOneMonthCooldown(
     ayah?: number | string;
     count?: number | string;
     collection?: string;
+    hadithCollection?: string;
     number?: number | string;
     hadithNumber?: number | string;
     summaryBg?: string;
@@ -767,7 +771,7 @@ export function checkProposalOneMonthCooldown(
   const propCount = proposal.count !== undefined && proposal.count !== "" ? Number(proposal.count) : 1;
   const propAyahEnd = propAyah ? propAyah + propCount - 1 : undefined;
 
-  const propCollection = (proposal.collection || "").toLowerCase().trim();
+  const propCollection = (proposal.collection || proposal.hadithCollection || "").toLowerCase().trim();
   const propHadithNum = proposal.hadithNumber !== undefined ? String(proposal.hadithNumber).trim() : proposal.number !== undefined ? String(proposal.number).trim() : undefined;
 
   const cleanTitle = (proposal.title || "").toLowerCase();
@@ -815,7 +819,7 @@ export function checkProposalOneMonthCooldown(
 
     // 2. Check Hadith collision
     if (propHadithNum && (proposal.type === "hadith" || propCollection || item.type === "hadith")) {
-      const itemColl = (item.collection || "").toLowerCase().trim();
+      const itemColl = (item.collection || item.hadithCollection || "").toLowerCase().trim();
       const itemNum = item.hadithNumber !== undefined ? String(item.hadithNumber).trim() : undefined;
 
       const collMatches =

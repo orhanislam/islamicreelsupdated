@@ -20,7 +20,7 @@ function getApiKeys(): string[] {
 // Shared helper for Google Gemini API calls.
 // Replaces all ai.gateway.lovable.dev calls with direct Google API access.
 
-export type ChatMessage = { role: "system" | "user" | "assistant"; content: string };
+export type ChatMessage = { role: "system" | "user" | "assistant" | "model"; content: string };
 
 /**
  * Call the Google Gemini API (OpenAI-compatible endpoint) for chat completions.
@@ -45,7 +45,7 @@ export async function geminiChat(
     .map((m) => {
       const textContent = (m.content && m.content.trim().length > 0) ? m.content : " ";
       return {
-        role: m.role === "assistant" ? "model" : "user",
+        role: m.role === "assistant" || m.role === "model" ? "model" : "user",
         parts: [{ text: textContent }],
       };
     });
@@ -89,9 +89,11 @@ export async function geminiChat(
     });
   };
 
-  // Prioritize gemini-3.1-pro first
+  // Prioritize gemini-3.1-pro first, with standard Gemini 2.5 Pro/Flash fallbacks
   const validModels = [
     "gemini-3.1-pro",
+    "gemini-2.5-pro",
+    "gemini-2.5-flash",
     "gemini-3.5-flash-lite",
     "gemini-omni-flash-preview"
   ];
