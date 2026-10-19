@@ -661,7 +661,7 @@ async function testTikTokTitleAndCaptionDashAndStripeRemoval() {
     throw new Error(`generateTikTokSEOTitle expected bullet separator: ${seoTitle}`);
   }
 
-  // 3. Caption generation has ZERO long divider lines (━━━━━━━━━━━━ or ---------------------------)
+  // 3. Caption generation has ZERO long divider lines and ZERO literal "TikTok SEO"
   const caption = formatViralSocialCaption("[Сахих ал-Бухари #6424] Двете блага", "Мъдрост за здравето и свободното време");
   if (caption.includes("━━━━") || caption.includes("----") || caption.includes("---------------------------")) {
     throw new Error(`formatViralSocialCaption contains long divider lines/stripes!\n${caption}`);
@@ -671,6 +671,24 @@ async function testTikTokTitleAndCaptionDashAndStripeRemoval() {
   }
   if (caption.includes("ЗАПАЗИ —")) {
     throw new Error(`formatViralSocialCaption contains em-dash in CTA!\n${caption}`);
+  }
+  if (/tiktok\s*seo/i.test(caption)) {
+    throw new Error(`formatViralSocialCaption must NOT contain literal 'TikTok SEO'!\n${caption}`);
+  }
+  if (!caption.includes("🔍 Ключови думи:")) {
+    throw new Error(`formatViralSocialCaption must contain '🔍 Ключови думи:'!\n${caption}`);
+  }
+
+  // Verify generateTikTokKeywords produces thematic keywords for various topics
+  const { generateTikTokKeywords } = await import("../caption.functions");
+  const silenceKw = generateTikTokKeywords("[Сахих ал-Бухари #6065] Спасението чрез мълчание", "Който вярва в Аллах, нека говори добро или да мълчи");
+  if (!silenceKw.includes("мълчание в исляма") || !silenceKw.includes("пази езика")) {
+    throw new Error(`generateTikTokKeywords failed for silence topic: ${silenceKw}`);
+  }
+
+  const peaceKw = generateTikTokKeywords("[Коран 13:28] Покоят на сърцата", "А нима със споменаването на Аллах не намират покой сърцата");
+  if (!peaceKw.includes("покой на сърцето") || !peaceKw.includes("коран на български")) {
+    throw new Error(`generateTikTokKeywords failed for peace topic: ${peaceKw}`);
   }
 
   // 4. Topic extraction with stripes
@@ -682,7 +700,7 @@ async function testTikTokTitleAndCaptionDashAndStripeRemoval() {
     throw new Error(`extractTopicFromTitle lost the topic: ${topicWithStripes}`);
   }
 
-  console.log("✔ testTikTokTitleAndCaptionDashAndStripeRemoval passed: Zero long stripes (━━━━━━━━ / ------), clean bullets, and no unwanted dashes in TikTok titles/captions!");
+  console.log("✔ testTikTokTitleAndCaptionDashAndStripeRemoval passed: Zero long stripes, zero 'TikTok SEO' labels, rich keywords, clean bullets, and no unwanted dashes!");
 }
 
 async function testRespectfulAndOfficialIslamicEmojis() {

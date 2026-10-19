@@ -232,7 +232,7 @@ export function CarouselRendererButton({ slides: initialSlides, title }: { slide
     return { hookQuestion, dalilText, explanation, actionStep };
   };
 
-  /** Copy full TikTok SEO + Salafi AI Shaykh caption to clipboard */
+  /** Copy full TikTok caption with keywords to clipboard */
   const handleCopyCaption = () => {
     const { hookQuestion, dalilText, explanation, actionStep } = _buildCaptionFromSlides();
     const text = formatViralSocialCaption(cleanTitle, undefined, {
@@ -242,13 +242,13 @@ export function CarouselRendererButton({ slides: initialSlides, title }: { slide
       explanation,
       actionStep,
     });
-    copyToClipboardFallback(text, "✅ TikTok SEO текстът (Salafi AI Shaykh) е копиран!");
+    copyToClipboardFallback(text, "✅ Текстът за TikTok (с ключови думи) е копиран!");
   };
 
-  /** Copy just the clean 1-line TikTok SEO headline */
+  /** Copy just the clean 1-line TikTok headline */
   const handleCopyTitle = () => {
     const seoTitle = generateTikTokSEOTitle(cleanTitle);
-    copyToClipboardFallback(seoTitle, "✅ TikTok SEO заглавието е копирано!");
+    copyToClipboardFallback(seoTitle, "✅ Заглавието за TikTok е копирано!");
   };
 
 
@@ -325,23 +325,23 @@ export function CarouselRendererButton({ slides: initialSlides, title }: { slide
 
   return (
     <div className="mt-3 flex flex-col gap-2">
-      {/* Primary: Full TikTok SEO Caption + Salafi AI Shaykh text */}
+      {/* Primary: Full TikTok Caption + Salafi AI Shaykh text */}
       <Button
         variant="outline"
         onClick={handleCopyCaption}
         className="w-full gap-2 border-teal-500/40 hover:bg-teal-500/10 text-teal-400 font-semibold"
-        title="Копирай пълния TikTok SEO пост (заглавие, Далил, Salafi AI Shaykh обяснение, призив, хаштагове)"
+        title="Копирай пълния пост за TikTok (заглавие, Далил, Salafi AI Shaykh обяснение, напътствие, ключови думи, хаштагове)"
       >
-        <Copy className="size-4" /> 📋 Копирай TikTok SEO Текст (Salafi AI Shaykh)
+        <Copy className="size-4" /> 📋 Копирай Текст за TikTok (Salafi AI Shaykh)
       </Button>
-      {/* Secondary: Just the 1-line SEO headline */}
+      {/* Secondary: Just the 1-line headline */}
       <Button
         variant="outline"
         onClick={handleCopyTitle}
         className="w-full gap-2 border-emerald-500/30 hover:bg-emerald-500/10 text-emerald-400 text-sm"
-        title="Копирай само SEO заглавието (1 ред)"
+        title="Копирай само заглавието за TikTok (1 ред)"
       >
-        <Copy className="size-3.5" /> Само SEO Заглавие (1 ред)
+        <Copy className="size-3.5" /> Само Заглавие за TikTok (1 ред)
       </Button>
 
       <div className="flex gap-2 w-full flex-wrap">

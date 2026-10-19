@@ -2315,7 +2315,7 @@ function AssistantPage() {
                           size="sm"
                           onClick={(e) => handleCopyTikTokCaption(m.proposal!.title, m.proposal!.summaryBg, e, m.proposal!.scriptWorkflow)}
                           className="rounded-xl text-xs border-teal-500/40 text-teal-400 hover:bg-teal-500/10 cursor-pointer"
-                          title="Копирай TikTok Заглавие & Описание"
+                          title="Копирай TikTok Текст & Ключови думи"
                         >
                           <Copy className="size-3.5 mr-1" />
                           TikTok Текст
@@ -2408,7 +2408,7 @@ function AssistantPage() {
                                   type="button"
                                   onClick={(e) => handleCopyTikTokCaption(prop.title, prop.summaryBg, e)}
                                   className="inline-flex items-center gap-1 rounded-md bg-teal-500/10 px-2 py-1 text-[11px] font-medium text-teal-400 hover:bg-teal-500/20 border border-teal-500/30 transition cursor-pointer"
-                                  title="Копирай TikTok Заглавие и Описание с хаштагове"
+                                  title="Копирай TikTok Текст, Ключови думи & Хаштагове"
                                 >
                                   <Copy className="size-3" /> TikTok Текст
                                 </button>

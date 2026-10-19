@@ -835,7 +835,7 @@ function DownloadsPage() {
                       <DropdownMenuItem
                         onSelect={(e) => {
                           e.preventDefault();
-                          copyToClipboardFallback(generateTikTokSEOTitle(cleanProposalTitle(item.title || "islamic-reel")), "TikTok SEO Заглавието е копирано!");
+                          copyToClipboardFallback(generateTikTokSEOTitle(cleanProposalTitle(item.title || "islamic-reel")), "Заглавието за TikTok е копирано!");
                         }}
                         className="cursor-pointer"
                       >

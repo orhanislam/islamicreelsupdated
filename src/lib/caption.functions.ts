@@ -111,6 +111,90 @@ export function generateTikTokSEOTitle(rawTitle: string): string {
 }
 
 /**
+ * Generates high-ranking Bulgarian Islamic keywords for TikTok SEO & search indexing.
+ * Does NOT contain the label "TikTok SEO" so the caption stays clean, organic, and professional.
+ */
+export function generateTikTokKeywords(
+  title: string,
+  summary?: string,
+  opts?: CaptionOptions
+): string {
+  const topic = extractTopicFromTitle(title);
+  const citation = extractCitationFromTitle(title);
+  const corpus = `${title} ${summary || ""} ${opts?.dalilText || ""} ${opts?.explanation || ""} ${opts?.actionStep || ""}`.toLowerCase();
+
+  const keywords: string[] = [];
+
+  // 1. Primary topic keyword
+  if (topic) {
+    const cleanTopicLower = topic.toLowerCase();
+    keywords.push(cleanTopicLower);
+  }
+
+  // 2. Thematic Islamic expansions based on semantic analysis of content
+  if (/мълча|език|думи|говорене|говори/i.test(corpus)) {
+    keywords.push("мълчание в исляма", "пази езика", "добро или мълчание", "грехове на езика");
+  }
+  if (/покой|тревог|тревожност|сърц|спокой|паник|тъга/i.test(corpus)) {
+    keywords.push("покой на сърцето", "дуа за спокойствие", "тревожност в исляма", "успокоение на душата", "тъга и депресия ислям");
+  }
+  if (/покая|тауб|прошк|грях|грехове|опрощ|истигфар/i.test(corpus)) {
+    keywords.push("покаяние в исляма", "тауба", "опрощение на грехове", "как да се покаем", "истигфар", "милост от аллах");
+  }
+  if (/търпени|сабр|изпитани|трудност|болка/i.test(corpus)) {
+    keywords.push("сабр", "търпение в исляма", "изпитания в живота", "трудност и облекчение", "награда за търпение");
+  }
+  if (/упован|тауаккул|страх|кадар|съдба|довер/i.test(corpus)) {
+    keywords.push("тауаккул", "упование на аллах", "съдба и кадар", "страх от бъдещето", "доверие в аллах");
+  }
+  if (/намаз|молитв|салят|кланя/i.test(corpus)) {
+    keywords.push("намаз", "как се прави намаз", "молитва в исляма", "редовен намаз", "хушу в намаза");
+  }
+  if (/благодарн|шукр|ризк|препитани|берекет|изобили/i.test(corpus)) {
+    keywords.push("благодарност към аллах", "шукр", "ризк и берекет", "препитание в исляма");
+  }
+  if (/смърт|ахирет|съдния ден|гроб|дженнет|рай|джехеннем/i.test(corpus)) {
+    keywords.push("смъртта в исляма", "ахирет", "съдния ден", "дженнет", "подготовка за ахирет");
+  }
+  if (/родител|майк|баща/i.test(corpus)) {
+    keywords.push("уважение към родителите", "майката в исляма", "добро към родителите", "рай под краката на майките");
+  }
+  if (/ихсан|добро|милосърд|съвършен/i.test(corpus)) {
+    keywords.push("ихсан", "милосърдие в исляма", "добри дела", "съвършенство в делата");
+  }
+  if (/таухид|ихлас|единобож|ширк/i.test(corpus)) {
+    keywords.push("чист таухид", "единобожие", "ихлас", "вяра в единния аллах");
+  }
+  if (/дуа|зикр/i.test(corpus)) {
+    keywords.push("искрена дуа", "приета дуа", "споменаване на аллах", "зикр");
+  }
+
+  // 3. Scripture citations
+  if (/коран|сура|quran/i.test(citation + corpus)) {
+    keywords.push("коран на български", "свещения коран", "аяти от корана");
+  }
+  if (/бухари|муслим|тирмизи|навауи|хадис/i.test(citation + corpus)) {
+    keywords.push("сахих хадиси", "сунна на пророка", "хадиси на български");
+  }
+
+  // 4. Core evergreen Bulgarian TikTok discovery terms
+  keywords.push("ислямски видеа", "ислям българия", "ислямско напомняне", "мюсюлмани", "вяра");
+
+  // Deduplicate case-insensitively and keep top 10-12
+  const seen = new Set<string>();
+  const uniqueKeywords: string[] = [];
+  for (const kw of keywords) {
+    const norm = kw.trim().toLowerCase();
+    if (norm && !seen.has(norm)) {
+      seen.add(norm);
+      uniqueKeywords.push(norm);
+    }
+  }
+
+  return uniqueKeywords.slice(0, 12).join(", ");
+}
+
+/**
  * Main broadcast-grade caption formatter.
  * Produces a complete, professional TikTok/Reels/Shorts caption:
  *
@@ -120,7 +204,7 @@ export function generateTikTokSEOTitle(rawTitle: string): string {
  * 4. 💎 Salafi AI Shaykh Sharh (Explanation)
  * 5. 📌 Sunnah Action OR Dua
  * 6. 🔄 Save & Share CTA (Sadaka Jariya hadith от Сахих Муслим)
- * 7. 🔍 TikTok SEO Search Queries
+ * 7. 🔍 Ключови думи (TikTok Search & Discovery Keywords - без етикет "TikTok SEO")
  * 8. #️⃣ Tiered Viral Hashtags
  */
 export interface CaptionOptions {
@@ -212,19 +296,19 @@ export function formatViralSocialCaption(
   // Note: NO long divider lines (━━━━━━━━━━━━ or ------------) or dashes
   const ctaBlock = `\n\n📌 ЗАПАЗИ, за да се върнете към тази мъдрост в момент на нужда!\n🔄 СПОДЕЛИ с приятел или в Story:\n„Който насочи към добро, получава награда колкото онзи, който го е извършил.“\n(Сахих Муслим #1893)\n💬 Напишете „Амин“ или „Субханаллах“ ⬇️`;
 
-  // ── 7. TikTok SEO Search Queries ─────────────────────────────────────────
-  const topic = extractTopicFromTitle(title);
-  const topicKeywords = topic
-    ? `${topic}, ислямски видеа, ислям България, коран хадис`
-    : "ислямски видеа, ислям България, коран хадис";
-  const seoBlock = `\n\n🔍 TikTok SEO: ${topicKeywords}, ислямско напомняне, мюсюлмани, вяра, таухид, ислям на български`;
+  // ── 7. TikTok Search & Discovery Keywords (No literal "TikTok SEO" label) ─
+  const keywords = generateTikTokKeywords(title, summary, opts);
+  const keywordsBlock = `\n\n🔍 Ключови думи: ${keywords}`;
 
   // ── 8. Tiered Hashtags ────────────────────────────────────────────────────
   // High-volume spiritual, Bulgarian-geo, niche Salafi, and viral algo tags
   const hashtags = `\n\n#ислям #коран #хадиси #мюсюлмани #напомняне #вяра #аллах #българия #ислямскоНапомняне #таухид #салафи #сахихБухари #сахихМуслим #islamicreels #islamicvideo #muslimreels #quran #hadith #sunnah #salafi #islamicreminder #fyp #viral #tiktokviral #islamicbulgaria`;
 
   // ── Compose Full Caption ──────────────────────────────────────────────────
-  const rawCaption = `${seoTitle}${hookBlock}${dalilBlock}${sharhBlock}${actionBlock}${ctaBlock}${seoBlock}${hashtags}`;
+  let rawCaption = `${seoTitle}${hookBlock}${dalilBlock}${sharhBlock}${actionBlock}${ctaBlock}${keywordsBlock}${hashtags}`;
+
+  // Ensure any lingering "TikTok SEO:" strings are completely eradicated
+  rawCaption = rawCaption.replace(/(?:🔍\s*)?tiktok\s*seo\s*:\s*/gi, "🔍 Ключови думи: ");
 
   // Strip any accidental long divider stripes, repeated hyphens/dashes
   const cleanCaption = rawCaption
