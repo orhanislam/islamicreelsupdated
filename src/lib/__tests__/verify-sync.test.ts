@@ -7,7 +7,12 @@ import {
   validateAndAlignVisualAtmosphere,
   auditAndRefineProposal,
   auditAndRefineNarrationScript,
+  validateAndHealQuranDaleel,
+  validateAndHealHadithDaleel,
+  detectAndHealFabricatedHadith,
+  detectAndHealSalafiTheologicalDeviations,
 } from "../smart-script-auditor";
+import { analyzeAndFixRenderPayloadSync } from "../render-analyzer";
 
 function testMonotonicityAndBounds() {
   const mockSpeechIntervals = [
@@ -1051,6 +1056,123 @@ async function testSmartScriptAuditorAndPreRenderHealing() {
   console.log("✔ testSmartScriptAuditorAndPreRenderHealing passed: 4-step workflow, Bulgarian euphony, Halal Pexels queries, and pre-render narration cleanup all verified!");
 }
 
+async function testSalafiTheologyAndDaleelSelfHealing() {
+  console.log("Testing Salafi Theology and Daleel Self-Healing Engine...");
+
+  // 1. Quran Daleel validation and healing: Surah 112 (Al-Ikhlas has 4 verses)
+  const invalidQuranProposal: any = {
+    title: "Сура Ал-Ихляс (112:5-8)",
+    surah: 112,
+    ayah: 5,
+    count: 4,
+    scriptWorkflow: {
+      hookQuestion: "Знаете ли съвършенството на Аллах?",
+      hookContext: "Това е най-великата сура за Единството.",
+      dalilIntro: "чуй какво казва Корана",
+      dalilText: "Кажи: Той е Аллах Единствен...",
+      explanation: "Таухид е основата на исляма.",
+      actionStep: "Повтаряйте я три пъти дневно.",
+    },
+  };
+  const quranHealRes = validateAndHealQuranDaleel(invalidQuranProposal);
+  if (!quranHealRes.healed) {
+    throw new Error("Expected out-of-bounds Quran ayah to be healed!");
+  }
+  if (invalidQuranProposal.ayah > 4 || invalidQuranProposal.count > 4) {
+    throw new Error(`Expected Surah 112 ayah clamped to 4, got ayah=${invalidQuranProposal.ayah}`);
+  }
+  if (!invalidQuranProposal.scriptWorkflow.dalilIntro.includes("Аллах Всевишният повелява")) {
+    throw new Error(`Expected dignified Dalil intro, got: ${invalidQuranProposal.scriptWorkflow.dalilIntro}`);
+  }
+
+  // 2. Fabricated Hadith detection and healing (e.g. "търсете знание дори в Китай")
+  const mawduProposal: any = {
+    title: "Търсете знание, дори и в Китай",
+    summaryBg: "Търсете знание дори в Китай е важен съвет за всички мюсюлмани.",
+    scriptWorkflow: {
+      hookQuestion: "Защо трябва да учим?",
+      hookContext: "Знанието е светлина.",
+      dalilIntro: "Пратеникът казва:",
+      dalilText: "Търсете знание, дори и в Китай.",
+      explanation: "Пътувайте навсякъде за наука.",
+      actionStep: "Четете книги.",
+    },
+  };
+  const mawduRes = detectAndHealFabricatedHadith(mawduProposal);
+  if (!mawduRes.healed) {
+    throw new Error("Expected fabricated Hadith 'Китай' to be caught and healed!");
+  }
+  if (!mawduProposal.title.includes("Сахих Муслим #2699")) {
+    throw new Error(`Expected fabricated hadith to be replaced by Sahih Muslim #2699, got: ${mawduProposal.title}`);
+  }
+  if (!mawduProposal.scriptWorkflow.dalilText.includes("Който поеме по път в търсене")) {
+    throw new Error(`Expected authentic text for Sahih Muslim #2699, got: ${mawduProposal.scriptWorkflow.dalilText}`);
+  }
+
+  // 3. Salafi theological deviation healing: Shirk in Dua (calling upon dead saints)
+  const shirkInDuaText = "В моменти на беда, молете се на светците и аулията за помощ и спасение.";
+  const shirkHeal = detectAndHealSalafiTheologicalDeviations(shirkInDuaText);
+  if (!shirkHeal.healed) {
+    throw new Error("Expected Shirk in Dua to be detected and healed!");
+  }
+  if (shirkHeal.healedText.includes("молете се на светците")) {
+    throw new Error(`Did not eliminate calling upon saints! Got: ${shirkHeal.healedText}`);
+  }
+  if (!shirkHeal.healedText.includes("ЕДИНСТВЕНО към Аллах Всевишният")) {
+    throw new Error(`Expected pure Tawheed redirection to Allah alone, got: ${shirkHeal.healedText}`);
+  }
+
+  // 4. Salafi theological deviation healing: Amulets & Evil Eye Charms (синьо око / муски)
+  const amuletText = "Носете синьо око против уроци за да ви пази от зли очи.";
+  const amuletHeal = detectAndHealSalafiTheologicalDeviations(amuletText);
+  if (!amuletHeal.healed) {
+    throw new Error("Expected amulet superstition to be detected and healed!");
+  }
+  if (amuletHeal.healedText.includes("синьо око")) {
+    throw new Error(`Did not eliminate evil eye amulet! Got: ${amuletHeal.healedText}`);
+  }
+  if (!amuletHeal.healedText.includes("забранено в Исляма") || !amuletHeal.healedText.includes("Ал-Фаляк")) {
+    throw new Error(`Expected Sunnah Ruqyah guidance, got: ${amuletHeal.healedText}`);
+  }
+
+  // 5. Salafi theological deviation healing: Ta'weel of Divine Attributes
+  const taweelText = "Ръката на Аллах е само метафора за сила и власт.";
+  const taweelHeal = detectAndHealSalafiTheologicalDeviations(taweelText);
+  if (!taweelHeal.healed) {
+    throw new Error("Expected Ta'weel of Divine Attributes to be caught and healed!");
+  }
+  if (taweelHeal.healedText.includes("само метафора за сила")) {
+    throw new Error(`Did not eliminate Ta'weel! Got: ${taweelHeal.healedText}`);
+  }
+  if (!taweelHeal.healedText.includes("Трон над седемте небеса")) {
+    throw new Error(`Expected Salafi affirmation of Divine Attributes above the Throne, got: ${taweelHeal.healedText}`);
+  }
+
+  // 6. Pre-render Analyzer auto-healing integration
+  const renderPayload = {
+    bulgarian: "Молете се на аулията и носете червен конец за защита.",
+    topic: "Защита от уроци",
+  };
+  const renderAudit = analyzeAndFixRenderPayloadSync(renderPayload);
+  if (renderAudit.data.bulgarian.includes("аулията") || renderAudit.data.bulgarian.includes("червен конец")) {
+    throw new Error(`Render analyzer failed to clean theological deviations! Got: ${renderAudit.data.bulgarian}`);
+  }
+
+  // 7. Full Proposal Auditor integration
+  const audited = auditAndRefineProposal({
+    title: "[Коран 112:1-4] Сура Ал-Ихляс",
+    summaryBg: "Търсете закрила от светците за душевен мир.",
+  });
+  if (!audited.report.theologyVerified || !audited.report.daleelVerified) {
+    throw new Error("Expected theologyVerified and daleelVerified to be true!");
+  }
+  if (audited.report.theologicalCorrections.length === 0) {
+    throw new Error("Expected theologicalCorrections to record applied fixes!");
+  }
+
+  console.log("✔ testSalafiTheologyAndDaleelSelfHealing passed: Quran ayah clamping, Mawdu hadith auto-replacement, Tawheed al-Uluhiyyah, Amulet bans, and Divine Attributes affirmation all 100% verified!");
+}
+
 async function runAllTests() {
   console.log("Running subtitle synchronization verification tests...");
   testMonotonicityAndBounds();
@@ -1070,6 +1192,7 @@ async function runAllTests() {
   await testRespectfulAndOfficialIslamicEmojis();
   await testGoalTikTokSubtitlesSemanticBRollAndTranslation();
   await testSmartScriptAuditorAndPreRenderHealing();
+  await testSalafiTheologyAndDaleelSelfHealing();
   console.log("✔ All subtitle synchronization verification tests passed successfully!");
   process.exit(0);
 }

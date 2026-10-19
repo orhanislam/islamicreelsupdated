@@ -20,6 +20,7 @@
  */
 
 import { sanitizeTheologicalRespect } from "./theological-sanitizer";
+import { detectAndHealSalafiTheologicalDeviations } from "./smart-script-auditor";
 import {
   normalizeIslamicArabicPhoneticsForTts,
   normalizePhoneticsToDisplayWord,
@@ -272,6 +273,19 @@ export function analyzeAndFixRenderPayloadSync(payload: any): {
         issuesFound++;
         issuesFixed++;
         actionsTaken.push(`Теологично коригиране в '${field}': премахване на умалителни/непочтителни изрази за Аллах.`);
+      }
+
+      // Salafi theological audit & self-healing (Shirk in Dua/grave-worship, amulets/charms, Ta'weel of Divine Attributes)
+      const salafiAudit = detectAndHealSalafiTheologicalDeviations(cleaned);
+      if (salafiAudit.healed) {
+        cleaned = salafiAudit.healedText;
+        theologicalSanitizations += salafiAudit.fixes.length;
+        shirkOrDisrespectCleaned += salafiAudit.fixes.length;
+        issuesFound += salafiAudit.fixes.length;
+        issuesFixed += salafiAudit.fixes.length;
+        for (const fix of salafiAudit.fixes) {
+          actionsTaken.push(`Салафитски одит в '${field}': ${fix}`);
+        }
       }
 
       if (orig !== cleaned) {

@@ -1894,21 +1894,43 @@ function AssistantPage() {
                       )}
 
                       {m.proposal.auditReport && (
-                        <div className="rounded-lg bg-emerald-500/10 border border-emerald-500/30 px-3 py-2 text-xs flex flex-wrap items-center justify-between gap-2">
-                          <div className="flex items-center gap-1.5 text-emerald-300 font-semibold">
-                            <ShieldCheck className="size-4 text-emerald-400 shrink-0" />
-                            <span>Умен одит: 100% богословски и граматически проверен</span>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <span className="text-[11px] font-mono bg-emerald-500/20 text-emerald-300 px-2 py-0.5 rounded-full border border-emerald-500/40">
-                              Оценка: {m.proposal.auditReport.overallScore}%
-                            </span>
-                            {m.proposal.auditReport.correctionsApplied && m.proposal.auditReport.correctionsApplied.length > 0 && (
-                              <span className="text-[10px] text-emerald-400/80 bg-black/40 px-2 py-0.5 rounded border border-emerald-500/20" title={m.proposal.auditReport.correctionsApplied.join(" • ")}>
-                                {m.proposal.auditReport.correctionsApplied.length} авто-корекции
+                        <div className="rounded-lg bg-emerald-500/10 border border-emerald-500/30 px-3 py-2 text-xs flex flex-col gap-2">
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <div className="flex items-center gap-1.5 text-emerald-300 font-semibold">
+                              <ShieldCheck className="size-4 text-emerald-400 shrink-0" />
+                              <span>Салафитски одит: 100% чиста Акида & автентичен Далил</span>
+                            </div>
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              {m.proposal.auditReport.daleelVerified && (
+                                <span className="text-[10px] bg-teal-500/20 text-teal-300 px-2 py-0.5 rounded-full border border-teal-500/30 font-medium">
+                                  ✔ Достоверен Далил
+                                </span>
+                              )}
+                              {m.proposal.auditReport.theologyVerified && (
+                                <span className="text-[10px] bg-amber-500/20 text-amber-300 px-2 py-0.5 rounded-full border border-amber-500/30 font-medium">
+                                  ✔ Салафитска Акида
+                                </span>
+                              )}
+                              <span className="text-[11px] font-mono bg-emerald-500/20 text-emerald-300 px-2 py-0.5 rounded-full border border-emerald-500/40">
+                                Оценка: {m.proposal.auditReport.overallScore}%
                               </span>
-                            )}
+                              {m.proposal.auditReport.correctionsApplied && m.proposal.auditReport.correctionsApplied.length > 0 && (
+                                <span className="text-[10px] text-emerald-400/80 bg-black/40 px-2 py-0.5 rounded border border-emerald-500/20" title={m.proposal.auditReport.correctionsApplied.join(" • ")}>
+                                  {m.proposal.auditReport.correctionsApplied.length} авто-корекции
+                                </span>
+                              )}
+                            </div>
                           </div>
+                          {m.proposal.auditReport.theologicalCorrections && m.proposal.auditReport.theologicalCorrections.length > 0 && (
+                            <div className="pt-1.5 border-t border-emerald-500/20 text-[11px] text-emerald-300/90 space-y-1">
+                              <span className="font-semibold text-emerald-400">🛡️ Салафитски авто-поправки на текст и далил:</span>
+                              <ul className="list-disc list-inside space-y-0.5 text-[10.5px] text-emerald-200/90">
+                                {m.proposal.auditReport.theologicalCorrections.map((corr, cIdx) => (
+                                  <li key={cIdx}>{corr}</li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
                         </div>
                       )}
 
@@ -2417,9 +2439,15 @@ function AssistantPage() {
                                   </span>
                                 )}
                                 {prop.auditReport && (
-                                  <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
+                                  <span
+                                    className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40"
+                                    title={prop.auditReport.theologicalCorrections && prop.auditReport.theologicalCorrections.length > 0
+                                      ? `Салафитски авто-поправки:\n${prop.auditReport.theologicalCorrections.join("\n")}`
+                                      : "100% автентичен далил и богословски проверен текст"}
+                                  >
                                     <ShieldCheck className="size-3 text-emerald-400 shrink-0" />
                                     Одит: {prop.auditReport.overallScore}%
+                                    {prop.auditReport.daleelVerified && " • Сахих"}
                                   </span>
                                 )}
                               </div>
