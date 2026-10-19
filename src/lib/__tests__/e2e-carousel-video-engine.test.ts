@@ -622,7 +622,7 @@ export async function runCarouselEngineE2ETests() {
     assert(parsed.segments.some((s) => s.type === "human"), "Must contain human commentary segment");
   });
 
-  await test("1.26 [F6] Sacred Quote lines use Bold font (800) and Gold color #F3D179 in layout result", () => {
+  await test("1.26 [F6] Sacred Quote lines use Bold font (800) and white color #FFFFFF in layout result", () => {
     const opts: CarouselSlideOptions = {
       backgroundUrl: "",
       topTitle: "ЗНАМЕНИЕ",
@@ -637,7 +637,7 @@ export async function runCarouselEngineE2ETests() {
     const humanSeg = layout.layoutSegments.find((s) => s.type === "human");
 
     assert(!!sacredSeg, "Sacred segment must exist");
-    assertEq(sacredSeg!.color, "#F3D179", "Sacred text color must be gold #F3D179");
+    assertEq(sacredSeg!.color, "#FFFFFF", "Sacred text color must be white #FFFFFF");
     assert(sacredSeg!.font.includes("800"), "Sacred text font weight must be 800 bold");
 
     assert(!!humanSeg, "Human segment must exist");

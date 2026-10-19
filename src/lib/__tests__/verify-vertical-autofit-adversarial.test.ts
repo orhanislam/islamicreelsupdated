@@ -197,7 +197,7 @@ function testArabicTashkeelAndMixedScripts() {
 
   const layout = fitSlideLayout(mockCtx, arabicSlide);
   assert(layout.totalH <= TIKTOK_SAFE_ZONE.H_SAFE, "Arabic slide must fit inside safe zone");
-  assert(layout.layoutSegments[0].color === "#F3D179", "Arabic quote must be styled in gold");
+  assert(layout.layoutSegments[0].color === "#FFFFFF", "Arabic quote must be styled in white");
   assert(layout.layoutSegments[1].color === "#FFFFFF", "Translation must be styled in white");
 
   console.log("  ✔ Arabic Tashkeel diacritics & mixed Cyrillic correctly parsed, styled, and bounded.");

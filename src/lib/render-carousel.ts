@@ -322,8 +322,9 @@ function drawTextLine(
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
 
-  ctx.shadowColor = isGlow ? "rgba(243, 209, 121, 0.45)" : "rgba(0, 0, 0, 0.9)";
-  ctx.shadowBlur = isGlow ? 22 : 16;
+  // All carousel text is pure white with a dark drop shadow (no golden glow)
+  ctx.shadowColor = "rgba(0, 0, 0, 0.9)";
+  ctx.shadowBlur = isGlow ? 20 : 16;
   ctx.shadowOffsetY = 4;
 
   ctx.lineJoin = "round";
@@ -413,7 +414,7 @@ export function computeSlideLayout(
       ctx.font = fontQuote;
       const lines = wrapIntelligent((t) => ctx.measureText(t).width, seg.text, maxWidth);
       if (lines.length > 0) {
-        layoutSegments.push({ type: "sacred", lines, font: fontQuote, lh: lhQuote, color: "#F3D179" });
+        layoutSegments.push({ type: "sacred", lines, font: fontQuote, lh: lhQuote, color: "#FFFFFF" });
         bodyH += lines.length * lhQuote;
       }
     } else {
@@ -698,7 +699,7 @@ export async function renderCarouselSlide(
         centerX,
         bottomStartY + i * layout.lhBottom + layout.lhBottom / 2,
         layout.fontBottom,
-        "#F3D179",
+        "#FFFFFF",
         false,
       );
     });
@@ -721,8 +722,8 @@ export async function renderCarouselSlide(
     const pillY = safeZone.SAFE_TOP; // 300 on video, 120 on carousel
 
     ctx.save();
-    ctx.fillStyle = "rgba(243, 209, 121, 0.15)";
-    ctx.strokeStyle = "rgba(243, 209, 121, 0.55)";
+    ctx.fillStyle = "rgba(0, 0, 0, 0.45)";
+    ctx.strokeStyle = "rgba(255, 255, 255, 0.45)";
     ctx.lineWidth = 2;
     ctx.beginPath();
     if (typeof (ctx as any).roundRect === "function") {
@@ -736,7 +737,10 @@ export async function renderCarouselSlide(
     ctx.font = badgeFont;
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    ctx.fillStyle = "#F3D179";
+    ctx.shadowColor = "rgba(0, 0, 0, 0.8)";
+    ctx.shadowBlur = 8;
+    ctx.shadowOffsetY = 2;
+    ctx.fillStyle = "#FFFFFF";
     ctx.fillText(badgeClean, centerX, pillY + pillH / 2);
     ctx.restore();
   }
@@ -753,9 +757,9 @@ export async function renderCarouselSlide(
     bodyAreaTop +
     Math.max(0, Math.round((bodyAreaHeight - layout.totalH) / 2));
 
-  // 1. Draw Top Title (Gold)
+  // 1. Draw Top Title (White)
   layout.topLines.forEach((line) => {
-    drawTextLine(ctx, line, centerX, currentY + layout.lhTop / 2, layout.fontTop, "#F3D179");
+    drawTextLine(ctx, line, centerX, currentY + layout.lhTop / 2, layout.fontTop, "#FFFFFF");
     currentY += layout.lhTop;
   });
   if (layout.topH > 0 && layout.bodyH > 0) {

@@ -149,19 +149,22 @@ function drawReferencePill(ctx: CanvasRenderingContext2D, text: string, sz: Safe
 
   const clamped = clampToSafeZone({ x: rawX, y: rawY, width: pillW, height: pillH }, sz);
 
-  // Glass-gold capsule
+  // Dark glass capsule with white text
   ctx.save();
   ctx.shadowBlur = 0;
   ctx.fillStyle = "rgba(0, 0, 0, 0.55)";
   roundRect(ctx, clamped.x, clamped.y, clamped.width, clamped.height, clamped.height / 2);
   ctx.fill();
 
-  ctx.strokeStyle = "rgba(212, 175, 55, 0.65)";
+  ctx.strokeStyle = "rgba(255, 255, 255, 0.45)";
   ctx.lineWidth = 1.5;
   roundRect(ctx, clamped.x, clamped.y, clamped.width, clamped.height, clamped.height / 2);
   ctx.stroke();
 
-  ctx.fillStyle = "#f4c95d";
+  ctx.shadowColor = "rgba(0, 0, 0, 0.8)";
+  ctx.shadowBlur = 8;
+  ctx.shadowOffsetY = 2;
+  ctx.fillStyle = "#FFFFFF";
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
   ctx.fillText(text, clamped.x + clamped.width / 2, clamped.y + clamped.height / 2 + 1);
