@@ -675,20 +675,31 @@ async function testTikTokTitleAndCaptionDashAndStripeRemoval() {
   if (/tiktok\s*seo/i.test(caption)) {
     throw new Error(`formatViralSocialCaption must NOT contain literal 'TikTok SEO'!\n${caption}`);
   }
-  if (!caption.includes("🔍 Ключови думи:")) {
-    throw new Error(`formatViralSocialCaption must contain '🔍 Ключови думи:'!\n${caption}`);
+  if (/ключови\s*думи/i.test(caption)) {
+    throw new Error(`formatViralSocialCaption must NOT contain artificial 'Ключови думи' label!\n${caption}`);
+  }
+  if (!caption.includes("#ислям") || !caption.includes("#хадиси")) {
+    throw new Error(`formatViralSocialCaption missing core hashtags!\n${caption}`);
   }
 
-  // Verify generateTikTokKeywords produces thematic keywords for various topics
-  const { generateTikTokKeywords } = await import("../caption.functions");
-  const silenceKw = generateTikTokKeywords("[Сахих ал-Бухари #6065] Спасението чрез мълчание", "Който вярва в Аллах, нека говори добро или да мълчи");
-  if (!silenceKw.includes("мълчание в исляма") || !silenceKw.includes("пази езика")) {
-    throw new Error(`generateTikTokKeywords failed for silence topic: ${silenceKw}`);
+  // Verify generateTikTokHashtags produces 5-8 focused hashtags with topic keywords
+  const { generateTikTokHashtags } = await import("../caption.functions");
+  const silenceTags = generateTikTokHashtags("[Сахих ал-Бухари #6065] Спасението чрез мълчание", "Който вярва в Аллах, нека говори добро или да мълчи");
+  const silenceTagCount = silenceTags.split(/\s+/).filter(Boolean).length;
+  if (silenceTagCount < 5 || silenceTagCount > 8) {
+    throw new Error(`generateTikTokHashtags expected between 5 and 8 tags, got ${silenceTagCount}: ${silenceTags}`);
+  }
+  if (!silenceTags.includes("#мълчание") || !silenceTags.includes("#пазиЕзика")) {
+    throw new Error(`generateTikTokHashtags failed for silence topic: ${silenceTags}`);
   }
 
-  const peaceKw = generateTikTokKeywords("[Коран 13:28] Покоят на сърцата", "А нима със споменаването на Аллах не намират покой сърцата");
-  if (!peaceKw.includes("покой на сърцето") || !peaceKw.includes("коран на български")) {
-    throw new Error(`generateTikTokKeywords failed for peace topic: ${peaceKw}`);
+  const peaceTags = generateTikTokHashtags("[Коран 13:28] Покоят на сърцата", "А нима със споменаването на Аллах не намират покой сърцата");
+  const peaceTagCount = peaceTags.split(/\s+/).filter(Boolean).length;
+  if (peaceTagCount < 5 || peaceTagCount > 8) {
+    throw new Error(`generateTikTokHashtags expected between 5 and 8 tags, got ${peaceTagCount}: ${peaceTags}`);
+  }
+  if (!peaceTags.includes("#покой") || !peaceTags.includes("#коран")) {
+    throw new Error(`generateTikTokHashtags failed for peace topic: ${peaceTags}`);
   }
 
   // 4. Topic extraction with stripes

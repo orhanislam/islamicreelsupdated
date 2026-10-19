@@ -195,17 +195,109 @@ export function generateTikTokKeywords(
 }
 
 /**
+ * Converts dynamic topic keywords and content context into optimal TikTok hashtags.
+ * TikTok algorithmic best practice: 5 to 8 focused, high-relevance hashtags
+ * (prevents shadowbanning / hashtag stuffing while maximizing search indexing).
+ */
+export function generateTikTokHashtags(
+  title: string,
+  summary?: string,
+  opts?: CaptionOptions,
+  maxTags: number = 8
+): string {
+  const corpus = `${title} ${summary || ""} ${opts?.dalilText || ""} ${opts?.explanation || ""} ${opts?.actionStep || ""}`.toLowerCase();
+  const citation = extractCitationFromTitle(title);
+  const topic = extractTopicFromTitle(title);
+
+  const tags: string[] = [];
+
+  // Helper to sanitize a phrase into a valid camelCase hashtag without spaces or symbols
+  const toHashtag = (phrase: string): string => {
+    const clean = phrase
+      .replace(/[^\p{L}\p{N}\s]/gu, "")
+      .trim()
+      .split(/\s+/)
+      .map((w, i) => (i === 0 ? w.toLowerCase() : w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()))
+      .join("");
+    return clean ? `#${clean}` : "";
+  };
+
+  // 1. Specific topic tag from title
+  if (topic) {
+    const topicTag = toHashtag(topic);
+    if (topicTag && topicTag.length <= 25) {
+      tags.push(topicTag);
+    }
+  }
+
+  // 2. Thematic keyword hashtags based on content analysis
+  if (/мълча|език|думи|говорене/i.test(corpus)) {
+    tags.push("#мълчание", "#пазиЕзика", "#спасение");
+  } else if (/покой|тревог|тревожност|сърц|спокой|паник/i.test(corpus)) {
+    tags.push("#покой", "#спокойствие", "#дуаЗаПокой");
+  } else if (/покая|тауб|прошк|грях|грехове|истигфар/i.test(corpus)) {
+    tags.push("#покаяние", "#тауба", "#прошка", "#истигфар");
+  } else if (/търпени|сабр|изпитани|болка/i.test(corpus)) {
+    tags.push("#сабр", "#търпение", "#изпитание");
+  } else if (/упован|тауаккул|страх|кадар|съдба/i.test(corpus)) {
+    tags.push("#тауаккул", "#упование", "#кадар");
+  } else if (/намаз|молитв|салят/i.test(corpus)) {
+    tags.push("#намаз", "#молитва", "#хушу");
+  } else if (/благодарн|шукр|ризк|препитани|берекет/i.test(corpus)) {
+    tags.push("#шукр", "#благодарност", "#ризк");
+  } else if (/смърт|ахирет|съдния ден|дженнет|рай/i.test(corpus)) {
+    tags.push("#ахирет", "#дженнет", "#съднияДен");
+  } else if (/родител|майк|баща/i.test(corpus)) {
+    tags.push("#родители", "#майка", "#добро");
+  } else if (/ихсан|добродетел/i.test(corpus)) {
+    tags.push("#ихсан", "#добро", "#милосърдие");
+  } else if (/таухид|ихлас|единобож/i.test(corpus)) {
+    tags.push("#таухид", "#ихлас", "#единобожие");
+  } else if (/дуа|зикр/i.test(corpus)) {
+    tags.push("#дуа", "#зикр", "#молитва");
+  }
+
+  // 3. Scripture citation tags
+  if (/коран|сура|quran/i.test(citation + corpus)) {
+    tags.push("#коран", "#свещенияКоран");
+  } else if (/бухари|муслим|тирмизи|навауи|хадис/i.test(citation + corpus)) {
+    if (/бухари/i.test(citation + corpus)) tags.push("#сахихБухари");
+    else if (/муслим/i.test(citation + corpus)) tags.push("#сахихМуслим");
+    tags.push("#хадиси", "#сунна");
+  }
+
+  // 4. Core community and discovery tags
+  tags.push("#ислям", "#напомняне", "#ислямБългария");
+
+  // Deduplicate and cap to optimal TikTok limits (5 to 8 hashtags)
+  const seen = new Set<string>();
+  const finalTags: string[] = [];
+  for (const tag of tags) {
+    const lower = tag.toLowerCase();
+    if (tag && !seen.has(lower)) {
+      seen.add(lower);
+      finalTags.push(tag);
+      if (finalTags.length >= maxTags) break;
+    }
+  }
+
+  return finalTags.join(" ");
+}
+
+/**
  * Main broadcast-grade caption formatter.
  * Produces a complete, professional TikTok/Reels/Shorts caption:
  *
- * 1. 🏆 SEO Headline (TikTok Search-indexed, high-CTR)
+ * 1. 🏆 Title (SEO & Search-indexed, high-CTR)
  * 2. 🎯 Curiosity Hook
  * 3. 📖 Authentic Dalil (Quran Ayah or Sahih Hadith)
  * 4. 💎 Salafi AI Shaykh Sharh (Explanation)
  * 5. 📌 Sunnah Action OR Dua
  * 6. 🔄 Save & Share CTA (Sadaka Jariya hadith от Сахих Муслим)
- * 7. 🔍 Ключови думи (TikTok Search & Discovery Keywords - без етикет "TikTok SEO")
- * 8. #️⃣ Tiered Viral Hashtags
+ * 7. #️⃣ Optimal TikTok Hashtags (5 to 8 targeted topic keywords as hashtags)
+ *
+ * Note: SEO keywords are organically embedded within the text body itself.
+ * No visible "TikTok SEO" or "Ключови думи" labels are included in the caption.
  */
 export interface CaptionOptions {
   /** The full proposal title, e.g. "[Коран 13:28] Покоят на сърцата" */
@@ -296,25 +388,19 @@ export function formatViralSocialCaption(
   // Note: NO long divider lines (━━━━━━━━━━━━ or ------------) or dashes
   const ctaBlock = `\n\n📌 ЗАПАЗИ, за да се върнете към тази мъдрост в момент на нужда!\n🔄 СПОДЕЛИ с приятел или в Story:\n„Който насочи към добро, получава награда колкото онзи, който го е извършил.“\n(Сахих Муслим #1893)\n💬 Напишете „Амин“ или „Субханаллах“ ⬇️`;
 
-  // ── 7. TikTok Search & Discovery Keywords (No literal "TikTok SEO" label) ─
-  const keywords = generateTikTokKeywords(title, summary, opts);
-  const keywordsBlock = `\n\n🔍 Ключови думи: ${keywords}`;
-
-  // ── 8. Tiered Hashtags ────────────────────────────────────────────────────
-  // High-volume spiritual, Bulgarian-geo, niche Salafi, and viral algo tags
-  const hashtags = `\n\n#ислям #коран #хадиси #мюсюлмани #напомняне #вяра #аллах #българия #ислямскоНапомняне #таухид #салафи #сахихБухари #сахихМуслим #islamicreels #islamicvideo #muslimreels #quran #hadith #sunnah #salafi #islamicreminder #fyp #viral #tiktokviral #islamicbulgaria`;
+  // ── 7. Optimal TikTok Hashtags (Keywords in hashtags, 5-8 tags) ──────────
+  // Organic SEO is inside the text body. Topic keywords are formatted as focused hashtags.
+  const hashtags = `\n\n${generateTikTokHashtags(title, summary, opts, 8)}`;
 
   // ── Compose Full Caption ──────────────────────────────────────────────────
-  let rawCaption = `${seoTitle}${hookBlock}${dalilBlock}${sharhBlock}${actionBlock}${ctaBlock}${keywordsBlock}${hashtags}`;
+  let rawCaption = `${seoTitle}${hookBlock}${dalilBlock}${sharhBlock}${actionBlock}${ctaBlock}${hashtags}`;
 
-  // Ensure any lingering "TikTok SEO:" strings are completely eradicated
-  rawCaption = rawCaption.replace(/(?:🔍\s*)?tiktok\s*seo\s*:\s*/gi, "🔍 Ключови думи: ");
-
-  // Strip any accidental long divider stripes, repeated hyphens/dashes
-  const cleanCaption = rawCaption
+  // Strip any accidental artificial label lines and long stripes
+  rawCaption = rawCaption
+    .replace(/(?:🔍\s*)?(?:tiktok\s*seo|ключови\s*думи)\s*:[^\n]*\n?/gi, "")
     .replace(/[-–—_━═─]{2,}/g, "")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
 
-  return sanitizeTheologicalRespect(cleanCaption);
+  return sanitizeTheologicalRespect(rawCaption);
 }

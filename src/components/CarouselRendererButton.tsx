@@ -242,7 +242,7 @@ export function CarouselRendererButton({ slides: initialSlides, title }: { slide
       explanation,
       actionStep,
     });
-    copyToClipboardFallback(text, "✅ Текстът за TikTok (с ключови думи) е копиран!");
+    copyToClipboardFallback(text, "✅ Текстът за TikTok е копиран!");
   };
 
   /** Copy just the clean 1-line TikTok headline */
