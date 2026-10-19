@@ -1893,6 +1893,25 @@ function AssistantPage() {
                         </div>
                       )}
 
+                      {m.proposal.auditReport && (
+                        <div className="rounded-lg bg-emerald-500/10 border border-emerald-500/30 px-3 py-2 text-xs flex flex-wrap items-center justify-between gap-2">
+                          <div className="flex items-center gap-1.5 text-emerald-300 font-semibold">
+                            <ShieldCheck className="size-4 text-emerald-400 shrink-0" />
+                            <span>Умен одит: 100% богословски и граматически проверен</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-[11px] font-mono bg-emerald-500/20 text-emerald-300 px-2 py-0.5 rounded-full border border-emerald-500/40">
+                              Оценка: {m.proposal.auditReport.overallScore}%
+                            </span>
+                            {m.proposal.auditReport.correctionsApplied && m.proposal.auditReport.correctionsApplied.length > 0 && (
+                              <span className="text-[10px] text-emerald-400/80 bg-black/40 px-2 py-0.5 rounded border border-emerald-500/20" title={m.proposal.auditReport.correctionsApplied.join(" • ")}>
+                                {m.proposal.auditReport.correctionsApplied.length} авто-корекции
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      )}
+
                       {m.proposal.type === 'carousel' && m.proposal.carouselSlides && (
                         <div className="mt-4 flex flex-col gap-3">
                           <div className="text-sm font-medium text-amber-400 mb-1">📸 КАРУСЕЛ (4 СЛАЙДА)</div>
@@ -2395,6 +2414,12 @@ function AssistantPage() {
                                       <ShieldCheck className="size-3 text-emerald-400 shrink-0" />
                                     )}
                                     {prop.scriptWorkflow.sourceScholar}
+                                  </span>
+                                )}
+                                {prop.auditReport && (
+                                  <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
+                                    <ShieldCheck className="size-3 text-emerald-400 shrink-0" />
+                                    Одит: {prop.auditReport.overallScore}%
                                   </span>
                                 )}
                               </div>

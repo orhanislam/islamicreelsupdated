@@ -1,6 +1,13 @@
 import { alignTimestampsToSpeech, clampToSpeechIntervals } from "../audio-align.functions";
 import { generateAssSubtitles, estimateTextWidth, balanceWordsIntoTwoLines } from "../render.functions";
 import { extractTopic } from "../assistant.functions";
+import {
+  auditAndRefineBulgarianGrammar,
+  validateAndEnforceFourStepArchitecture,
+  validateAndAlignVisualAtmosphere,
+  auditAndRefineProposal,
+  auditAndRefineNarrationScript,
+} from "../smart-script-auditor";
 
 function testMonotonicityAndBounds() {
   const mockSpeechIntervals = [
@@ -958,6 +965,92 @@ async function testGoalTikTokSubtitlesSemanticBRollAndTranslation() {
   console.log("✔ testGoalTikTokSubtitlesSemanticBRollAndTranslation passed: uniform 68px subtitles, context-synced fire/rain/jannah B-Roll scenes, and literary Bulgarian translation verified!");
 }
 
+async function testSmartScriptAuditorAndPreRenderHealing() {
+  // 1. Test Bulgarian grammar, polite form, gender agreement, and euphony
+  const rawGrammar = "Ти знаеш ли, че всяка душа ще вкуси своя смърт в вярата с страх?";
+  const grammarRes = auditAndRefineBulgarianGrammar(rawGrammar);
+  if (!grammarRes.refinedText.includes("Вие знаете ли")) {
+    throw new Error(`Expected polite 'Вие знаете ли', got: ${grammarRes.refinedText}`);
+  }
+  if (!grammarRes.refinedText.includes("своята смърт")) {
+    throw new Error(`Expected feminine agreement 'своята смърт', got: ${grammarRes.refinedText}`);
+  }
+  if (!grammarRes.refinedText.includes("във вярата")) {
+    throw new Error(`Expected euphony 'във вярата', got: ${grammarRes.refinedText}`);
+  }
+  if (!grammarRes.refinedText.includes("със страх")) {
+    throw new Error(`Expected euphony 'със страх', got: ${grammarRes.refinedText}`);
+  }
+
+  // 2. Test 4-step narrative architecture enforcement and repair
+  const incompleteWorkflow: any = {
+    hookQuestion: "Знаеш ли какво казва Корана",
+    hookContext: "",
+    dalilIntro: "",
+    dalilText: "Аллах е Един",
+    explanation: "Salafi Shaykh AI пояснява, че сърцето намира покой единствено в Аллах.",
+    actionStep: "",
+  };
+  const archRes = validateAndEnforceFourStepArchitecture(incompleteWorkflow, "Покоят на сърцата");
+  if (!archRes.sw.hookQuestion.endsWith("?")) {
+    throw new Error(`Hook question must end with '?', got: ${archRes.sw.hookQuestion}`);
+  }
+  if (!archRes.sw.hookContext || archRes.sw.hookContext.length < 15) {
+    throw new Error(`Hook context was not repaired! Got: ${archRes.sw.hookContext}`);
+  }
+  if (!archRes.sw.dalilIntro || !archRes.sw.dalilIntro.includes("Аллах Всевишният")) {
+    throw new Error(`Sacred dalil intro missing or invalid: ${archRes.sw.dalilIntro}`);
+  }
+  if (archRes.sw.explanation.includes("Salafi Shaykh AI пояснява")) {
+    throw new Error(`Scholar attribution leak was not stripped from explanation: ${archRes.sw.explanation}`);
+  }
+  if (!archRes.sw.actionStep || (!archRes.sw.actionStep.includes("Напътствие:") && !archRes.sw.actionStep.includes("Дуа:"))) {
+    throw new Error(`Action step was not repaired with Напътствие/Дуа! Got: ${archRes.sw.actionStep}`);
+  }
+
+  // 3. Test Halal Visual Category and Query Alignment
+  const fireProposal: any = {
+    title: "[Коран] Наказанието на огъня и Джаханнам",
+    searchQuery: "woman walking face girl piano music",
+    themeBg: "",
+  };
+  const visualRes = validateAndAlignVisualAtmosphere(fireProposal);
+  if (/woman|face|girl|piano|music/i.test(visualRes.searchQuery)) {
+    throw new Error(`Forbidden visual tokens were not removed! Got: ${visualRes.searchQuery}`);
+  }
+  if (!visualRes.searchQuery.includes("fire") && !visualRes.searchQuery.includes("flames")) {
+    throw new Error(`Expected fire/flames Pexels query, got: ${visualRes.searchQuery}`);
+  }
+
+  // 4. Test Proposal Auditor end-to-end
+  const proposalInput: any = {
+    title: "[Коран 13:28] Покоят на сърцата",
+    summaryBg: "Всяка душа намира покой с любов в вярата.",
+    searchQuery: "",
+    themeBg: "",
+    scriptWorkflow: incompleteWorkflow,
+  };
+  const auditRes = auditAndRefineProposal(proposalInput);
+  if (!auditRes.report.passed || auditRes.report.overallScore < 90) {
+    throw new Error(`Expected audit report to pass with >=90 score, got: ${auditRes.report.overallScore}`);
+  }
+  if (!auditRes.proposal.searchQuery || auditRes.proposal.searchQuery.length < 5) {
+    throw new Error(`searchQuery not populated by auditor!`);
+  }
+
+  // 5. Test Pre-Render Narration Script Clean-up
+  const rawNarration = `[Коран 13:28] Покоят на сърцата. #viral #islam 🔍 TikTok SEO: ислям, коран... Всяка душа намира утеха в вярата.`;
+  const refinedNarration = auditAndRefineNarrationScript(rawNarration);
+  if (refinedNarration.refinedNarration.includes("#viral") || refinedNarration.refinedNarration.includes("TikTok SEO")) {
+    throw new Error(`Narration script contains spoken hashtags or SEO headers! Got: ${refinedNarration.refinedNarration}`);
+  }
+  if (!refinedNarration.refinedNarration.includes("във вярата")) {
+    throw new Error(`Narration script did not fix euphony 'във вярата'! Got: ${refinedNarration.refinedNarration}`);
+  }
+
+  console.log("✔ testSmartScriptAuditorAndPreRenderHealing passed: 4-step workflow, Bulgarian euphony, Halal Pexels queries, and pre-render narration cleanup all verified!");
+}
+
 async function runAllTests() {
   console.log("Running subtitle synchronization verification tests...");
   testMonotonicityAndBounds();
@@ -976,6 +1069,7 @@ async function runAllTests() {
   await testTikTokTitleAndCaptionDashAndStripeRemoval();
   await testRespectfulAndOfficialIslamicEmojis();
   await testGoalTikTokSubtitlesSemanticBRollAndTranslation();
+  await testSmartScriptAuditorAndPreRenderHealing();
   console.log("✔ All subtitle synchronization verification tests passed successfully!");
   process.exit(0);
 }

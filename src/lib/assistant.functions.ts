@@ -30,6 +30,11 @@ import {
 } from "./tafsir.functions";
 import { sanitizeTheologicalRespect } from "./theological-sanitizer";
 import { enrichUnfamiliarQuranicTerms } from "./islamic-glossary";
+import {
+  auditAndRefineProposal,
+  auditAndRefineNarrationScript,
+  type ScriptAuditReport,
+} from "./smart-script-auditor";
 
 
 export type ManagerAction = {
@@ -82,6 +87,7 @@ export type VideoProposal = {
     sourceBadge?: string;
   }[];
   scriptWorkflow?: ExplainedVideoScript;
+  auditReport?: ScriptAuditReport;
 };
 
 export function cleanProposalTitle(rawTitle: string): string {
@@ -2014,7 +2020,16 @@ export function sanitizeProposalFields(p: VideoProposal): VideoProposal {
       if (s.sourceBadge) s.sourceBadge = sanitizeTheologicalRespect(s.sourceBadge);
     }
   }
-  return p;
+
+  // Smart Script Auditor: Deep validation, self-healing of 4-step workflow, grammar, and visual alignment
+  try {
+    const { proposal: auditedProposal, report } = auditAndRefineProposal(p as any);
+    (auditedProposal as VideoProposal).auditReport = report;
+    return auditedProposal as VideoProposal;
+  } catch (err) {
+    console.warn("[smart-script-auditor] Error in auditAndRefineProposal:", err);
+    return p;
+  }
 }
 
 export function cleanScriptPrefixes(text: string): string {
@@ -2158,21 +2173,8 @@ export function buildExplainedNarrationText(params: {
 export const confirmAndGenerateVideo = createServerFn({ method: "POST" })
   .validator((input: { proposal: VideoProposal; force?: boolean }) => input)
   .handler(async ({ data: { proposal, force } }) => {
-    if (proposal.title) {
-      proposal.title = sanitizeTheologicalRespect(cleanProposalTitle(proposal.title));
-    }
-    if (proposal.summaryBg) {
-      proposal.summaryBg = sanitizeTheologicalRespect(proposal.summaryBg);
-    }
-    if (proposal.scriptWorkflow) {
-      const sw = proposal.scriptWorkflow;
-      if (sw.hookQuestion) sw.hookQuestion = sanitizeTheologicalRespect(sw.hookQuestion);
-      if (sw.hookContext) sw.hookContext = sanitizeTheologicalRespect(sw.hookContext);
-      if (sw.dalilIntro) sw.dalilIntro = sanitizeTheologicalRespect(sw.dalilIntro);
-      if (sw.dalilText) sw.dalilText = sanitizeTheologicalRespect(sw.dalilText);
-      if (sw.explanation) sw.explanation = sanitizeTheologicalRespect(sw.explanation);
-      if (sw.actionStep) sw.actionStep = sanitizeTheologicalRespect(sw.actionStep);
-    }
+    // 1. Full Smart Script Audit & Reparation before processing
+    proposal = sanitizeProposalFields(proposal);
 
     // 1-Month Cooldown Safety Check: Block duplicate generation unless explicitly forced
     if (!force) {
@@ -2253,6 +2255,7 @@ export const confirmAndGenerateVideo = createServerFn({ method: "POST" })
         }
       }
       bulgarian = sanitizeTheologicalRespect(bulgarian);
+      bulgarian = auditAndRefineNarrationScript(bulgarian).refinedNarration;
 
       try {
         const narr = await synthesizeHadithNarration({ data: { text: bulgarian } });
@@ -2291,6 +2294,7 @@ export const confirmAndGenerateVideo = createServerFn({ method: "POST" })
       }
 
       bulgarian = sanitizeTheologicalRespect(bulgarian);
+      bulgarian = auditAndRefineNarrationScript(bulgarian).refinedNarration;
 
       try {
         const narr = await synthesizeHadithNarration({ data: { text: bulgarian } });
@@ -2413,6 +2417,7 @@ export const confirmAndGenerateVideo = createServerFn({ method: "POST" })
         }
 
         bulgarian = sanitizeTheologicalRespect(bulgarian);
+        bulgarian = auditAndRefineNarrationScript(bulgarian).refinedNarration;
 
         try {
           const narr = await synthesizeHadithNarration({ data: { text: bulgarian } });
@@ -2430,8 +2435,9 @@ export const confirmAndGenerateVideo = createServerFn({ method: "POST" })
       }
     }
 
-    // 0. Salafi Adab text sanitation: Reverence for Allah (strictly eliminate casual 'оня')
+    // 0. Salafi Adab text sanitation: Reverence for Allah & voiceover refinement
     bulgarian = sanitizeTheologicalRespect(bulgarian);
+    bulgarian = auditAndRefineNarrationScript(bulgarian).refinedNarration;
 
     let resolvedQuery = proposal.searchQuery;
     const fullText = `${proposal.title || ""} ${proposal.themeBg || ""} ${proposal.summaryBg || ""} ${bulgarian || ""}`;
