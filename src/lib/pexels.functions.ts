@@ -1163,9 +1163,10 @@ export function segmentScriptIntoSemanticScenes(
     }
   }
 
-  // Merge or split clauses into natural semantic scenes:
-  // - Immediately switch scene when a clause has a DIFFERENT theological concept!
-  // - Merge consecutive clauses if they share the same concept (up to ~7.5s) or if a clause has no concept and the current scene is < 4.5s.
+  // Merge clauses into natural, calm semantic scenes:
+  // - User requirement: Do NOT switch every 3 seconds! Switch only on distinct thematic shifts.
+  // - Minimum scene duration: at least 7.5s (calm and cinematic).
+  // - Capped at max 3 to 4 scenes total per video to avoid rapid flickering and massive encoding overhead.
   const mergedScenes: RawClause[] = [];
   for (const cl of clauses) {
     if (mergedScenes.length === 0) {
@@ -1180,15 +1181,12 @@ export function segmentScriptIntoSemanticScenes(
     const curId = cl.concept?.id || null;
 
     const hasDifferentExplicitConcept = prevId && curId && prevId !== curId;
-    const newExplicitConceptAfterGeneric = !prevId && curId && prevDur >= 2.2;
+    const newExplicitConceptAfterGeneric = !prevId && curId && prevDur >= 2.0;
 
+    // Never merge across distinct explicit theological concepts (e.g. Fire -> Rain -> Paradise)!
     if (hasDifferentExplicitConcept || newExplicitConceptAfterGeneric) {
-      // Never merge across a semantic concept shift (e.g. Fire -> Paradise)!
       mergedScenes.push({ ...cl });
-    } else if (
-      (prevDur < 3.5 && combinedDur <= 9.0) ||
-      (prevId && prevId === curId && combinedDur <= 7.5)
-    ) {
+    } else if (prevDur < 7.5 || combinedDur <= 18.0) {
       prev.words.push(...cl.words);
       prev.end = cl.end;
       if (!prev.concept && cl.concept) {
@@ -1197,6 +1195,35 @@ export function segmentScriptIntoSemanticScenes(
     } else {
       mergedScenes.push({ ...cl });
     }
+  }
+
+  // Strictly enforce max 3-4 scenes total to ensure fast rendering, merging generic/same-concept scenes first
+  const MAX_ALLOWED_SCENES = Math.max(3, estDur > 85 ? 4 : 3);
+  while (mergedScenes.length > MAX_ALLOWED_SCENES) {
+    let mergeIdx = -1;
+    let minCombined = Infinity;
+    for (let i = 0; i < mergedScenes.length - 1; i++) {
+      const a = mergedScenes[i];
+      const b = mergedScenes[i + 1];
+      const isConflicting = a.concept?.id && b.concept?.id && a.concept.id !== b.concept.id;
+      if (!isConflicting) {
+        const combined = (a.end - a.start) + (b.end - b.start);
+        if (combined < minCombined) {
+          minCombined = combined;
+          mergeIdx = i;
+        }
+      }
+    }
+    if (mergeIdx === -1) {
+      if (mergedScenes.length <= 4) break;
+      mergeIdx = 0;
+    }
+    mergedScenes[mergeIdx].words.push(...mergedScenes[mergeIdx + 1].words);
+    mergedScenes[mergeIdx].end = mergedScenes[mergeIdx + 1].end;
+    if (!mergedScenes[mergeIdx].concept && mergedScenes[mergeIdx + 1].concept) {
+      mergedScenes[mergeIdx].concept = mergedScenes[mergeIdx + 1].concept;
+    }
+    mergedScenes.splice(mergeIdx + 1, 1);
   }
 
   // Build final contiguous timed segments covering [0, estDur]

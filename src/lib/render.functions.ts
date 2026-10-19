@@ -1059,6 +1059,28 @@ export async function executeRenderTask(opts: any): Promise<any> {
             }
           }
 
+          // Coalesce schedule to max 3-4 calm semantic scenes so backgrounds do NOT switch every 3s and render in seconds
+          const MAX_BROLL_SCENES = audioDur > 85 ? 4 : 3;
+          while (schedule.length > MAX_BROLL_SCENES) {
+            let shortestIdx = 0;
+            let shortestDur = Infinity;
+            for (let i = 0; i < schedule.length; i++) {
+              if (schedule[i].duration < shortestDur) {
+                shortestDur = schedule[i].duration;
+                shortestIdx = i;
+              }
+            }
+            if (shortestIdx === 0 && schedule.length > 1) {
+              schedule[1].duration = Number((schedule[1].duration + schedule[0].duration).toFixed(2));
+              schedule.splice(0, 1);
+            } else if (shortestIdx > 0) {
+              schedule[shortestIdx - 1].duration = Number((schedule[shortestIdx - 1].duration + schedule[shortestIdx].duration).toFixed(2));
+              schedule.splice(shortestIdx, 1);
+            } else {
+              break;
+            }
+          }
+
           if (schedule.length > 1) {
             console.log(
               `[server-render] Building semantic text-synced B-Roll sequence (${schedule.length} scenes across ${audioDur.toFixed(2)}s):`,
@@ -1096,10 +1118,10 @@ export async function executeRenderTask(opts: any): Promise<any> {
                     .inputOptions(["-stream_loop -1"])
                     .outputOptions([
                       `-t ${seg.duration.toFixed(2)}`,
-                      "-vf scale=1080:1920:flags=lanczos:force_original_aspect_ratio=increase,crop=1080:1920,fps=30,format=yuv420p",
+                      "-vf scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,fps=30,format=yuv420p",
                       "-c:v libx264",
-                      "-preset superfast",
-                      "-crf 17",
+                      "-preset ultrafast",
+                      "-crf 20",
                       "-pix_fmt yuv420p",
                       "-an",
                     ])
@@ -1191,8 +1213,8 @@ export async function executeRenderTask(opts: any): Promise<any> {
 
         cmd
           .complexFilter([
-            // Lanczos scaling + subtle unsharp clarity + BT.709 vibrancy for iPhone 16 Pro Max Super Retina XDR
-            `[0:v]crop='min(iw,ih*9/16)':'min(iw*16/9,ih)',scale=${width}:${height}:flags=lanczos+accurate_rnd+full_chroma_int,unsharp=3:3:0.35:3:3:0.0,eq=contrast=1.05:saturation=1.10,subtitles='${escapedAssPath}'[v]`,
+            // Crisp 1080p scaling + subtle BT.709 color grade + burned-in 68px TikTok subtitles (optimized for iPhone 16 Pro Max without CPU lag)
+            `[0:v]crop='min(iw,ih*9/16)':'min(iw*16/9,ih)',scale=${width}:${height}:force_original_aspect_ratio=increase,crop=${width}:${height},eq=contrast=1.04:saturation=1.08,subtitles='${escapedAssPath}'[v]`,
             `[1:a]highpass=f=45,treble=g=2:f=3500:w=0.7,acompressor=threshold=-18dB:ratio=2.5:attack=5:release=50,bass=g=3:f=110:w=0.6,loudnorm=I=-14:LRA=9:TP=-1.0,apad[a]`,
           ])
           .outputOptions([
@@ -1207,8 +1229,8 @@ export async function executeRenderTask(opts: any): Promise<any> {
             "-color_trc bt709",
             "-color_primaries bt709",
             "-movflags +faststart",
-            "-preset superfast",
-            "-crf 18",
+            "-preset ultrafast",
+            "-crf 19",
             "-maxrate 25M",
             "-bufsize 50M",
             "-r 30",
@@ -1222,22 +1244,10 @@ export async function executeRenderTask(opts: any): Promise<any> {
             "-ar 48000",
             "-ac 2",
             `-t ${Number(audioDur).toFixed(2)}`,
-            "-threads 1",
           ])
           .outputFormat("mp4")
           .on("start", (commandLine: string) => {
             console.log(`[server-render] FFmpeg started with command: ${commandLine}`);
-            // Lower FFmpeg priority to prevent it from completely starving the web server on a 1-core VPS
-            import("child_process").then(({ exec }) => {
-              exec('pidof ffmpeg', (err, stdout) => {
-                if (!err && stdout) {
-                  const pids = stdout.trim().split(' ').join(' ');
-                  exec(`renice -n 19 -p ${pids}`, () => {
-                    console.log(`[server-render] Reniced FFmpeg (PIDs: ${pids}) to priority 19`);
-                  });
-                }
-              });
-            });
           })
           .on("stderr", (line: string) => {
             ffmpegStderr += line + "\n";
