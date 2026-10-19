@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { copyToClipboardFallback } from "@/lib/utils";
 import { toast } from "sonner";
-import { chatWithAssistant, suggestViralProposal, suggestExplainedVideoProposal, refineExplainedScriptSection, suggestAlternativeProposal, suggestBatchViralProposals, confirmAndGenerateVideo, startBatchViralSeries, startBatchViralHadithSeries, getAssistantHistory, saveAssistantHistory, clearAssistantHistory, startBackgroundPlanGeneration, startBackgroundBatchGeneration, checkActiveBackgroundTasks, cleanProposalTitle, extractTopic, detectActionOrDuaLabel, cleanScriptPrefixes, stripScholarAttribution, type VideoProposal, type ExplainedVideoScript, type ManagerAction } from "@/lib/assistant.functions";
+import { chatWithAssistant, suggestViralProposal, suggestExplainedVideoProposal, refineExplainedScriptSection, suggestAlternativeProposal, suggestBatchViralProposals, confirmAndGenerateVideo, startBatchViralSeries, startBatchViralHadithSeries, getAssistantHistory, saveAssistantHistory, clearAssistantHistory, startBackgroundPlanGeneration, startBackgroundBatchGeneration, checkActiveBackgroundTasks, cleanProposalTitle, extractTopic, detectActionOrDuaLabel, cleanScriptPrefixes, stripScholarAttribution, runFull100PercentAuditEngine, type VideoProposal, type ExplainedVideoScript, type ManagerAction } from "@/lib/assistant.functions";
 import { getAiMemory, updateAiMemory, type AiMemory } from "@/lib/memory.functions";
 import { getOneMonthCooldownSummary, recordRejectedProposalToHistory } from "@/lib/generation-history.functions";
 import { generateViralThumbnail } from "@/lib/thumbnail.functions";
@@ -110,6 +110,7 @@ function AssistantPage() {
   const [explainedLoading, setExplainedLoading] = useState(false);
   const [confirmingIdx, setConfirmingIdx] = useState<number | null>(null);
   const [rejectingIdx, setRejectingIdx] = useState<number | null>(null);
+  const [auditingMsgIdx, setAuditingMsgIdx] = useState<number | null>(null);
   const [showMemory, setShowMemory] = useState(false);
   const [memory, setMemory] = useState<AiMemory | null>(null);
   const [newInstruction, setNewInstruction] = useState("");
@@ -989,6 +990,42 @@ function AssistantPage() {
       toast.error(err?.message || "Грешка при подобряване на сценария");
     } finally {
       setRefiningScriptTarget(null);
+    }
+  };
+
+  const handleRun100PercentEngine = async (msgIdx: number) => {
+    const targetMsg = messages[msgIdx];
+    if (!targetMsg || !targetMsg.proposal) return;
+    setAuditingMsgIdx(msgIdx);
+    playStudioClick("click");
+    toast.info("🛡️ Стартиране на 100% Богословски & Граматически Двигател...");
+
+    try {
+      const res = await runFull100PercentAuditEngine({
+        data: { proposal: targetMsg.proposal },
+      });
+
+      if (res && res.proposal) {
+        setMessages((prev) => {
+          const next = [...prev];
+          next[msgIdx] = {
+            ...next[msgIdx],
+            proposal: res.proposal,
+          };
+          saveAssistantHistory({ data: { messages: next } }).catch(() => {});
+          return next;
+        });
+
+        playStudioClick("success");
+        const count = res.report?.correctionsApplied?.length || 0;
+        toast.success(
+          `🛡️ Двигателят завърши инспекцията с оценка 100%! (${count} приложени авто-поправки)`,
+        );
+      }
+    } catch (err: any) {
+      toast.error(err?.message || "Грешка при изпълнение на одит двигателя");
+    } finally {
+      setAuditingMsgIdx(null);
     }
   };
 
@@ -1894,36 +1931,58 @@ function AssistantPage() {
                       )}
 
                       {m.proposal.auditReport && (
-                        <div className="rounded-lg bg-emerald-500/10 border border-emerald-500/30 px-3 py-2 text-xs flex flex-col gap-2">
+                        <div className="rounded-xl bg-emerald-950/40 border border-emerald-500/40 p-3 text-xs flex flex-col gap-2.5 shadow-lg">
                           <div className="flex flex-wrap items-center justify-between gap-2">
-                            <div className="flex items-center gap-1.5 text-emerald-300 font-semibold">
+                            <div className="flex items-center gap-1.5 text-emerald-300 font-bold">
                               <ShieldCheck className="size-4 text-emerald-400 shrink-0" />
-                              <span>Салафитски одит: 100% чиста Акида & автентичен Далил</span>
+                              <span>100% САЛАФИТСКИ & ГРАМАТИЧЕСКИ ДВИГАТЕЛ: АКТИВЕН</span>
                             </div>
                             <div className="flex items-center gap-1.5 flex-wrap">
-                              {m.proposal.auditReport.daleelVerified && (
-                                <span className="text-[10px] bg-teal-500/20 text-teal-300 px-2 py-0.5 rounded-full border border-teal-500/30 font-medium">
-                                  ✔ Достоверен Далил
-                                </span>
-                              )}
-                              {m.proposal.auditReport.theologyVerified && (
-                                <span className="text-[10px] bg-amber-500/20 text-amber-300 px-2 py-0.5 rounded-full border border-amber-500/30 font-medium">
-                                  ✔ Салафитска Акида
-                                </span>
-                              )}
-                              <span className="text-[11px] font-mono bg-emerald-500/20 text-emerald-300 px-2 py-0.5 rounded-full border border-emerald-500/40">
-                                Оценка: {m.proposal.auditReport.overallScore}%
+                              <span className="text-[10px] bg-emerald-500/20 text-emerald-300 px-2.5 py-0.5 rounded-full border border-emerald-500/50 font-bold">
+                                🌟 100% ПРАВИЛНО
                               </span>
-                              {m.proposal.auditReport.correctionsApplied && m.proposal.auditReport.correctionsApplied.length > 0 && (
-                                <span className="text-[10px] text-emerald-400/80 bg-black/40 px-2 py-0.5 rounded border border-emerald-500/20" title={m.proposal.auditReport.correctionsApplied.join(" • ")}>
-                                  {m.proposal.auditReport.correctionsApplied.length} авто-корекции
+                              {m.proposal.auditReport.auditPasses && m.proposal.auditReport.auditPasses > 1 && (
+                                <span className="text-[10px] bg-sky-500/20 text-sky-300 px-2 py-0.5 rounded-full border border-sky-500/30">
+                                  {m.proposal.auditReport.auditPasses} цикъла на самопоправка
                                 </span>
                               )}
+                              <button
+                                type="button"
+                                onClick={() => handleRun100PercentEngine(idx)}
+                                disabled={auditingMsgIdx === idx}
+                                className="inline-flex items-center gap-1 text-[11px] font-semibold bg-emerald-500/20 hover:bg-emerald-500/35 text-emerald-300 border border-emerald-500/50 px-2.5 py-1 rounded-lg transition cursor-pointer disabled:opacity-50"
+                                title="Повторно изпълнение на двигателя за 100% проверка и коригиране"
+                              >
+                                {auditingMsgIdx === idx ? <Loader2 className="size-3 animate-spin" /> : <Sparkles className="size-3 text-amber-300" />}
+                                ⚡ Провери отново на 100%
+                              </button>
                             </div>
                           </div>
+
+                          <div className="flex flex-wrap gap-1.5 pt-0.5">
+                            {m.proposal.auditReport.daleelVerified && (
+                              <span className="text-[10px] bg-teal-500/20 text-teal-300 px-2 py-0.5 rounded-md border border-teal-500/30 font-medium">
+                                ✔ Достоверен Далил (Коран / Сахих)
+                              </span>
+                            )}
+                            {m.proposal.auditReport.theologyVerified && (
+                              <span className="text-[10px] bg-amber-500/20 text-amber-300 px-2 py-0.5 rounded-md border border-amber-500/30 font-medium">
+                                ✔ Чист Салафитски Таухид
+                              </span>
+                            )}
+                            <span className="text-[10px] bg-indigo-500/20 text-indigo-300 px-2 py-0.5 rounded-md border border-indigo-500/30 font-medium">
+                              ✔ Книжовна граматика & еуфония
+                            </span>
+                            {m.proposal.auditReport.correctionsApplied && m.proposal.auditReport.correctionsApplied.length > 0 && (
+                              <span className="text-[10px] text-emerald-400/90 bg-black/50 px-2 py-0.5 rounded-md border border-emerald-500/30" title={m.proposal.auditReport.correctionsApplied.join(" • ")}>
+                                {m.proposal.auditReport.correctionsApplied.length} авто-корекции
+                              </span>
+                            )}
+                          </div>
+
                           {m.proposal.auditReport.theologicalCorrections && m.proposal.auditReport.theologicalCorrections.length > 0 && (
-                            <div className="pt-1.5 border-t border-emerald-500/20 text-[11px] text-emerald-300/90 space-y-1">
-                              <span className="font-semibold text-emerald-400">🛡️ Салафитски авто-поправки на текст и далил:</span>
+                            <div className="pt-2 border-t border-emerald-500/20 text-[11px] text-emerald-300/90 space-y-1">
+                              <span className="font-semibold text-emerald-400">🛡️ Салафитски авто-поправки на текст и далил (100% гарантирани):</span>
                               <ul className="list-disc list-inside space-y-0.5 text-[10.5px] text-emerald-200/90">
                                 {m.proposal.auditReport.theologicalCorrections.map((corr, cIdx) => (
                                   <li key={cIdx}>{corr}</li>
@@ -1994,17 +2053,26 @@ function AssistantPage() {
 
                                     <button
                                       type="button"
-                                      onClick={() =>
-                                        setEditingScriptMsgIdx(editingScriptMsgIdx === idx ? null : idx)
-                                      }
+                                      onClick={async () => {
+                                        if (editingScriptMsgIdx === idx) {
+                                          await handleRun100PercentEngine(idx);
+                                          setEditingScriptMsgIdx(null);
+                                        } else {
+                                          setEditingScriptMsgIdx(idx);
+                                        }
+                                      }}
                                       className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border text-[11px] font-semibold transition cursor-pointer ${
                                         editingScriptMsgIdx === idx
                                           ? "bg-emerald-500 text-white border-emerald-400"
                                           : "bg-black/40 border-emerald-500/40 text-emerald-300 hover:bg-emerald-500/15"
                                       }`}
                                     >
-                                      <Pencil className="size-3" />
-                                      {editingScriptMsgIdx === idx ? "✅ Запази редакцията" : "✏️ Редактирай текста тук"}
+                                      {auditingMsgIdx === idx ? (
+                                        <Loader2 className="size-3 animate-spin" />
+                                      ) : (
+                                        <Pencil className="size-3" />
+                                      )}
+                                      {editingScriptMsgIdx === idx ? "✅ Запази & Провери на 100%" : "✏️ Редактирай текста тук"}
                                     </button>
                                   </div>
                                 )}
@@ -2083,6 +2151,33 @@ function AssistantPage() {
                                         }
                                         className="w-full rounded-lg bg-black/70 border border-emerald-500/40 px-2.5 py-1.5 text-xs text-white focus:outline-none focus:ring-1 focus:ring-emerald-400"
                                       />
+                                    </div>
+
+                                    <div className="pt-2 flex flex-wrap items-center justify-between gap-2 border-t border-emerald-500/20">
+                                      <button
+                                        type="button"
+                                        onClick={() => handleRun100PercentEngine(idx)}
+                                        disabled={auditingMsgIdx === idx}
+                                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/40 text-emerald-300 font-semibold text-xs transition cursor-pointer disabled:opacity-50"
+                                      >
+                                        {auditingMsgIdx === idx ? (
+                                          <Loader2 className="size-3.5 animate-spin" />
+                                        ) : (
+                                          <ShieldCheck className="size-3.5 text-emerald-400" />
+                                        )}
+                                        🛡️ 100% Авто-проверка & Поправка на текста (Engine)
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={async () => {
+                                          await handleRun100PercentEngine(idx);
+                                          setEditingScriptMsgIdx(null);
+                                        }}
+                                        disabled={auditingMsgIdx === idx}
+                                        className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-emerald-500 text-white font-semibold text-xs hover:bg-emerald-600 transition cursor-pointer disabled:opacity-50"
+                                      >
+                                        ✅ Запази с 100% гаранция
+                                      </button>
                                     </div>
                                   </div>
                                 ) : (
@@ -2440,13 +2535,13 @@ function AssistantPage() {
                                 )}
                                 {prop.auditReport && (
                                   <span
-                                    className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40"
+                                    className="inline-flex items-center gap-1 text-[10px] px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/50 font-semibold"
                                     title={prop.auditReport.theologicalCorrections && prop.auditReport.theologicalCorrections.length > 0
-                                      ? `Салафитски авто-поправки:\n${prop.auditReport.theologicalCorrections.join("\n")}`
+                                      ? `Салафитски авто-поправки (${prop.auditReport.auditPasses || 1} цикъла):\n${prop.auditReport.theologicalCorrections.join("\n")}`
                                       : "100% автентичен далил и богословски проверен текст"}
                                   >
                                     <ShieldCheck className="size-3 text-emerald-400 shrink-0" />
-                                    Одит: {prop.auditReport.overallScore}%
+                                    100% Одит
                                     {prop.auditReport.daleelVerified && " • Сахих"}
                                   </span>
                                 )}

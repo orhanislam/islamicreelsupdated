@@ -2023,7 +2023,7 @@ export function sanitizeProposalFields(p: VideoProposal): VideoProposal {
 
   // Smart Script Auditor: Deep validation, self-healing of 4-step workflow, grammar, and visual alignment
   try {
-    const { proposal: auditedProposal, report } = auditAndRefineProposal(p as any);
+    const { proposal: auditedProposal, report } = auditAndRefineProposal(p as any, { maxPasses: 5 });
     (auditedProposal as VideoProposal).auditReport = report;
     return auditedProposal as VideoProposal;
   } catch (err) {
@@ -2031,6 +2031,20 @@ export function sanitizeProposalFields(p: VideoProposal): VideoProposal {
     return p;
   }
 }
+
+/**
+ * Server function to manually trigger the 100% Salafi & Grammar Self-Healing Engine on any proposal.
+ */
+export const runFull100PercentAuditEngine = createServerFn({ method: "POST" })
+  .validator((input: { proposal: VideoProposal }) => input)
+  .handler(async ({ data: { proposal } }) => {
+    const { proposal: audited, report } = auditAndRefineProposal(proposal as any, { maxPasses: 5 });
+    (audited as VideoProposal).auditReport = report;
+    return {
+      proposal: audited as VideoProposal,
+      report,
+    };
+  });
 
 export function cleanScriptPrefixes(text: string): string {
   const cleaned = text

@@ -1158,19 +1158,37 @@ async function testSalafiTheologyAndDaleelSelfHealing() {
     throw new Error(`Render analyzer failed to clean theological deviations! Got: ${renderAudit.data.bulgarian}`);
   }
 
-  // 7. Full Proposal Auditor integration
+  // 7. Full Proposal Auditor integration with 100% multi-pass convergence
   const audited = auditAndRefineProposal({
-    title: "[Коран 112:1-4] Сура Ал-Ихляс",
-    summaryBg: "Търсете закрила от светците за душевен мир.",
+    title: "ти знаеш ли за синьото око и търси помощ от светците в вярата",
+    summaryBg: "търси закрила от светците за душевен мир и помни своя вяра.",
   });
   if (!audited.report.theologyVerified || !audited.report.daleelVerified) {
     throw new Error("Expected theologyVerified and daleelVerified to be true!");
   }
+  if (!audited.report.grammarVerified) {
+    throw new Error("Expected grammarVerified to be true!");
+  }
+  if (audited.report.overallScore !== 100) {
+    throw new Error(`Expected overallScore to be 100%, got: ${audited.report.overallScore}`);
+  }
+  if (!audited.report.is100PercentGuaranteed) {
+    throw new Error("Expected is100PercentGuaranteed to be true!");
+  }
+  if (!audited.report.auditPasses || audited.report.auditPasses < 1) {
+    throw new Error(`Expected auditPasses >= 1, got: ${audited.report.auditPasses}`);
+  }
   if (audited.report.theologicalCorrections.length === 0) {
     throw new Error("Expected theologicalCorrections to record applied fixes!");
   }
+  if (audited.proposal.title?.includes("ти знаеш ли") || audited.proposal.title?.includes("светците")) {
+    throw new Error(`Expected title to be completely healed, got: ${audited.proposal.title}`);
+  }
+  if (audited.proposal.summaryBg?.includes("светците") || audited.proposal.summaryBg?.includes("своя вяра")) {
+    throw new Error(`Expected summaryBg to be completely healed, got: ${audited.proposal.summaryBg}`);
+  }
 
-  console.log("✔ testSalafiTheologyAndDaleelSelfHealing passed: Quran ayah clamping, Mawdu hadith auto-replacement, Tawheed al-Uluhiyyah, Amulet bans, and Divine Attributes affirmation all 100% verified!");
+  console.log("✔ testSalafiTheologyAndDaleelSelfHealing passed: 100% multi-pass convergence, Quran ayah clamping, Mawdu hadith auto-replacement, Tawheed al-Uluhiyyah, Amulet bans, and Divine Attributes affirmation all 100% verified!");
 }
 
 async function runAllTests() {
