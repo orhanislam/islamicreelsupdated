@@ -154,7 +154,6 @@ export function buildViralThumbnailSvg(options: {
   safeZone?: SafeZoneGeometry;
 }): { svg: string; fontSize: number; lines: string[]; centerX: number; maxLineWidth: number } {
   const sz = options.safeZone || getSafeZone(options.profile || "tiktok");
-  const accentColor = options.accentColor || "#FFD700";
   const maxWidth = Math.min(sz.W_SAFE, 780);
   // TikTok Profile 1:1 and Search 3:4 grid crop optical center is exactly canvas midpoint
   const centerX = Math.round(sz.W / 2); // 540 for 1080p
@@ -172,20 +171,27 @@ export function buildViralThumbnailSvg(options: {
       const lineWidth = estimateTitleWidth(line, fontSize);
       if (lineWidth > maxLineWidth) maxLineWidth = lineWidth;
       const y = centerY + (i - (displayLines.length - 1) / 2) * lineHeight;
-      const isGold =
-        i === 0 ||
-        line.includes("АЛЛАХ") ||
-        line.includes("КОРАН") ||
-        line.includes("РАЙ") ||
-        line.includes("ALLAH") ||
-        line.includes("QURAN");
-      const color = isGold ? accentColor : "#FFFFFF";
-      return `<text x="${centerX}" y="${y}" font-family="Arial, sans-serif" font-weight="900" font-size="${fontSize}" fill="${color}" text-anchor="middle" letter-spacing="-1">${escapeXml(line)}</text>`;
+      // Clean professional cover: every line pure white with a soft drop shadow (no gold/yellow accents)
+      return `<text x="${centerX}" y="${y}" font-family="Arial, sans-serif" font-weight="900" font-size="${fontSize}" fill="#FFFFFF" text-anchor="middle" letter-spacing="-1" filter="url(#coverTextShadow)">${escapeXml(line)}</text>`;
     })
     .join("\n");
 
   const svg = `
 <svg width="${sz.W}" height="${sz.H}" viewBox="0 0 ${sz.W} ${sz.H}" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <!-- Soft drop shadow (built from primitives for maximum librsvg/sharp compatibility) -->
+    <filter id="coverTextShadow" x="-20%" y="-50%" width="140%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="7"/>
+      <feOffset dx="0" dy="5" result="blurOffset"/>
+      <feFlood flood-color="#000000" flood-opacity="0.85"/>
+      <feComposite in2="blurOffset" operator="in" result="shadow"/>
+      <feMerge>
+        <feMergeNode in="shadow"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
   <!-- Semi-transparent overlay to make text readable over any image -->
   <rect width="${sz.W}" height="${sz.H}" fill="#000000" fill-opacity="0.45"/>
 
