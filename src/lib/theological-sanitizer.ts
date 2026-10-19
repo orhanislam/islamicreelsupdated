@@ -143,7 +143,51 @@ export function sanitizeTheologicalRespect(text: string): string {
     return `${isCap ? "Твоите" : "твоите"} ${noun}`;
   });
 
-  // 7. Respectful and dignified Islamic emoji normalization:
+  // 7. Literary Bulgarian grammar & scholarly translation polish:
+  // 7a. Strip leftover English translation cross-references like [V. 2:255], (see V. 3:10), [Tafsir ...]
+  s = s
+    .replace(/\[\s*(?:see\s+)?v\.?\s*\d+\s*:\s*\d+[^\]]*\]/gi, "")
+    .replace(/\(\s*(?:see\s+)?v\.?\s*\d+\s*:\s*\d+[^)]*\)/gi, "")
+    .replace(/\[\s*(?:tafsir|i\.e\.)[^\]]*\]/gi, "")
+    .replace(/\s+([.,!?;:])/g, "$1");
+
+  // 7b. Fix Hadith transmission calques ("Разказано от Абу Хурайра" -> "Предава се от Абу Хурайра")
+  s = s
+    .replace(new RegExp(`(^|[.!?\\n]\\s*)разказано\\s+е\\s+от${bEnd}`, "gi"), "$1Предава се от")
+    .replace(new RegExp(`(^|[.!?\\n]\\s*)разказано\\s+от${bEnd}`, "gi"), "$1Предава се от")
+    .replace(new RegExp(`(^|[.!?\\n]\\s*)разказва\\s+се\\s+от${bEnd}`, "gi"), "$1Предава се от");
+
+  // 7c. Fix nominative definite article (пълен член) when Пратеникът / Пророкът is the subject
+  s = s
+    .replace(
+      new RegExp(`(^|[:.!?\\n„"«]\\s*|${bStart}че\\s+)пратеника\\s+на\\s+аллах(\\s*(?:ﷺ|\\(мир[^)]*\\)|мир\\s+да\\s+бъде\\s+с\\s+него))?\\s+(каза|рече|попита|повели|повелява|учи|заповяда|забрани|предупреди|отговори|е\\s+казал|ни\\s+учи)${bEnd}`, "gi"),
+      (_, prefix, salawat, verb) => `${prefix}Пратеникът на Аллах${salawat || ""} ${verb}`,
+    )
+    .replace(
+      new RegExp(`(^|[:.!?\\n„"«]\\s*|${bStart}че\\s+)пророка(\\s*(?:ﷺ|\\(мир[^)]*\\)|мир\\s+да\\s+бъде\\s+с\\s+него))?\\s+(каза|рече|попита|повели|повелява|учи|заповяда|забрани|предупреди|отговори|е\\s+казал|ни\\s+учи)${bEnd}`, "gi"),
+      (_, prefix, salawat, verb) => `${prefix}Пророкът${salawat || ""} ${verb}`,
+    );
+
+  // 7d. Bulgarian phonetic euphony for prepositions "с" vs "със":
+  // "със" is ONLY used before words starting with с/з (or single-consonant clitics).
+  // Fix "със него/нея/тях/нас/вас/мен/теб/милост/търпение/добро/вяра/праведните/търпеливите" -> "с ..."
+  s = s.replace(
+    new RegExp(`${bStart}със\\s+(него|нея|тях|нас|вас|мен|теб|милост|търпение|добро|вяра|истина|праведните|търпеливите|благодат|почит|уважение|чисто|цялото|всички|всеки|всяка|всяко|единия|едно)${bEnd}`, "gi"),
+    (m, word) => {
+      const isCap = m[0] === m[0].toUpperCase();
+      return `${isCap ? "С" : "с"} ${word}`;
+    },
+  );
+  // Fix "с себе си / с своите / с своя / с своето / с сърце / с страх / с знание / с словото" -> "със ..."
+  s = s.replace(
+    new RegExp(`${bStart}с\\s+(себе|своите|своя|своята|своето|сърце|сърцето|страх|словото|справедливост|знание|знанието|злото|земята)${bEnd}`, "gi"),
+    (m, word) => {
+      const isCap = m[0] === m[0].toUpperCase();
+      return `${isCap ? "Със" : "със"} ${word}`;
+    },
+  );
+
+  // 8. Respectful and dignified Islamic emoji normalization:
   // Strictly replaces hype/gaming/casual or disrespectful emojis (fire, lightning, rocket, cartoon lightbulb)
   // with dignified, official Islamic symbols, and strips prohibited emojis (human hands, music notes, Kaaba as decorative icon).
   s = s

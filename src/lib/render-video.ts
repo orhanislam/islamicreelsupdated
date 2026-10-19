@@ -693,7 +693,7 @@ export async function renderVideo(opts: VideoOptions): Promise<{ blob: Blob; mim
     const recorder = new MediaRecorder(videoStream, {
       mimeType: requestedMimeType,
       videoBitsPerSecond,
-      audioBitsPerSecond: 128_000,
+      audioBitsPerSecond: 192_000,
     });
     const recordedMimeType = normalizeRecordedMime(recorder.mimeType, requestedMimeType);
     const chunks: Blob[] = [];
@@ -712,10 +712,11 @@ export async function renderVideo(opts: VideoOptions): Promise<{ blob: Blob; mim
       .replace(/…+/g, " ")
       .trim();
     const allWords = cleanBulgarianText.split(/\s+/).filter(Boolean);
-    const maxW = sz.W_SAFE;
+    const maxW = Math.min(sz.W_SAFE, Math.round(640 * scale));
     const verticalForText = sz.H_SAFE;
+    const UNIFORM_CANVAS_FS = Math.round(68 * scale);
 
-    const MAX_WORDS_PER_PHRASE = 10;
+    const MAX_WORDS_PER_PHRASE = 7;
     const MIN_WORDS_PER_PHRASE = 2;
     type Phrase = {
       words: string[];
@@ -744,13 +745,56 @@ export async function renderVideo(opts: VideoOptions): Promise<{ blob: Blob; mim
           ayahWords = allWords.slice(wordIdx, Math.min(allWords.length, wordIdx + count));
         }
         if (ayahWords.length > 0) {
-          phrases.push({
-            words: ayahWords,
-            startWord: wordIdx,
-            endWord: wordIdx + ayahWords.length,
-            exactStart: Number(b.start) || 0,
-            exactEnd: Number(b.end) || Number(b.start) + 5,
-          });
+          const bStart = Number(b.start) || 0;
+          const bEnd = Number(b.end) || bStart + 5;
+          const bDur = Math.max(0.5, bEnd - bStart);
+
+          // Slice long ayahs into uniform 2-line TikTok phrases at UNIFORM_CANVAS_FS
+          ctx.font = `700 ${UNIFORM_CANVAS_FS}px 'Outfit', 'Inter', sans-serif`;
+          const subChunks: string[][] = [];
+          let curSub: string[] = [];
+          for (const w of ayahWords) {
+            const testSub = [...curSub, w];
+            const testLines = wrapWords(ctx, testSub, maxW);
+            if (testLines.length > 2 && curSub.length > 0) {
+              subChunks.push(curSub);
+              curSub = [w];
+            } else {
+              curSub.push(w);
+              if (
+                (/[.!?…;:—]$/.test(w) && curSub.length >= 2) ||
+                curSub.length >= MAX_WORDS_PER_PHRASE
+              ) {
+                subChunks.push(curSub);
+                curSub = [];
+              }
+            }
+          }
+          if (curSub.length > 0) subChunks.push(curSub);
+
+          const totalSubCost =
+            subChunks.reduce((acc, sc) => acc + sc.join(" ").length + sc.length * 2, 0) || 1;
+          let cumSubCost = 0;
+          let subWordCursor = wordIdx;
+
+          for (let sIdx = 0; sIdx < subChunks.length; sIdx++) {
+            const sc = subChunks[sIdx];
+            const scCost = sc.join(" ").length + sc.length * 2;
+            const sStart = bStart + (cumSubCost / totalSubCost) * bDur;
+            cumSubCost += scCost;
+            const sEnd =
+              sIdx === subChunks.length - 1
+                ? bEnd
+                : bStart + (cumSubCost / totalSubCost) * bDur;
+            phrases.push({
+              words: sc,
+              startWord: subWordCursor,
+              endWord: subWordCursor + sc.length,
+              exactStart: sStart,
+              exactEnd: sEnd,
+            });
+            subWordCursor += sc.length;
+          }
         }
         wordIdx += ayahWords.length;
       }
@@ -765,10 +809,9 @@ export async function renderVideo(opts: VideoOptions): Promise<{ blob: Blob; mim
       };
       for (let i = 0; i < allWords.length; i++) {
         const w = allWords[i];
-        
+
         const testCur = [...cur, w];
-        const testFs = Math.round(84 * scale);
-        ctx.font = `700 ${testFs}px 'Outfit', 'Inter', sans-serif`;
+        ctx.font = `700 ${UNIFORM_CANVAS_FS}px 'Outfit', 'Inter', sans-serif`;
         const testLines = wrapWords(ctx, testCur, maxW);
         if (testLines.length > 2 && cur.length > 0) {
           flush();
@@ -780,7 +823,7 @@ export async function renderVideo(opts: VideoOptions): Promise<{ blob: Blob; mim
         if (
           (endsSentence && cur.length >= 2) ||
           endsClause ||
-          cur.length >= 15
+          cur.length >= MAX_WORDS_PER_PHRASE
         ) {
           flush();
         }
@@ -962,11 +1005,11 @@ export async function renderVideo(opts: VideoOptions): Promise<{ blob: Blob; mim
     const phraseRender: RenderPhrase[] = phrases.map((p) => {
       const start = p.exactStart ?? wordTimes[p.startWord]?.start ?? 0;
       const end = p.exactEnd ?? wordTimes[p.endWord - 1]?.end ?? revealDuration;
-      let fs = Math.round(84 * scale); // Increased normal font size
+      let fs = UNIFORM_CANVAS_FS; // Strictly uniform 68px font size across all phrases for TikTok
       ctx.font = `700 ${fs}px 'Outfit', 'Inter', sans-serif`;
 
-      // Scale down only if a single word is wider than maxW
-      while (fs > Math.round(36 * scale)) {
+      // Scale down only if a single unusually long compound word exceeds maxW
+      while (fs > Math.round(44 * scale)) {
         const longestWordWidth = Math.max(...p.words.map((w) => ctx.measureText(w).width));
         if (longestWordWidth <= maxW) break;
         fs -= 2;

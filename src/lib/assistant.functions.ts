@@ -2446,18 +2446,24 @@ export const confirmAndGenerateVideo = createServerFn({ method: "POST" })
       console.warn("[assistant] Pexels search failed, using fallback bg:", err);
     }
 
-    // Fetch multi-scene B-Roll always for Assistant videos
+    // Fetch semantic text-synced multi-scene B-Roll for Assistant videos
     let bRollUrls: string[] | undefined;
+    let bRollSegments: any[] | undefined;
     try {
       const { fetchMultiSceneBRoll } = await import("./pexels.functions");
       const bRollResult = await fetchMultiSceneBRoll({
         data: {
           query: resolvedQuery,
           text: bulgarian,
+          wordTimings: bulgarianWordTimings,
         },
       });
-      if (bRollResult.clips && bRollResult.clips.length > 1) {
+      if (bRollResult.clips && bRollResult.clips.length > 0) {
         bRollUrls = bRollResult.clips;
+        if (bRollResult.segments && bRollResult.segments.length > 0) {
+          bRollSegments = bRollResult.segments;
+        }
+        bestVid = bRollResult.clips[0] || bestVid;
       }
     } catch (e) {
       console.warn("[assistant] Could not fetch multi-scene B-Roll:", e);
@@ -2491,6 +2497,7 @@ export const confirmAndGenerateVideo = createServerFn({ method: "POST" })
           bulgarianWordTimings,
           quality: proposal.quality || "1080p", // create.tsx uses 1080p instead of high
           bRollUrls,
+          bRollSegments,
         },
       },
     });

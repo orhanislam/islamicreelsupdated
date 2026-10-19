@@ -132,9 +132,10 @@ export function generateAssSubtitles(data: any, audioDur: number): string {
   const placement = getASSSubtitlePlacement(subPos, data.style);
 
   const tiktokTheme = data.tiktokTheme || "hormozi";
+  const UNIFORM_TIKTOK_FS = 68;
   const outlineColor = "&H00000000";
-  const outlineWidth = "2";
-  const shadowSize = "6.5";
+  const outlineWidth = "4.5";
+  const shadowSize = "3.5";
   let highlightColor = "&H00D7FF&"; // Default Hormozi vibrant gold/yellow
   const borderStyle = "1";
   const backColor = "&H99000000";
@@ -159,8 +160,8 @@ PlayResY: ${sz.H}
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
 Style: Arabic,Scheherazade New,100,&H00FFFFFF,&H000000FF,&H00000000,&H80000000,-1,0,0,0,100,100,0,0,1,3,0,8,${placement.marginL},${placement.marginR},${sz.SAFE_TOP},1
-Style: Bulgarian,Outfit,80,&H00FFFFFF,&H0000D7FF,${outlineColor},${backColor},-1,0,0,0,100,100,0,0,${borderStyle},${outlineWidth},${shadowSize},${placement.alignment},${placement.marginL},${placement.marginR},${placement.marginV},1
-Style: Reference,Outfit,64,&H00FFFFFF,&H000000FF,&H00000000,&H99000000,-1,0,0,0,100,100,1,0,1,2.5,3,8,180,180,${sz.SAFE_TOP + 30},1
+Style: Bulgarian,Outfit,${UNIFORM_TIKTOK_FS},&H00FFFFFF,&H0000D7FF,${outlineColor},${backColor},-1,0,0,0,100,100,0,0,${borderStyle},${outlineWidth},${shadowSize},${placement.alignment},${placement.marginL},${placement.marginR},${placement.marginV},1
+Style: Reference,Outfit,64,&H00FFFFFF,&H000000FF,&H00000000,&H99000000,-1,0,0,0,100,100,1,0,1,3.5,3,8,180,180,${sz.SAFE_TOP + 30},1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
@@ -395,6 +396,9 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
     }
 
     const bounds = data.ayahBounds;
+    const maxLineWidth = Math.min(sz.W_SAFE, 640);
+    const posTag = `\\an${placement.alignment}\\pos(${placement.posX},${placement.posY})`;
+
     if (Array.isArray(bounds) && bounds.length > 0) {
       const totalEngLen =
         bounds.reduce((acc: number, b: any) => acc + (b.english ? b.english.length : 10), 0) || 1;
@@ -422,52 +426,68 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
           let end = nextStart !== null ? Math.min(rawEnd, nextStart) : rawEnd;
           if (end <= start) end = start + 0.5;
 
-          const wordCount = ayahWords.length;
-          const maxLineWidth = Math.min(sz.W_SAFE, 640);
-          const refBottomY = sz.SAFE_TOP + 40 + 70 + 20; // ~430px
-          const minSubtitleTopY = refBottomY + 30; // 460px
-          const maxAllowedHeight =
-            placement.alignment === 5
-              ? (placement.posY - minSubtitleTopY) * 2
-              : placement.posY - minSubtitleTopY;
-
-          let fs =
-            wordCount > 50
-              ? 44
-              : wordCount > 35
-                ? 52
-                : wordCount > 22
-                  ? 66
-                  : wordCount > 12
-                    ? 76
-                    : 84;
-          let lines: string[] = [];
-          const minFs = 28;
-
-          while (fs >= minFs) {
-            lines = wrapTextToSafeWidth(ayahWords, fs, maxLineWidth);
-            const estimatedLineHeight = fs * 1.25;
-            const totalHeight = lines.length * estimatedLineHeight;
-            const maxSingleWordWidth = Math.max(...ayahWords.map((w) => estimateTextWidth(w, fs)));
-
-            if (maxSingleWordWidth <= maxLineWidth && totalHeight <= maxAllowedHeight) {
-              break;
+          // Slice long ayahs into uniform 2-line TikTok phrases at UNIFORM_TIKTOK_FS (68px)
+          // so every subtitle in the video maintains the exact same size!
+          const subPhrases: string[][] = [];
+          let curSub: string[] = [];
+          for (const w of ayahWords) {
+            const testSub = [...curSub, w];
+            const testLines = wrapTextToSafeWidth(testSub, UNIFORM_TIKTOK_FS, maxLineWidth);
+            if (testLines.length > 2 && curSub.length > 0) {
+              subPhrases.push(curSub);
+              curSub = [w];
+            } else {
+              curSub.push(w);
+              if ((/[.!?…;:—]$/.test(w) && curSub.length >= 2) || curSub.length >= 7) {
+                subPhrases.push(curSub);
+                curSub = [];
+              }
             }
-            fs -= 2;
           }
+          if (curSub.length > 0) subPhrases.push(curSub);
 
-          const formattedText = lines.join("\\N");
-          const useAnim = isLast ? `\\fad(0,120)` : ``;
-          const posTag = `\\an${placement.alignment}\\pos(${placement.posX},${placement.posY})`;
-          const ayahStyleTag = `{${posTag}\\blur6\\fs${fs}\\1c&H00FFFFFF&${useAnim}}`;
+          const totalCost =
+            subPhrases.reduce(
+              (acc, sp) => acc + sp.join(" ").length + sp.length * 2,
+              0,
+            ) || 1;
+          let cumCost = 0;
+          const ayahDur = end - start;
 
-          ass += `Dialogue: 0,${formatTime(start)},${formatTime(end)},Bulgarian,,0,0,0,,${ayahStyleTag}${formattedText}\n`;
+          for (let sIdx = 0; sIdx < subPhrases.length; sIdx++) {
+            const sp = subPhrases[sIdx];
+            const spCost = sp.join(" ").length + sp.length * 2;
+            const sStart = start + (cumCost / totalCost) * ayahDur;
+            cumCost += spCost;
+            const sEnd =
+              sIdx === subPhrases.length - 1
+                ? end
+                : start + (cumCost / totalCost) * ayahDur;
+
+            let fs = UNIFORM_TIKTOK_FS;
+            const longestWordWidth = Math.max(...sp.map((w) => estimateTextWidth(w, fs)));
+            if (longestWordWidth > maxLineWidth) {
+              const scale = maxLineWidth / longestWordWidth;
+              fs = Math.max(44, Math.floor(fs * scale * 0.94));
+            }
+
+            const lines =
+              sp.length >= 2
+                ? balanceWordsIntoTwoLines(sp, fs, maxLineWidth)
+                : wrapTextToSafeWidth(sp, fs, maxLineWidth);
+            const formattedText = lines.join("\\N");
+            const useAnim = isLast && sIdx === subPhrases.length - 1 ? `\\fad(0,120)` : ``;
+            const ayahStyleTag = `{${posTag}\\blur1.2\\fs${fs}\\1c&H00FFFFFF&${useAnim}}`;
+
+            ass += `Dialogue: 0,${formatTime(sStart)},${formatTime(sEnd)},Bulgarian,,0,0,0,,${ayahStyleTag}${formattedText}\n`;
+          }
         }
       }
     } else {
       const isSingleWordMode = data.subtitleSlicingMode === "single";
-      const MAX_WORDS = isSingleWordMode ? 1 : 15;
+      const MAX_WORDS = isSingleWordMode ? 1 : 7;
       const MIN_CLAUSE_WORDS = isSingleWordMode ? 1 : 2;
+      const safeLineWidth = Math.min(sz.W_SAFE, 640);
 
       const cleanBulgarian = (data.bulgarian || "").replace(/<[^>]+>/g, "").trim();
       const textParts = cleanBulgarian.split(/\n\n+/);
@@ -495,13 +515,22 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
       for (let i = 0; i < words.length; i++) {
         const w = words[i];
 
-        // Check if adding this word would exceed 2 lines at the target font size
-        const isTitleNext = curStart < titleWordCount;
-        const testFs = isTitleNext ? 92 : 84;
+        // Check if adding this word would exceed 2 lines or safeLineWidth at the uniform TikTok font size
         const testCur = [...cur, w];
-        const testLines = wrapTextToSafeWidth(testCur, testFs, Math.min(sz.W_SAFE, 640));
+        const testLines = wrapTextToSafeWidth(testCur, UNIFORM_TIKTOK_FS, safeLineWidth);
+        const balancedTest =
+          testCur.length >= 2
+            ? balanceWordsIntoTwoLines(testCur, UNIFORM_TIKTOK_FS, safeLineWidth)
+            : testLines;
+        const exceedsBalancedWidth = balancedTest.some(
+          (l) => estimateTextWidth(l, UNIFORM_TIKTOK_FS) > safeLineWidth,
+        );
 
-        if (!isSingleWordMode && testLines.length > 2 && cur.length > 0) {
+        if (
+          !isSingleWordMode &&
+          (testLines.length > 2 || exceedsBalancedWidth) &&
+          cur.length > 0
+        ) {
           flush();
         }
 
@@ -534,7 +563,6 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
       let prevEnd = 0;
       for (let idx = 0; idx < phrases.length; idx++) {
         const p = phrases[idx];
-        const isFirstPhrase = idx === 0;
         const isLastPhrase = idx === phrases.length - 1;
 
         let start = timings[p.startIdx]?.start ?? prevEnd;
@@ -568,21 +596,18 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
           if (end <= start) end = Math.min(audioDur, start + 1.0);
         }
 
-        const posTag = `\\an${placement.alignment}\\pos(${placement.posX},${placement.posY})`;
-        const safeLineWidth = Math.min(sz.W_SAFE, 640);
+        // 1. Strictly uniform font size across the entire video (both title and body phrases)
+        let phraseFs = UNIFORM_TIKTOK_FS;
 
-        // 1. Initial base font size (titles 88, regular phrases 84)
-        let phraseFs = p.isTitle ? 92 : 84; // increased stable size
-
-        // 2. Dynamic auto-scale down ONLY if a SINGLE word exceeds safeLineWidth
+        // 2. Dynamic auto-scale down ONLY if a SINGLE ultra-long word exceeds safeLineWidth
         const longestWordWidth = Math.max(...p.words.map((w) => estimateTextWidth(w, phraseFs)));
         if (longestWordWidth > safeLineWidth) {
           const scale = safeLineWidth / longestWordWidth;
           phraseFs = Math.max(44, Math.floor(phraseFs * scale * 0.94));
         }
 
-        // 3. Arrange words into exactly 2 lines
-        let linesOfWords =
+        // 3. Arrange words into max 2 balanced lines
+        const linesOfWords =
           !isSingleWordMode && p.words.length >= 2
             ? balanceWordsIntoTwoLines(p.words, phraseFs, safeLineWidth)
             : wrapTextToSafeWidth(p.words, phraseFs, safeLineWidth);
@@ -598,7 +623,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
           if (sliceEnd <= sliceStart) continue;
 
           const useAnim = isLastPhrase && wIdx === p.words.length - 1 ? `\\fad(0,100)` : ``;
-          const phraseStyleTag = `{${posTag}\\fs${phraseFs}\\blur6${useAnim}}`;
+          const phraseStyleTag = `{${posTag}\\fs${phraseFs}\\blur1.2${useAnim}}`;
 
           let wordCounter = 0;
           const formattedLineStrings = linesOfWords.map((lineStr) => {
@@ -938,89 +963,196 @@ export async function executeRenderTask(opts: any): Promise<any> {
         }
       }
 
-      // 2.5 Multi-Scene B-Roll sequence (if multiple bRollUrls provided)
-      if (Array.isArray(data.bRollUrls) && data.bRollUrls.length > 1) {
-        try {
-          console.log(
-            `[server-render] Creating multi-scene B-Roll sequence from ${data.bRollUrls.length} clips...`,
-          );
-          const bRollFiles: string[] = [];
-          for (let i = 0; i < data.bRollUrls.length; i++) {
-            const url = data.bRollUrls[i];
-            const p = path.join(tmpDir, `broll_${i}_${Date.now()}.mp4`);
-            const r = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0" } });
-            if (r.ok) {
-              const buf = await r.arrayBuffer();
-              await fs.writeFile(p, BufferMod.from(buf));
-              bRollFiles.push(p);
-              sessionTempFiles.add(p);
+      // 2.5 Context-Synced Semantic Multi-Scene B-Roll (switches by spoken text meaning, NOT every 3s!)
+      try {
+        const { segmentScriptIntoSemanticScenes, matchTheologicalConcept } = await import(
+          "./pexels.functions"
+        );
+        const { getHalalVideoByConceptId } = await import("./backgrounds.functions");
+
+        const scriptText = String(data.bulgarian || data.script || "").trim();
+        const semanticScenes = segmentScriptIntoSemanticScenes(
+          scriptText,
+          data.bulgarianWordTimings,
+          audioDur,
+        );
+
+        // Count how many distinct explicit concepts exist in the spoken script
+        const explicitConcepts = new Set(
+          semanticScenes
+            .map((sc) => matchTheologicalConcept(sc.text)?.id)
+            .filter(Boolean),
+        );
+
+        const hasExplicitSegments =
+          Array.isArray(data.bRollSegments) && data.bRollSegments.length > 1;
+        const hasMultipleBRollUrls =
+          Array.isArray(data.bRollUrls) && data.bRollUrls.length > 1;
+        const shouldUseSemanticMultiScene =
+          hasExplicitSegments ||
+          hasMultipleBRollUrls ||
+          (semanticScenes.length > 1 && explicitConcepts.size >= 2);
+
+        if (shouldUseSemanticMultiScene) {
+          type ScheduledScene = { url: string; duration: number; theme: string };
+          const schedule: ScheduledScene[] = [];
+
+          if (hasExplicitSegments) {
+            const rawSegs = data.bRollSegments as Array<{
+              url: string;
+              start?: number;
+              end?: number;
+              duration?: number;
+              theme?: string;
+            }>;
+            const rawTotal =
+              rawSegs.reduce(
+                (acc, s) =>
+                  acc +
+                  (Number(s.duration) ||
+                    Math.max(1, (Number(s.end) || 0) - (Number(s.start) || 0)) ||
+                    4),
+                0,
+              ) || audioDur;
+            const scale = audioDur / rawTotal;
+            for (const s of rawSegs) {
+              const rawDur =
+                Number(s.duration) ||
+                Math.max(1, (Number(s.end) || 0) - (Number(s.start) || 0)) ||
+                4;
+              schedule.push({
+                url: s.url,
+                duration: Math.max(1.5, Number((rawDur * scale).toFixed(2))),
+                theme: s.theme || "Контекстна сцена",
+              });
+            }
+          } else if (semanticScenes.length > 1) {
+            const providedUrls = hasMultipleBRollUrls ? (data.bRollUrls as string[]) : [];
+            for (let i = 0; i < semanticScenes.length; i++) {
+              const sc = semanticScenes[i];
+              const explicitMatch = matchTheologicalConcept(sc.text);
+              let chosenUrl = "";
+              if (providedUrls.length === semanticScenes.length && providedUrls[i]) {
+                chosenUrl = providedUrls[i];
+              } else if (explicitMatch) {
+                chosenUrl = getHalalVideoByConceptId(explicitMatch.id, i).url;
+              } else if (providedUrls.length > 0) {
+                chosenUrl = providedUrls[i % providedUrls.length];
+              } else {
+                chosenUrl = sc.fallbackUrl;
+              }
+              schedule.push({
+                url: chosenUrl,
+                duration: Math.max(1.5, Number(sc.duration.toFixed(2))),
+                theme: sc.themeBg,
+              });
+            }
+          } else if (hasMultipleBRollUrls) {
+            const urls = data.bRollUrls as string[];
+            const segDur = Math.max(2.5, Number((audioDur / urls.length).toFixed(2)));
+            for (const u of urls) {
+              schedule.push({
+                url: u,
+                duration: segDur,
+                theme: "Кинематографична сцена",
+              });
             }
           }
-          if (bRollFiles.length > 1) {
-            const clipDur = 3.0; // The user requested B-roll to change exactly every 3 seconds
+
+          if (schedule.length > 1) {
+            console.log(
+              `[server-render] Building semantic text-synced B-Roll sequence (${schedule.length} scenes across ${audioDur.toFixed(2)}s):`,
+              schedule.map((s) => `${s.theme} (${s.duration}s)`).join(" -> "),
+            );
+
+            const downloadedByUrl = new Map<string, string>();
+            const bRollFiles: string[] = [];
+            const normalizedPaths: string[] = [];
             const concatListPath = path.join(tmpDir, `concat_${Date.now()}.txt`);
             sessionTempFiles.add(concatListPath);
-            const normalizedPaths: string[] = [];
 
-            for (let i = 0; i < bRollFiles.length; i++) {
-              const normPath = path.join(tmpDir, `norm_${i}_${Date.now()}.mp4`);
+            for (let i = 0; i < schedule.length; i++) {
+              const seg = schedule[i];
+              let rawClipPath = downloadedByUrl.get(seg.url);
+              if (!rawClipPath) {
+                const p = path.join(tmpDir, `broll_${i}_${Date.now()}.mp4`);
+                const r = await fetch(seg.url, { headers: { "User-Agent": "Mozilla/5.0" } });
+                if (r.ok) {
+                  const buf = await r.arrayBuffer();
+                  await fs.writeFile(p, BufferMod.from(buf));
+                  rawClipPath = p;
+                  downloadedByUrl.set(seg.url, p);
+                  bRollFiles.push(p);
+                  sessionTempFiles.add(p);
+                }
+              }
+
+              if (rawClipPath) {
+                const normPath = path.join(tmpDir, `norm_${i}_${Date.now()}.mp4`);
+                await new Promise((resolve, reject) => {
+                  ffmpeg()
+                    .setFfmpegPath(ffmpegPath)
+                    .input(rawClipPath!)
+                    .inputOptions(["-stream_loop -1"])
+                    .outputOptions([
+                      `-t ${seg.duration.toFixed(2)}`,
+                      "-vf scale=1080:1920:flags=lanczos:force_original_aspect_ratio=increase,crop=1080:1920,fps=30,format=yuv420p",
+                      "-c:v libx264",
+                      "-preset superfast",
+                      "-crf 17",
+                      "-pix_fmt yuv420p",
+                      "-an",
+                    ])
+                    .output(normPath)
+                    .on("end", resolve)
+                    .on("error", reject)
+                    .run();
+                });
+                normalizedPaths.push(normPath);
+                sessionTempFiles.add(normPath);
+              }
+            }
+
+            if (normalizedPaths.length > 1) {
+              const concatContent = normalizedPaths
+                .map((p) => `file '${p.replace(/\\/g, "/")}'`)
+                .join("\n");
+              await fs.writeFile(concatListPath, concatContent);
+
+              const multiSceneBg = path.join(tmpDir, `multiscene_${Date.now()}.mp4`);
+              sessionTempFiles.add(multiSceneBg);
               await new Promise((resolve, reject) => {
-                ffmpeg(bRollFiles[i])
+                ffmpeg()
                   .setFfmpegPath(ffmpegPath)
-                  .outputOptions([
-                    `-t ${clipDur}`,
-                    "-vf scale=1080:1920:flags=bicubic:force_original_aspect_ratio=increase,crop=1080:1920,fps=60",
-                    "-c:v libx264",
-                    "-preset ultrafast",
-                    "-crf 22",
-                    "-pix_fmt yuv420p",
-                    "-an",
-                  ])
-                  .output(normPath)
+                  .input(concatListPath)
+                  .inputOptions(["-f concat", "-safe 0"])
+                  .outputOptions(["-c copy"])
+                  .output(multiSceneBg)
                   .on("end", resolve)
                   .on("error", reject)
                   .run();
               });
-              normalizedPaths.push(normPath);
-              sessionTempFiles.add(normPath);
-            }
 
-            const concatContent = normalizedPaths
-              .map((p) => `file '${p.replace(/\\/g, "/")}'`)
-              .join("\n");
-            await fs.writeFile(concatListPath, concatContent);
+              finalBgPath = multiSceneBg;
+              sessionTempFiles.add(finalBgPath);
+              isVideoBg = true;
+              console.log(
+                "[server-render] Semantic text-synced B-Roll successfully built:",
+                finalBgPath,
+              );
 
-            const multiSceneBg = path.join(tmpDir, `multiscene_${Date.now()}.mp4`);
-            sessionTempFiles.add(multiSceneBg);
-            await new Promise((resolve, reject) => {
-              ffmpeg()
-                .setFfmpegPath(ffmpegPath)
-                .input(concatListPath)
-                .inputOptions(["-f concat", "-safe 0"])
-                .outputOptions(["-c copy"])
-                .output(multiSceneBg)
-                .on("end", resolve)
-                .on("error", reject)
-                .run();
-            });
-
-            finalBgPath = multiSceneBg;
-            sessionTempFiles.add(finalBgPath);
-            isVideoBg = true;
-            console.log("[server-render] Multi-scene B-Roll successfully built:", finalBgPath);
-
-            // Immediately delete intermediate clips and concat file to free up 100MB+ disk space before audio/subtitle processing
-            for (const p of [...bRollFiles, ...normalizedPaths, concatListPath]) {
-              await fs.unlink(p).catch(() => {});
-              sessionTempFiles.delete(p);
+              for (const p of [...bRollFiles, ...normalizedPaths, concatListPath]) {
+                await fs.unlink(p).catch(() => {});
+                sessionTempFiles.delete(p);
+              }
             }
           }
-        } catch (bRollErr) {
-          console.warn(
-            "[server-render] Multi-scene B-Roll failed, falling back to primary bg:",
-            bRollErr,
-          );
         }
+      } catch (bRollErr) {
+        console.warn(
+          "[server-render] Semantic B-Roll build failed, falling back to primary bg:",
+          bRollErr,
+        );
       }
 
       // 3. Generate ASS Subtitles
@@ -1031,8 +1163,8 @@ export async function executeRenderTask(opts: any): Promise<any> {
       // Escape ASS path for FFmpeg filter on Windows
       const escapedAssPath = assPath.replace(/\\/g, "/").replace(/:/g, "\\:");
 
-      // 4. Run FFmpeg
-      console.log(`[server-render] Generating MP4 with FFmpeg...`);
+      // 4. Run FFmpeg (iPhone 16 Pro Max Super Retina XDR & TikTok 1080p HD Mastering)
+      console.log(`[server-render] Generating iPhone 16 Pro Max HD MP4 with FFmpeg...`);
       try {
         const _files = await fs.readdir(tempDir);
         console.log(`[server-render] Temp files currently in dir:`, _files);
@@ -1059,14 +1191,15 @@ export async function executeRenderTask(opts: any): Promise<any> {
 
         cmd
           .complexFilter([
-            // Video background remains fully visible. Light contrast bump for vibrancy, no black box overlay!
-            `[0:v]crop='min(iw,ih*9/16)':'min(iw*16/9,ih)',scale=${width}:${height}:flags=bicubic,eq=contrast=1.05:saturation=1.1,subtitles='${escapedAssPath}'[v]`,
+            // Lanczos scaling + subtle unsharp clarity + BT.709 vibrancy for iPhone 16 Pro Max Super Retina XDR
+            `[0:v]crop='min(iw,ih*9/16)':'min(iw*16/9,ih)',scale=${width}:${height}:flags=lanczos+accurate_rnd+full_chroma_int,unsharp=3:3:0.35:3:3:0.0,eq=contrast=1.05:saturation=1.10,subtitles='${escapedAssPath}'[v]`,
             `[1:a]highpass=f=45,treble=g=2:f=3500:w=0.7,acompressor=threshold=-18dB:ratio=2.5:attack=5:release=50,bass=g=3:f=110:w=0.6,loudnorm=I=-14:LRA=9:TP=-1.0,apad[a]`,
           ])
           .outputOptions([
             "-map [v]",
             "-map [a]",
             "-c:v libx264",
+            "-tag:v avc1",
             "-profile:v high",
             "-level 4.2",
             "-pix_fmt yuv420p",
@@ -1074,15 +1207,18 @@ export async function executeRenderTask(opts: any): Promise<any> {
             "-color_trc bt709",
             "-color_primaries bt709",
             "-movflags +faststart",
-            "-preset ultrafast",
-            "-crf 24",
-            "-maxrate 20M",
-            "-bufsize 40M",
+            "-preset superfast",
+            "-crf 18",
+            "-maxrate 25M",
+            "-bufsize 50M",
             "-r 30",
+            "-vsync cfr",
             "-g 60",
+            "-keyint_min 60",
+            "-sc_threshold 0",
             "-c:a aac",
             "-profile:a aac_low",
-            "-b:a 192k",
+            "-b:a 256k",
             "-ar 48000",
             "-ac 2",
             `-t ${Number(audioDur).toFixed(2)}`,

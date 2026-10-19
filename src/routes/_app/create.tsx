@@ -14,6 +14,8 @@ import {
   searchPexelsPhotos,
   searchPexelsVideos,
   fetchMultiSceneBRoll,
+  segmentScriptIntoSemanticScenes,
+  type SemanticBRollSegment,
 } from "@/lib/pexels.functions";
 import { suggestViral } from "@/lib/suggestions.functions";
 import {
@@ -206,6 +208,7 @@ function CreatePage() {
   >(null);
   const [narrating, setNarrating] = useState(false);
   const [multiSceneUrls, setMultiSceneUrls] = useState<string[]>([]);
+  const [multiSceneSegments, setMultiSceneSegments] = useState<SemanticBRollSegment[]>([]);
   const [multiSceneLoading, setMultiSceneLoading] = useState(false);
 
   // render
@@ -712,16 +715,23 @@ function CreatePage() {
   const handleFetchMultiScene = async () => {
     try {
       setMultiSceneLoading(true);
-      toast.message("Избирам кинематографични B-Roll сцени за динамичен монтаж...");
+      toast.message("Анализирам текста и избирам контекстни B-Roll сцени според думите...");
       const r = await runFetchMultiScene({
-        data: { query: pexelsQuery || content?.source_ref || "islamic nature", text: bulgarian },
+        data: {
+          query: pexelsQuery || content?.source_ref || "islamic nature",
+          text: bulgarian,
+          wordTimings: narrationTimings ?? undefined,
+        },
       });
-      if (r.clips && r.clips.length > 1) {
+      if (r.clips && r.clips.length > 0) {
         setMultiSceneUrls(r.clips);
+        if (r.segments && r.segments.length > 0) {
+          setMultiSceneSegments(r.segments);
+        }
         setBgVideoUrl(r.clips[0]);
         clearRendered();
         setFormat("video");
-        toast.success(`Избрани ${r.clips.length} сменящи се B-Roll кадра (${r.theme})!`);
+        toast.success(`Избрани ${r.clips.length} контекстни B-Roll сцени според текста (${r.theme})!`);
       } else {
         toast.message("Не бяха намерени достатъчно клипове, използва се един фон");
       }
@@ -740,7 +750,23 @@ function CreatePage() {
       toast.message("Генерирам български глас…");
       const r = await runNarrate({ data: { text: bulgarian, reference: content.source_ref } });
       setNarrationUrl(`data:${r.mimeType};base64,${r.base64}`);
-      setNarrationTimings(r.wordTimings ?? null);
+      const newTimings = r.wordTimings ?? null;
+      setNarrationTimings(newTimings);
+      if (newTimings && newTimings.length > 0 && multiSceneUrls.length > 0) {
+        const scenes = segmentScriptIntoSemanticScenes(bulgarian, newTimings);
+        setMultiSceneSegments(
+          scenes.map((s, idx) => ({
+            url: multiSceneUrls[idx % multiSceneUrls.length],
+            start: s.start,
+            end: s.end,
+            duration: s.duration,
+            theme: s.themeBg,
+            conceptId: s.conceptId,
+            query: s.query,
+            textSnippet: s.text.slice(0, 80),
+          })),
+        );
+      }
       if (!useBgNarration) setUseBgNarration(true);
       toast.success("Гласът е готов — пусни плейъра по-долу.");
     } catch (e: unknown) {
@@ -767,6 +793,8 @@ function CreatePage() {
   const onPickPexels = (photo: { url: string; full: string; photographer: string }) => {
     setBgUrl(photo.full);
     setBgVideoUrl(null);
+    setMultiSceneUrls([]);
+    setMultiSceneSegments([]);
     setBgPrompt(`Pexels stock photo by ${photo.photographer}`);
     clearRendered();
     toast.success("Стоковият фон е избран");
@@ -775,6 +803,8 @@ function CreatePage() {
   const onPickPexelsVideo = (v: { link: string; poster: string; photographer: string }) => {
     setBgVideoUrl(v.link);
     setBgUrl(v.poster || null);
+    setMultiSceneUrls([]);
+    setMultiSceneSegments([]);
     setBgPrompt(`Pexels stock video by ${v.photographer}`);
     clearRendered();
     if (format !== "video") {
@@ -921,6 +951,20 @@ function CreatePage() {
         toast.message("Рендирам видео в реално време — изчакай края на аудиото.");
 
         const activeTimings = timings && timings.length > 0 ? timings : undefined;
+        let activeSegments = multiSceneSegments;
+        if (multiSceneUrls.length > 1 && activeSegments.length === 0 && bulgarian.trim()) {
+          const rawScenes = segmentScriptIntoSemanticScenes(bulgarian, activeTimings);
+          activeSegments = rawScenes.map((s, idx) => ({
+            url: multiSceneUrls[idx % multiSceneUrls.length],
+            start: s.start,
+            end: s.end,
+            duration: s.duration,
+            theme: s.themeBg,
+            conceptId: s.conceptId,
+            query: s.query,
+            textSnippet: s.text.slice(0, 80),
+          }));
+        }
         const opts = {
           backgroundUrl: bgUrl,
           backgroundVideoUrl: bgVideoUrl,
@@ -947,6 +991,7 @@ function CreatePage() {
           bulgarianWordTimings: activeTimings,
           quality: videoQuality,
           bRollUrls: multiSceneUrls.length > 1 ? multiSceneUrls : undefined,
+          bRollSegments: activeSegments.length > 0 ? activeSegments : undefined,
         };
 
         let blob: Blob;
@@ -1034,19 +1079,47 @@ function CreatePage() {
         setBulgarian(currentBulgarian);
       }
 
-      setAutoViralStep("2/4: Избор на кинематографични B-Roll кадри...");
-      toast.message("🎬 1-Click: Подбор на вертикални Pexels видеа без хора...");
+      let activeAudioUrl = customAudioUrl ?? narrationUrl ?? null;
+      let activeTimings = narrationTimings;
+      if (!activeAudioUrl && currentBulgarian.trim().length > 0) {
+        setAutoViralStep("2/4: Генериране на глас и акустично караоке...");
+        toast.message("✨ 1-Click: Синхронизиране на българско озвучаване...");
+        const r = await runNarrate({
+          data: { text: currentBulgarian, reference: content.source_ref },
+        });
+        activeAudioUrl = `data:${r.mimeType};base64,${r.base64}`;
+        activeTimings = r.wordTimings ?? null;
+        setNarrationUrl(activeAudioUrl);
+        setNarrationTimings(activeTimings);
+      }
+      if (!activeAudioUrl) {
+        activeAudioUrl = content.audioUrl ?? null;
+      }
+
+      setAutoViralStep("3/4: Контекстен подбор на B-Roll сцени според думите в текста...");
+      toast.message("🎬 1-Click: Подбор на контекстни вертикални видеа според смисъла на текста...");
       let activeBgVideoUrl = bgVideoUrl;
       let activeBgPosterUrl = bgUrl;
       let activeMultiUrls = multiSceneUrls;
+      let activeMultiSegments = multiSceneSegments;
       try {
         const query = pexelsQuery || content.source_ref || "islamic nature";
-        const multiRes = await runFetchMultiScene({ data: { query, text: currentBulgarian } });
+        const multiRes = await runFetchMultiScene({
+          data: {
+            query,
+            text: currentBulgarian,
+            wordTimings: activeTimings ?? undefined,
+          },
+        });
         if (multiRes.clips && multiRes.clips.length > 0) {
           activeMultiUrls = multiRes.clips;
           activeBgVideoUrl = multiRes.clips[0];
           activeBgPosterUrl = null;
           setMultiSceneUrls(multiRes.clips);
+          if (multiRes.segments && multiRes.segments.length > 0) {
+            activeMultiSegments = multiRes.segments;
+            setMultiSceneSegments(multiRes.segments);
+          }
           setBgVideoUrl(activeBgVideoUrl);
           setBgUrl(null);
         } else {
@@ -1066,23 +1139,6 @@ function CreatePage() {
         }
       } catch {
         // Ignore fallback video fetch failure
-      }
-
-      let activeAudioUrl = customAudioUrl ?? narrationUrl ?? null;
-      let activeTimings = narrationTimings;
-      if (!activeAudioUrl && currentBulgarian.trim().length > 0) {
-        setAutoViralStep("3/4: Генериране на глас и акустично караоке...");
-        toast.message("✨ 1-Click: Синхронизиране на българско озвучаване...");
-        const r = await runNarrate({
-          data: { text: currentBulgarian, reference: content.source_ref },
-        });
-        activeAudioUrl = `data:${r.mimeType};base64,${r.base64}`;
-        activeTimings = r.wordTimings ?? null;
-        setNarrationUrl(activeAudioUrl);
-        setNarrationTimings(activeTimings);
-      }
-      if (!activeAudioUrl) {
-        activeAudioUrl = content.audioUrl ?? null;
       }
 
       setAutoViralStep("4/4: Стартиране на сървърно рендиране във формат Hormozi...");
@@ -1117,6 +1173,7 @@ function CreatePage() {
         bulgarianWordTimings: activeTimingsFinal,
         quality: videoQuality,
         bRollUrls: activeMultiUrls.length > 1 ? activeMultiUrls : undefined,
+        bRollSegments: activeMultiSegments.length > 0 ? activeMultiSegments : undefined,
       };
 
       await startServerRenderJob({
@@ -1957,10 +2014,35 @@ function CreatePage() {
                 ) : (
                   <Film className="size-4 mr-1" />
                 )}
-                🎬 3 Сменящи се B-Roll сцени
+                🎬 Контекстни B-Roll сцени (според текста)
               </Button>
             </div>
           </div>
+
+          {multiSceneSegments.length > 0 && (
+            <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 space-y-2">
+              <div className="text-xs font-semibold text-amber-400 flex items-center gap-1.5">
+                <Film className="size-3.5" />
+                Контекстна смяна на фоновете според думите в текста ({multiSceneSegments.length} сцени):
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {multiSceneSegments.map((seg, i) => (
+                  <div
+                    key={`${seg.conceptId}-${i}`}
+                    className="text-[11px] bg-background/80 border border-border/60 rounded-md px-2.5 py-1 flex items-center gap-2"
+                  >
+                    <span className="font-mono text-amber-400 font-semibold">
+                      {seg.start.toFixed(1)}s–{seg.end.toFixed(1)}s
+                    </span>
+                    <span className="font-medium text-foreground">{seg.theme}</span>
+                    <span className="text-muted-foreground truncate max-w-[180px]">
+                      „{seg.textSnippet}“
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {(pexelsTheme || pexelsTried.length > 0) && (
             <div className="flex items-center gap-2 flex-wrap text-xs font-ui">
@@ -2196,7 +2278,31 @@ function CreatePage() {
                       <>
                         {(() => {
                           if (multiSceneUrls && multiSceneUrls.length > 1) {
-                            const activeIdx = Math.floor(previewTime / 3) % multiSceneUrls.length;
+                            let activeIdx = 0;
+                            if (multiSceneSegments && multiSceneSegments.length > 0) {
+                              const segIdx = multiSceneSegments.findIndex(
+                                (s) => previewTime >= s.start && previewTime <= s.end,
+                              );
+                              if (segIdx >= 0) {
+                                const segUrl = multiSceneSegments[segIdx].url;
+                                const urlIdx = multiSceneUrls.indexOf(segUrl);
+                                activeIdx = urlIdx >= 0 ? urlIdx : segIdx % multiSceneUrls.length;
+                              } else {
+                                activeIdx = multiSceneUrls.length - 1;
+                              }
+                            } else {
+                              const scenes = segmentScriptIntoSemanticScenes(
+                                bulgarian,
+                                narrationTimings ?? undefined,
+                              );
+                              const segIdx = scenes.findIndex(
+                                (s) => previewTime >= s.start && previewTime <= s.end,
+                              );
+                              activeIdx =
+                                segIdx >= 0
+                                  ? segIdx % multiSceneUrls.length
+                                  : Math.floor(previewTime / 4.5) % multiSceneUrls.length;
+                            }
                             return multiSceneUrls.map((url, idx) => (
                               <video
                                 key={url}
@@ -2326,8 +2432,8 @@ function CreatePage() {
                                     const pWords = cur.map((w) => w.word);
                                     const lines =
                                       pWords.length >= 2
-                                        ? balanceWordsIntoTwoLines(pWords, 72, 600)
-                                        : wrapTextToSafeWidth(pWords, 72, 600);
+                                        ? balanceWordsIntoTwoLines(pWords, 68, 640)
+                                        : wrapTextToSafeWidth(pWords, 68, 640);
                                     phrases.push({
                                       words: cur,
                                       start: cur[0].start,
@@ -2337,14 +2443,14 @@ function CreatePage() {
                                     cur = [];
                                   };
 
-                                  const MAX_WORDS = 15;
+                                  const MAX_WORDS = 7;
                                   const MIN_CLAUSE = 2;
                                   for (let i = 0; i < activeTimings.length; i++) {
                                     const item = activeTimings[i];
                                     const w = item.word || "";
                                     
                                     const pWordsTest = [...cur.map(x => x.word), w];
-                                    const testLines = wrapTextToSafeWidth(pWordsTest, 72, 600);
+                                    const testLines = wrapTextToSafeWidth(pWordsTest, 68, 640);
                                     if (testLines.length > 2 && cur.length > 0) {
                                       flushPhrase();
                                     }

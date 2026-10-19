@@ -6,7 +6,12 @@ export async function handleVideoDownload(request: Request, id: string, rawFilen
   const path = await import("path");
   const os = await import("os");
 
-  const filename = rawFilename.replace(/[^a-z0-9._-]+/gi, "_") || "islamic-reel.mp4";
+  const cleanBase = rawFilename
+    .replace(/\.mp4$/i, "")
+    .replace(/[<>:"/\\|?*\x00-\x1F]+/g, "_")
+    .trim() || "islamic-reel";
+  const utf8Filename = `${cleanBase}.mp4`;
+  const asciiFilename = cleanBase.replace(/[^a-z0-9._-]+/gi, "_").replace(/^_+|_+$/g, "") || "islamic-reel";
 
   // Check the primary directory where getJobsDir() stores videos
   const primaryDir = path.join(os.homedir(), ".islamicreels_jobs");
@@ -34,15 +39,21 @@ export async function handleVideoDownload(request: Request, id: string, rawFilen
   const totalSize = stat.size;
 
   const rangeHeader = request.headers.get("range");
+  let isInline = false;
+  try {
+    const reqUrl = new URL(request.url, "http://localhost");
+    isInline = reqUrl.searchParams.get("inline") === "1";
+  } catch {
+    // ignore URL parse error
+  }
 
-  const userAgent = request.headers.get("user-agent") || "";
-  const isIOS = /iPhone|iPad|iPod/i.test(userAgent);
-  // Force attachment disposition so all devices (especially iOS) instantly download instead of playing inline
-  const disposition = "attachment";
+  // Use inline disposition when previewing in <video> tag (?inline=1), and attachment for direct downloads
+  const disposition = isInline ? "inline" : "attachment";
+  const encodedUtf8 = encodeURIComponent(utf8Filename);
 
   const commonHeaders: Record<string, string> = {
     "Content-Type": "video/mp4",
-    "Content-Disposition": `${disposition}; filename="${filename}"`,
+    "Content-Disposition": `${disposition}; filename="${asciiFilename}.mp4"; filename*=UTF-8''${encodedUtf8}`,
     "Accept-Ranges": "bytes",
     "Cache-Control": "no-cache, no-store, must-revalidate",
     "X-Content-Type-Options": "nosniff",

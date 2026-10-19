@@ -226,9 +226,95 @@ export const LOCAL_HALAL_VIDEO_POOL: CuratedHalalVideoAsset[] = [
     height: 1920,
     role: "dalil",
   },
+  {
+    id: "halal_vid_09_fire_flames",
+    title: "Огън и пламъци в нощта",
+    themeBg: "огън и пламъци в нощта",
+    themeEn: "raging fire flames glowing embers dark night",
+    theme: "огън и пламъци в нощта",
+    mood: "solemn",
+    tags: ["fire", "flames", "embers", "jahannam", "hell", "punishment", "огън", "ад", "пламъци"],
+    filename: "halal_fire_flames.mp4",
+    url: "https://images.pexels.com/videos/2715412/free-video-2715412.mp4",
+    fallbackRemoteUrl: "https://images.pexels.com/videos/2715412/free-video-2715412.mp4",
+    sourceImageRef: "tiktok_output/bg1.jpg",
+    duration: 10,
+    width: 1080,
+    height: 1920,
+    role: "hook",
+  },
+  {
+    id: "halal_vid_10_gentle_rain",
+    title: "Чист дъжд и роса върху зелени листа",
+    themeBg: "чист дъжд и роса",
+    themeEn: "gentle rain falling green leaves water droplets",
+    theme: "чист дъжд и роса",
+    mood: "calm",
+    tags: ["rain", "raindrops", "dew", "tawbah", "mercy", "forgiveness", "дъжд", "милост", "прошка"],
+    filename: "halal_gentle_rain.mp4",
+    url: "https://images.pexels.com/videos/2491284/free-video-2491284.mp4",
+    fallbackRemoteUrl: "https://images.pexels.com/videos/2491284/free-video-2491284.mp4",
+    sourceImageRef: "tiktok_images/img1.jpg",
+    duration: 10,
+    width: 1080,
+    height: 1920,
+    role: "context",
+  },
+  {
+    id: "halal_vid_11_storm_clouds",
+    title: "Драматични облаци над планински връх",
+    themeBg: "драматични облаци и буря над планината",
+    themeEn: "dramatic storm clouds mountain peak mist",
+    theme: "драматични облаци и буря над планината",
+    mood: "solemn",
+    tags: ["storm", "clouds", "trial", "sabr", "hardship", "mountain", "буря", "изпитание", "търпение"],
+    filename: "halal_storm_clouds.mp4",
+    url: "https://images.pexels.com/videos/1893623/free-video-1893623.mp4",
+    fallbackRemoteUrl: "https://images.pexels.com/videos/1893623/free-video-1893623.mp4",
+    sourceImageRef: "tiktok_images/img0.jpg",
+    duration: 10,
+    width: 1080,
+    height: 1920,
+    role: "hook",
+  },
 ];
 
 export const CURATED_HALAL_VIDEO_POOL = LOCAL_HALAL_VIDEO_POOL;
+
+const CONCEPT_TO_POOL_ID: Record<string, string> = {
+  jahannam: "halal_vid_09_fire_flames",
+  fire: "halal_vid_09_fire_flames",
+  jannah: "halal_vid_04_emerald_garden",
+  tawbah: "halal_vid_10_gentle_rain",
+  rain: "halal_vid_10_gentle_rain",
+  sabr: "halal_vid_11_storm_clouds",
+  tahajjud: "halal_vid_06_night_stars",
+  qadr: "halal_vid_06_night_stars",
+  sakina: "halal_vid_02_calm_river",
+  dunya: "halal_vid_03_desert_sunset",
+  masjids: "halal_vid_05_masjid_arches",
+  rizq: "halal_vid_08_sunlit_spring",
+  shukr: "halal_vid_01_mountain_dawn",
+  noor: "halal_vid_01_mountain_dawn",
+  bahr: "halal_vid_07_turquoise_ocean",
+  tawakkul: "halal_vid_01_mountain_dawn",
+  ikhlas: "halal_vid_08_sunlit_spring",
+  dua: "halal_vid_03_desert_sunset",
+};
+
+export function getHalalVideoByConceptId(
+  conceptId?: string | null,
+  fallbackIndex = 0,
+): CuratedHalalVideoAsset {
+  if (conceptId) {
+    const targetId = CONCEPT_TO_POOL_ID[conceptId.toLowerCase()];
+    if (targetId) {
+      const found = LOCAL_HALAL_VIDEO_POOL.find((v) => v.id === targetId);
+      if (found) return found;
+    }
+  }
+  return getLocalHalalVideoFallback(fallbackIndex);
+}
 
 export function getVideoCacheDir(): string {
   const home = process.env.USERPROFILE || process.env.HOME || ".";

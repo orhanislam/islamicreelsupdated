@@ -66,6 +66,8 @@ function DownloadsPage() {
   const [loading, setLoading] = useState(true);
   const [downloadedIds, setDownloadedIds] = useState<Set<string>>(new Set());
   const [downloadingServerId, setDownloadingServerId] = useState<string | null>(null);
+  const [savingToIphoneId, setSavingToIphoneId] = useState<string | null>(null);
+  const [readyShareFiles, setReadyShareFiles] = useState<Record<string, File>>({});
   const [downloadingBatch, setDownloadingBatch] = useState(false);
   const [downloadingZipBatch, setDownloadingZipBatch] = useState(false);
   const [downloadingKitId, setDownloadingKitId] = useState<string | null>(null);
@@ -148,6 +150,62 @@ function DownloadsPage() {
     }
   };
 
+  const handleSaveToIphonePhotos = async (job: ServerJob) => {
+    const filename = sanitizeFilename(job.title || "islamic-reel", "islamic-reel") + ".mp4";
+    const nav = typeof navigator !== "undefined" ? (navigator as Navigator & { canShare?: (data: ShareData) => boolean }) : null;
+
+    // 1. If the File is already preloaded in memory, invoke navigator.share synchronously (0ms user gesture)
+    const cachedFile = readyShareFiles[job.id];
+    if (cachedFile && nav && typeof nav.share === "function") {
+      try {
+        copyToClipboardFallback(formatViralSocialCaption(job.title || "Ислямска мъдрост"));
+        await nav.share({ files: [cachedFile], title: filename });
+        toast.success("📱 Избери 'Save Video' (Запази видеото), за да влезе в iPhone Снимки с максимално качество за TikTok!");
+        return;
+      } catch (err: any) {
+        if (err?.name === "AbortError") return;
+      }
+    }
+
+    setSavingToIphoneId(job.id);
+    try {
+      copyToClipboardFallback(formatViralSocialCaption(job.title || "Ислямска мъдрост"));
+      toast.message("📱 Подготвям оригиналния 1080p MP4 файл за iPhone Галерия (TikTok)...");
+      const res = await fetch(`/api/download/${job.id}?inline=1&filename=${encodeURIComponent(filename)}`, {
+        cache: "no-store",
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const blob = await res.blob();
+      const mp4File = new File([blob], filename, {
+        type: "video/mp4",
+        lastModified: Date.now(),
+      });
+      setReadyShareFiles((prev) => ({ ...prev, [job.id]: mp4File }));
+
+      if (nav && typeof nav.share === "function" && (!nav.canShare || nav.canShare({ files: [mp4File] }))) {
+        try {
+          await nav.share({ files: [mp4File], title: filename });
+          toast.success("📱 Избери 'Save Video' (Запази видеото) за запазване директно в Снимки (Photos)!");
+          return;
+        } catch (shareErr: any) {
+          if (shareErr?.name === "AbortError") return;
+          // Transient user activation expired during fetch -> file is now in readyShareFiles for instant 0ms second tap!
+          toast.success("✅ Видеото е заредено! Натисни зеления бутон още веднъж за директно запазване в iPhone Снимки!");
+          return;
+        }
+      }
+
+      // Desktop or non-share fallback: save directly as MP4 file
+      await saveMediaBlob(blob, filename, "video/mp4");
+      toast.success("Оригиналният 1080p MP4 файл е свален успешно! (Текстът за TikTok е копиран)");
+    } catch (e) {
+      toast.error("Грешка при подготовка на файла — стартирам директно сваляне...");
+      window.location.href = `/api/download/${job.id}?filename=${encodeURIComponent(filename)}`;
+    } finally {
+      setSavingToIphoneId(null);
+    }
+  };
+
   const handleDownloadServerJob = async (job: ServerJob) => {
     setDownloadingServerId(job.id);
     try {
@@ -158,7 +216,6 @@ function DownloadsPage() {
       copyToClipboardFallback(formatViralSocialCaption(job.title || "Ислямска мъдрост"));
       
       // Use direct navigation for server files to trigger native OS download manager.
-      // Fetching 30MB into a Blob loses the user gesture for navigator.share anyway.
       window.location.href = downloadUrl;
       
       toast.success("Изтеглянето стартира веднага! (Текстът за TikTok е копиран)");
@@ -511,7 +568,7 @@ function DownloadsPage() {
                   <div>
                     <h3 className="font-semibold text-base line-clamp-1">{job.title}</h3>
                     <p className="text-xs text-muted-foreground mt-0.5">
-                      Сървърен фонов рендер (Clouding.io)
+                      iPhone 16 Pro Max • 1080×1920 30 FPS (CRF 18 • Lossless TikTok)
                     </p>
                   </div>
                   {job.status === "rendering" && (
@@ -543,7 +600,7 @@ function DownloadsPage() {
                 {job.status === "completed" && (
                   <div className="my-2 rounded-xl overflow-hidden bg-black/60 aspect-[9/16] max-h-96 w-full max-w-[240px] mx-auto flex items-center justify-center border border-border/40 relative">
                     <video 
-                      src={`/api/download/${job.id}`} 
+                      src={`/api/download/${job.id}?inline=1`} 
                       controls 
                       preload="metadata"
                       playsInline
@@ -552,16 +609,38 @@ function DownloadsPage() {
                   </div>
                 )}
 
-                <div className="mt-auto flex items-center gap-2 pt-2">
+                <div className="mt-auto flex flex-wrap items-center gap-2 pt-2">
                   {job.status === "completed" ? (
                     <>
                       <button
+                        onClick={() => handleSaveToIphonePhotos(job)}
+                        disabled={savingToIphoneId === job.id}
+                        className={`flex-1 min-w-[155px] inline-flex items-center justify-center gap-1.5 rounded-xl px-3 py-2.5 text-sm font-semibold shadow transition cursor-pointer ${
+                          readyShareFiles[job.id]
+                            ? "bg-emerald-600 text-white hover:bg-emerald-500 ring-2 ring-emerald-400/50"
+                            : "bg-primary text-primary-foreground hover:bg-primary/90"
+                        }`}
+                        title="Запази директно в iPhone Снимки (Camera Roll) с максимално качество за TikTok"
+                      >
+                        {savingToIphoneId === job.id ? (
+                          <Loader2 className="size-4 animate-spin" />
+                        ) : (
+                          <Sparkles className="size-4" />
+                        )}
+                        {savingToIphoneId === job.id
+                          ? "Подготовка..."
+                          : readyShareFiles[job.id]
+                            ? "📲 Запази в iPhone Снимки"
+                            : "📱 Запази за TikTok (iPhone)"}
+                      </button>
+                      <button
                         onClick={() => handleDownloadServerJob(job)}
                         disabled={downloadingServerId === job.id}
-                        className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-xl bg-primary px-3.5 py-2.5 text-sm font-medium text-primary-foreground shadow hover:bg-primary/90 transition cursor-pointer"
+                        className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-primary/40 bg-primary/10 px-3 py-2.5 text-sm font-medium text-primary hover:bg-primary/20 transition cursor-pointer shrink-0"
+                        title="Директно изтегляне на MP4 файла"
                       >
                         {downloadingServerId === job.id ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}
-                        {downloadingServerId === job.id ? "Зареждане..." : "Свали MP4"}
+                        {downloadingServerId === job.id ? "Зареждане..." : "MP4"}
                       </button>
                       <button
                         onClick={() => handleRetryServerJob(job.id)}

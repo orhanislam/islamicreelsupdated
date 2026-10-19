@@ -856,6 +856,79 @@ function testTwoLineSentenceSubtitlesAndContiguousTiming() {
   console.log("✔ testTwoLineSentenceSubtitlesAndContiguousTiming passed: 2-line layout and seamless contiguous sentence transitions verified!");
 }
 
+async function testGoalTikTokSubtitlesSemanticBRollAndTranslation() {
+  const { segmentScriptIntoSemanticScenes } = await import("../pexels.functions");
+  const { getHalalVideoByConceptId } = await import("../backgrounds.functions");
+  const { normalizeIslamicTermsBulgarian } = await import("../translate.functions");
+
+  // 1. Verify strictly uniform 68px font size across all phrases in ASS subtitles
+  const multiPhraseScript = "Страхувайте се от огъня на Ада. Търсете прошка и милост като чист дъжд. В градините на Рая има вечен покой.";
+  const words = multiPhraseScript.split(/\s+/);
+  const timings = words.map((w, i) => ({
+    word: w,
+    start: Number((i * 0.45).toFixed(2)),
+    end: Number(((i + 1) * 0.45).toFixed(2)),
+  }));
+
+  const ass = generateAssSubtitles(
+    {
+      bulgarian: multiPhraseScript,
+      bulgarianWordTimings: timings,
+      subtitlePosition: "tiktok",
+      tiktokTheme: "hormozi",
+    },
+    words.length * 0.45 + 0.5,
+  );
+
+  const bgLines = ass.split("\n").filter((l) => l.startsWith("Dialogue:") && l.includes(",Bulgarian,"));
+  const fsSet = new Set<string>();
+  for (const line of bgLines) {
+    const m = line.match(/\\fs(\d+)/);
+    if (m) fsSet.add(m[1]);
+  }
+  if (fsSet.size !== 1 || !fsSet.has("68")) {
+    throw new Error(`Expected strictly uniform \\fs68 across all subtitle phrases, but got font sizes: ${Array.from(fsSet).join(", ")}`);
+  }
+
+  // 2. Verify semantic text-synced B-Roll segmentation (fire -> rain -> paradise)
+  const scenes = segmentScriptIntoSemanticScenes(multiPhraseScript, timings, words.length * 0.45);
+  if (scenes.length < 3) {
+    throw new Error(`Expected at least 3 semantic scenes for fire -> rain -> paradise script, got ${scenes.length}`);
+  }
+  if (scenes[0].conceptId !== "jahannam") {
+    throw new Error(`Expected scene 1 ('огъня на Ада') to match 'jahannam', got '${scenes[0].conceptId}'`);
+  }
+  if (scenes[1].conceptId !== "tawbah") {
+    throw new Error(`Expected scene 2 ('прошка и милост като чист дъжд') to match 'tawbah', got '${scenes[1].conceptId}'`);
+  }
+  if (scenes[2].conceptId !== "jannah") {
+    throw new Error(`Expected scene 3 ('В градините на Рая') to match 'jannah', got '${scenes[2].conceptId}'`);
+  }
+
+  const fireAsset = getHalalVideoByConceptId(scenes[0].conceptId, 0);
+  const rainAsset = getHalalVideoByConceptId(scenes[1].conceptId, 1);
+  const jannahAsset = getHalalVideoByConceptId(scenes[2].conceptId, 2);
+  if (fireAsset.id !== "halal_vid_09_fire_flames" || rainAsset.id !== "halal_vid_10_gentle_rain" || jannahAsset.id !== "halal_vid_04_emerald_garden") {
+    throw new Error(`Concept-to-video asset mapping mismatch: ${fireAsset.id}, ${rainAsset.id}, ${jannahAsset.id}`);
+  }
+
+  // 3. Verify literary Bulgarian translation normalization
+  const rawTrans = "Разказано от Абу Хурайра: Пратеника на Аллах (с/у) каза със милост и с себе си [V. 2:255].";
+  const polished = normalizeIslamicTermsBulgarian(rawTrans);
+  if (
+    !polished.includes("Предава се от Абу Хурайра") ||
+    !polished.includes("Пратеникът на Аллах") ||
+    !polished.includes("(мир да бъде с него)") ||
+    !polished.includes("с милост") ||
+    !polished.includes("със себе си") ||
+    polished.includes("[V. 2:255]")
+  ) {
+    throw new Error(`Literary Bulgarian translation polish failed! Got: ${polished}`);
+  }
+
+  console.log("✔ testGoalTikTokSubtitlesSemanticBRollAndTranslation passed: uniform 68px subtitles, context-synced fire/rain/jannah B-Roll scenes, and literary Bulgarian translation verified!");
+}
+
 async function runAllTests() {
   console.log("Running subtitle synchronization verification tests...");
   testMonotonicityAndBounds();
@@ -873,6 +946,7 @@ async function runAllTests() {
   await testPronounGenderAgreementAndRespectfulTone();
   await testTikTokTitleAndCaptionDashAndStripeRemoval();
   await testRespectfulAndOfficialIslamicEmojis();
+  await testGoalTikTokSubtitlesSemanticBRollAndTranslation();
   console.log("✔ All subtitle synchronization verification tests passed successfully!");
   process.exit(0);
 }

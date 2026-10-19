@@ -9,11 +9,23 @@ import {
   LOCAL_HALAL_VIDEO_POOL,
   CuratedHalalVideoAsset,
   getLocalHalalVideoFallback,
+  getHalalVideoByConceptId,
   getCuratedHalalVideoFallbackDirect,
 } from "./backgrounds.functions";
 
 export type Mood = "calm" | "majestic" | "reflective" | "hopeful" | "solemn";
 export type Analysis = { theme: string; mood: Mood; queries: string[] };
+
+export interface SemanticBRollSegment {
+  url: string;
+  start: number;
+  end: number;
+  duration: number;
+  theme: string;
+  conceptId: string;
+  query: string;
+  textSnippet: string;
+}
 
 // ============================================================================
 // 1. DATA CONTRACTS (matching PROJECT.md § Interface Contracts)
@@ -848,6 +860,77 @@ export const THEOLOGICAL_CONCEPT_MAP: TheologicalConcept[] = [
       ],
     },
   },
+  {
+    id: "noor",
+    nameBg: "Божествена светлина и напътствие",
+    keywords: [
+      "светлин",
+      "слънц",
+      "изгрев",
+      "лъч",
+      "зора",
+      "утро",
+      "напътстви",
+      "истин",
+      "нур",
+      "озарява",
+    ],
+    arabicTerms: ["noor", "nur", "hidayah", "haqq", "shams"],
+    mood: "hopeful",
+    roleQueries: {
+      hook: [
+        "mountain sunrise golden dawn light nature vertical",
+        "radiant golden sunrise open field nature vertical",
+      ],
+      context: [
+        "golden sunbeams breaking through forest trees vertical",
+        "warm morning sunrays misty valley landscape vertical",
+      ],
+      dalil: [
+        "celestial golden light rays breaking through clouds vertical",
+        "bright sunrise over mountain peaks clouds vertical",
+      ],
+      cta: [
+        "warm golden hour sunlight calm meadow nature vertical",
+        "peaceful sunrise horizon golden sky vertical",
+      ],
+    },
+  },
+  {
+    id: "bahr",
+    nameBg: "Безбрежно море и Божието величие",
+    keywords: [
+      "море",
+      "морет",
+      "океан",
+      "вълн",
+      "дълбин",
+      "бряг",
+      "кораб",
+      "водата",
+      "водите",
+    ],
+    arabicTerms: ["bahr", "yam", "mawj"],
+    mood: "majestic",
+    roleQueries: {
+      hook: [
+        "calm turquoise ocean sunset waves nature vertical",
+        "deep blue ocean waves horizon landscape vertical",
+      ],
+      context: [
+        "gentle ocean waves rolling sandy shore sunset vertical",
+        "crystal turquoise sea waves aerial nature vertical",
+      ],
+      dalil: [
+        "majestic ocean horizon golden sunbeams clouds vertical",
+        "vast blue sea sunlight reflection nature vertical",
+      ],
+      cta: [
+        "peaceful serene sea morning light landscape vertical",
+        "calm ocean sunset golden ripples vertical",
+      ],
+    },
+  },
 ];
 
 export const DEFAULT_ROLE_QUERIES: Record<SlideProgressionRole, string[]> = {
@@ -894,17 +977,274 @@ export function detectSlideRole(
   return roles[slideIndex % 4];
 }
 
+const GENERIC_HEART_SOUL_STEMS = new Set(["сърца", "сърцата", "душата", "сърце", "душа"]);
+
 export function matchTheologicalConcept(text: string): TheologicalConcept | null {
+  if (!text) return null;
   const norm = text.toLowerCase();
+  let bestConcept: TheologicalConcept | null = null;
+  let bestScore = 0;
+
   for (const concept of THEOLOGICAL_CONCEPT_MAP) {
+    let score = 0;
     for (const kw of concept.keywords) {
-      if (norm.includes(kw)) return concept;
+      if (norm.includes(kw)) {
+        // Give concrete physical/theological imagery higher weight than generic "сърце/душа"
+        if (concept.id === "sakina" && GENERIC_HEART_SOUL_STEMS.has(kw)) {
+          score += 3;
+        } else if (
+          concept.id === "jahannam" ||
+          concept.id === "jannah" ||
+          concept.id === "tawbah" ||
+          concept.id === "bahr" ||
+          concept.id === "tahajjud" ||
+          concept.id === "sabr" ||
+          concept.id === "noor"
+        ) {
+          score += 12;
+        } else {
+          score += 9;
+        }
+      }
     }
     for (const ar of concept.arabicTerms) {
-      if (norm.includes(ar)) return concept;
+      if (norm.includes(ar)) {
+        score += 12;
+      }
+    }
+    if (score > bestScore) {
+      bestScore = score;
+      bestConcept = concept;
     }
   }
-  return null;
+  return bestConcept;
+}
+
+/**
+ * Segments a spoken Bulgarian script into timed semantic B-Roll scenes.
+ * Instead of switching every 3 seconds blindly, each scene corresponds to the actual
+ * spoken sentence/clause and its theological/visual concept (e.g. Fire -> Rain -> Paradise -> Peace).
+ */
+export function segmentScriptIntoSemanticScenes(
+  text: string,
+  wordTimings?: Array<{ word?: string; start: number; end: number }>,
+  totalDuration?: number,
+): Array<{
+  text: string;
+  start: number;
+  end: number;
+  duration: number;
+  conceptId: string;
+  themeBg: string;
+  query: string;
+  fallbackUrl: string;
+}> {
+  const cleanText = (text || "")
+    .replace(/<break[^>]*\/>/gi, " ")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  const rawWords = cleanText ? cleanText.split(/\s+/).filter(Boolean) : [];
+  const validTimings = Array.isArray(wordTimings)
+    ? wordTimings.filter((t) => Number.isFinite(Number(t?.start)) && Number.isFinite(Number(t?.end)))
+    : [];
+
+  const maxTimingEnd =
+    validTimings.length > 0
+      ? Math.max(...validTimings.map((t) => Number(t.end) || 0))
+      : 0;
+
+  const estDur =
+    totalDuration && totalDuration > 0
+      ? totalDuration
+      : maxTimingEnd > 0
+        ? Number((maxTimingEnd + 0.15).toFixed(2))
+        : Math.max(10, rawWords.length / 2.4);
+
+  if (rawWords.length === 0) {
+    const fb = getHalalVideoByConceptId("sakina", 0);
+    return [
+      {
+        text: "",
+        start: 0,
+        end: estDur,
+        duration: estDur,
+        conceptId: "sakina",
+        themeBg: fb.themeBg,
+        query: "tranquil peaceful lake morning sunrise mist calm water vertical",
+        fallbackUrl: fb.url,
+      },
+    ];
+  }
+
+  // Align word timings 1-to-1 with rawWords
+  const alignedWords: Array<{ word: string; start: number; end: number }> = [];
+  if (validTimings.length === rawWords.length) {
+    for (let i = 0; i < rawWords.length; i++) {
+      alignedWords.push({
+        word: rawWords[i],
+        start: Number(validTimings[i].start),
+        end: Number(validTimings[i].end),
+      });
+    }
+  } else if (validTimings.length > 0 && validTimings[0].word) {
+    for (const t of validTimings) {
+      alignedWords.push({
+        word: String(t.word || ""),
+        start: Number(t.start),
+        end: Number(t.end),
+      });
+    }
+  } else {
+    const costs = rawWords.map((w) => {
+      let c = 1 + w.replace(/[^\p{L}\p{N}]/gu, "").length * 0.55;
+      if (/[.!?…]$/.test(w)) c += 3.0;
+      else if (/[,;:—]$/.test(w)) c += 1.5;
+      return c;
+    });
+    const totalCost = costs.reduce((a, b) => a + b, 0) || 1;
+    let cum = 0;
+    for (let i = 0; i < rawWords.length; i++) {
+      const s = (cum / totalCost) * estDur;
+      cum += costs[i];
+      const e = (cum / totalCost) * estDur;
+      alignedWords.push({ word: rawWords[i], start: s, end: e });
+    }
+  }
+
+  // Group into sentence/clause units
+  interface RawClause {
+    words: string[];
+    start: number;
+    end: number;
+    concept: TheologicalConcept | null;
+  }
+
+  const clauses: RawClause[] = [];
+  let curWords: string[] = [];
+  let curStart = alignedWords[0]?.start ?? 0;
+
+  for (let i = 0; i < alignedWords.length; i++) {
+    const item = alignedWords[i];
+    if (curWords.length === 0) {
+      curStart = item.start;
+    }
+    curWords.push(item.word);
+
+    const endsSentence = /[.!?…]$/.test(item.word);
+    const endsMajorClause = /[;:—]$/.test(item.word) && curWords.length >= 5;
+    const endsCommaClause = /,$/.test(item.word) && curWords.length >= 8;
+    const isLast = i === alignedWords.length - 1;
+
+    // Also check if the upcoming words trigger a distinct concrete concept after a comma
+    let nextTriggersNewConcept = false;
+    if (/[,;:—]$/.test(item.word) && curWords.length >= 3 && i + 1 < alignedWords.length) {
+      const curConcept = matchTheologicalConcept(curWords.join(" "));
+      const lookaheadWords = alignedWords
+        .slice(i + 1, Math.min(alignedWords.length, i + 8))
+        .map((x) => x.word)
+        .join(" ");
+      const nextConcept = matchTheologicalConcept(lookaheadWords);
+      if (nextConcept && (!curConcept || nextConcept.id !== curConcept.id)) {
+        nextTriggersNewConcept = true;
+      }
+    }
+
+    if (endsSentence || endsMajorClause || endsCommaClause || nextTriggersNewConcept || isLast) {
+      const clauseText = curWords.join(" ");
+      clauses.push({
+        words: [...curWords],
+        start: curStart,
+        end: item.end,
+        concept: matchTheologicalConcept(clauseText),
+      });
+      curWords = [];
+    }
+  }
+
+  // Merge or split clauses into natural semantic scenes:
+  // - Immediately switch scene when a clause has a DIFFERENT theological concept!
+  // - Merge consecutive clauses if they share the same concept (up to ~7.5s) or if a clause has no concept and the current scene is < 4.5s.
+  const mergedScenes: RawClause[] = [];
+  for (const cl of clauses) {
+    if (mergedScenes.length === 0) {
+      mergedScenes.push({ ...cl });
+      continue;
+    }
+    const prev = mergedScenes[mergedScenes.length - 1];
+    const prevDur = prev.end - prev.start;
+    const combinedDur = cl.end - prev.start;
+
+    const prevId = prev.concept?.id || null;
+    const curId = cl.concept?.id || null;
+
+    const hasDifferentExplicitConcept = prevId && curId && prevId !== curId;
+    const newExplicitConceptAfterGeneric = !prevId && curId && prevDur >= 2.2;
+
+    if (hasDifferentExplicitConcept || newExplicitConceptAfterGeneric) {
+      // Never merge across a semantic concept shift (e.g. Fire -> Paradise)!
+      mergedScenes.push({ ...cl });
+    } else if (
+      (prevDur < 3.5 && combinedDur <= 9.0) ||
+      (prevId && prevId === curId && combinedDur <= 7.5)
+    ) {
+      prev.words.push(...cl.words);
+      prev.end = cl.end;
+      if (!prev.concept && cl.concept) {
+        prev.concept = cl.concept;
+      }
+    } else {
+      mergedScenes.push({ ...cl });
+    }
+  }
+
+  // Build final contiguous timed segments covering [0, estDur]
+  const roles: SlideProgressionRole[] = ["hook", "context", "dalil", "cta"];
+  const FallbackOrder = ["noor", "sakina", "dunya", "jannah", "tahajjud", "rizq"];
+  const usedQueries = new Set<string>();
+
+  return mergedScenes.map((scene, idx) => {
+    const isFirst = idx === 0;
+    const isLast = idx === mergedScenes.length - 1;
+    const start = isFirst ? 0 : Number(mergedScenes[idx].start.toFixed(2));
+    const rawEnd = isLast
+      ? estDur
+      : Number(mergedScenes[idx + 1].start.toFixed(2));
+    const end = Math.max(Number((start + 0.5).toFixed(2)), rawEnd);
+    const duration = Number((end - start).toFixed(2));
+
+    const role = roles[idx % roles.length];
+    const concept =
+      scene.concept ||
+      THEOLOGICAL_CONCEPT_MAP.find(
+        (c) => c.id === FallbackOrder[idx % FallbackOrder.length],
+      ) ||
+      THEOLOGICAL_CONCEPT_MAP[0];
+
+    const roleCandidates = concept.roleQueries[role] || DEFAULT_ROLE_QUERIES[role];
+    let chosenQuery = roleCandidates[0] || DEFAULT_ROLE_QUERIES[role][0];
+    for (const q of roleCandidates) {
+      if (!usedQueries.has(q)) {
+        chosenQuery = q;
+        break;
+      }
+    }
+    usedQueries.add(chosenQuery);
+
+    const fallbackAsset = getHalalVideoByConceptId(concept.id, idx);
+
+    return {
+      text: scene.words.join(" "),
+      start,
+      end,
+      duration,
+      conceptId: concept.id,
+      themeBg: concept.nameBg,
+      query: sanitizeSearchQuery(chosenQuery),
+      fallbackUrl: fallbackAsset.url,
+    };
+  });
 }
 
 // ============================================================================
@@ -1214,96 +1554,127 @@ export const searchPexelsVideos = createServerFn({ method: "POST" })
     };
   });
 
-export const fetchMultiSceneBRoll = createServerFn({ method: "POST" })
-  .validator((input: { query?: string; text?: string }) => input)
-  .handler(async ({ data }): Promise<{ clips: string[]; theme: string }> => {
-    const key = process.env.PEXELS_API_KEY || "";
-    const textWords = data.text ? data.text.split(/\s+/).length : 0;
-    const estDuration = textWords > 0 ? Math.max(15, textWords / 2.5) : 30;
-    const neededClips = Math.max(3, Math.ceil(estDuration / 5));
+export async function fetchMultiSceneBRollDirect(data: {
+  query?: string;
+  text?: string;
+  wordTimings?: Array<{ word?: string; start: number; end: number }>;
+  audioDuration?: number;
+}): Promise<{
+  clips: string[];
+  theme: string;
+  segments: SemanticBRollSegment[];
+}> {
+  const key = process.env.PEXELS_API_KEY || "";
+  const rawScenes = segmentScriptIntoSemanticScenes(
+    data?.text || data?.query || "",
+    data?.wordTimings,
+    data?.audioDuration,
+  );
 
-    let queries = data?.query
-      ? [data.query]
-      : ["mountain sunset", "night sky stars", "nature river calm"];
+  // Ensure at least 2 scenes if the video is >= 8s so multi-scene mode feels dynamic
+  let scenes = rawScenes;
+  if (scenes.length === 1 && scenes[0].duration >= 8) {
+    const first = scenes[0];
+    const mid = Number((first.duration / 2).toFixed(2));
+    const secondFallback = getHalalVideoByConceptId(first.conceptId, 1);
+    scenes = [
+      {
+        ...first,
+        start: 0,
+        end: mid,
+        duration: mid,
+      },
+      {
+        ...first,
+        start: mid,
+        end: first.end,
+        duration: Number((first.end - mid).toFixed(2)),
+        query: sanitizeSearchQuery(`${first.query} sunset golden hour`),
+        fallbackUrl:
+          secondFallback.url !== first.fallbackUrl
+            ? secondFallback.url
+            : getLocalHalalVideoFallback(1).url,
+      },
+    ];
+  }
 
-    if (data.text) {
+  const segments: SemanticBRollSegment[] = [];
+  const clips: string[] = [];
+  const usedUrls = new Set<string>();
+
+  for (let i = 0; i < scenes.length; i++) {
+    const sc = scenes[i];
+    const safeQuery = sanitizeSearchQuery(sc.query);
+    let chosenUrl = "";
+
+    if (key) {
       try {
-        const sysPrompt = `You are a cinematic B-Roll director. 
-Generate exactly ${neededClips} distinct English visual search queries for background stock footage.
-STRICT RULES:
-1. ONLY return a JSON array of strings, e.g. ["desert sunrise", "ocean waves calm", "mountain clouds peak"].
-2. NO humans, NO faces, NO hands, NO silhouettes, NO animals.
-3. ALL queries MUST include "nature" or "landscape".`;
-
-        const resp = await geminiChat(
-          "gemini-2.5-flash",
-          [
-            { role: "system", content: sysPrompt },
-            { role: "user", content: `Script:\n${data.text}` },
-          ],
-          true,
-        );
-
-        let cleanResp = resp.replace(/```json\s*|\s*```/g, "").trim();
-        const firstBracket = cleanResp.indexOf("[");
-        const lastBracket = cleanResp.lastIndexOf("]");
-        if (firstBracket !== -1 && lastBracket !== -1 && lastBracket > firstBracket) {
-          cleanResp = cleanResp.substring(firstBracket, lastBracket + 1);
-        }
-        const parsed = JSON.parse(cleanResp);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          queries = parsed.slice(0, neededClips * 2);
+        const vs = await pexelsVideoQuery(key, safeQuery, 15);
+        const halalVideos = await getHalalVideos(vs, 5, 3);
+        const bestClip =
+          halalVideos.find((b) => !usedUrls.has(b.link)) || halalVideos[0];
+        if (bestClip?.link) {
+          chosenUrl = bestClip.link;
         }
       } catch (err) {
-        console.warn("[pexels] Failed to generate dynamic B-Roll queries, falling back:", err);
+        console.warn(`[pexels] Error fetching semantic B-roll for "${safeQuery}":`, err);
       }
     }
 
-    while (queries.length < neededClips) {
-      queries = [...queries, ...queries];
-    }
-    queries = queries.slice(0, neededClips);
-
-    const clips: string[] = [];
-
-    for (const rawQuery of queries) {
-      if (clips.length >= neededClips) break;
-
-      // Tier 1: Query Sanitization
-      const safeQuery = sanitizeSearchQuery(rawQuery);
-
-      if (key) {
-        try {
-          const vs = await pexelsVideoQuery(key, safeQuery, 15);
-          // Tier 2 & Tier 3 applied via getHalalVideos
-          const halalVideos = await getHalalVideos(vs, 5, 3);
-          const bestClip = halalVideos.find((b) => !clips.includes(b.link));
-          if (bestClip) {
-            clips.push(bestClip.link);
-            continue;
-          }
-        } catch (err) {
-          console.warn(`[pexels] Error fetching B-roll for "${safeQuery}":`, err);
-        }
-      }
-
-      // If Pexels fails or yields no Halal clips, use local fallback pool
-      const fallback = getLocalHalalVideoFallback(clips.length);
-      if (!clips.includes(fallback.url)) {
-        clips.push(fallback.url);
+    if (!chosenUrl) {
+      // Concept-specific Halal fallback (e.g., Fire for 'jahannam', Rain for 'tawbah', Waterfall for 'jannah')
+      const conceptAsset = getHalalVideoByConceptId(sc.conceptId, i);
+      if (!usedUrls.has(conceptAsset.url)) {
+        chosenUrl = conceptAsset.url;
+      } else {
+        const altAsset = getLocalHalalVideoFallback(i);
+        chosenUrl = altAsset.url;
       }
     }
 
-    while (clips.length < neededClips) {
-      const fallback = getLocalHalalVideoFallback(clips.length);
-      clips.push(fallback.url);
-    }
+    usedUrls.add(chosenUrl);
+    clips.push(chosenUrl);
+    segments.push({
+      url: chosenUrl,
+      start: sc.start,
+      end: sc.end,
+      duration: sc.duration,
+      theme: sc.themeBg,
+      conceptId: sc.conceptId,
+      query: safeQuery,
+      textSnippet: sc.text.slice(0, 120),
+    });
+  }
 
-    return {
-      clips: clips.slice(0, neededClips),
-      theme: data?.query || "Кинематографични B-Roll сцени",
-    };
-  });
+  const summaryThemes = Array.from(new Set(segments.map((s) => s.theme))).join(" • ");
+
+  return {
+    clips,
+    theme: summaryThemes || data?.query || "Контекстни сцени според текста",
+    segments,
+  };
+}
+
+export const fetchMultiSceneBRoll = createServerFn({ method: "POST" })
+  .validator(
+    (input: {
+      query?: string;
+      text?: string;
+      wordTimings?: Array<{ word?: string; start: number; end: number }>;
+      audioDuration?: number;
+    }) => input,
+  )
+  .handler(
+    async ({
+      data,
+    }): Promise<{
+      clips: string[];
+      theme: string;
+      segments: SemanticBRollSegment[];
+    }> => {
+      return fetchMultiSceneBRollDirect(data || {});
+    },
+  );
 
 // ============================================================================
 // 10. CORE ENGINE: fetchCarouselSlideVideos (PROJECT.md Interface Contract)
@@ -1321,9 +1692,9 @@ export async function fetchCarouselSlideVideos(
   }
 
   // Safe helper to pick and deduplicate assets from LOCAL_HALAL_VIDEO_POOL
-  const pickFromLocalPool = (slideIdx: number, theme: string): SlideVideoResult => {
+  const pickFromLocalPool = (slideIdx: number, theme: string, conceptId?: string): SlideVideoResult => {
     const safeIdx = Math.floor(Math.abs(Number(slideIdx) || 0)) % LOCAL_HALAL_VIDEO_POOL.length;
-    let asset = LOCAL_HALAL_VIDEO_POOL[safeIdx];
+    let asset = conceptId ? getHalalVideoByConceptId(conceptId, safeIdx) : LOCAL_HALAL_VIDEO_POOL[safeIdx];
     let fallbackUrl = asset.url;
 
     if (usedVideoUrls.has(fallbackUrl)) {
@@ -1382,7 +1753,7 @@ export async function fetchCarouselSlideVideos(
         chosenTheme = matchedConcept.nameBg;
       }
 
-      results.push(pickFromLocalPool(i, chosenTheme));
+      results.push(pickFromLocalPool(i, chosenTheme, matchedConcept?.id));
     }
     return results;
   }
@@ -1494,7 +1865,7 @@ Return JSON ONLY: { "theme": string (Bulgarian), "queries": string[] }`;
 
     // --- Step 3: Local Halal Fallback Pool ---
     if (!selectedVideo) {
-      selectedVideo = pickFromLocalPool(i, chosenTheme);
+      selectedVideo = pickFromLocalPool(i, chosenTheme, matchedConcept?.id);
     }
 
     results.push(selectedVideo);
