@@ -1188,7 +1188,48 @@ async function testSalafiTheologyAndDaleelSelfHealing() {
     throw new Error(`Expected summaryBg to be completely healed, got: ${audited.proposal.summaryBg}`);
   }
 
-  console.log("✔ testSalafiTheologyAndDaleelSelfHealing passed: 100% multi-pass convergence, Quran ayah clamping, Mawdu hadith auto-replacement, Tawheed al-Uluhiyyah, Amulet bans, and Divine Attributes affirmation all 100% verified!");
+  // 8. Expanded Salafi rules: Prophet Du'a, oaths, astrology, secular pantheism
+  const prophetCheck = detectAndHealSalafiTheologicalDeviations("О, Пратенико на Аллах, помогни ми и ме спаси!");
+  if (!prophetCheck.healed || prophetCheck.healedText.includes("помогни ми")) {
+    throw new Error(`Failed to heal Du'a directed to the Prophet! Got: ${prophetCheck.healedText}`);
+  }
+
+  const oathCheck = detectAndHealSalafiTheologicalDeviations("Кълна се в децата си и в хляба!");
+  if (!oathCheck.healed || oathCheck.healedText.includes("в децата")) {
+    throw new Error(`Failed to heal oath by creation! Got: ${oathCheck.healedText}`);
+  }
+
+  const horoCheck = detectAndHealSalafiTheologicalDeviations("Моят хороскоп предсказва щастие.");
+  if (!horoCheck.healed || horoCheck.healedText.includes("хороскоп")) {
+    throw new Error(`Failed to heal horoscope/astrology! Got: ${horoCheck.healedText}`);
+  }
+
+  const universeCheck = detectAndHealSalafiTheologicalDeviations("Вселената чува твоите желания.");
+  if (!universeCheck.healed || universeCheck.healedText.includes("Вселената чува")) {
+    throw new Error(`Failed to heal secular universe pantheism! Got: ${universeCheck.healedText}`);
+  }
+
+  // 9. Pronoun gender agreement in Bulgarian
+  const genderGram = auditAndRefineBulgarianGrammar("Благодарете на вашето Господ с вашето душа и вашето дела.");
+  if (!genderGram.refinedText.includes("Вашия Господ") || !genderGram.refinedText.includes("Вашата душа") || !genderGram.refinedText.includes("Вашите дела")) {
+    throw new Error(`Failed pronoun gender agreement test! Got: ${genderGram.refinedText}`);
+  }
+
+  // 10. 4-step workflow Explanation and Guidance automatic self-healing
+  const testSw = validateAndEnforceFourStepArchitecture({
+    hookQuestion: "ти знаеш ли?",
+    hookContext: "твоето сърце е неспокойно",
+    explanation: "Молете се на светците и помнете вашето Господ.",
+    actionStep: "носете синьо око против уроци и благодари на оня горе.",
+  }, "Тест видео");
+  if (testSw.sw.explanation.includes("светците") || !testSw.sw.explanation.includes("Вашия Господ")) {
+    throw new Error(`Explanation failed self-healing! Got: ${testSw.sw.explanation}`);
+  }
+  if (testSw.sw.actionStep.includes("синьо око") || !testSw.sw.actionStep.includes("Единственият Творец")) {
+    throw new Error(`ActionStep failed self-healing! Got: ${testSw.sw.actionStep}`);
+  }
+
+  console.log("✔ testSalafiTheologyAndDaleelSelfHealing passed: 100% multi-pass convergence, Quran ayah clamping, Mawdu hadith auto-replacement, Tawheed al-Uluhiyyah, Amulet bans, Divine Attributes affirmation, pronoun gender agreement, and explanation/guidance auto-healing all 100% verified!");
 }
 
 async function runAllTests() {

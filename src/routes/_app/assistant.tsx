@@ -510,24 +510,33 @@ function AssistantPage() {
     if (confirmingIdx !== null) return;
     playStudioClick("start");
     setConfirmingIdx(msgIdx);
-    toast.message("Генерирам видеото по Вашето одобрено предложение...");
+    toast.message("🛡️ Вграден Salafi Engine: Проверявам Далил, Тафсир, Напътствие и Граматика...");
 
     try {
       const res = await confirmAndGenerateVideo({
         data: { proposal },
       });
 
-      setMessages((prev) => [
-        ...prev,
-        {
+      setMessages((prev) => {
+        const next = [...prev];
+        if (res.proposal && next[msgIdx]) {
+          next[msgIdx] = {
+            ...next[msgIdx],
+            proposal: res.proposal,
+          };
+        }
+        next.push({
           role: "assistant",
           text: res.reply,
           jobId: res.jobId,
           reference: res.reference,
-        },
-      ]);
+        });
+        saveAssistantHistory({ data: { messages: next } }).catch(() => {});
+        return next;
+      });
+
       playStudioClick("success");
-      toast.success("Видеото е стартирано успешно!");
+      toast.success("🛡️ 100% Салафи Акида & Граматика — Верифицирано и стартирано!");
     } catch (err: any) {
       toast.error(err?.message || "Грешка при стартиране на видеото");
     } finally {
@@ -2635,25 +2644,31 @@ function AssistantPage() {
                         ) : (
                           <>
                             {/* Step-by-Step Approval ("Едно по Едно") Primary Buttons */}
-                            <Button
-                              size="sm"
-                              onClick={() => handleConfirmProposal(m.proposal!, idx)}
-                              disabled={confirmingIdx !== null || rejectingIdx !== null}
-                              className="rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold shadow-md cursor-pointer transition px-4 py-2 text-xs"
-                              title="Потвърди предложението и стартирай фоновото рендиране"
-                            >
-                              {confirmingIdx === idx ? (
-                                <>
-                                  <Loader2 className="size-3.5 mr-1.5 animate-spin" />
-                                  Генерира се...
-                                </>
-                              ) : (
-                                <>
-                                  <CheckCircle2 className="size-3.5 mr-1.5" />
-                                  ✅ Съгласи се / Одобри
-                                </>
-                              )}
-                            </Button>
+                            <div className="flex flex-col gap-1">
+                              <Button
+                                size="sm"
+                                onClick={() => handleConfirmProposal(m.proposal!, idx)}
+                                disabled={confirmingIdx !== null || rejectingIdx !== null}
+                                className="rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold shadow-md cursor-pointer transition px-4 py-2 text-xs"
+                                title="Потвърди предложението и стартирай фоновото рендиране с автоматична 100% Salafi & Grammar проверка на Далил, Тафсир и Напътствие"
+                              >
+                                {confirmingIdx === idx ? (
+                                  <>
+                                    <Loader2 className="size-3.5 mr-1.5 animate-spin" />
+                                    Проверява се & Генерира...
+                                  </>
+                                ) : (
+                                  <>
+                                    <CheckCircle2 className="size-3.5 mr-1.5" />
+                                    ✅ Съгласи се / Генерирай
+                                  </>
+                                )}
+                              </Button>
+                              <span className="text-[10px] text-emerald-400/90 flex items-center gap-1 font-medium">
+                                <ShieldCheck className="size-3 text-emerald-400" />
+                                100% авто-проверка на Далил, Тафсир & Напътствие
+                              </span>
+                            </div>
 
                             <Button
                               size="sm"

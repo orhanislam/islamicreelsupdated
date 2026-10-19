@@ -565,6 +565,48 @@ export function detectAndHealSalafiTheologicalDeviations(text: string): {
     fixes.push("Коригиран неподходящ израз за Аллах: Заменен с 'Единственият Творец'");
   }
 
+  // 5. Shirk in Dua / Calling upon the Prophet ﷺ for help or forgiveness after his death
+  const prophetDuaPattern = /(?<=^|[^\p{L}\p{N}])(?:о[,\s]+пратенико\s+на\s+аллах|йа\s+расулуллах|йа\s+пророко|о[,\s]+пророко)\s*[,–—\s]+(?:помогни\s+ми|спаси\s+ме|излекувай\s+ме|прости\s+ми|дай\s+ми)(?=[^\p{L}\p{N}]|$)/giu;
+  const beforeProphetDua = s;
+  s = s.replace(
+    prophetDuaPattern,
+    "отправете Вашата дуа единствено към Аллах Всевишният, Който чува и откликва, а към Пратеника ﷺ изпращаме благослов (саляуат)",
+  );
+  if (s !== beforeProphetDua) {
+    healed = true;
+    fixes.push("🚨 КОРИГИРАНО ТЕОЛОГИЧЕСКО ОТКЛОНЕНИЕ: Дуа се отправя единствено към Аллах Всевишният, без зов към творение [Коран 72:18]");
+  }
+
+  // 6. Swearing by creations / Oaths by other than Allah
+  const oathPattern = /(?<=^|[^\p{L}\p{N}])(?:кълна\s+се\s+в\s+(?:децата|майка|хляба|гроба|пророка|пратеника|небето|земята)|заклевам\s+се\s+в\s+(?:децата|майка|хляба|гроба|пророка|пратеника))(?=[^\p{L}\p{N}]|$)/giu;
+  const beforeOath = s;
+  s = s.replace(oathPattern, "кълна се в Аллах, Твореца на световете");
+  if (s !== beforeOath) {
+    healed = true;
+    fixes.push("🚨 КОРИГИРАНА КЛЕТВА (Ширк Асгар): Клетвата в Исляма е позволена единствено в името на Аллах");
+  }
+
+  // 7. Horoscopes, astrology, fortune-telling
+  const horoscopePattern = /(?<=^|[^\p{L}\p{N}])(?:хороскоп(?:ът|а|и|ите|ата)?|зоди(?:ята|ите|я)?\s+(?:казва|предсказва|определя)|гледане\s+на\s+(?:кафе|карти|ръка|боб)|гадател(?:и|ство|ка)?)(?=[^\p{L}\p{N}]|$)/giu;
+  const beforeHoro = s;
+  s = s.replace(
+    horoscopePattern,
+    "бъдещето и неведомото (ал-Гайб) са известни единствено на Аллах Всевишният, а астрологията и гаданията са грях в Исляма",
+  );
+  if (s !== beforeHoro) {
+    healed = true;
+    fixes.push("🚨 КОРИГИРАНО СУЕВЕРИЕ: Хороскопите и гаданията са отхвърлени, утвърдено знанието на Аллах за Неведомото [Коран 27:65]");
+  }
+
+  // 8. Secular pantheism / "вселената чува / дава / грижи се"
+  const universePattern = /(?<=^|[^\p{L}\p{N}])(?:вселената\s+(?:чува|дава|се\s+грижи|ще\s+ти\s+върне|откликва)|енергията\s+на\s+вселената|космическа\s+енергия)(?=[^\p{L}\p{N}]|$)/giu;
+  const beforeUniverse = s;
+  s = s.replace(universePattern, "Аллах Всевишният, Единственият Творец и Господар на световете");
+  if (s !== beforeUniverse) {
+    healed = true;
+    fixes.push("🚨 КОРИГИРАН СВЕТСКИ ТЕРМИН: Премахнато обожествяване на 'вселената', заменено с Единствения Творец");
+  }
+
   return { healedText: s, healed, fixes };
 }
 
@@ -780,6 +822,39 @@ export function auditAndRefineBulgarianGrammar(text: string): { refinedText: str
     fixes.push("Коригирано съгласуване на притежателното местоимение в женски род ('своята смърт/душа')");
   }
 
+  // 3b. Pronoun gender agreement for masculine nouns (Господ, Творец, Създател, живот, път, грях, намаз):
+  // "вашето Господ" -> "Вашият Господ"
+  const beforeMascAgree = s;
+  s = s.replace(/(?<=^|[^\p{L}\p{N}])вашето\s+(господ|творец|създател|живот|път|грях|намаз|иман|сабр)(?=[^\p{L}\p{N}]|$)/giu, (m, word) => {
+    const isCap = m[0] === m[0].toUpperCase();
+    return `${isCap ? "Вашият" : "вашият"} ${word}`;
+  });
+  if (s !== beforeMascAgree) {
+    fixes.push("Коригирано съгласуване на местоимението в мъжки род ('Вашият Господ/Творец')");
+  }
+
+  // 3c. Pronoun gender agreement for feminine nouns (душа, вяра, молитва, дуа, надежда, милост, прошка):
+  // "вашето душа" -> "Вашата душа", "вашия молитва" -> "Вашата молитва"
+  const beforeFemNounAgree = s;
+  s = s.replace(/(?<=^|[^\p{L}\p{N}])(?:вашето|вашия|вашият)\s+(душа|вяра|молитва|дуа|ду'а|надежда|милост|прошка|скръб|тежест)(?=[^\p{L}\p{N}]|$)/giu, (m, word) => {
+    const isCap = m[0] === m[0].toUpperCase();
+    return `${isCap ? "Вашата" : "вашата"} ${word}`;
+  });
+  if (s !== beforeFemNounAgree) {
+    fixes.push("Коригирано съгласуване на местоимението в женски род ('Вашата душа/молитва')");
+  }
+
+  // 3d. Pronoun gender agreement for plural nouns (дела, грехове, стъпки, молитви, въпроси):
+  // "вашето дела" -> "Вашите дела", "вашия грехове" -> "Вашите грехове"
+  const beforePluralAgree = s;
+  s = s.replace(/(?<=^|[^\p{L}\p{N}])(?:вашето|вашия|вашият)\s+(дела|грехове|стъпки|молитви|въпроси|думи|страхове)(?=[^\p{L}\p{N}]|$)/giu, (m, word) => {
+    const isCap = m[0] === m[0].toUpperCase();
+    return `${isCap ? "Вашите" : "вашите"} ${word}`;
+  });
+  if (s !== beforePluralAgree) {
+    fixes.push("Коригирано съгласуване на местоимението в множествено число ('Вашите дела/грехове')");
+  }
+
   // 4. Preposition Euphony: "в" vs "във" with unicode boundaries
   const beforeVv = s;
   // Convert "във" to "в" if next word doesn't start with в/ф
@@ -917,6 +992,14 @@ export function validateAndEnforceFourStepArchitecture(
       .trim();
     expl = `Обяснение: ${expl}`;
   }
+  const theoExpl = detectAndHealSalafiTheologicalDeviations(expl);
+  if (theoExpl.healed) {
+    expl = theoExpl.healedText;
+    fixes.push(...theoExpl.fixes);
+  }
+  const gramExpl = auditAndRefineBulgarianGrammar(expl);
+  expl = gramExpl.refinedText;
+  fixes.push(...gramExpl.fixes);
   sw.explanation = expl;
 
   // Step 4: Guidance / Action / Dua (Напътствие / Дуа)
@@ -938,6 +1021,14 @@ export function validateAndEnforceFourStepArchitecture(
       act = `${prefix} ${act.replace(/^(?:действие|напътствие|дуа|action|dua)\s*:\s*/i, "")}`;
     }
   }
+  const theoAct = detectAndHealSalafiTheologicalDeviations(act);
+  if (theoAct.healed) {
+    act = theoAct.healedText;
+    fixes.push(...theoAct.fixes);
+  }
+  const gramAct = auditAndRefineBulgarianGrammar(act);
+  act = gramAct.refinedText;
+  fixes.push(...gramAct.fixes);
   sw.actionStep = act;
 
   const stepsVerified = {
