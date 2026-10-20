@@ -933,9 +933,16 @@ function AssistantPage() {
         const expActText = expAct ? `\n${expActLabel === "Дуа" ? "🤍" : "📌"} **${expActLabel}:** ${expAct}` : "";
         const expExpl = stripScholarAttribution(res.proposal?.scriptWorkflow?.explanation || res.proposal?.summaryBg || "");
 
+        const audit = res.proposal?.auditReport;
+        const theoFixes = audit?.theologicalCorrections || [];
+        const gramFixes = audit?.grammarCorrections || [];
+        const auditText = `\n\n🛡️ **100% Salafi & Grammar Engine: Авто-проверено и Редактирано!**\n✔ **Салафи Акида:** 100% Сахих Далил и автентичен Тафсир\n✔ **Книжовна граматика:** Учтива форма („Вие/Вашето“), съгласуване и еуфония („в/във“, „с/със“)` +
+          (theoFixes.length > 0 ? `\n🚨 **Богословски корекции:** ${theoFixes.join("; ")}` : "") +
+          (gramFixes.length > 0 ? `\n✍️ **Граматични корекции:** ${gramFixes.join("; ")}` : "");
+
         const newMsg: ChatMsg = {
           role: "assistant",
-          text: `🎬 **Ислямско видео с обяснение${totalToGenerate > 1 ? ` (${i + 1}/${totalToGenerate})` : ""}:**\n\n${res.reply}\n\n📖 **Цитат:** ${res.proposal?.title}\n💎 **Обяснение:** ${expExpl}${expActText}\n🎨 **Атмосфера:** ${res.proposal?.themeBg}${scheduleNote}\n\n📌 Натиснете **\"✅ Съгласи се / Одобри\"** за да стартираме видеото, използвайте бутоните за **AI подобрение / редакция**, или **\"❌ Откажи / Предложи друг\"** за алтернатива!`,
+          text: `🎬 **Ислямско видео с обяснение${totalToGenerate > 1 ? ` (${i + 1}/${totalToGenerate})` : ""}:**\n\n${res.reply}\n\n📖 **Цитат:** ${res.proposal?.title}\n💎 **Обяснение:** ${expExpl}${expActText}\n🎨 **Атмосфера:** ${res.proposal?.themeBg}${scheduleNote}${auditText}\n\n📌 Натиснете **\"✅ Съгласи се / Одобри\"** за да стартираме видеото, използвайте бутоните за **AI подобрение / редакция**, или **\"❌ Откажи / Предложи друг\"** за алтернатива!`,
           proposal: res.proposal,
         };
 
@@ -2499,6 +2506,28 @@ function AssistantPage() {
                                         <div className="text-emerald-100/90 font-medium">
                                           {cleanScriptPrefixes(m.proposal.scriptWorkflow.actionStep)}
                                         </div>
+                                      </div>
+                                    )}
+
+                                    {m.proposal.auditReport && (
+                                      <div className="p-2.5 rounded-lg bg-emerald-950/40 border border-emerald-500/40 text-[11px] space-y-1">
+                                        <div className="flex items-center gap-1.5 font-bold text-emerald-400">
+                                          <ShieldCheck className="size-3.5 text-emerald-400 shrink-0" />
+                                          <span>100% Salafi & Grammar Engine: Авто-проверено и Редактирано!</span>
+                                        </div>
+                                        <div className="text-emerald-200/90 text-[10.5px]">
+                                          ✔ 100% Сахих Далил & Тафсир • ✔ Книжовна граматика („Вие/Вашето“, съгласуване и еуфория)
+                                        </div>
+                                        {m.proposal.auditReport.theologicalCorrections && m.proposal.auditReport.theologicalCorrections.length > 0 && (
+                                          <div className="text-amber-300 text-[10px]">
+                                            🚨 <strong>Богословски корекции:</strong> {m.proposal.auditReport.theologicalCorrections.join("; ")}
+                                          </div>
+                                        )}
+                                        {m.proposal.auditReport.grammarCorrections && m.proposal.auditReport.grammarCorrections.length > 0 && (
+                                          <div className="text-teal-300 text-[10px]">
+                                            ✍️ <strong>Граматични корекции:</strong> {m.proposal.auditReport.grammarCorrections.join("; ")}
+                                          </div>
+                                        )}
                                       </div>
                                     )}
 

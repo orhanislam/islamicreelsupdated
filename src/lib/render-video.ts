@@ -45,6 +45,15 @@ export type VideoOptions = RenderOptions & {
   bulgarianWordTimings?: WordSegment[];
   /** Video quality. 1080p uses high bitrate but may crash iPhone Safari. */
   quality?: "1080p" | "720p";
+  /** Optional multi-scene B-Roll clips and timed segments */
+  bRollUrls?: string[];
+  bRollSegments?: Array<{
+    url: string;
+    start?: number;
+    end?: number;
+    duration?: number;
+    theme?: string;
+  }>;
 };
 
 let W = 1080;
@@ -488,36 +497,60 @@ export async function renderVideo(opts: VideoOptions): Promise<{ blob: Blob; mim
     // clip's loop boundary while audio keeps going. For iPhone/iPad we render
     // from the selected poster/image with Ken Burns movement instead, which keeps
     // the subtitle/video timeline deterministic until the narration ends.
-    const useBackgroundVideo = Boolean(opts.backgroundVideoUrl);
-    if (useBackgroundVideo && opts.backgroundVideoUrl) {
-      bgVideo = document.createElement("video");
-      bgVideo.crossOrigin = "anonymous";
-      let videoSrc = opts.backgroundVideoUrl;
-      try {
-        // Preload the entire video into RAM to prevent network buffering
-        // from pausing the video during the real-time render.
-        const res = await fetch(videoSrc, { cache: "force-cache" });
-        if (res.ok) {
-          const b = await res.blob();
-          videoSrc = URL.createObjectURL(b);
-          createdObjectUrl = videoSrc;
-        }
-      } catch {
-        /* ignore, use original URL */
+    const multiBgScenes: Array<{ video: HTMLVideoElement; start: number; end: number }> = [];
+    const hasMultiSegments = Array.isArray(opts.bRollSegments) && opts.bRollSegments.length > 1;
+    if (hasMultiSegments && opts.bRollSegments) {
+      for (let i = 0; i < opts.bRollSegments.length; i++) {
+        const seg = opts.bRollSegments[i];
+        if (!seg?.url) continue;
+        const v = document.createElement("video");
+        v.crossOrigin = "anonymous";
+        v.src = seg.url;
+        v.muted = true;
+        v.loop = true;
+        v.playsInline = true;
+        v.preload = "auto";
+        keepBackgroundVideoLooping(v);
+        multiBgScenes.push({
+          video: v,
+          start: Number(seg.start) || i * 4,
+          end: Number(seg.end) || (i + 1) * 4,
+        });
       }
-      bgVideo.src = videoSrc;
-      bgVideo.muted = true;
-      // Do not use native loop on iOS/stock clips: the loop boundary can pause
-      // canvas capture around ~15–20s. We control looping manually in drawFrame.
-      bgVideo.loop = false;
-      bgVideo.playsInline = true;
-      bgVideo.preload = "auto";
-      keepBackgroundVideoLooping(bgVideo);
-      const ready = await waitForVideoReady(bgVideo, 10_000);
-      if (!ready) {
-        console.warn("[render-video] background video unavailable, falling back to image");
-        bgVideo.src = "";
-        bgVideo = null;
+      if (multiBgScenes.length > 0) {
+        bgVideo = multiBgScenes[0].video;
+        await waitForVideoReady(bgVideo, 6_000).catch(() => {});
+      }
+    } else {
+      const useBackgroundVideo = Boolean(opts.backgroundVideoUrl);
+      if (useBackgroundVideo && opts.backgroundVideoUrl) {
+        bgVideo = document.createElement("video");
+        bgVideo.crossOrigin = "anonymous";
+        let videoSrc = opts.backgroundVideoUrl;
+        try {
+          // Preload the entire video into RAM to prevent network buffering
+          // from pausing the video during the real-time render.
+          const res = await fetch(videoSrc, { cache: "force-cache" });
+          if (res.ok) {
+            const b = await res.blob();
+            videoSrc = URL.createObjectURL(b);
+            createdObjectUrl = videoSrc;
+          }
+        } catch {
+          /* ignore, use original URL */
+        }
+        bgVideo.src = videoSrc;
+        bgVideo.muted = true;
+        bgVideo.loop = false;
+        bgVideo.playsInline = true;
+        bgVideo.preload = "auto";
+        keepBackgroundVideoLooping(bgVideo);
+        const ready = await waitForVideoReady(bgVideo, 10_000);
+        if (!ready) {
+          console.warn("[render-video] background video unavailable, falling back to image");
+          bgVideo.src = "";
+          bgVideo = null;
+        }
       }
     }
     const bg =
@@ -1142,29 +1175,36 @@ export async function renderVideo(opts: VideoOptions): Promise<{ blob: Blob; mim
           elapsed >= phraseRender[phraseRender.length - 1].end - 0.01);
       const captionDone = allPhrasesShown && lastPhraseTimingDone;
 
-      // background — pre-emptively loop video before it reaches the end to avoid
-      // the freeze that occurs when the video element enters "ended" state.
+      // background — multi-scene dynamic video switching or single looping video
       let backgroundDrawn = false;
-      if (bgVideo) {
-        const ready = bgVideo.readyState >= 2 && !bgVideo.seeking;
+      let activeVid = bgVideo;
+      if (multiBgScenes.length > 0) {
+        const match = multiBgScenes.find((s) => elapsed >= s.start && elapsed < s.end);
+        if (match?.video) {
+          activeVid = match.video;
+        }
+      }
+
+      if (activeVid) {
+        const ready = activeVid.readyState >= 2 && !activeVid.seeking;
         // Pre-emptive loop: seek back before the video reaches its natural end.
-        if (ready && Number.isFinite(bgVideo.duration) && bgVideo.duration > 0) {
-          if (bgVideo.currentTime >= bgVideo.duration - 0.5) {
+        if (ready && Number.isFinite(activeVid.duration) && activeVid.duration > 0) {
+          if (activeVid.currentTime >= activeVid.duration - 0.5) {
             saveBgSnapshot();
-            bgVideo.currentTime = 0.01;
-            void bgVideo.play().catch(() => undefined);
+            activeVid.currentTime = 0.01;
+            void activeVid.play().catch(() => undefined);
           }
         }
         if (ready) {
           try {
-            if ((bgVideo.paused || bgVideo.ended) && !bgVideo.seeking) {
-              void bgVideo.play().catch(() => undefined);
+            if ((activeVid.paused || activeVid.ended) && !activeVid.seeking) {
+              void activeVid.play().catch(() => undefined);
             }
             drawCover(
               ctx,
-              bgVideo,
-              bgVideo.videoWidth || 1080,
-              bgVideo.videoHeight || 1920,
+              activeVid,
+              activeVid.videoWidth || 1080,
+              activeVid.videoHeight || 1920,
               t,
               false,
             );
@@ -1389,7 +1429,15 @@ export async function renderVideo(opts: VideoOptions): Promise<{ blob: Blob; mim
     // Start the moving background before the recorder/audio, then draw a real
     // first frame. This prevents iOS from recording audio over a black/blank
     // video track at the beginning.
-    if (bgVideo) {
+    if (multiBgScenes.length > 0) {
+      for (const sc of multiBgScenes) {
+        sc.video.play().catch(() => {});
+      }
+      await new Promise<void>((resolve) => {
+        if (ios) setTimeout(resolve, 15);
+        else requestAnimationFrame(() => resolve());
+      });
+    } else if (bgVideo) {
       try {
         await withTimeout(bgVideo.play(), 3_000, "Фоновото видео не стартира навреме");
       } catch {
@@ -1640,7 +1688,12 @@ export async function renderVideo(opts: VideoOptions): Promise<{ blob: Blob; mim
         /* ignore */
       }
     }
-    if (bgVideo) {
+    if (multiBgScenes.length > 0) {
+      for (const sc of multiBgScenes) {
+        sc.video.pause();
+        sc.video.src = "";
+      }
+    } else if (bgVideo) {
       bgVideo.pause();
       bgVideo.src = "";
     }

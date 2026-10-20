@@ -1163,10 +1163,9 @@ export function segmentScriptIntoSemanticScenes(
     }
   }
 
-  // Merge clauses into natural, calm semantic scenes:
-  // - User requirement: Do NOT switch every 3 seconds! Switch only on distinct thematic shifts.
-  // - Minimum scene duration: at least 7.5s (calm and cinematic).
-  // - Capped at max 3 to 4 scenes total per video to avoid rapid flickering and massive encoding overhead.
+  // Merge tiny fragments (<3.2s) into natural, dynamic visual scenes:
+  // - Reels/TikTok short-form standard: Visual transition every 3.5 to 5.5 seconds.
+  // - Prevents static single-background loops where the video shows the same background almost the entire time.
   const mergedScenes: RawClause[] = [];
   for (const cl of clauses) {
     if (mergedScenes.length === 0) {
@@ -1186,7 +1185,7 @@ export function segmentScriptIntoSemanticScenes(
     // Never merge across distinct explicit theological concepts (e.g. Fire -> Rain -> Paradise)!
     if (hasDifferentExplicitConcept || newExplicitConceptAfterGeneric) {
       mergedScenes.push({ ...cl });
-    } else if (prevDur < 7.5 || combinedDur <= 18.0) {
+    } else if (prevDur < 3.2 || combinedDur <= 5.5) {
       prev.words.push(...cl.words);
       prev.end = cl.end;
       if (!prev.concept && cl.concept) {
@@ -1197,33 +1196,54 @@ export function segmentScriptIntoSemanticScenes(
     }
   }
 
-  // Strictly enforce max 3-4 scenes total to ensure fast rendering, merging generic/same-concept scenes first
-  const MAX_ALLOWED_SCENES = Math.max(3, estDur > 85 ? 4 : 3);
-  while (mergedScenes.length > MAX_ALLOWED_SCENES) {
+  // If any single scene is still too long (> 6.5s), subdivide it into balanced sub-scenes
+  // so the video maintains engaging visual cuts instead of a static background.
+  const balancedScenes: RawClause[] = [];
+  for (const sc of mergedScenes) {
+    const scDur = sc.end - sc.start;
+    if (scDur > 6.5 && sc.words.length >= 8) {
+      const partsCount = Math.min(3, Math.ceil(scDur / 5.0));
+      const wordsPerPart = Math.ceil(sc.words.length / partsCount);
+      const timePerPart = scDur / partsCount;
+      for (let p = 0; p < partsCount; p++) {
+        const pStart = sc.start + p * timePerPart;
+        const pEnd = p === partsCount - 1 ? sc.end : sc.start + (p + 1) * timePerPart;
+        const pWords = sc.words.slice(p * wordsPerPart, (p + 1) * wordsPerPart);
+        balancedScenes.push({
+          words: pWords.length > 0 ? pWords : sc.words,
+          start: Number(pStart.toFixed(2)),
+          end: Number(pEnd.toFixed(2)),
+          concept: sc.concept,
+        });
+      }
+    } else {
+      balancedScenes.push(sc);
+    }
+  }
+
+  // Strictly avoid creating long static scenes: allow dynamic cuts every 3.5 - 5.5s
+  const MAX_ALLOWED_SCENES = Math.max(5, Math.min(10, Math.ceil(estDur / 3.5)));
+  while (balancedScenes.length > MAX_ALLOWED_SCENES) {
     let mergeIdx = -1;
     let minCombined = Infinity;
-    for (let i = 0; i < mergedScenes.length - 1; i++) {
-      const a = mergedScenes[i];
-      const b = mergedScenes[i + 1];
+    for (let i = 0; i < balancedScenes.length - 1; i++) {
+      const a = balancedScenes[i];
+      const b = balancedScenes[i + 1];
       const isConflicting = a.concept?.id && b.concept?.id && a.concept.id !== b.concept.id;
-      if (!isConflicting) {
-        const combined = (a.end - a.start) + (b.end - b.start);
-        if (combined < minCombined) {
-          minCombined = combined;
-          mergeIdx = i;
-        }
+      const combined = (b.end - a.start);
+      // Strictly prevent creating scenes longer than 6.0s
+      if (!isConflicting && combined <= 6.0 && combined < minCombined) {
+        minCombined = combined;
+        mergeIdx = i;
       }
     }
-    if (mergeIdx === -1) {
-      if (mergedScenes.length <= 4) break;
-      mergeIdx = 0;
+    if (mergeIdx === -1) break;
+    balancedScenes[mergeIdx].words.push(...balancedScenes[mergeIdx + 1].words);
+    balancedScenes[mergeIdx].end = balancedScenes[mergeIdx + 1].end;
+    if (!balancedScenes[mergeIdx].concept && balancedScenes[mergeIdx + 1].concept) {
+      balancedScenes[mergeIdx].concept = balancedScenes[mergeIdx + 1].concept;
     }
-    mergedScenes[mergeIdx].words.push(...mergedScenes[mergeIdx + 1].words);
-    mergedScenes[mergeIdx].end = mergedScenes[mergeIdx + 1].end;
-    if (!mergedScenes[mergeIdx].concept && mergedScenes[mergeIdx + 1].concept) {
-      mergedScenes[mergeIdx].concept = mergedScenes[mergeIdx + 1].concept;
-    }
-    mergedScenes.splice(mergeIdx + 1, 1);
+    balancedScenes.splice(mergeIdx + 1, 1);
   }
 
   // Build final contiguous timed segments covering [0, estDur]
@@ -1231,13 +1251,13 @@ export function segmentScriptIntoSemanticScenes(
   const FallbackOrder = ["noor", "sakina", "dunya", "jannah", "tahajjud", "rizq"];
   const usedQueries = new Set<string>();
 
-  return mergedScenes.map((scene, idx) => {
+  return balancedScenes.map((scene, idx) => {
     const isFirst = idx === 0;
-    const isLast = idx === mergedScenes.length - 1;
-    const start = isFirst ? 0 : Number(mergedScenes[idx].start.toFixed(2));
+    const isLast = idx === balancedScenes.length - 1;
+    const start = isFirst ? 0 : Number(balancedScenes[idx].start.toFixed(2));
     const rawEnd = isLast
       ? estDur
-      : Number(mergedScenes[idx + 1].start.toFixed(2));
+      : Number(balancedScenes[idx + 1].start.toFixed(2));
     const end = Math.max(Number((start + 0.5).toFixed(2)), rawEnd);
     const duration = Number((end - start).toFixed(2));
 
@@ -1598,31 +1618,28 @@ export async function fetchMultiSceneBRollDirect(data: {
     data?.audioDuration,
   );
 
-  // Ensure at least 2 scenes if the video is >= 8s so multi-scene mode feels dynamic
+  // Ensure dynamic multi-scene pacing: at least 3 scenes if duration >= 10s
   let scenes = rawScenes;
-  if (scenes.length === 1 && scenes[0].duration >= 8) {
-    const first = scenes[0];
-    const mid = Number((first.duration / 2).toFixed(2));
-    const secondFallback = getHalalVideoByConceptId(first.conceptId, 1);
-    scenes = [
-      {
-        ...first,
-        start: 0,
-        end: mid,
-        duration: mid,
-      },
-      {
-        ...first,
-        start: mid,
-        end: first.end,
-        duration: Number((first.end - mid).toFixed(2)),
-        query: sanitizeSearchQuery(`${first.query} sunset golden hour`),
-        fallbackUrl:
-          secondFallback.url !== first.fallbackUrl
-            ? secondFallback.url
-            : getLocalHalalVideoFallback(1).url,
-      },
-    ];
+  if (scenes.length < 3 && scenes.length > 0) {
+    const totalD = scenes.reduce((sum, s) => sum + s.duration, 0);
+    if (totalD >= 9.0) {
+      // Split the longest scene into 2 or 3 sub-scenes
+      const newScenes: typeof rawScenes = [];
+      for (const sc of scenes) {
+        if (sc.duration >= 7.0 && newScenes.length < 5) {
+          const half = Number((sc.duration / 2).toFixed(2));
+          newScenes.push(
+            { ...sc, end: sc.start + half, duration: half },
+            { ...sc, start: sc.start + half, duration: Number((sc.duration - half).toFixed(2)) }
+          );
+        } else {
+          newScenes.push(sc);
+        }
+      }
+      if (newScenes.length > scenes.length) {
+        scenes = newScenes;
+      }
+    }
   }
 
   const segments: SemanticBRollSegment[] = [];
@@ -1638,8 +1655,7 @@ export async function fetchMultiSceneBRollDirect(data: {
       try {
         const vs = await pexelsVideoQuery(key, safeQuery, 15);
         const halalVideos = await getHalalVideos(vs, 5, 3);
-        const bestClip =
-          halalVideos.find((b) => !usedUrls.has(b.link)) || halalVideos[0];
+        const bestClip = halalVideos.find((b) => !usedUrls.has(b.link));
         if (bestClip?.link) {
           chosenUrl = bestClip.link;
         }
@@ -1648,14 +1664,20 @@ export async function fetchMultiSceneBRollDirect(data: {
       }
     }
 
-    if (!chosenUrl) {
-      // Concept-specific Halal fallback (e.g., Fire for 'jahannam', Rain for 'tawbah', Waterfall for 'jannah')
+    if (!chosenUrl || usedUrls.has(chosenUrl)) {
+      // Concept-specific Halal fallback
       const conceptAsset = getHalalVideoByConceptId(sc.conceptId, i);
       if (!usedUrls.has(conceptAsset.url)) {
         chosenUrl = conceptAsset.url;
       } else {
-        const altAsset = getLocalHalalVideoFallback(i);
-        chosenUrl = altAsset.url;
+        // Pick any unused clip from curated pool to guarantee visual variety across every scene!
+        const unusedAsset = LOCAL_HALAL_VIDEO_POOL.find((a) => !usedUrls.has(a.url));
+        if (unusedAsset) {
+          chosenUrl = unusedAsset.url;
+        } else {
+          const altAsset = getLocalHalalVideoFallback(i);
+          chosenUrl = altAsset.url;
+        }
       }
     }
 

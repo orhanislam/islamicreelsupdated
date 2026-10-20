@@ -991,7 +991,7 @@ export async function executeRenderTask(opts: any): Promise<any> {
         const shouldUseSemanticMultiScene =
           hasExplicitSegments ||
           hasMultipleBRollUrls ||
-          (semanticScenes.length > 1 && explicitConcepts.size >= 2);
+          (semanticScenes.length > 1 && audioDur >= 6.0);
 
         if (shouldUseSemanticMultiScene) {
           type ScheduledScene = { url: string; duration: number; theme: string };
@@ -1060,7 +1060,7 @@ export async function executeRenderTask(opts: any): Promise<any> {
           }
 
           // Coalesce schedule to max 3-4 calm semantic scenes so backgrounds do NOT switch every 3s and render in seconds
-          const MAX_BROLL_SCENES = audioDur > 85 ? 4 : 3;
+          const MAX_BROLL_SCENES = Math.max(6, Math.min(8, Math.ceil(audioDur / 4.0)));
           while (schedule.length > MAX_BROLL_SCENES) {
             let shortestIdx = 0;
             let shortestDur = Infinity;

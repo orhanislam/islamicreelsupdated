@@ -233,14 +233,30 @@ export function normalizeBulgarianNumbersForTts(text: string): string {
     }
   );
 
-  // 5. Hadith references like "#5368" or "№ 5368" or "№5368"
+  // 5. Hadith references, list numbers, and citations like "#1", "# 1", "№1", "№ 1", "No. 1", "номер 1", "хадис 1"
   res = res.replace(
-    /(?:#|№\s*|(?<=^|[^\p{L}\p{N}])номер\s+)(\d+)(?=[^\p{L}\p{N}]|$)/gui,
+    /(?:#\s*|№\s*|No\.\s*|No\s+|Nº\s*|ном\.\s*|(?<=^|[^\p{L}\p{N}])номер\s+)(\d+)(?=[^\p{L}\p{N}]|$)/gui,
     (_m, numStr) => {
       const val = parseInt(numStr, 10);
-      return `номер ${integerToBulgarianWords(val, "masculine")}`;
+      // In literary Bulgarian, numbers with "номер" are strictly spoken in neuter: "номер едно", "номер две", "номер три"
+      return `номер ${integerToBulgarianWords(val, "neuter")}`;
     }
   );
+
+  // Hadith citation with raw number e.g. "хадис 1" -> "хадис номер едно"
+  res = res.replace(
+    /(?<=^|[^\p{L}\p{N}])(хадис(?:а|ът)?)\s+(\d+)(?=[^\p{L}\p{N}]|$)/gui,
+    (_m, hadithWord, numStr) => {
+      const val = parseInt(numStr, 10);
+      return `${hadithWord} номер ${integerToBulgarianWords(val, "neuter")}`;
+    }
+  );
+
+  // Standalone number symbols without digits
+  res = res
+    .replace(/№/g, " номер ")
+    .replace(/(?<=^|[^\p{L}\p{N}])No\.(?=[^\p{L}\p{N}]|$)/gi, " номер ")
+    .replace(/(?<=^|\s)#(?=\s|$)/g, " номер ");
 
   // 6. Percentages: e.g. 50% -> "петдесет процента"
   res = res.replace(

@@ -13,7 +13,7 @@
     "format": "prettier --write .",
     "test:carousel": "jiti src/lib/__tests__/verify-tawheed-carousel.test.ts",
     "test:viral": "jiti src/lib/__tests__/verify-viral-carousel.test.ts",
-    "test": "jiti src/lib/__tests__/verify-tawheed-carousel.test.ts && jiti src/lib/__tests__/verify-sync.test.ts"
+    "test": "jiti src/lib/__tests__/verify-tawheed-carousel.test.ts && jiti src/lib/__tests__/verify-sync.test.ts && jiti src/lib/__tests__/verify-goal-fixes.test.ts"
   },
   "dependencies": {
     "@ffmpeg-installer/ffmpeg": "^1.1.0",

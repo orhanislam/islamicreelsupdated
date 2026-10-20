@@ -716,6 +716,21 @@ CAPCUT-ПОДОБНИ ИНСТРУКЦИИ ЗА РЕДАКТИРАНЕ:
       await enrichProposalWithAuthenticTafsir(p);
     }
     await injectAuthenticCarouselText(proposalsToRecord);
+
+    // Auto-audit and self-heal proposals before presenting to user
+    if (parsed.proposal) {
+      const { proposal: auditedProp, report } = auditAndRefineProposal(parsed.proposal as any, { maxPasses: 5 });
+      parsed.proposal = auditedProp as VideoProposal;
+      parsed.proposal.auditReport = report;
+    }
+    if (Array.isArray(parsed.proposals)) {
+      parsed.proposals = parsed.proposals.map((p: any) => {
+        const { proposal: auditedProp, report } = auditAndRefineProposal(p, { maxPasses: 5 });
+        auditedProp.auditReport = report;
+        return auditedProp;
+      });
+    }
+
     if (proposalsToRecord.length > 0) {
       await recordProposalUsages({ data: { proposals: proposalsToRecord } }).catch(() => {});
     }
@@ -911,6 +926,9 @@ SALAFI HALAL ПРИНЦИПИ (СТРИКТНО ЗАДЪЛЖИТЕЛНО):
   }
 
   if (parsed.proposal) {
+    const { proposal: auditedProp, report } = auditAndRefineProposal(parsed.proposal as any, { maxPasses: 5 });
+    parsed.proposal = auditedProp as VideoProposal;
+    parsed.proposal.auditReport = report;
     await recordProposalUsages({ data: { proposals: [parsed.proposal] } }).catch(() => {});
   }
 
@@ -1434,6 +1452,10 @@ ${userTopic}${preGroundingPrompt ? `\n\n${preGroundingPrompt}` : ""}
 
   if (parsed.proposal) {
     await enrichProposalWithAuthenticTafsir(parsed.proposal);
+    // User goal requirement 3: Engine automatically audits and heals the text BEFORE presenting for approval!
+    const { proposal: auditedProp, report } = auditAndRefineProposal(parsed.proposal as any, { maxPasses: 5 });
+    parsed.proposal = auditedProp as VideoProposal;
+    parsed.proposal.auditReport = report;
     await recordProposalUsagesDirect([parsed.proposal]).catch(() => {});
   }
 
@@ -1553,9 +1575,17 @@ ${customInstruction ? `Допълнително изискване от потр
       actionStep: sanitizeTheologicalRespect(parsed.actionStep || sw.actionStep || ""),
     };
 
-    return {
+    const tempProposal = {
+      ...proposal,
       scriptWorkflow: updatedWorkflow,
       summaryBg: updatedWorkflow.explanation,
+    };
+    const { proposal: auditedProp, report } = auditAndRefineProposal(tempProposal as any, { maxPasses: 5 });
+
+    return {
+      scriptWorkflow: auditedProp.scriptWorkflow || updatedWorkflow,
+      summaryBg: auditedProp.scriptWorkflow?.explanation || updatedWorkflow.explanation,
+      auditReport: report,
     };
   });
 
@@ -1760,6 +1790,9 @@ ${getVerifiedHadithCatalogPrompt()}
 
     if (parsed.proposal) {
       await enrichProposalWithAuthenticTafsir(parsed.proposal);
+      const { proposal: auditedProp, report } = auditAndRefineProposal(parsed.proposal as any, { maxPasses: 5 });
+      parsed.proposal = auditedProp as VideoProposal;
+      parsed.proposal.auditReport = report;
       await recordProposalUsages({ data: { proposals: [parsed.proposal] } }).catch(() => {});
     }
 
@@ -1975,10 +2008,10 @@ export function formatSpokenCitation(rawRef: string, isQuran: boolean): string {
       if (parts.length > 0) return parts.join(", ");
     }
   } else {
-    // Hadith format: 'Сахих ал-Бухари #6424' or 'Сахих Муслим #123'
-    const m2 = ref.match(/^([^#]+)(?:#\s*(\d+))?/);
+    // Hadith format: 'Сахих ал-Бухари #6424', 'Сахих ал-Бухари #1', 'Сахих Муслим № 1', 'Сахих ал-Бухари No. 1'
+    const m2 = ref.match(/^([^#№\d]+?)(?:\s*(?:#|№|No\.|No|номер|ном\.)\s*(\d+))?$/i);
     if (m2) {
-      const coll = m2[1].trim();
+      const coll = m2[1].trim().replace(/[-–—•\s]+$/, "");
       const num = m2[2];
       if (coll && num) return coll + ", хадис номер " + num;
       if (coll) return coll;
@@ -2632,11 +2665,15 @@ export const confirmAndGenerateVideo = createServerFn({ method: "POST" })
     let bRollSegments: any[] | undefined;
     try {
       const { fetchMultiSceneBRoll } = await import("./pexels.functions");
+      const estAudioDur = bulgarianWordTimings && bulgarianWordTimings.length > 0
+        ? Math.max(...bulgarianWordTimings.map((t) => Number(t.end) || 0))
+        : undefined;
       const bRollResult = await fetchMultiSceneBRoll({
         data: {
           query: resolvedQuery,
           text: bulgarian,
           wordTimings: bulgarianWordTimings,
+          audioDuration: estAudioDur,
         },
       });
       if (bRollResult.clips && bRollResult.clips.length > 0) {

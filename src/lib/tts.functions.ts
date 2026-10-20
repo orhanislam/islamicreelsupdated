@@ -336,7 +336,9 @@ export const synthesizeHadithNarration = createServerFn({ method: "POST" })
     wordTimings: WordTiming[];
   }> => {
     // Authentically normalize Islamic Arabic terminology for Salafi Arabic diction
-    const cleaned = normalizeIslamicArabicPhoneticsForTts(data.text);
+    let cleaned = normalizeIslamicArabicPhoneticsForTts(data.text);
+    // Explicitly normalize Bulgarian numbers, citations, and symbols (#1, №1, 2:255, ordinals, percentages) for natural verbalization
+    cleaned = normalizeBulgarianNumbersForTts(cleaned);
 
     let audioBuffer: any = null;
     let exactWordTimings: WordTiming[] | null = null;

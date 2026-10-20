@@ -444,7 +444,24 @@ async function testBulgarianNumberPhoneticNormalization() {
     throw new Error(`Expected '1-ви ден' in TTS text, got: "${tts6}"`);
   }
 
-  console.log("✔ testBulgarianNumberPhoneticNormalization passed: 5, 50, 500, 5000, 5368 & contextual numbers articulate accurately in Bulgarian!");
+  // 4. Test number symbol articulation (#1, # 1, № 1, №1, No. 1, номер 1):
+  const numberSymbolCases: [string, string][] = [
+    ["Сахих ал-Бухари #1", "номер едно"],
+    ["Сахих ал-Бухари # 1", "номер едно"],
+    ["Сахих Муслим № 1", "номер едно"],
+    ["Сахих Муслим №1", "номер едно"],
+    ["Сунан ат-Тирмизи No. 1", "номер едно"],
+    ["Хадис номер 1", "номер едно"],
+    ["Хадис 1", "номер едно"],
+  ];
+  for (const [rawText, expectedSnippet] of numberSymbolCases) {
+    const normalized = normalizeBulgarianNumbersForTts(rawText);
+    if (!normalized.toLowerCase().includes(expectedSnippet.toLowerCase())) {
+      throw new Error(`Number symbol articulation failed for "${rawText}"! Expected "${expectedSnippet}", got "${normalized}"`);
+    }
+  }
+
+  console.log("✔ testBulgarianNumberPhoneticNormalization passed: 5, 50, 500, 5000, 5368, and #1/№1/No.1 articulate accurately in Bulgarian!");
 }
 
 async function testQuranSurahsAndIslamicPhonetics() {
