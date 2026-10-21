@@ -1980,7 +1980,7 @@ ${getVerifiedHadithCatalogPrompt()}
 
 export function formatSpokenCitation(rawRef: string, isQuran: boolean): string {
   if (!rawRef) return "";
-  let ref = rawRef.replace(/^[\[\s]+|[\]\s]+$/g, "").trim();
+  let ref = rawRef.replace(/^[\[\(\s]+|[\]\)\s]+$/g, "").trim();
 
   if (isQuran) {
     const m1 = ref.match(
@@ -2008,10 +2008,10 @@ export function formatSpokenCitation(rawRef: string, isQuran: boolean): string {
       if (parts.length > 0) return parts.join(", ");
     }
   } else {
-    // Hadith format: 'Сахих ал-Бухари #6424', 'Сахих ал-Бухари #1', 'Сахих Муслим № 1', 'Сахих ал-Бухари No. 1'
-    const m2 = ref.match(/^([^#№\d]+?)(?:\s*(?:#|№|No\.|No|номер|ном\.)\s*(\d+))?$/i);
+    // Hadith format: 'Сахих ал-Бухари #6424', 'Сахих ал-Бухари #1', 'Сахих ал-Бухари (#1)', 'Сахих Муслим № 1', 'Сахих ал-Бухари No. 1'
+    const m2 = ref.match(/^([^#№\d]+?)(?:\s*\(?(?:#|№|No\.|No|Nº|N°|Nr\.|Nr|номер|ном\.)\s*(\d+)\)?)?$/i);
     if (m2) {
-      const coll = m2[1].trim().replace(/[-–—•\s]+$/, "");
+      const coll = m2[1].trim().replace(/[-–—•\(\[\s]+$/, "");
       const num = m2[2];
       if (coll && num) return coll + ", хадис номер " + num;
       if (coll) return coll;

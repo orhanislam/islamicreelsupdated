@@ -235,7 +235,7 @@ export function normalizeBulgarianNumbersForTts(text: string): string {
 
   // 5. Hadith references, list numbers, and citations like "#1", "# 1", "№1", "№ 1", "No. 1", "номер 1", "хадис 1"
   res = res.replace(
-    /(?:#\s*|№\s*|No\.\s*|No\s+|Nº\s*|ном\.\s*|(?<=^|[^\p{L}\p{N}])номер\s+)(\d+)(?=[^\p{L}\p{N}]|$)/gui,
+    /(?:#\s*|№\s*|No\.\s*|No\s+|Nº\s*|N°\s*|Nr\.\s*|Nr\s+|nr\.\s*|nr\s+|ном\.\s*|(?<=^|[^\p{L}\p{N}])номер\s+)(\d+)(?=[^\p{L}\p{N}]|$)/gui,
     (_m, numStr) => {
       const val = parseInt(numStr, 10);
       // In literary Bulgarian, numbers with "номер" are strictly spoken in neuter: "номер едно", "номер две", "номер три"
@@ -243,12 +243,12 @@ export function normalizeBulgarianNumbersForTts(text: string): string {
     }
   );
 
-  // Hadith citation with raw number e.g. "хадис 1" -> "хадис номер едно"
+  // Hadith and Ayah citations with raw number e.g. "хадис 1" -> "хадис номер едно", "аят 1" -> "аят номер едно"
   res = res.replace(
-    /(?<=^|[^\p{L}\p{N}])(хадис(?:а|ът)?)\s+(\d+)(?=[^\p{L}\p{N}]|$)/gui,
-    (_m, hadithWord, numStr) => {
+    /(?<=^|[^\p{L}\p{N}])(хадис(?:а|ът)?|аят(?:а|ът)?|сура(?:та)?|епизод(?:а|ът)?|част(?:та)?|точка(?:та)?|т\.)\s+(\d+)(?=[^\p{L}\p{N}]|$)/gui,
+    (_m, word, numStr) => {
       const val = parseInt(numStr, 10);
-      return `${hadithWord} номер ${integerToBulgarianWords(val, "neuter")}`;
+      return `${word} номер ${integerToBulgarianWords(val, "neuter")}`;
     }
   );
 
@@ -256,7 +256,9 @@ export function normalizeBulgarianNumbersForTts(text: string): string {
   res = res
     .replace(/№/g, " номер ")
     .replace(/(?<=^|[^\p{L}\p{N}])No\.(?=[^\p{L}\p{N}]|$)/gi, " номер ")
-    .replace(/(?<=^|\s)#(?=\s|$)/g, " номер ");
+    .replace(/(?<=^|[^\p{L}\p{N}])N°(?=[^\p{L}\p{N}]|$)/gi, " номер ")
+    .replace(/(?<=^|[^\p{L}\p{N}])Nº(?=[^\p{L}\p{N}]|$)/gi, " номер ")
+    .replace(/(?<=^|[^\p{L}\p{N}])#(?=[^\p{L}\p{N}]|$)/g, " номер ");
 
   // 6. Percentages: e.g. 50% -> "петдесет процента"
   res = res.replace(

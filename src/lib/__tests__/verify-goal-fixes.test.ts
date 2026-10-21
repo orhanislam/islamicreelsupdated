@@ -15,13 +15,18 @@ async function runGoalFixesVerification() {
   const cases: [string, string][] = [
     ["Сахих ал-Бухари #1", "номер едно"],
     ["Сахих ал-Бухари # 1", "номер едно"],
+    ["Сахих ал-Бухари (#1)", "номер едно"],
     ["Сахих Муслим № 1", "номер едно"],
     ["Сахих Муслим №1", "номер едно"],
     ["Сунан ат-Тирмизи No. 1", "номер едно"],
+    ["Сунан ат-Тирмизи N° 1", "номер едно"],
+    ["Сунан ат-Тирмизи Nr. 1", "номер едно"],
     ["Хадис номер 1", "номер едно"],
     ["Хадис 1", "номер едно"],
     ["Точка #1 от сунната", "номер едно"],
     ["Точка №1 от правилата", "номер едно"],
+    ["[Сахих ал-Бухари #5645]", "номер пет хиляди"],
+    ["аят 255", "аят номер двеста"],
   ];
 
   for (const [input, expected] of cases) {
@@ -41,6 +46,11 @@ async function runGoalFixesVerification() {
   const spokenHadith = formatSpokenCitation("Сахих ал-Бухари #1", false);
   if (!spokenHadith.includes("хадис номер 1")) {
     throw new Error(`formatSpokenCitation failed! Expected 'хадис номер 1', got: "${spokenHadith}"`);
+  }
+
+  const spokenHadithParens = formatSpokenCitation("Сахих ал-Бухари (#1)", false);
+  if (!spokenHadithParens.includes("хадис номер 1")) {
+    throw new Error(`formatSpokenCitation failed with parens! Expected 'хадис номер 1', got: "${spokenHadithParens}"`);
   }
 
   console.log("✔ TEST 1 PASSED: #1, № 1, No. 1, and citations articulate accurately as 'номер едно'!\n");

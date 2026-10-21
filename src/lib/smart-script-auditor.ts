@@ -1358,8 +1358,8 @@ export function auditAndRefineNarrationScript(narrationText: string): {
     const beforePunct = s;
     s = s.replace(/\.{3,}/g, ".");
     s = s.replace(/[-–—_━═─]{2,}/g, "");
-    // First, convert any number symbols like "#1", "# 1", "№1", "№ 1", "No. 1" to "номер $1" so they are spoken naturally!
-    s = s.replace(/(?:#\s*|№\s*|No\.\s*|No\s+|Nº\s*|ном\.\s*)(\d+)/gui, "номер $1");
+    // First, convert any number symbols like "#1", "# 1", "№1", "№ 1", "No. 1", "N° 1" to "номер $1" so they are spoken naturally!
+    s = s.replace(/(?:#\s*|№\s*|No\.\s*|No\s+|Nº\s*|N°\s*|Nr\.\s*|Nr\s+|nr\.\s*|nr\s+|ном\.\s*)(\d+)/gui, "номер $1");
     // Only strip social media hashtags (which start with a letter, e.g. #islam, #ramadan), NEVER deleting numbers!
     s = s.replace(/#\p{L}[\p{L}\p{N}_]*/gu, "");
     s = s.replace(/(?:🔍\s*)?(?:tiktok\s*seo|ключови\s*думи)\s*:[^.\n]*(?:\.|\n|$)/gi, ""); // Strip any keyword headers
