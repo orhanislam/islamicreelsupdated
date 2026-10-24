@@ -89,15 +89,16 @@ export async function geminiChat(
     });
   };
 
-  // Prioritize gemini-3.1-pro first, with standard Gemini 2.5 Pro/Flash fallbacks
+  // Prioritize modern Gemini 3.8/3.5 models with standard fallbacks
   const validModels = [
-    "gemini-3.1-pro",
-    "gemini-2.5-pro",
-    "gemini-2.5-flash",
+    "gemini-3.8-flash",
+    "gemini-flash-latest",
+    "gemini-3.5-flash",
+    "gemini-3.1-pro-preview",
+    "gemini-pro-latest",
     "gemini-3.5-flash-lite",
-    "gemini-omni-flash-preview"
   ];
-  const targetModel = model || "gemini-3.1-pro";
+  const targetModel = model || "gemini-3.8-flash";
   const uniqueModels = Array.from(new Set([targetModel, ...validModels]));
   let lastErrorMsg = "";
 
@@ -158,24 +159,33 @@ export async function geminiImageAnalysis(
   ];
 
   let lastErrorMsg = "";
-  for (const apiKey of apiKeys) {
-    try {
-      const body = { contents, generationConfig: { temperature: 0.1 } };
-      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-pro:generateContent?key=${apiKey}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
+  const visionModels = [
+    "gemini-3.8-flash",
+    "gemini-flash-latest",
+    "gemini-3.5-flash",
+    "gemini-3.1-pro-preview",
+  ];
 
-      if (!res.ok) {
-        lastErrorMsg = `${res.status} ${res.statusText} - ${await res.text()}`;
-        continue;
+  for (const apiKey of apiKeys) {
+    for (const vModel of visionModels) {
+      try {
+        const body = { contents, generationConfig: { temperature: 0.1 } };
+        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${vModel}:generateContent?key=${apiKey}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+
+        if (!res.ok) {
+          lastErrorMsg = `${vModel}: ${res.status} ${res.statusText} - ${await res.text()}`;
+          continue;
+        }
+        const json = await res.json();
+        const content = (json.candidates?.[0]?.content?.parts?.[0]?.text ?? "").trim();
+        if (content) return content;
+      } catch (e: any) {
+        lastErrorMsg = e.message;
       }
-      const json = await res.json();
-      const content = (json.candidates?.[0]?.content?.parts?.[0]?.text ?? "").trim();
-      if (content) return content;
-    } catch (e: any) {
-      lastErrorMsg = e.message;
     }
   }
   throw new Error(`Грешка при визуален анализ от AI: ${lastErrorMsg}`);

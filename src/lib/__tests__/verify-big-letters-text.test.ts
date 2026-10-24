@@ -1,4 +1,4 @@
-import { test, expect } from "node:test";
+import { test } from "node:test";
 import assert from "node:assert/strict";
 import { generateAssSubtitles, balanceWordsIntoTwoLines, estimateTextWidth } from "../render.functions";
 import { getSafeZone, getASSSubtitlePlacement } from "../safe-zone";
