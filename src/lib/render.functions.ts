@@ -3,7 +3,7 @@ import { createServerFn } from "@tanstack/react-start";
 import type { Buffer } from "node:buffer";
 import { verifyAndCorrectSubtitleSync } from "./subtitle-sync.functions";
 import { remapSalawatTimingsToBulgarian } from "./salawat-timings";
-import { normalizeBulgarianNumbersForTts } from "./bulgarian-numbers";
+import { normalizeBulgarianNumbersForTts, convertBulgarianNumberWordsToDigits } from "./bulgarian-numbers";
 import {
   getSafeZone,
   getASSSubtitlePlacement,
@@ -225,7 +225,8 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
   }
 
   if (data.bulgarian) {
-    data.bulgarian = (data.bulgarian || "")
+    data.bulgarian = convertBulgarianNumberWordsToDigits(data.bulgarian || "");
+    data.bulgarian = data.bulgarian
       .replace(/<[^>]+>/g, "")
       .replace(/\[(?:коран|сура|хадис|бухари|муслим|тирмизи|навауи)[^\]]*\]/gi, "")
       .replace(/[\[\]]/g, "")
@@ -240,10 +241,35 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
       timings = syncRes.correctedTimings;
       if (timings.length > 0 && timings[0].word && timings[0].word !== "...") {
         timings = timings
-          .map((t: any) => ({
-            ...t,
-            word: (t.word || "").replace(/[\[\]()]/g, "").trim().toUpperCase(),
-          }))
+          .map((t: any, idx: number) => {
+            let w = (t.word || "").replace(/[\[\]()]/g, "").trim().toUpperCase();
+            if (idx > 0) {
+              const prev = (timings[idx - 1]?.word || "").replace(/[^\p{L}]/gu, "").toUpperCase();
+              if (prev === "НОМЕР" || prev === "ХАДИС" || prev === "АЯТ" || prev === "СУРА") {
+                const cleanW = w.replace(/[^\p{L}]/gu, "");
+                const punct = w.match(/([.,;:!?…\-—–'"„“”»]+)$/)?.[1] || "";
+                const map: Record<string, string> = {
+                  ЕДНО: "1", ЕДНА: "1", ЕДИН: "1", ПЪРВИ: "1", ПЪРВА: "1", ПЪРВО: "1",
+                  ДВЕ: "2", ДВА: "2", ВТОРИ: "2", ВТОРА: "2", ВТОРО: "2",
+                  ТРИ: "3", ТРЕТИ: "3", ТРЕТА: "3", ТРЕТО: "3",
+                  ЧЕТИРИ: "4", ЧЕТВЪРТИ: "4", ЧЕТВЪРТА: "4",
+                  ПЕТ: "5", ПЕТИ: "5", ПЕТА: "5",
+                  ШЕСТ: "6", ШЕСТИ: "6", ШЕСТА: "6",
+                  СЕДЕМ: "7", СЕДМИ: "7", СЕДМА: "7",
+                  ОСЕМ: "8", ОСМИ: "8", ОСМА: "8",
+                  ДЕВЕТ: "9", ДЕВЕТИ: "9", ДЕВЕТА: "9",
+                  ДЕСЕТ: "10", ДЕСЕТИ: "10",
+                };
+                if (map[cleanW]) {
+                  w = map[cleanW] + punct;
+                }
+              }
+            }
+            return {
+              ...t,
+              word: w,
+            };
+          })
           .filter((t: any) => {
             if (!t.word) return false;
             const w = t.word.toLowerCase();

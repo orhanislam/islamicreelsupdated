@@ -141,4 +141,56 @@ describe("Salawat Phonetics and Bulgarian Written Meaning Verification", () => {
       .join(" ");
     assert.doesNotMatch(dialogueTexts, /[()]/, "Dialogue text should not contain bracket punctuation");
   });
+
+  it("6. Numbers are written directly as digits, not letters (User requirement)", async () => {
+    const { normalizeBulgarianNumbersForTts, convertBulgarianNumberWordsToDigits } = await import("../bulgarian-numbers");
+
+    // Citations and numbers must stay as digits:
+    const t1 = normalizeBulgarianNumbersForTts("Хадис #1: Сахих ал-Бухари.");
+    assert.match(t1, /1/);
+    assert.doesNotMatch(t1, /едно/i);
+
+    const t2 = normalizeBulgarianNumbersForTts("Сура 2, аят 255. Има 5 стълба.");
+    assert.match(t2, /2/);
+    assert.match(t2, /255/);
+    assert.match(t2, /5/);
+    assert.doesNotMatch(t2, /двеста|петдесет/i);
+
+    // Spelled-out words in citations are converted to digits:
+    const t3 = convertBulgarianNumberWordsToDigits("Хадис номер едно, сура втора, аят първи");
+    assert.match(t3, /номер 1/);
+    assert.match(t3, /сура 2/);
+    assert.match(t3, /аят 1/);
+
+    // Subtitles render numbers as direct digits:
+    const payload = {
+      bulgarian: "Хадис номер 1. Сура 2, аят 255. 5 стълба.",
+      bulgarianWordTimings: [
+        { word: "Хадис", start: 0.1, end: 0.4 },
+        { word: "номер", start: 0.4, end: 0.7 },
+        { word: "1.", start: 0.7, end: 1.0 },
+        { word: "Сура", start: 1.1, end: 1.4 },
+        { word: "2,", start: 1.4, end: 1.7 },
+        { word: "аят", start: 1.7, end: 2.0 },
+        { word: "255.", start: 2.0, end: 2.6 },
+        { word: "5", start: 2.7, end: 3.0 },
+        { word: "стълба.", start: 3.0, end: 3.5 },
+      ],
+      subtitlePosition: "tiktok",
+    };
+
+    const ass = generateAssSubtitles(payload, 3.8);
+    const dialogueTexts = ass
+      .split("\n")
+      .filter((l) => l.startsWith("Dialogue:"))
+      .map((l) => l.replace(/\{[^}]+\}/g, "").split(",").slice(9).join(","))
+      .join(" ");
+
+    assert.match(dialogueTexts, /1/);
+    assert.match(dialogueTexts, /2/);
+    assert.match(dialogueTexts, /255/);
+    assert.match(dialogueTexts, /5/);
+    assert.doesNotMatch(dialogueTexts, /ЕДНО/);
+    assert.doesNotMatch(dialogueTexts, /ДВЕСТА/);
+  });
 });

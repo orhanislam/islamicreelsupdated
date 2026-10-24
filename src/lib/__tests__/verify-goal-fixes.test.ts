@@ -9,24 +9,26 @@ async function runGoalFixesVerification() {
   console.log("=================================================================\n");
 
   // --------------------------------------------------------------------------
-  // TEST 1: Number verbalization (#1, № 1, No. 1, номер 1, хадис 1)
+  // TEST 1: Number verbalization (#1, № 1, No. 1, номер 1, хадис 1) -> DIRECT DIGITS
   // --------------------------------------------------------------------------
-  console.log("[TEST 1] Verifying Number Symbol Normalization for TTS...");
+  console.log("[TEST 1] Verifying Number Normalization as Direct Digits (not letters)...");
   const cases: [string, string][] = [
-    ["Сахих ал-Бухари #1", "номер едно"],
-    ["Сахих ал-Бухари # 1", "номер едно"],
-    ["Сахих ал-Бухари (#1)", "номер едно"],
-    ["Сахих Муслим № 1", "номер едно"],
-    ["Сахих Муслим №1", "номер едно"],
-    ["Сунан ат-Тирмизи No. 1", "номер едно"],
-    ["Сунан ат-Тирмизи N° 1", "номер едно"],
-    ["Сунан ат-Тирмизи Nr. 1", "номер едно"],
-    ["Хадис номер 1", "номер едно"],
-    ["Хадис 1", "номер едно"],
-    ["Точка #1 от сунната", "номер едно"],
-    ["Точка №1 от правилата", "номер едно"],
-    ["[Сахих ал-Бухари #5645]", "номер пет хиляди"],
-    ["аят 255", "аят номер двеста"],
+    ["Сахих ал-Бухари #1", "номер 1"],
+    ["Сахих ал-Бухари # 1", "номер 1"],
+    ["Сахих ал-Бухари (#1)", "номер 1"],
+    ["Сахих Муслим № 1", "номер 1"],
+    ["Сахих Муслим №1", "номер 1"],
+    ["Сунан ат-Тирмизи No. 1", "номер 1"],
+    ["Сунан ат-Тирмизи N° 1", "номер 1"],
+    ["Сунан ат-Тирмизи Nr. 1", "номер 1"],
+    ["Хадис номер 1", "номер 1"],
+    ["Хадис 1", "1"],
+    ["Точка #1 от сунната", "номер 1"],
+    ["Точка №1 от правилата", "номер 1"],
+    ["[Сахих ал-Бухари #5645]", "5645"],
+    ["аят 255", "аят 255"],
+    ["Хадис номер едно", "номер 1"],
+    ["Сура втора", "сура 2"],
   ];
 
   for (const [input, expected] of cases) {
@@ -38,7 +40,7 @@ async function runGoalFixesVerification() {
 
   // Verify that smart-script-auditor does NOT wipe out #1 or #\d+
   const auditRes = auditAndRefineNarrationScript("Пратеникът каза в хадис #1 следното.");
-  if (!auditRes.refinedNarration.includes("номер 1") && !auditRes.refinedNarration.includes("номер едно")) {
+  if (!auditRes.refinedNarration.includes("номер 1")) {
     throw new Error(`auditAndRefineNarrationScript wiped out hadith number! Got: "${auditRes.refinedNarration}"`);
   }
 

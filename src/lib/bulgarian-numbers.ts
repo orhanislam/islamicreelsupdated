@@ -185,9 +185,109 @@ const ROMAN_CENTURIES: Record<string, string> = {
   "xix": "деветнадесети", "xx": "двадесети", "xxi": "двадесет и първи"
 };
 
+const SPELLED_CITATION_NUMBERS: Record<string, string> = {
+  "едно": "1",
+  "една": "1",
+  "един": "1",
+  "първи": "1",
+  "първия": "1",
+  "първият": "1",
+  "първа": "1",
+  "първата": "1",
+  "първо": "1",
+  "първото": "1",
+  "две": "2",
+  "два": "2",
+  "втори": "2",
+  "втория": "2",
+  "вторият": "2",
+  "втора": "2",
+  "втората": "2",
+  "второ": "2",
+  "три": "3",
+  "трети": "3",
+  "третия": "3",
+  "третият": "3",
+  "трета": "3",
+  "третата": "3",
+  "трето": "3",
+  "четири": "4",
+  "четвърти": "4",
+  "четвърта": "4",
+  "пет": "5",
+  "пети": "5",
+  "пета": "5",
+  "шест": "6",
+  "шести": "6",
+  "шеста": "6",
+  "седем": "7",
+  "седми": "7",
+  "седма": "7",
+  "осем": "8",
+  "осми": "8",
+  "осма": "8",
+  "девет": "9",
+  "девети": "9",
+  "девета": "9",
+  "десет": "10",
+  "десети": "10",
+  "десета": "10",
+  "единадесет": "11",
+  "единайсет": "11",
+  "дванадесет": "12",
+  "дванайсет": "12",
+  "тринадесет": "13",
+  "тринайсет": "13",
+  "четиринадесет": "14",
+  "четиринайсет": "14",
+  "петнадесет": "15",
+  "петнайсет": "15",
+  "шестнадесет": "16",
+  "шестнайсет": "16",
+  "седемнадесет": "17",
+  "седемнайсет": "17",
+  "осемнадесет": "18",
+  "осемнайсет": "18",
+  "деветнадесет": "19",
+  "деветнайсет": "19",
+  "двадесет": "20",
+  "двайсет": "20",
+  "тридесет": "30",
+  "четиридесет": "40",
+  "петдесет": "50",
+  "шестдесет": "60",
+  "седемдесет": "70",
+  "осемдесет": "80",
+  "деветдесет": "90",
+  "сто": "100",
+  "двеста": "200",
+  "триста": "300",
+  "хиляда": "1000",
+};
+
+/**
+ * Converts spelled-out Bulgarian number words in citations into direct digits.
+ * E.g. "хадис номер едно" -> "хадис номер 1", "сура втора" -> "сура 2", "аят първи" -> "аят 1".
+ */
+export function convertBulgarianNumberWordsToDigits(text: string): string {
+  if (!text) return "";
+  let res = text;
+
+  const spelledKeys = Object.keys(SPELLED_CITATION_NUMBERS).join("|");
+  const pattern = new RegExp(
+    `(?<=(?:^|[^\\p{L}\\p{N}])(?:номер|хадис|аят|сура|част|епизод|точка|т\\.)\\s+)(${spelledKeys})(?=[^\\p{L}\\p{N}]|$)`,
+    "gui"
+  );
+  res = res.replace(pattern, (m) => SPELLED_CITATION_NUMBERS[m.toLowerCase()] || m);
+
+  return res;
+}
+
 /**
  * Normalizes all numbers and numerical expressions in Bulgarian text into
- * fully articulated phonetic words for TTS pronunciation.
+ * clean standard digits and direct numeric citations.
+ * Fulfills the user requirement: "цифрите да се напишат направо като цифри, не със букви"
+ * (Numbers must be written directly as digits, never expanded into spelled-out letter words).
  */
 export function normalizeBulgarianNumbersForTts(text: string): string {
   if (!text) return "";
@@ -200,99 +300,35 @@ export function normalizeBulgarianNumbersForTts(text: string): string {
   // 1. Collapse spaced thousands like "5 000" into "5000"
   res = res.replace(/(?<=^|[^\p{L}\p{N}])(\d{1,3})\s+(\d{3})(?=[^\p{L}\p{N}]|$)/gu, "$1$2");
 
-  // 2. Ordinals with hyphens: 1-ви, 2-ри, 3-ти, 1-ва, 2-ра, etc.
-  res = res.replace(
-    /(?<=^|[^\p{L}\p{N}])(\d+-(?:ви|вия|вият|ва|вата|во|вото|ри|рия|рият|ра|рата|ро|рото|ти|тия|тият|та|тата|то|тото|ми|мия|мият|ма|мата|мо|мото))(?=[^\p{L}\p{N}]|$)/gui,
-    (match) => {
-      const lower = match.toLowerCase();
-      return ORDINAL_MAP[lower] || match;
-    }
-  );
-
-  // 3. Roman numerals before "век": e.g. "VII век", "XXI век"
-  res = res.replace(
-    /(?<=^|[^\p{L}\p{N}])([ivxlcdm]+)\s+(век(?:а|ът)?)(?=[^\p{L}\p{N}]|$)/gui,
-    (_m, roman, century) => {
-      const lower = roman.toLowerCase();
-      const word = ROMAN_CENTURIES[lower];
-      return word ? `${word} ${century}` : _m;
-    }
-  );
-
-  // 4. Quran Chapter:Verse format e.g. "2:255" or "(13:28)" or "112:1-4"
+  // 2. Quran Chapter:Verse format: keep directly as digits "сура $1, аят $2"
   res = res.replace(
     /(?<=[^\p{L}\p{N}]|^)(\d+):(\d+)(?:-(\d+))?(?=[^\p{L}\p{N}]|$)/gu,
     (_m, surah, ayah, ayahEnd) => {
-      const sWords = integerToBulgarianWords(parseInt(surah, 10), "feminine");
-      const aStartWords = integerToBulgarianWords(parseInt(ayah, 10), "masculine");
       if (ayahEnd) {
-        const aEndWords = integerToBulgarianWords(parseInt(ayahEnd, 10), "masculine");
-        return `сура ${sWords}, аяти от ${aStartWords} до ${aEndWords}`;
+        return `сура ${surah}, аяти от ${ayah} до ${ayahEnd}`;
       }
-      return `сура ${sWords}, аят ${aStartWords}`;
+      return `сура ${surah}, аят ${ayah}`;
     }
   );
 
-  // 5. Hadith references, list numbers, and citations like "#1", "# 1", "№1", "№ 1", "No. 1", "номер 1", "хадис 1"
+  // 3. Hadith references & citations like "#1", "# 1", "№1", "№ 1", "No. 1" -> standardize as digits "номер $1"
   res = res.replace(
-    /(?:#\s*|№\s*|No\.\s*|No\s+|Nº\s*|N°\s*|Nr\.\s*|Nr\s+|nr\.\s*|nr\s+|ном\.\s*|(?<=^|[^\p{L}\p{N}])номер\s+)(\d+)(?=[^\p{L}\p{N}]|$)/gui,
-    (_m, numStr) => {
-      const val = parseInt(numStr, 10);
-      // In literary Bulgarian, numbers with "номер" are strictly spoken in neuter: "номер едно", "номер две", "номер три"
-      return `номер ${integerToBulgarianWords(val, "neuter")}`;
-    }
+    /(?:#\s*|№\s*|No\.\s*|No\s+|Nº\s*|N°\s*|Nr\.\s*|Nr\s+|nr\.\s*|nr\s+|ном\.\s*)(\d+)(?=[^\p{L}\p{N}]|$)/gui,
+    "номер $1"
   );
 
-  // Hadith and Ayah citations with raw number e.g. "хадис 1" -> "хадис номер едно", "аят 1" -> "аят номер едно"
-  res = res.replace(
-    /(?<=^|[^\p{L}\p{N}])(хадис(?:а|ът)?|аят(?:а|ът)?|сура(?:та)?|епизод(?:а|ът)?|част(?:та)?|точка(?:та)?|т\.)\s+(\d+)(?=[^\p{L}\p{N}]|$)/gui,
-    (_m, word, numStr) => {
-      const val = parseInt(numStr, 10);
-      return `${word} номер ${integerToBulgarianWords(val, "neuter")}`;
-    }
-  );
-
-  // Standalone number symbols without digits
+  // 4. Standalone number symbols without digits
   res = res
     .replace(/№/g, " номер ")
     .replace(/(?<=^|[^\p{L}\p{N}])No\.(?=[^\p{L}\p{N}]|$)/giu, " номер ")
     .replace(/(?<=^|[^\p{L}\p{N}])N°(?=[^\p{L}\p{N}]|$)/giu, " номер ")
-    .replace(/(?<=^|[^\p{L}\p{N}])Nº(?=[^\p{L}\p{N}]|$)/giu, " номер ")
-    .replace(/(?<=^|[^\p{L}\p{N}])#(?=[^\p{L}\p{N}]|$)/gu, " номер ");
+    .replace(/(?<=^|[^\p{L}\p{N}])Nº(?=[^\p{L}\p{N}]|$)/giu, " номер ");
 
-  // 6. Percentages: e.g. 50% -> "петдесет процента"
-  res = res.replace(
-    /(?<=^|[^\p{L}\p{N}])(\d+)%(?=[^\p{L}\p{N}]|$)/gu,
-    (_m, numStr) => {
-      const val = parseInt(numStr, 10);
-      return `${integerToBulgarianWords(val, "masculine")} процента`;
-    }
-  );
+  // 5. Convert any spelled-out Bulgarian number words back into digits ("номер едно" -> "номер 1", "сура втора" -> "сура 2")
+  res = convertBulgarianNumberWordsToDigits(res);
 
-  // 7. Decimals: e.g. 3.5 or 3,5 (surrounded by digits)
-  res = res.replace(
-    /(?<=^|[^\p{L}\p{N}])(\d+)[.,](\d+)(?=[^\p{L}\p{N}]|$)/gu,
-    (_m, intPart, decPart) => {
-      const intVal = parseInt(intPart, 10);
-      const decVal = parseInt(decPart, 10);
-      return `${integerToBulgarianWords(intVal, "neuter")} цяло и ${integerToBulgarianWords(decVal, "neuter")}`;
-    }
-  );
-
-  // 8. Negative integers: e.g. -5
-  res = res.replace(
-    /(?<=^|\s)-(\d+)(?=[^\p{L}\p{N}]|$)/gu,
-    (_m, numStr) => {
-      const val = parseInt(numStr, 10);
-      return `минус ${integerToBulgarianWords(val, "neuter")}`;
-    }
-  );
-
-  // 9. Standalone integers (Disabled to preserve digits for 1:1 TTS timing sync)
-  // res = res.replace(
-  //   /(?<=^|[^\p{L}\p{N}])(\d+)(?=[^\p{L}\p{N}]|$)/gu,
-  //   ...
-  // );
+  // 6. Clean multi-spaces
+  res = res.replace(/[ \t]{2,}/g, " ").trim();
 
   return res;
 }
