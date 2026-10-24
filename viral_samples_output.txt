@@ -3,7 +3,7 @@
                   (Proven Retention & Virality Best Practices)                  
 ================================================================================
 
-Generated: 2026-08-29T18:05:22.891Z
+Generated: 2026-10-24T16:33:58.346Z
 Framework Specifications:
   • Slide 1 (Hook): Curiosity gap, counter-intuitive statement, or provocative question
   • Middle Slides (Body): Concise text (max 2-3 sentences) ending with suspense/cliffhanger
@@ -16,64 +16,64 @@ SAMPLE CAROUSEL #1
 --------------------------------------------------------------------------------
 
 [SLIDE 1: VIRAL HOOK (Curiosity Gap / Question)]
-  Top Title   : [ПАРАДОКСЪТ НА ЗАГУБАТА]
-  Main Text   : Защо продължаваш да скърбиш за онова, което си изгубил, след като то никога не е било писано да бъде твое? Има дълбока причина всяка пропусната възможност да те подмине точно в този момент...
-  Bottom Text : Плъзни наляво, за да разбереш тайната 👉
+  Top Title   : [СКРИТИЯТ ЗАКОН]
+  Main Text   : Какво всъщност означава, че онова, което те е пропуснало в живота, никога не е било писано да те сполети? Зад всеки изгубен миг и неслучил се план стои абсолютната воля на Създателя.
+  Bottom Text : Плъзни наляво за истината -->
   Footer Text : 1/4 • Плъзнете наляво
-  Image Prompt: dark misty mountain peaks under celestial starlight, cinematic atmospheric lighting, photorealistic 8k, vertical 9:16, highly detailed nature landscape, no people, no animals
+  Image Prompt: dark misty mountain peaks with celestial starlight, vertical 8k, no people
 
 [SLIDE 2: BODY 1 (Explanation & Cliffhanger)]
-  Top Title   : БОЖЕСТВЕНИЯТ УКАЗ
-  Main Text   : Всичко във вселената — от падащото листо до всяко твое изпитание — е било записано 50 000 години преди сътворението. Онова, което те е пропуснало, никога е нямало да те сполети. Но най-поразяващото доказателство за това спокойствие е скрито в думите на Всевишния...
-  Bottom Text : Плъзни наляво за далила 👉
+  Top Title   : БОЖЕСТВЕНИЯТ ЗАКОН
+  Main Text   : Умът ти се мъчи да разбере защо губиш неща, които си държал в ръцете си, но Таухид ар-Рубубийя изисква пълно успокоение в премъдростта на Аллах. Това не е просто случайност, а прецизно разпределение на твоя ризк и съдба. Но най-поразяващото обяснение за този божествен закон е скрито в думите на Самия Създател...
+  Bottom Text : Плъзни наляво за далила -->
   Footer Text : 2/4 • Плъзнете наляво
-  Image Prompt: misty dawn over majestic mountain valley with golden dawn rays breaking through fog, photorealistic 8k, vertical 9:16, nature photography, no people, no animals
+  Image Prompt: gradually emerging light, misty dawn over dark mountain peaks, no people, vertical 8k
 
 [SLIDE 3: BODY 2 (Authentic Dalil & Transition)]
   Top Title   : Сура Ал-Хадид (57:22-23)
-  Main Text   : „Не сполита земята или вас самите беда, без тя да е в Книга, преди още да сме я сътворили. Това за Аллах е лесно — за да не скърбите за онова, което сте изпуснали, и да не ликувате за онова, което Той ви е дал.“ А ето как да приложиш това спасение в живота си още днес...
-  Bottom Text : Плъзни за духовното решение 👉
+  Main Text   : „Не сполита земята или вас самите беда, без тя да е в Книга, преди още да сме я сътворили. Това за Аллах е лесно — за да не скърбите за онова, което сте изпуснали, и да не ликувате за онова, което Той ви е дал.“ Аллах ти дава този ясен знак, за да освободи сърцето ти от тревогата за бъдещето.
+  Bottom Text : Плъзни за духовното решение -->
   Footer Text : 3/4 • Плъзнете наляво
-  Image Prompt: golden rays breaking through dramatic storm clouds over serene high mountain peaks, cinematic photorealistic 8k, vertical 9:16, epic nature, no people, no animals
+  Image Prompt: golden rays breaking through dramatic clouds over majestic mountain landscape, no people, vertical 8k
 
 [SLIDE 4: FINAL VALUE-DRIVEN CTA (Action & Du'a)]
-  Top Title   : ОСВОБОЖДЕНИЕ НА СЪРЦЕТО
-  Main Text   : Кажи от сърце: „О, Аллах, направи ме доволен с това, което си ми отредил, и дари сърцето ми с покой!“ Когато приемеш Ал-Кадр, болката от миналото изчезва и идва пълната увереност.
+  Top Title   : ДЕЙСТВИЕ И ДУА
+  Main Text   : Кажи искрено: „О, Аллах, моля Те за удовлетворение след предопределението.“ Когато приемеш Ал-Кадр с пълно доверие, тревогите изчезват.
   Bottom Text : Запази това напомняне за моменти на трудност и го сподели за садака джария!
   Footer Text : 4/4 • Запази & Сподели
-  Image Prompt: serene mountain landscape bathed in rich golden divine sunlight, peaceful scenery, photorealistic 8k, cinematic vertical 9:16, no people, no animals
+  Image Prompt: majestic nature bathed in warm divine golden sunlight, magnificent landscape, no people, vertical 8k
 
 --------------------------------------------------------------------------------
 SAMPLE CAROUSEL #2
 --------------------------------------------------------------------------------
 
 [SLIDE 1: VIRAL HOOK (Curiosity Gap / Question)]
-  Top Title   : [СКРИТИЯТ КАПАН]
-  Main Text   : Колко от добрите ти дела правиш тайно, без никой човек на земята да знае за тях? Има една опасна и тиха отрова, която може моментално да изпепели години на искрено поклонение...
-  Bottom Text : Плъзни наляво, за да разбереш истината 👉
+  Top Title   : [ИХЛЯС И СПАСЕНИЕ]
+  Main Text   : Колко от добрите ти дела правиш тайно, без никой човек на земята да знае за тях? Докато светът аплодира показната вяра, същността на искреността пред Аллах се крие в сенките на усамотението, където чуждите погледи нямат значение.
+  Bottom Text : Плъзни наляво за истината -->
   Footer Text : 1/4 • Плъзнете наляво
-  Image Prompt: solitary golden lantern glowing brightly in pitch black night, crystalline light reflections, cinematic photorealistic 8k vertical, no people
+  Image Prompt: solitary golden lantern glowing brightly in pitch black night, crystalline light reflections, dark moody cinematic photorealistic 8k vertical, no people
 
 [SLIDE 2: BODY 1 (Explanation & Cliffhanger)]
-  Top Title   : ОТРОВАТА НА ПОКАЗНОСТТА
-  Main Text   : Търсенето на хорското одобрение и похвала е скрит ширк (рияа), който унищожава възнаграждението на Ахирета. Истинската свобода на душата идва тогава, когато копнееш единствено за Задоволството на Твореца. Но най-поразяващото доказателство за това е скрито в думите на Аллах и Неговия Пратеник ﷺ...
-  Bottom Text : Плъзни наляво за далила 👉
+  Top Title   : БОЖЕСТВЕНИЯТ СТАНДАРТ
+  Main Text   : Едно единствено скрито дело, правено единствено заради Лицето на Аллах, тежи повече на Везните от планини от дела, правени за човешко одобрение и похвала. Сърцето е поле на битка, където показната суета унищожава всичко ценно в миг. Но най-поразяващото доказателство за това изискване е скрито в думите на Създателя...
+  Bottom Text : Плъзни наляво за далила -->
   Footer Text : 2/4 • Плъзнете наляво
-  Image Prompt: solitary golden lantern glowing brighter in pitch black night with misty ambient atmosphere emerging, crystalline light reflections, vertical 8k, no people
+  Image Prompt: solitary golden lantern with gradually emerging mystical light, misty dawn, dark background, no people, vertical 8k
 
 [SLIDE 3: BODY 2 (Authentic Dalil & Transition)]
-  Top Title   : Ал-Баййина (98:5) & Сахих ал-Бухари (#1)
-  Main Text   : „А им бе повелено да служат единствено на Аллах, предани Нему в религията, правоверни.“ Пратеникът ﷺ каза: „Делата се оценяват според намеренията.“ А ето как да пречистиш намерението си от хорските очи още днес...
-  Bottom Text : Плъзни за духовното решение 👉
+  Top Title   : Сура Ал-Баййина (98:5) & Сахих ал-Бухари (#1)
+  Main Text   : Аллах заявява в Своето Слово: „А им бе повелено да служат единствено на Аллах, предани Нему в религията, правоверни.“ А Пратеникът ﷺ каза в основополагащия хадис: „Делата се оценяват според намеренията.“ А ето как да приложиш това пречистване в живота си още днес...
+  Bottom Text : Плъзни за духовното решение -->
   Footer Text : 3/4 • Плъзнете наляво
-  Image Prompt: golden lantern light illuminating dramatic surrounding night sky with rays breaking through dark atmosphere, crystalline light reflections, vertical 8k, no people
+  Image Prompt: golden rays breaking through dramatic dark clouds over mystical landscape, glowing illumination, no people, vertical 8k
 
 [SLIDE 4: FINAL VALUE-DRIVEN CTA (Action & Du'a)]
-  Top Title   : ТВОЕТО ИЗЦЕЛЕНИЕ
-  Main Text   : О, Аллах, пречисти сърцата ни от показност (рияа) и ни дари с искреност (ихляс) във всяка дума и дело! Направи така, че да имаш поне едно тайно добро дело, за което знае единствено Всевишният.
-  Bottom Text : Запази това напомняне за защита на намерението си и го сподели за садака джария!
+  Top Title   : ТВОЯТ ПЛАН ЗА ДЕЙСТВИЕ
+  Main Text   : Огради най-добрите си поклонения в пълна тайна от хората, за да намериш мир в съдния ден, когато публичните аплодисменти ще се стопят. О Аллах, предпази ни от показна праведност и направи сърцата ни искрени само за Теб!
+  Bottom Text : Запази това напомняне срещу суетата и го сподели за садака джария!
   Footer Text : 4/4 • Запази & Сподели
-  Image Prompt: radiant golden lantern fully illuminating majestic landscape bathed in warm divine golden light, crystalline light reflections, vertical 8k, no people
+  Image Prompt: magnificent majestic landscape bathed in warm divine golden light, radiant crystalline reflections, no people, vertical 8k
 
 --------------------------------------------------------------------------------
 SAMPLE CAROUSEL #3
@@ -81,31 +81,31 @@ SAMPLE CAROUSEL #3
 
 [SLIDE 1: VIRAL HOOK (Curiosity Gap / Question)]
   Top Title   : [ИЗТОЩЕНИЕТО НА ДУШАТА]
-  Main Text   : Тялото ти пада от умора, но душата ти носи товар, който никой човек не вижда. Поверяваш грижите си на хора, които са също толкова слаби и уморени, колкото си и ти. А знаеш ли Кой никога не се изнурява да държи целия ти свят?
-  Bottom Text : Плъзни наляво, за да разбереш тайната 👉
+  Main Text   : Когато тежестта на живота ти вземе и последните сили, а вътре в теб цари пълна празнота, на Кого реално разчиташ за подкрепа? Докато хората около теб те уморяват с очаквания, съществува само Един, Който никога не изпитва умора.
+  Bottom Text : Плъзни наляво, за да разбереш тайната -->
   Footer Text : 1/4 • Плъзнете наляво
-  Image Prompt: Deep dark cosmos with endless cosmic pillars of faint radiant white-gold light extending infinitely into the starry expanse, dark moody atmospheric mood, cinematic photorealistic vertical 8k, no people, no animals
+  Image Prompt: endless cosmic pillars of radiant white-gold light extending infinitely into deep cosmos, dark, moody, cinematic photorealistic 8k vertical, no people
 
 [SLIDE 2: BODY 1 (Explanation & Cliffhanger)]
-  Top Title   : ВЕЧНОЖИВИЯТ И ВСЕПОДДЪРЖАЩИЯТ
-  Main Text   : Хората се уморяват, забравят и изоставят. Но Аллах е Ал-Хайй (Вечноживият) и Ал-Кайюм (Всеподдържащият) — Онзи, Който крепи галактиките и всяка твоя глътка въздух без да изпитва капчица умора. Но най-поразяващото доказателство за тази вечна закрила е скрито в думите на Корана...
-  Bottom Text : Плъзни наляво за далила 👉
+  Top Title   : БОЖЕСТВЕНИЯТ ЗАКОН
+  Main Text   : Аллах е Ал-Хайй (Вечноживият с абсолютен, съвършен живот) и Ал-Кайюм (Всеподдържащият, Който крепи цялото творение без почивка). Докато ти губиш енергия и имаш нужда от сън, Неговата грижа за теб никога не спира и не отслабва. Но най-поразяващото доказателство за това е скрито в думите на Корана...
+  Bottom Text : Плъзни наляво за далила -->
   Footer Text : 2/4 • Плъзнете наляво
-  Image Prompt: Deep cosmos with gradually emerging glowing white-gold pillars of radiant light illuminating misty space nebula, majestic, vertical 8k, photorealistic, no people, no animals
+  Image Prompt: endless cosmic pillars of radiant white-gold light extending infinitely into deep cosmos, gradually emerging light, misty dawn, no people, vertical 8k
 
 [SLIDE 3: BODY 2 (Authentic Dalil & Transition)]
   Top Title   : Сура Ал-Бакара (2:255 - Аят ал-Курси)
-  Main Text   : „Аллах! Няма друг бог освен Него — Вечноживия, Всеподдържащия! Не Го обзема нито дрямка, нито сън.“ Когато разбереш, че Твоят Создател никога не спи и не бди с умора, осъзнаваш, че молитвите ти никога не са останали нечути. А ето как да приложиш това спасение в живота си още днес...
-  Bottom Text : Плъзни за духовното решение 👉
+  Main Text   : „Аллах! Няма друг бог освен Него — Вечноживия, Всеподдържащия! Не Го обзема нито дрямка, нито сън.“ Когато разбереш това съвършено качество на Твореца, твоите земни тревоги губят тежестта си пред Неговата всеобхватна мощ. А ето как да приложиш това спасение в живота си още днес...
+  Bottom Text : Плъзни за духовното решение -->
   Footer Text : 3/4 • Плъзнете наляво
-  Image Prompt: Golden sunbeams and rays breaking through dramatic cosmic clouds in deep space, grand pillars of radiant white-gold light, majestic vertical 8k, photorealistic, no people, no animals
+  Image Prompt: endless cosmic pillars of radiant white-gold light extending infinitely into deep cosmos, golden rays breaking through dramatic clouds over landscape, no people, vertical 8k
 
 [SLIDE 4: FINAL VALUE-DRIVEN CTA (Action & Du'a)]
-  Top Title   : ТВОЯТА СИЛА И ДУ'А
-  Main Text   : Казвай всеки ден: „Я Хайй, я Кайюм, би-рахматика астагис!“ (О, Вечноживи, о, Всеподдържащи! Чрез Твоята милост търся спасение — оправи всички мои дела и не ме оставяй на самия себе си нито за миг!). Повери товара си на Онзи, Който не се уморява.
-  Bottom Text : Запази това напомняне за моменти на трудност и го сподели, за да бъде садака джария за теб! 👉
+  Top Title   : ДУХОВНОТО РЕШЕНИЕ
+  Main Text   : В моменти на слабост и изтощение, отпусни сърцето си и се уповавай единствено на Ал-Кайюм, Който крепи небесата и земята вместо теб.
+  Bottom Text : Запази това напомняне за моменти на трудност и го сподели за садака джария!
   Footer Text : 4/4 • Запази & Сподели
-  Image Prompt: Space scene bathed in warm divine golden and white light, endless cosmic pillars radiating peaceful eternal glow, magnificent majestic sky, vertical 8k, photorealistic, no people, no animals
+  Image Prompt: endless cosmic pillars of radiant white-gold light extending infinitely into deep cosmos, bathed in warm divine golden light, magnificent majestic nature, no people, vertical 8k
 
 ================================================================================
 END OF DELIVERABLE REPORT — 3 SAMPLES SUCCESSFULLY VALIDATED

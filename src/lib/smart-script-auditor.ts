@@ -28,6 +28,8 @@ export interface ScriptAuditReport {
   auditPasses: number; // Number of iterative self-healing passes executed until 100% stability
   correctionsApplied: string[];
   theologicalCorrections: string[]; // Specific theological or scripture corrections performed
+  grammarCorrections?: string[];
+  fixes?: string[];
   warnings: string[];
   stepsVerified: {
     hook: boolean;
@@ -68,6 +70,8 @@ export interface AuditedProposalInput {
   subtitlePosition?: string;
   quality?: string;
   scriptWorkflow?: ExplainedScript;
+  fullDalilText?: string;
+  arabicScriptureText?: string;
   [key: string]: unknown;
 }
 
@@ -435,6 +439,10 @@ export function validateAndHealHadithDaleel(proposal: AuditedProposalInput): {
   );
 
   if (match) {
+    if (match.hadithTextBg && (!proposal.fullDalilText || proposal.fullDalilText.length < 20)) {
+      proposal.fullDalilText = match.hadithTextBg;
+      if (match.hadithTextAr) proposal.arabicScriptureText = match.hadithTextAr;
+    }
     if (proposal.scriptWorkflow) {
       if (match.hadithTextBg && (!proposal.scriptWorkflow.dalilText || proposal.scriptWorkflow.dalilText.length < 20)) {
         proposal.scriptWorkflow.dalilText = match.hadithTextBg;
@@ -1328,6 +1336,7 @@ export function auditAndRefineProposal(
  */
 export function auditAndRefineNarrationScript(narrationText: string): {
   refinedNarration: string;
+  fixes: string[];
   report: {
     passed: boolean;
     segmentCount: number;
@@ -1382,12 +1391,14 @@ export function auditAndRefineNarrationScript(narrationText: string): {
 
   const segments = s.split(/<break[^>]*>/).map((seg) => seg.trim()).filter(Boolean);
 
+  const uniqueFixes = Array.from(new Set(fixesApplied));
   return {
     refinedNarration: s.trim(),
+    fixes: uniqueFixes,
     report: {
       passed: segments.length >= 2,
       segmentCount: segments.length,
-      fixesApplied: Array.from(new Set(fixesApplied)),
+      fixesApplied: uniqueFixes,
       theologicalFixes: Array.from(new Set(theologicalFixes)),
       is100Percent: true,
       auditPasses: pass,

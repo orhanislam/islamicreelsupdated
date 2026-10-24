@@ -132,13 +132,13 @@ export function generateAssSubtitles(data: any, audioDur: number): string {
   const placement = getASSSubtitlePlacement(subPos, data.style);
 
   const tiktokTheme = data.tiktokTheme || "hormozi";
-  const UNIFORM_TIKTOK_FS = 68;
+  const UNIFORM_TIKTOK_FS = 76;
   const outlineColor = "&H00000000";
-  const outlineWidth = "4.5";
-  const shadowSize = "3.5";
+  const outlineWidth = "5.0";
+  const shadowSize = "4.0";
   let highlightColor = "&H00D7FF&"; // Default Hormozi vibrant gold/yellow
   const borderStyle = "1";
-  const backColor = "&H99000000";
+  const backColor = "&HAA000000";
 
   if (tiktokTheme === "emerald") {
     highlightColor = "&H32CD32&";
@@ -161,7 +161,7 @@ PlayResY: ${sz.H}
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
 Style: Arabic,Scheherazade New,100,&H00FFFFFF,&H000000FF,&H00000000,&H80000000,-1,0,0,0,100,100,0,0,1,3,0,8,${placement.marginL},${placement.marginR},${sz.SAFE_TOP},1
 Style: Bulgarian,Outfit,${UNIFORM_TIKTOK_FS},&H00FFFFFF,&H0000D7FF,${outlineColor},${backColor},-1,0,0,0,100,100,0,0,${borderStyle},${outlineWidth},${shadowSize},${placement.alignment},${placement.marginL},${placement.marginR},${placement.marginV},1
-Style: Reference,Outfit,64,&H00FFFFFF,&H000000FF,&H00000000,&H99000000,-1,0,0,0,100,100,1,0,1,3.5,3,8,180,180,${sz.SAFE_TOP + 30},1
+Style: Reference,Outfit,64,&H00FFFFFF,&H000000FF,&H00000000,&HAA000000,-1,0,0,0,100,100,1,0,1,5.0,4,8,180,180,${sz.SAFE_TOP + 30},1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
@@ -169,34 +169,30 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 
   const rawTop = (data.topic || data.reference || "").trim();
   let topText = rawTop;
-  if (data.topic && data.topic.trim()) {
-    topText = data.topic.trim();
-  } else if (rawTop) {
-    if (rawTop.includes("] ")) {
-      const after = rawTop.split("] ").slice(1).join("] ").trim();
-      if (after) topText = after;
-    } else if (rawTop.includes("]")) {
-      const after = rawTop.split("]").slice(1).join("]").replace(/^[:\-–—\s]+/, "").trim();
-      if (after) topText = after;
-    } else if (rawTop.includes("•")) {
-      const parts = rawTop.split("•").map((p: string) => p.trim()).filter(Boolean);
-      const nonCitation = parts.find(
-        (p: string) => !/(?:коран|сура|хадис|бухари|муслим|тирмизи|навауи|\d+[:.]\d+)/i.test(p)
-      );
-      if (nonCitation) topText = nonCitation;
-      else if (parts.length > 1) topText = parts[1];
-    } else if (/\s+[-–—]\s+/.test(rawTop)) {
-      const parts = rawTop.split(/\s+[-–—]\s+/).map((p: string) => p.trim()).filter(Boolean);
-      const nonCitation = parts.find(
-        (p: string) => !/(?:коран|сура|хадис|бухари|муслим|тирмизи|навауи|\d+[:.]\d+)/i.test(p)
-      );
-      if (nonCitation) topText = nonCitation;
-      else if (parts.length > 1) topText = parts[1];
-    }
+  if (topText.includes("] ")) {
+    const after = topText.split("] ").slice(1).join("] ").trim();
+    if (after) topText = after;
+  } else if (topText.includes("]")) {
+    const after = topText.split("]").slice(1).join("]").replace(/^[:\-–—\s]+/, "").trim();
+    if (after) topText = after;
+  } else if (topText.includes("•")) {
+    const parts = topText.split("•").map((p: string) => p.trim()).filter(Boolean);
+    const nonCitation = parts.find(
+      (p: string) => !/(?:коран|сура|хадис|бухари|муслим|тирмизи|навауи|\d+[:.]\d+)/i.test(p)
+    );
+    if (nonCitation) topText = nonCitation;
+    else if (parts.length > 1) topText = parts[1];
+  } else if (/\s+[-–—]\s+/.test(topText)) {
+    const parts = topText.split(/\s+[-–—]\s+/).map((p: string) => p.trim()).filter(Boolean);
+    const nonCitation = parts.find(
+      (p: string) => !/(?:коран|сура|хадис|бухари|муслим|тирмизи|навауи|\d+[:.]\d+)/i.test(p)
+    );
+    if (nonCitation) topText = nonCitation;
+    else if (parts.length > 1) topText = parts[1];
   }
 
-  // Clean dangling symbols or quotes from topic
-  topText = topText.replace(/^["„“'«»\s:\-–—]+|["„“'«»\s:\-–—]+$/g, "").trim();
+  // Clean dangling symbols or quotes from topic and format in bold big uppercase letters
+  topText = topText.replace(/^["„“'«»\s:\-–—]+|["„“'«»\s:\-–—]+$/g, "").trim().toUpperCase();
 
   if (topText) {
     // Format into two balanced lines for a clean, bold, professional 2-line header at the top
@@ -235,7 +231,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
       .replace(/\.{2,}/g, "")
       .replace(/…+/g, "")
       .trim();
-    let words = data.bulgarian.split(/\s+/).filter(Boolean);
+    let words = data.bulgarian.split(/\s+/).filter(Boolean).map((w: string) => w.toUpperCase());
     let timings = data.bulgarianWordTimings;
     if (timings && timings.length > 0) {
       const syncRes = verifyAndCorrectSubtitleSync(timings, audioDur);
@@ -244,7 +240,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         timings = timings
           .map((t: any) => ({
             ...t,
-            word: (t.word || "").replace(/[\[\]]/g, "").trim(),
+            word: (t.word || "").replace(/[\[\]]/g, "").trim().toUpperCase(),
           }))
           .filter((t: any) => {
             if (!t.word) return false;
@@ -279,7 +275,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
           const isLast = bIdx === bounds.length - 1;
           let ayahWords: string[];
           if (b.bulgarian && typeof b.bulgarian === "string" && b.bulgarian.trim().length > 0) {
-            ayahWords = b.bulgarian.split(/\s+/).filter(Boolean);
+            ayahWords = b.bulgarian.split(/\s+/).filter(Boolean).map((w: string) => w.toUpperCase());
           } else {
             const ratio = (b.english ? b.english.length : 10) / totalEngLen;
             const count = isLast
@@ -408,7 +404,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         const isLast = bIdx === bounds.length - 1;
         let ayahWords: string[];
         if (b.bulgarian && typeof b.bulgarian === "string" && b.bulgarian.trim().length > 0) {
-          ayahWords = b.bulgarian.split(/\s+/).filter(Boolean);
+          ayahWords = b.bulgarian.split(/\s+/).filter(Boolean).map((w: string) => w.toUpperCase());
         } else {
           const ratio = (b.english ? b.english.length : 10) / totalEngLen;
           const count = isLast

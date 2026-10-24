@@ -26,6 +26,7 @@ export interface HadithSharhEntry {
   work: string;
   text: string;
   topic: string;
+  ref?: string;
   hadithTextBg?: string;
   hadithTextAr?: string;
   sourceType?: "database" | "salafi_ai";
@@ -468,6 +469,7 @@ export function detectScriptureFromText(text: string): {
   type: "quran" | "hadith" | null;
   surah?: number;
   ayah?: number;
+  count?: number;
   collection?: string;
   number?: number;
 } {

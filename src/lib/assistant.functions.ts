@@ -68,6 +68,8 @@ export type VideoProposal = {
   type: "hadith" | "quran" | "tiktok" | "general" | "carousel" | "explained_video";
   collection?: string;
   number?: number;
+  hadithCollection?: string;
+  hadithNumber?: number;
   surah?: number;
   ayah?: number;
   count?: number;
@@ -92,6 +94,8 @@ export type VideoProposal = {
   }[];
   scriptWorkflow?: ExplainedVideoScript;
   auditReport?: ScriptAuditReport;
+  fullDalilText?: string;
+  arabicScriptureText?: string;
 };
 
 export function cleanProposalTitle(rawTitle: string): string {
@@ -702,17 +706,8 @@ CAPCUT-ПОДОБНИ ИНСТРУКЦИИ ЗА РЕДАКТИРАНЕ:
     const proposalsToRecord: VideoProposal[] = [];
     if (parsed.proposal) proposalsToRecord.push(parsed.proposal);
     if (Array.isArray(parsed.proposals)) proposalsToRecord.push(...parsed.proposals);
+    await enrichProposalsWithFullScripture(proposalsToRecord);
     for (const p of proposalsToRecord) {
-      if (p && p.surah && p.ayah && (p.type === "explained_video" || p.scriptWorkflow)) {
-        const freshBg = await preFetchQuranDalilBg(
-          Number(p.surah),
-          Number(p.ayah),
-          Number(p.count) || 1,
-        );
-        if (freshBg && p.scriptWorkflow) {
-          p.scriptWorkflow.dalilText = freshBg;
-        }
-      }
       await enrichProposalWithAuthenticTafsir(p);
     }
     await injectAuthenticCarouselText(proposalsToRecord);
@@ -727,7 +722,7 @@ CAPCUT-ПОДОБНИ ИНСТРУКЦИИ ЗА РЕДАКТИРАНЕ:
       parsed.proposals = parsed.proposals.map((p: any) => {
         const { proposal: auditedProp, report } = auditAndRefineProposal(p, { maxPasses: 5 });
         auditedProp.auditReport = report;
-        return auditedProp;
+        return auditedProp as VideoProposal;
       });
     }
 
@@ -926,6 +921,7 @@ SALAFI HALAL ПРИНЦИПИ (СТРИКТНО ЗАДЪЛЖИТЕЛНО):
   }
 
   if (parsed.proposal) {
+    await enrichProposalWithFullScripture(parsed.proposal);
     const { proposal: auditedProp, report } = auditAndRefineProposal(parsed.proposal as any, { maxPasses: 5 });
     parsed.proposal = auditedProp as VideoProposal;
     parsed.proposal.auditReport = report;
@@ -938,7 +934,11 @@ SALAFI HALAL ПРИНЦИПИ (СТРИКТНО ЗАДЪЛЖИТЕЛНО):
   };
 });
 
-async function preFetchQuranDalilBg(surah: number, ayah: number, count = 1): Promise<string> {
+export async function preFetchQuranDalilFull(
+  surah: number,
+  ayah: number,
+  count = 1,
+): Promise<{ bulgarian: string; arabic?: string; english?: string }> {
   try {
     const ayahEnd = ayah + Math.max(1, count) - 1;
     const q = await fetchAyah({ data: { surah, ayah, ayahEnd } });
@@ -951,12 +951,124 @@ async function preFetchQuranDalilBg(surah: number, ayah: number, count = 1): Pro
         ayahBounds: q.ayahBounds,
       },
     });
-    const clean = t.bulgarian.replace(/(^|\n)\s*(?:\(\d+\)|\[\d+\]|\d+\.)\s*/g, "$1").trim();
-    return sanitizeTheologicalRespect(enrichUnfamiliarQuranicTerms(clean));
+    const clean = (t.bulgarian || "")
+      .replace(/(^|\n)\s*(?:\(\d+\)|\[\d+\]|\d+\.)\s*/g, "$1")
+      .trim();
+    return {
+      bulgarian: sanitizeTheologicalRespect(enrichUnfamiliarQuranicTerms(clean)),
+      arabic: q.arabic,
+      english: q.english,
+    };
   } catch (err) {
-    console.warn(`[preFetchQuranDalilBg] Failed for ${surah}:${ayah}:`, err);
-    return "";
+    console.warn(`[preFetchQuranDalilFull] Failed for ${surah}:${ayah}:`, err);
+    return { bulgarian: "" };
   }
+}
+
+async function preFetchQuranDalilBg(surah: number, ayah: number, count = 1): Promise<string> {
+  const res = await preFetchQuranDalilFull(surah, ayah, count);
+  return res.bulgarian;
+}
+
+export async function preFetchHadithDalilFull(
+  collection: string,
+  number: number | string,
+): Promise<{ bulgarian: string; arabic?: string; english?: string }> {
+  try {
+    const coll = String(collection || "bukhari").toLowerCase().trim() as SunnahCollection;
+    const num = Number(number) || 1;
+
+    // 1. Try local verified sharh data first
+    const sharh = getVerifiedHadithSharhDirect({ collection: coll, number: num });
+    if (sharh?.hadithTextBg && sharh.hadithTextBg.trim().length > 15) {
+      const clean = sharh.hadithTextBg.trim().replace(/^["„“']+|["„“']+$/g, "").trim();
+      return {
+        bulgarian: sanitizeTheologicalRespect(enrichUnfamiliarQuranicTerms(clean)),
+        arabic: sharh.hadithTextAr,
+      };
+    }
+
+    // 2. Fetch from Sunnah.com API + Bulgarian translation
+    const h = await fetchSunnahHadith({ data: { collection: coll, number: num } });
+    if (h && h.english) {
+      const t = await translateToBulgarian({
+        data: { english: h.english, sourceRef: h.reference },
+      });
+      const clean = (t.bulgarian || "")
+        .replace(/(^|\n)\s*(?:\(\d+\)|\[\d+\]|\d+\.)\s*/g, "$1")
+        .replace(/^["„“']+|["„“']+$/g, "")
+        .trim();
+      return {
+        bulgarian: sanitizeTheologicalRespect(enrichUnfamiliarQuranicTerms(clean)),
+        arabic: h.arabic,
+        english: h.english,
+      };
+    }
+  } catch (err) {
+    console.warn(`[preFetchHadithDalilFull] Failed for ${collection}:${number}:`, err);
+  }
+  return { bulgarian: "" };
+}
+
+export async function enrichProposalWithFullScripture(proposal: VideoProposal): Promise<void> {
+  if (!proposal) return;
+
+  let surah = proposal.surah ? Number(proposal.surah) : undefined;
+  let ayah = proposal.ayah ? Number(proposal.ayah) : undefined;
+  let count = proposal.count ? Number(proposal.count) : 1;
+  let collection = proposal.collection;
+  let number = proposal.number ? Number(proposal.number) : undefined;
+
+  // Auto-detect scripture if missing
+  if ((!surah || !ayah) && (!collection || !number) && proposal.title) {
+    const det = detectScriptureFromText(proposal.title);
+    if (det.type === "quran" && det.surah && det.ayah) {
+      surah = det.surah;
+      ayah = det.ayah;
+      count = det.count || 1;
+      proposal.surah = surah;
+      proposal.ayah = ayah;
+      proposal.count = count;
+    } else if (det.type === "hadith" && det.collection && det.number) {
+      collection = det.collection;
+      number = det.number;
+      proposal.collection = collection;
+      proposal.number = number;
+    }
+  }
+
+  // 1. Quran Scripture
+  if (surah && ayah) {
+    if (!proposal.fullDalilText || proposal.fullDalilText.length < 15) {
+      const qRes = await preFetchQuranDalilFull(surah, ayah, count);
+      if (qRes.bulgarian) {
+        proposal.fullDalilText = qRes.bulgarian;
+        if (qRes.arabic) proposal.arabicScriptureText = qRes.arabic;
+      }
+    }
+    if (proposal.fullDalilText && proposal.scriptWorkflow) {
+      proposal.scriptWorkflow.dalilText = proposal.fullDalilText;
+    }
+  }
+
+  // 2. Hadith Scripture
+  if (collection && number) {
+    if (!proposal.fullDalilText || proposal.fullDalilText.length < 15) {
+      const hRes = await preFetchHadithDalilFull(collection, number);
+      if (hRes.bulgarian) {
+        proposal.fullDalilText = hRes.bulgarian;
+        if (hRes.arabic) proposal.arabicScriptureText = hRes.arabic;
+      }
+    }
+    if (proposal.fullDalilText && proposal.scriptWorkflow) {
+      proposal.scriptWorkflow.dalilText = proposal.fullDalilText;
+    }
+  }
+}
+
+export async function enrichProposalsWithFullScripture(proposals: VideoProposal[]): Promise<void> {
+  if (!Array.isArray(proposals) || proposals.length === 0) return;
+  await Promise.all(proposals.map((p) => enrichProposalWithFullScripture(p)));
 }
 
 export async function generateExplainedVideoProposalDirect(data?: {
@@ -1451,6 +1563,7 @@ ${userTopic}${preGroundingPrompt ? `\n\n${preGroundingPrompt}` : ""}
   }
 
   if (parsed.proposal) {
+    await enrichProposalWithFullScripture(parsed.proposal);
     await enrichProposalWithAuthenticTafsir(parsed.proposal);
     // User goal requirement 3: Engine automatically audits and heals the text BEFORE presenting for approval!
     const { proposal: auditedProp, report } = auditAndRefineProposal(parsed.proposal as any, { maxPasses: 5 });
@@ -1789,6 +1902,7 @@ ${getVerifiedHadithCatalogPrompt()}
     }
 
     if (parsed.proposal) {
+      await enrichProposalWithFullScripture(parsed.proposal);
       await enrichProposalWithAuthenticTafsir(parsed.proposal);
       const { proposal: auditedProp, report } = auditAndRefineProposal(parsed.proposal as any, { maxPasses: 5 });
       parsed.proposal = auditedProp as VideoProposal;
@@ -1967,6 +2081,10 @@ ${getVerifiedHadithCatalogPrompt()}
         parsed.proposals.forEach((p: VideoProposal) => {
           if (p && p.title) p.title = cleanProposalTitle(p.title);
         });
+        await enrichProposalsWithFullScripture(parsed.proposals);
+        for (const p of parsed.proposals) {
+          await enrichProposalWithAuthenticTafsir(p);
+        }
         await injectAuthenticCarouselText(parsed.proposals);
         await recordProposalUsages({ data: { proposals: parsed.proposals } }).catch(() => {});
       }
@@ -1980,7 +2098,10 @@ ${getVerifiedHadithCatalogPrompt()}
 
 export function formatSpokenCitation(rawRef: string, isQuran: boolean): string {
   if (!rawRef) return "";
-  let ref = rawRef.replace(/^[\[\(\s]+|[\]\)\s]+$/g, "").trim();
+  let ref = rawRef.trim();
+  if (ref.startsWith("[") && ref.endsWith("]")) {
+    ref = ref.slice(1, -1).trim();
+  }
 
   if (isQuran) {
     const m1 = ref.match(
@@ -2037,6 +2158,7 @@ export function sanitizeProposalFields(p: VideoProposal): VideoProposal {
   if (p.title) p.title = sanitizeTheologicalRespect(cleanProposalTitle(p.title));
   if (p.summaryBg) p.summaryBg = sanitizeTheologicalRespect(p.summaryBg);
   if (p.themeBg) p.themeBg = sanitizeTheologicalRespect(p.themeBg);
+  if (p.fullDalilText) p.fullDalilText = sanitizeTheologicalRespect(enrichUnfamiliarQuranicTerms(p.fullDalilText));
   if (p.scriptWorkflow) {
     const sw = p.scriptWorkflow;
     if (sw.hookQuestion) sw.hookQuestion = sanitizeTheologicalRespect(sw.hookQuestion);
@@ -2424,7 +2546,9 @@ export const confirmAndGenerateVideo = createServerFn({ method: "POST" })
 
       if (proposal.type === "explained_video" || proposal.scriptWorkflow) {
         const effectiveDalil =
-          proposal.scriptWorkflow?.dalilText && proposal.scriptWorkflow.dalilText.trim().length > 20
+          proposal.fullDalilText && proposal.fullDalilText.trim().length > 20
+            ? proposal.fullDalilText.trim()
+            : proposal.scriptWorkflow?.dalilText && proposal.scriptWorkflow.dalilText.trim().length > 20
             ? proposal.scriptWorkflow.dalilText.trim()
             : bulgarian;
 
@@ -2441,8 +2565,8 @@ export const confirmAndGenerateVideo = createServerFn({ method: "POST" })
         if (cleanExplanation && cleanExplanation.length > 15 && !bulgarian.includes(cleanExplanation)) {
           bulgarian = `${bulgarian} <break time="0.8s" /> Обяснение: ${cleanExplanation}`;
         }
-        if (proposal.scriptWorkflow?.actionStep) {
-          const act = cleanScriptPrefixes(proposal.scriptWorkflow.actionStep);
+        if ((proposal as any).scriptWorkflow?.actionStep) {
+          const act = cleanScriptPrefixes((proposal as any).scriptWorkflow.actionStep);
           const actLabel = detectActionOrDuaLabel(act);
           bulgarian = `${bulgarian} <break time="0.8s" /> ${actLabel}: ${act}`;
         }
@@ -2580,7 +2704,7 @@ export const confirmAndGenerateVideo = createServerFn({ method: "POST" })
         bulgarian = t.bulgarian.replace(/(^|\n)\s*(?:\(\d+\)|\[\d+\]|\d+\.)\s*/g, "$1").trim();
 
         if (proposal.type === "explained_video" || proposal.scriptWorkflow) {
-          const candidateDalil = (proposal.scriptWorkflow?.dalilText || "").trim();
+          const candidateDalil = (proposal.fullDalilText || proposal.scriptWorkflow?.dalilText || "").trim();
           const effectiveDalil =
             candidateDalil.length > 20 &&
             !candidateDalil.includes("...") &&
@@ -2602,8 +2726,8 @@ export const confirmAndGenerateVideo = createServerFn({ method: "POST" })
           if (cleanExplanation && cleanExplanation.length > 15 && !bulgarian.includes(cleanExplanation)) {
             bulgarian = `${bulgarian} <break time="0.8s" /> Обяснение: ${cleanExplanation}`;
           }
-          if (proposal.scriptWorkflow?.actionStep) {
-            const act = cleanScriptPrefixes(proposal.scriptWorkflow.actionStep);
+          if ((proposal as any).scriptWorkflow?.actionStep) {
+            const act = cleanScriptPrefixes((proposal as any).scriptWorkflow.actionStep);
             const actLabel = detectActionOrDuaLabel(act);
             bulgarian = `${bulgarian} <break time="0.8s" /> ${actLabel}: ${act}`;
           }

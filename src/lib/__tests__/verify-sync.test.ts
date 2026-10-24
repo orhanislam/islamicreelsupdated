@@ -1242,7 +1242,7 @@ async function testSalafiTheologyAndDaleelSelfHealing() {
   if (testSw.sw.explanation.includes("светците") || !testSw.sw.explanation.includes("Вашия Господ")) {
     throw new Error(`Explanation failed self-healing! Got: ${testSw.sw.explanation}`);
   }
-  if (testSw.sw.actionStep.includes("синьо око") || !testSw.sw.actionStep.includes("Единственият Творец")) {
+  if (testSw.sw.actionStep?.includes("синьо око") || !testSw.sw.actionStep?.includes("Единственият Творец")) {
     throw new Error(`ActionStep failed self-healing! Got: ${testSw.sw.actionStep}`);
   }
 

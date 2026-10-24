@@ -255,10 +255,10 @@ export function normalizeBulgarianNumbersForTts(text: string): string {
   // Standalone number symbols without digits
   res = res
     .replace(/№/g, " номер ")
-    .replace(/(?<=^|[^\p{L}\p{N}])No\.(?=[^\p{L}\p{N}]|$)/gi, " номер ")
-    .replace(/(?<=^|[^\p{L}\p{N}])N°(?=[^\p{L}\p{N}]|$)/gi, " номер ")
-    .replace(/(?<=^|[^\p{L}\p{N}])Nº(?=[^\p{L}\p{N}]|$)/gi, " номер ")
-    .replace(/(?<=^|[^\p{L}\p{N}])#(?=[^\p{L}\p{N}]|$)/g, " номер ");
+    .replace(/(?<=^|[^\p{L}\p{N}])No\.(?=[^\p{L}\p{N}]|$)/giu, " номер ")
+    .replace(/(?<=^|[^\p{L}\p{N}])N°(?=[^\p{L}\p{N}]|$)/giu, " номер ")
+    .replace(/(?<=^|[^\p{L}\p{N}])Nº(?=[^\p{L}\p{N}]|$)/giu, " номер ")
+    .replace(/(?<=^|[^\p{L}\p{N}])#(?=[^\p{L}\p{N}]|$)/gu, " номер ");
 
   // 6. Percentages: e.g. 50% -> "петдесет процента"
   res = res.replace(

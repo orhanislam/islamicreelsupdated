@@ -192,7 +192,7 @@ function CreatePage() {
   const [pacingMode, setPacingMode] = useState<"punchy" | "ayah">("punchy");
   const [subtitlePosition, setSubtitlePosition] = useState<
     "tiktok" | "reels" | "shorts" | "center"
-  >("tiktok");
+  >("center");
   const [showSafeZones, setShowSafeZones] = useState<boolean>(false);
   const [subtitleSlicingMode, setSubtitleSlicingMode] = useState<"phrase" | "single">("phrase");
   const [aligningSync, setAligningSync] = useState(false);
@@ -1854,6 +1854,11 @@ function CreatePage() {
                 </div>
               </div>
 
+              <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-xs text-foreground font-ui">
+                <span className="font-bold text-emerald-400">🔤 Големи букви (ALL CAPS):</span>
+                <span className="text-muted-foreground">Включени заглавие и субтитри с дебел контур и дълбока сянка за 100% четимост в TikTok/Reels.</span>
+              </div>
+
               <div className="pt-3 border-t border-border/40 flex flex-wrap items-center justify-between gap-3">
                 <div className="flex items-center gap-2 flex-wrap">
                   <Button
@@ -2352,16 +2357,43 @@ function CreatePage() {
 
                           {/* Reference / Topic Text Overlay positioned at SAFE_TOP (15.6%) */}
                           {(topic || content?.source_ref) && (
-                            <div className="absolute top-[15.6%] inset-x-0 text-center px-4 z-10">
+                            <div className="absolute top-[15.6%] inset-x-0 text-center px-4 z-10 pointer-events-none">
                               <p
-                                className="text-white font-bold tracking-wide break-words"
+                                className="text-white font-extrabold tracking-wide uppercase"
                                 style={{
-                                  fontSize: "clamp(10px, 3.5cqi, 18px)",
+                                  fontSize: "clamp(12px, 3.8cqi, 20px)",
+                                  lineHeight: 1.25,
                                   textShadow:
-                                    "1px 1px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 0px 4px 6px rgba(0,0,0,0.8)",
+                                    "2px 2px 0 #000, -2px -2px 0 #000, 2px -2px 0 #000, -2px 2px 0 #000, 0 4px 14px rgba(0,0,0,0.95), 0 0 10px rgba(0,0,0,0.85)",
                                 }}
                               >
-                                {topic || content?.source_ref}
+                                {(() => {
+                                  const raw = (topic || content?.source_ref || "")
+                                    .replace(/^["„“'«»\s:\-–—]+|["„“'«»\s:\-–—]+$/g, "")
+                                    .trim()
+                                    .toUpperCase();
+                                  const words = raw.split(/\s+/).filter(Boolean);
+                                  if (words.length >= 2) {
+                                    let bestIdx = 1;
+                                    let minDiff = Infinity;
+                                    for (let i = 1; i < words.length; i++) {
+                                      const l1 = words.slice(0, i).join(" ");
+                                      const l2 = words.slice(i).join(" ");
+                                      const diff = Math.abs(l1.length - l2.length);
+                                      if (diff < minDiff) {
+                                        minDiff = diff;
+                                        bestIdx = i;
+                                      }
+                                    }
+                                    return (
+                                      <>
+                                        <span className="block">{words.slice(0, bestIdx).join(" ")}</span>
+                                        <span className="block">{words.slice(bestIdx).join(" ")}</span>
+                                      </>
+                                    );
+                                  }
+                                  return raw;
+                                })()}
                               </p>
                             </div>
                           )}
@@ -2373,10 +2405,11 @@ function CreatePage() {
                             }`}
                           >
                             <p
-                              className="text-white font-bold leading-snug break-words"
+                              className="text-white font-extrabold leading-tight break-words uppercase"
                               style={{
-                                fontSize: "clamp(14px, 5.5cqi, 30px)",
-                                textShadow: "0px 2px 10px rgba(0,0,0,0.8)",
+                                fontSize: "clamp(18px, 6.8cqi, 36px)",
+                                textShadow:
+                                  "2.5px 2.5px 0 #000, -2.5px -2.5px 0 #000, 2.5px -2.5px 0 #000, -2.5px 2.5px 0 #000, 0 4px 16px rgba(0,0,0,0.95), 0 0 10px rgba(0,0,0,0.85)",
                               }}
                             >
                               {(() => {
@@ -2411,7 +2444,7 @@ function CreatePage() {
                                     );
                                     if (currentWord && currentWord.word) {
                                       return (
-                                        <span style={{ color: themeColor }}>{currentWord.word}</span>
+                                        <span style={{ color: themeColor }}>{currentWord.word.toUpperCase()}</span>
                                       );
                                     }
                                     return "";
@@ -2429,7 +2462,7 @@ function CreatePage() {
                                   let cur: { word: string; start: number; end: number; globalIdx: number }[] = [];
                                   const flushPhrase = () => {
                                     if (!cur.length) return;
-                                    const pWords = cur.map((w) => w.word);
+                                    const pWords = cur.map((w) => w.word.toUpperCase());
                                     const lines =
                                       pWords.length >= 2
                                         ? balanceWordsIntoTwoLines(pWords, 68, 640)
@@ -2447,9 +2480,9 @@ function CreatePage() {
                                   const MIN_CLAUSE = 2;
                                   for (let i = 0; i < activeTimings.length; i++) {
                                     const item = activeTimings[i];
-                                    const w = item.word || "";
+                                    const w = (item.word || "").toUpperCase();
                                     
-                                    const pWordsTest = [...cur.map(x => x.word), w];
+                                    const pWordsTest = [...cur.map(x => x.word.toUpperCase()), w];
                                     const testLines = wrapTextToSafeWidth(pWordsTest, 68, 640);
                                     if (testLines.length > 2 && cur.length > 0) {
                                       flushPhrase();
@@ -2512,12 +2545,12 @@ function CreatePage() {
                                                     style={{
                                                       color: isActive ? themeColor : "#FFFFFF",
                                                       textShadow: isActive
-                                                        ? `0 0 14px ${themeColor}, 0 2px 8px rgba(0,0,0,0.8)`
+                                                        ? `2.5px 2.5px 0 #000, -2.5px -2.5px 0 #000, 2.5px -2.5px 0 #000, -2.5px 2.5px 0 #000, 0 0 18px ${themeColor}, 0 4px 16px rgba(0,0,0,0.95)`
                                                         : undefined,
-                                                      fontWeight: isActive ? 800 : 700,
+                                                      fontWeight: isActive ? 900 : 800,
                                                     }}
                                                   >
-                                                    {token}
+                                                    {token.toUpperCase()}
                                                     {tIdx < lineTokens.length - 1 ? " " : ""}
                                                   </span>
                                                 );
@@ -2529,22 +2562,22 @@ function CreatePage() {
                                     );
                                   }
 
-                                  return bulgarian ? bulgarian.substring(0, 40) + "..." : "";
+                                  return bulgarian ? bulgarian.substring(0, 40).toUpperCase() + "..." : "";
                                 }
 
                                 if (bulgarian) {
                                   const clean = bulgarian.replace(/<[^>]+>/g, "").trim();
-                                  const firstSentence = clean.split(/[.!?…\n]/)[0] || clean.substring(0, 40);
+                                  const firstSentence = (clean.split(/[.!?…\n]/)[0] || clean.substring(0, 40)).toUpperCase();
                                   const words = firstSentence.split(/\s+/).filter(Boolean).slice(0, 8);
                                   const lines =
                                     words.length >= 2
-                                      ? balanceWordsIntoTwoLines(words, 64, 600)
+                                      ? balanceWordsIntoTwoLines(words, 68, 600)
                                       : [words.join(" ")];
                                   return (
-                                    <span className="block text-center">
+                                    <span className="block text-center uppercase font-extrabold">
                                       {lines.map((line, idx) => (
                                         <span key={idx} className="block text-white">
-                                          {line}
+                                          {line.toUpperCase()}
                                         </span>
                                       ))}
                                     </span>

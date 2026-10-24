@@ -582,12 +582,14 @@ function AssistantPage() {
       const altActLabel = altAct ? detectActionOrDuaLabel(altAct) : "";
       const altActText = altAct ? `\n${altActLabel === "Дуа" ? "🤍" : "📌"} **${altActLabel}:** ${altAct}` : "";
       const altExpl = stripScholarAttribution(res.proposal?.scriptWorkflow?.explanation || res.proposal?.summaryBg || "");
+      const dalilFull = res.proposal?.fullDalilText || res.proposal?.scriptWorkflow?.dalilText;
+      const dalilFullText = dalilFull ? `\n📖 **Пълен далил:** „${cleanScriptPrefixes(dalilFull)}“` : "";
 
       setMessages((prev) => [
         ...prev,
         {
           role: "assistant",
-          text: `🔄 **Алтернативно предложение:**\n\n${res.reply}\n\n📖 **Цитат:** ${res.proposal?.title}\n💎 **Обяснение:** ${altExpl}${altActText}\n🎨 **Атмосфера:** ${res.proposal?.themeBg}\n\n📌 Натиснете **\"✅ Съгласи се / Одобри\"** за да стартираме видеото, или **\"❌ Откажи / Предложи друг\"** за ново предложение!`,
+          text: `🔄 **Алтернативно предложение:**\n\n${res.reply}\n\n📖 **Цитат:** ${res.proposal?.title}${dalilFullText}\n💎 **Обяснение:** ${altExpl}${altActText}\n🎨 **Атмосфера:** ${res.proposal?.themeBg}\n\n📌 Натиснете **\"✅ Съгласи се / Одобри\"** за да стартираме видеото, или **\"❌ Откажи / Предложи друг\"** за ново предложение!`,
           proposal: res.proposal,
         },
       ]);
@@ -882,12 +884,14 @@ function AssistantPage() {
       toast.message("✨ AI подготвя тематично предложение (по автентичен източник)...");
 
       const res = await suggestViralProposal();
+      const dalilFull = res.proposal?.fullDalilText || res.proposal?.scriptWorkflow?.dalilText;
+      const dalilFullText = dalilFull ? `\n📖 **Пълен цитат:** „${cleanScriptPrefixes(dalilFull)}“` : "";
 
       setMessages((prev) => [
         ...prev,
         {
           role: "assistant",
-          text: `✨ **Тематично Предложение:**\n\n${res.reply}\n\n📋 **Тема:** ${res.proposal?.title}\n🎨 **Атмосфера:** ${res.proposal?.themeBg}\n\n📌 Натиснете **\"✅ Съгласи се / Одобри\"** за да стартираме видеото, или **\"❌ Откажи / Предложи друг\"** за ново предложение!`,
+          text: `✨ **Тематично Предложение:**\n\n${res.reply}\n\n📋 **Тема:** ${res.proposal?.title}${dalilFullText}\n🎨 **Атмосфера:** ${res.proposal?.themeBg}\n\n📌 Натиснете **\"✅ Съгласи се / Одобри\"** за да стартираме видеото, или **\"❌ Откажи / Предложи друг\"** за ново предложение!`,
           proposal: res.proposal,
         },
       ]);
@@ -932,6 +936,8 @@ function AssistantPage() {
         const expActLabel = expAct ? detectActionOrDuaLabel(expAct) : "";
         const expActText = expAct ? `\n${expActLabel === "Дуа" ? "🤍" : "📌"} **${expActLabel}:** ${expAct}` : "";
         const expExpl = stripScholarAttribution(res.proposal?.scriptWorkflow?.explanation || res.proposal?.summaryBg || "");
+        const dalilFull = res.proposal?.fullDalilText || res.proposal?.scriptWorkflow?.dalilText;
+        const dalilFullText = dalilFull ? `\n📖 **Пълен далил:** „${cleanScriptPrefixes(dalilFull)}“` : "";
 
         const audit = res.proposal?.auditReport;
         const theoFixes = audit?.theologicalCorrections || [];
@@ -942,7 +948,7 @@ function AssistantPage() {
 
         const newMsg: ChatMsg = {
           role: "assistant",
-          text: `🎬 **Ислямско видео с обяснение${totalToGenerate > 1 ? ` (${i + 1}/${totalToGenerate})` : ""}:**\n\n${res.reply}\n\n📖 **Цитат:** ${res.proposal?.title}\n💎 **Обяснение:** ${expExpl}${expActText}\n🎨 **Атмосфера:** ${res.proposal?.themeBg}${scheduleNote}${auditText}\n\n📌 Натиснете **\"✅ Съгласи се / Одобри\"** за да стартираме видеото, използвайте бутоните за **AI подобрение / редакция**, или **\"❌ Откажи / Предложи друг\"** за алтернатива!`,
+          text: `🎬 **Ислямско видео с обяснение${totalToGenerate > 1 ? ` (${i + 1}/${totalToGenerate})` : ""}:**\n\n${res.reply}\n\n📖 **Цитат:** ${res.proposal?.title}${dalilFullText}\n💎 **Обяснение:** ${expExpl}${expActText}\n🎨 **Атмосфера:** ${res.proposal?.themeBg}${scheduleNote}${auditText}\n\n📌 Натиснете **\"✅ Съгласи се / Одобри\"** за да стартираме видеото, използвайте бутоните за **AI подобрение / редакция**, или **\"❌ Откажи / Предложи друг\"** за алтернатива!`,
           proposal: res.proposal,
         };
 
@@ -1090,7 +1096,7 @@ function AssistantPage() {
           dalilIntro: targetMsg.proposal.surah
             ? "В Свещения Коран, Аллах Всевишният повелява:"
             : "Пратеникът на Аллах ﷺ ни учи:",
-          dalilText: targetMsg.proposal.title,
+          dalilText: targetMsg.proposal.fullDalilText || targetMsg.proposal.title,
           explanation: targetMsg.proposal.summaryBg || "",
           actionStep: "",
         };
@@ -1101,6 +1107,7 @@ function AssistantPage() {
         targetMsg.proposal = {
           ...targetMsg.proposal,
           scriptWorkflow: updatedSw,
+          fullDalilText: field === "dalilText" ? value : targetMsg.proposal.fullDalilText,
           summaryBg: field === "explanation" ? value : targetMsg.proposal.summaryBg,
         };
       }
@@ -2398,7 +2405,7 @@ function AssistantPage() {
                                       </label>
                                       <textarea
                                         rows={3}
-                                        value={m.proposal.scriptWorkflow.dalilText || ""}
+                                        value={m.proposal.scriptWorkflow.dalilText || m.proposal.fullDalilText || ""}
                                         onChange={(e) =>
                                           handleUpdateScriptField(idx, "dalilText", e.target.value)
                                         }
@@ -2476,15 +2483,31 @@ function AssistantPage() {
                                       </div>
                                     )}
 
-                                    <div className="p-2.5 rounded-lg bg-black/40 border border-teal-500/20">
-                                      <div className="font-bold text-teal-300 flex items-center gap-1 mb-1">
-                                        <span>📖 Свещен цитат</span>
+                                    <div className="p-3 rounded-xl bg-teal-950/30 border-2 border-teal-500/40 space-y-2 shadow-sm">
+                                      <div className="flex items-center justify-between gap-2 border-b border-teal-500/20 pb-1">
+                                        <div className="font-bold text-teal-300 flex items-center gap-1.5 text-xs">
+                                          <BookOpen className="size-3.5 text-teal-400 shrink-0" />
+                                          <span>📖 ПЪЛЕН ТЕКСТ НА СВЕЩЕНИЯ {m.proposal.surah ? "АЯТ (КОРАН)" : "ХАДИС (САХИХ)"}</span>
+                                        </div>
+                                        {(m.proposal.surah || m.proposal.collection || m.proposal.hadithCollection) && (
+                                          <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-teal-500/20 text-teal-200 border border-teal-500/30">
+                                            {cleanProposalTitle(m.proposal.title)}
+                                          </span>
+                                        )}
                                       </div>
-                                      {m.proposal.scriptWorkflow.dalilText ? (
-                                        <div className="font-medium text-white/90">„{cleanScriptPrefixes(m.proposal.scriptWorkflow.dalilText)}“</div>
-                                      ) : (
-                                        <div className="font-semibold text-primary">{m.proposal.title}</div>
+
+                                      {m.proposal.arabicScriptureText && (
+                                        <div
+                                          dir="rtl"
+                                          className="font-serif text-right text-base sm:text-lg leading-loose text-amber-200/95 bg-black/40 p-2.5 rounded-lg border border-amber-500/20 font-medium select-text"
+                                        >
+                                          {m.proposal.arabicScriptureText}
+                                        </div>
                                       )}
+
+                                      <div className="font-medium text-white/95 text-xs sm:text-[13px] leading-relaxed bg-black/30 p-2.5 rounded-lg border border-teal-500/20 select-text">
+                                        „{cleanScriptPrefixes(m.proposal.fullDalilText || m.proposal.scriptWorkflow.dalilText || m.proposal.title)}“
+                                      </div>
                                     </div>
 
                                     <div className="p-2.5 rounded-lg bg-black/40 border border-sky-500/20">
@@ -2613,12 +2636,44 @@ function AssistantPage() {
                               )}
                             </div>
                           ) : (
-                            m.proposal.summaryBg && (
-                              <div>
-                                <span className="font-semibold text-muted-foreground">Съдържание: </span>
-                                <span className="text-foreground">{m.proposal.summaryBg}</span>
-                              </div>
-                            )
+                            <div className="space-y-2.5 my-2">
+                              {/* 📖 ПЪЛЕН ТЕКСТ НА СВЕЩЕНИЯ АЯТ / САХИХ ХАДИС */}
+                              {(m.proposal.fullDalilText || m.proposal.arabicScriptureText || m.proposal.surah || m.proposal.collection || m.proposal.hadithCollection) && (
+                                <div className="p-3.5 rounded-xl bg-teal-950/40 border-2 border-teal-500/50 space-y-2 shadow-md">
+                                  <div className="flex items-center justify-between gap-2 border-b border-teal-500/30 pb-1.5">
+                                    <div className="font-bold text-teal-300 text-xs sm:text-sm flex items-center gap-1.5">
+                                      <BookOpen className="size-4 text-teal-400 shrink-0" />
+                                      <span>
+                                        📖 ПЪЛЕН ТЕКСТ НА СВЕЩЕНИЯ {m.proposal.surah ? "АЯТ (СВЕЩЕН КОРАН)" : "ХАДИС (САХИХ)"}
+                                      </span>
+                                    </div>
+                                    <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-teal-500/20 text-teal-200 border border-teal-500/30 font-semibold">
+                                      {cleanProposalTitle(m.proposal.title)}
+                                    </span>
+                                  </div>
+
+                                  {m.proposal.arabicScriptureText && (
+                                    <div
+                                      dir="rtl"
+                                      className="font-serif text-right text-base sm:text-lg leading-loose text-amber-200/95 bg-black/40 p-2.5 rounded-lg border border-amber-500/20 font-medium select-text"
+                                    >
+                                      {m.proposal.arabicScriptureText}
+                                    </div>
+                                  )}
+
+                                  <div className="text-white/95 text-xs sm:text-[13px] leading-relaxed font-medium bg-black/30 p-2.5 rounded-lg border border-teal-500/20 select-text">
+                                    „{cleanScriptPrefixes(m.proposal.fullDalilText || m.proposal.title)}“
+                                  </div>
+                                </div>
+                              )}
+
+                              {m.proposal.summaryBg && (
+                                <div className="text-xs">
+                                  <span className="font-semibold text-emerald-400">Обяснение & Поука: </span>
+                                  <span className="text-foreground">{stripScholarAttribution(m.proposal.summaryBg)}</span>
+                                </div>
+                              )}
+                            </div>
                           )}
                       {m.proposal.themeBg && (
                         <div>
@@ -2859,7 +2914,42 @@ function AssistantPage() {
                                   </span>
                                 )}
                               </div>
-                              {prop.summaryBg && <p className="text-muted-foreground">{prop.summaryBg}</p>}
+
+                              {(prop.fullDalilText || prop.scriptWorkflow?.dalilText || prop.arabicScriptureText || prop.surah || prop.collection || prop.hadithCollection) && (
+                                <div className="my-2 p-2.5 rounded-lg bg-teal-950/30 border border-teal-500/30 space-y-1.5 text-xs">
+                                  <div className="font-bold text-teal-300 text-[11px] flex items-center justify-between gap-2 border-b border-teal-500/20 pb-1">
+                                    <span className="flex items-center gap-1">
+                                      <BookOpen className="size-3 text-teal-400 shrink-0" />
+                                      📖 Пълен текст на {prop.surah ? "аята" : "далила"}:
+                                    </span>
+                                    {(prop.surah || prop.collection || prop.hadithCollection) && (
+                                      <span className="text-[10px] font-mono text-teal-200/90">
+                                        {cleanProposalTitle(prop.title)}
+                                      </span>
+                                    )}
+                                  </div>
+
+                                  {prop.arabicScriptureText && (
+                                    <div
+                                      dir="rtl"
+                                      className="font-serif text-right text-sm leading-relaxed text-amber-200/90 bg-black/40 p-2 rounded border border-amber-500/20 select-text"
+                                    >
+                                      {prop.arabicScriptureText}
+                                    </div>
+                                  )}
+
+                                  <div className="text-white/95 font-medium bg-black/30 p-2 rounded border border-teal-500/20 leading-relaxed select-text">
+                                    „{cleanScriptPrefixes(prop.fullDalilText || prop.scriptWorkflow?.dalilText || prop.title)}“
+                                  </div>
+                                </div>
+                              )}
+
+                              {prop.summaryBg && (
+                                <p className="text-muted-foreground text-xs leading-relaxed">
+                                  <span className="text-emerald-400/90 font-medium">Обяснение: </span>
+                                  {stripScholarAttribution(prop.summaryBg)}
+                                </p>
+                              )}
                               <div className="flex flex-wrap gap-3 text-[11px] text-amber-400/90 pt-0.5">
                                 <span>🎨 {prop.themeBg || "Кино фон"}</span>
                                 <span>✨ Стил: {prop.tiktokTheme || "hormozi"}</span>

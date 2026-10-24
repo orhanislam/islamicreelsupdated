@@ -368,40 +368,64 @@ function roundRect(
 
 function drawReferencePill(ctx: CanvasRenderingContext2D, text: string, sz: SafeZoneGeometry) {
   if (!text || !text.trim()) return;
+  const clean = text
+    .replace(/^["„“'«»\s:\-–—]+|["„“'«»\s:\-–—]+$/g, "")
+    .trim()
+    .toUpperCase();
+  if (!clean) return;
+
   ctx.save();
   const scale = sz.W / 1080;
-  const fontPx = Math.round(REFERENCE_PILL_STANDARDS.FONT_SIZE * scale);
-  ctx.font = `500 ${fontPx}px 'Inter', system-ui, sans-serif`;
-  const tw = ctx.measureText(text).width;
-  const padX = Math.round(REFERENCE_PILL_STANDARDS.PAD_X * scale);
-  const padY = Math.round(REFERENCE_PILL_STANDARDS.PAD_Y * scale);
-  const pillW = Math.min(tw + padX * 2, sz.W_SAFE);
-  const pillH = fontPx + padY * 2;
-  const rawX = sz.CENTER_X - pillW / 2;
-  const rawY = sz.SAFE_TOP;
-  const clamped = clampToSafeZone({ x: rawX, y: rawY, width: pillW, height: pillH }, sz);
+  let fs = Math.round(58 * scale);
+  ctx.font = `800 ${fs}px 'Outfit', 'Inter', sans-serif`;
 
-  ctx.shadowBlur = 15;
-  ctx.shadowColor = "rgba(0, 0, 0, 0.6)";
-  ctx.fillStyle = "rgba(0, 0, 0, 0.65)";
-  roundRect(ctx, clamped.x, clamped.y, clamped.width, clamped.height, clamped.height / 2);
-  ctx.fill();
+  // Format into two balanced lines for a punchy, prominent 2-line header like in TikTok
+  const words = clean.split(/\s+/).filter(Boolean);
+  let lines: string[] = [clean];
+  if (words.length >= 2) {
+    let bestIdx = 1;
+    let minDiff = Infinity;
+    for (let i = 1; i < words.length; i++) {
+      const l1 = words.slice(0, i).join(" ");
+      const l2 = words.slice(i).join(" ");
+      const diff = Math.abs(l1.length - l2.length);
+      if (diff < minDiff) {
+        minDiff = diff;
+        bestIdx = i;
+      }
+    }
+    lines = [words.slice(0, bestIdx).join(" "), words.slice(bestIdx).join(" ")];
+  }
 
-  // Glowing golden border
-  ctx.shadowBlur = 10;
-  ctx.shadowColor = "rgba(212, 175, 55, 0.4)";
-  ctx.strokeStyle = "rgba(212, 175, 55, 0.8)";
-  ctx.lineWidth = 2.0;
-  roundRect(ctx, clamped.x, clamped.y, clamped.width, clamped.height, clamped.height / 2);
-  ctx.stroke();
+  const maxHeaderW = Math.min(sz.W_SAFE, Math.round(760 * scale));
+  while (fs > Math.round(38 * scale)) {
+    ctx.font = `800 ${fs}px 'Outfit', 'Inter', sans-serif`;
+    const maxLineWidth = Math.max(...lines.map((l) => ctx.measureText(l).width));
+    if (maxLineWidth <= maxHeaderW) break;
+    fs -= 2;
+  }
 
-  // Premium typography for the reference
-  ctx.shadowBlur = 0;
-  ctx.fillStyle = "#f4c95d";
-  ctx.font = `bold ${Math.round(24 * scale)}px 'Inter', 'Roboto', sans-serif`;
+  const lh = Math.round(fs * 1.25);
+  const startY = sz.SAFE_TOP + Math.round(25 * scale);
+
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
-  ctx.fillText(text, clamped.x + clamped.width / 2, clamped.y + clamped.height / 2 + 1);
+  ctx.lineJoin = "round";
+
+  // Pro TikTok/Reels title outline and shadow with big white letters
+  ctx.strokeStyle = "#000000";
+  ctx.lineWidth = Math.max(7.5, fs * 0.12);
+  ctx.shadowColor = "rgba(0, 0, 0, 0.90)";
+  ctx.shadowBlur = Math.max(16, fs * 0.24);
+  ctx.shadowOffsetY = Math.max(3, fs * 0.05);
+
+  lines.forEach((line, idx) => {
+    const y = startY + idx * lh + lh / 2;
+    ctx.strokeText(line, sz.CENTER_X, y);
+    ctx.fillStyle = "#FFFFFF";
+    ctx.fillText(line, sz.CENTER_X, y);
+  });
+
   ctx.restore();
 }
 
@@ -451,6 +475,7 @@ export async function renderVideo(opts: VideoOptions): Promise<{ blob: Blob; mim
   let audioCtx: AudioContext | null = null;
   let audioSource: AudioBufferSourceNode | null = null;
   let audioEndedAtWall: number | null = null;
+  const multiBgScenes: Array<{ video: HTMLVideoElement; start: number; end: number }> = [];
 
   try {
     if (ios) {
@@ -497,7 +522,7 @@ export async function renderVideo(opts: VideoOptions): Promise<{ blob: Blob; mim
     // clip's loop boundary while audio keeps going. For iPhone/iPad we render
     // from the selected poster/image with Ken Burns movement instead, which keeps
     // the subtitle/video timeline deterministic until the narration ends.
-    const multiBgScenes: Array<{ video: HTMLVideoElement; start: number; end: number }> = [];
+    multiBgScenes.length = 0;
     const hasMultiSegments = Array.isArray(opts.bRollSegments) && opts.bRollSegments.length > 1;
     if (hasMultiSegments && opts.bRollSegments) {
       for (let i = 0; i < opts.bRollSegments.length; i++) {
@@ -744,10 +769,13 @@ export async function renderVideo(opts: VideoOptions): Promise<{ blob: Blob; mim
       .replace(/\.{2,}/g, " ")
       .replace(/…+/g, " ")
       .trim();
-    const allWords = cleanBulgarianText.split(/\s+/).filter(Boolean);
-    const maxW = Math.min(sz.W_SAFE, Math.round(640 * scale));
+    const allWords = cleanBulgarianText
+      .split(/\s+/)
+      .filter(Boolean)
+      .map((w) => w.toUpperCase());
+    const maxW = Math.min(sz.W_SAFE, Math.round(680 * scale));
     const verticalForText = sz.H_SAFE;
-    const UNIFORM_CANVAS_FS = Math.round(68 * scale);
+    const UNIFORM_CANVAS_FS = Math.round(76 * scale);
 
     const MAX_WORDS_PER_PHRASE = 7;
     const MIN_WORDS_PER_PHRASE = 2;
@@ -769,7 +797,7 @@ export async function renderVideo(opts: VideoOptions): Promise<{ blob: Blob; mim
         const isLast = bIdx === bounds.length - 1;
         let ayahWords: string[];
         if (b.bulgarian && typeof b.bulgarian === "string" && b.bulgarian.trim().length > 0) {
-          ayahWords = b.bulgarian.split(/\s+/).filter(Boolean);
+          ayahWords = b.bulgarian.split(/\s+/).filter(Boolean).map((w) => w.toUpperCase());
         } else {
           const ratio = (b.english ? b.english.length : 10) / totalEngLen;
           const count = isLast
@@ -783,7 +811,7 @@ export async function renderVideo(opts: VideoOptions): Promise<{ blob: Blob; mim
           const bDur = Math.max(0.5, bEnd - bStart);
 
           // Slice long ayahs into uniform 2-line TikTok phrases at UNIFORM_CANVAS_FS
-          ctx.font = `700 ${UNIFORM_CANVAS_FS}px 'Outfit', 'Inter', sans-serif`;
+          ctx.font = `800 ${UNIFORM_CANVAS_FS}px 'Outfit', 'Inter', sans-serif`;
           const subChunks: string[][] = [];
           let curSub: string[] = [];
           for (const w of ayahWords) {
@@ -844,7 +872,7 @@ export async function renderVideo(opts: VideoOptions): Promise<{ blob: Blob; mim
         const w = allWords[i];
 
         const testCur = [...cur, w];
-        ctx.font = `700 ${UNIFORM_CANVAS_FS}px 'Outfit', 'Inter', sans-serif`;
+        ctx.font = `800 ${UNIFORM_CANVAS_FS}px 'Outfit', 'Inter', sans-serif`;
         const testLines = wrapWords(ctx, testCur, maxW);
         if (testLines.length > 2 && cur.length > 0) {
           flush();
@@ -1038,22 +1066,22 @@ export async function renderVideo(opts: VideoOptions): Promise<{ blob: Blob; mim
     const phraseRender: RenderPhrase[] = phrases.map((p) => {
       const start = p.exactStart ?? wordTimes[p.startWord]?.start ?? 0;
       const end = p.exactEnd ?? wordTimes[p.endWord - 1]?.end ?? revealDuration;
-      let fs = UNIFORM_CANVAS_FS; // Strictly uniform 68px font size across all phrases for TikTok
-      ctx.font = `700 ${fs}px 'Outfit', 'Inter', sans-serif`;
+      let fs = UNIFORM_CANVAS_FS; // Strictly uniform font size across all phrases for TikTok
+      ctx.font = `800 ${fs}px 'Outfit', 'Inter', sans-serif`;
 
       // Scale down only if a single unusually long compound word exceeds maxW
-      while (fs > Math.round(44 * scale)) {
+      while (fs > Math.round(48 * scale)) {
         const longestWordWidth = Math.max(...p.words.map((w) => ctx.measureText(w).width));
         if (longestWordWidth <= maxW) break;
         fs -= 2;
-        ctx.font = `700 ${fs}px 'Outfit', 'Inter', sans-serif`;
+        ctx.font = `800 ${fs}px 'Outfit', 'Inter', sans-serif`;
       }
       
       const lines =
         p.words.length >= 2
           ? balanceWordsIntoTwoLinesCanvas(ctx, p.words, maxW)
           : wrapWords(ctx, p.words, maxW);
-      const lh = Math.round(fs * 1.34);
+      const lh = Math.round(fs * 1.25);
       return { ...p, start, end, fontSize: fs, lineHeight: lh, lines };
     });
     if (phraseRender.length) {
@@ -1275,8 +1303,8 @@ export async function renderVideo(opts: VideoOptions): Promise<{ blob: Blob; mim
         const alpha = Math.min(alphaIn, alphaOut);
         const popScale = 1.0;
 
-        // Modern minimalistic clean white font
-        ctx.font = `700 ${activePhrase.fontSize}px 'Outfit', 'Inter', sans-serif`;
+        // Big bold viral TikTok font (matching reference style)
+        ctx.font = `800 ${activePhrase.fontSize}px 'Outfit', 'Inter', sans-serif`;
         ctx.textBaseline = "alphabetic";
         ctx.lineJoin = "round";
 
@@ -1322,9 +1350,9 @@ export async function renderVideo(opts: VideoOptions): Promise<{ blob: Blob; mim
 
         // Pro TikTok/Reels caption styling: crisp opaque black outline with deep subtle drop shadow
         ctx.strokeStyle = "#000000";
-        ctx.lineWidth = Math.max(6.5, activePhrase.fontSize * 0.09);
-        ctx.shadowColor = "rgba(0, 0, 0, 0.65)";
-        ctx.shadowBlur = Math.max(8, activePhrase.fontSize * 0.15);
+        ctx.lineWidth = Math.max(8.5, activePhrase.fontSize * 0.12);
+        ctx.shadowColor = "rgba(0, 0, 0, 0.90)";
+        ctx.shadowBlur = Math.max(16, activePhrase.fontSize * 0.22);
         ctx.shadowOffsetY = Math.max(3, activePhrase.fontSize * 0.05);
 
         const themeColor =
@@ -1356,7 +1384,7 @@ export async function renderVideo(opts: VideoOptions): Promise<{ blob: Blob; mim
           let cursorX = sz.CENTER_X - totalLineWidth / 2;
 
           for (let wIdx = 0; wIdx < lineWords.length; wIdx++) {
-            const wordStr = lineWords[wIdx];
+            const wordStr = lineWords[wIdx].toUpperCase();
             const globalIdx = activePhrase.startWord + currentWordOffset + wIdx;
             const wTiming = wordTimes[globalIdx];
             const isActive = wTiming && elapsed >= wTiming.start && elapsed <= wTiming.end;
@@ -1369,15 +1397,15 @@ export async function renderVideo(opts: VideoOptions): Promise<{ blob: Blob; mim
             if (isActive) {
               // Active karaoke pop & glow
               ctx.translate(centerX, y);
-              ctx.scale(1.14, 1.14);
+              ctx.scale(1.10, 1.10);
               ctx.translate(-centerX, -y);
               ctx.fillStyle = themeColor;
               ctx.shadowColor = themeColor;
-              ctx.shadowBlur = Math.max(14, activePhrase.fontSize * 0.25);
+              ctx.shadowBlur = Math.max(18, activePhrase.fontSize * 0.28);
             } else if (isKeyword) {
               ctx.fillStyle = themeColor;
             } else {
-              ctx.fillStyle = "#ffffff";
+              ctx.fillStyle = "#FFFFFF";
             }
 
             ctx.textAlign = "center";
@@ -1396,17 +1424,20 @@ export async function renderVideo(opts: VideoOptions): Promise<{ blob: Blob; mim
       }
       const rawTop = (opts.topic || opts.reference || "").trim();
       let pillText = rawTop;
-      if (opts.topic && opts.topic.trim()) {
-        pillText = opts.topic.trim();
-      } else if (rawTop) {
-        if (rawTop.includes("] ")) {
-          const after = rawTop.split("] ").slice(1).join("] ").trim();
-          if (after) pillText = after;
-        } else if (rawTop.includes("•")) {
-          const parts = rawTop.split("•").map((p) => p.trim()).filter(Boolean);
-          const nonCitation = parts.find((p) => !/(?:коран|сура|хадис|бухари|муслим|тирмизи|навауи|\d+[:.]\d+)/i.test(p));
-          if (nonCitation) pillText = nonCitation;
-        }
+      if (pillText.includes("] ")) {
+        const after = pillText.split("] ").slice(1).join("] ").trim();
+        if (after) pillText = after;
+      } else if (pillText.includes("]")) {
+        const after = pillText.split("]").slice(1).join("]").replace(/^[:\-–—\s]+/, "").trim();
+        if (after) pillText = after;
+      } else if (pillText.includes("•")) {
+        const parts = pillText.split("•").map((p) => p.trim()).filter(Boolean);
+        const nonCitation = parts.find((p) => !/(?:коран|сура|хадис|бухари|муслим|тирмизи|навауи|\d+[:.]\d+)/i.test(p));
+        if (nonCitation) pillText = nonCitation;
+      } else if (/\s+[-–—]\s+/.test(pillText)) {
+        const parts = pillText.split(/\s+[-–—]\s+/).map((p) => p.trim()).filter(Boolean);
+        const nonCitation = parts.find((p) => !/(?:коран|сура|хадис|бухари|муслим|тирмизи|навауи|\d+[:.]\d+)/i.test(p));
+        if (nonCitation) pillText = nonCitation;
       }
       pillText = pillText.replace(/^["„“'«»\s:\-–—]+|["„“'«»\s:\-–—]+$/g, "").trim();
       if (pillText) {
