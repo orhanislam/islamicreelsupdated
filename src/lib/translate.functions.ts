@@ -38,15 +38,20 @@ export function normalizeIslamicTermsBulgarian(t: string): string {
     // Strip leftover English cross-reference brackets from Muhsin Khan / sunnah.com
     .replace(/\[\s*(?:see\s+)?v\.?\s*\d+\s*:\s*\d+[^\]]*\]/gi, "")
     .replace(/\(\s*(?:see\s+)?v\.?\s*\d+\s*:\s*\d+[^)]*\)/gi, "")
-    // Abbreviations
+    // Abbreviations & Raw Transliterations -> Always Bulgarian meaning
     .replace(/\(\s*с\s*\/\s*у\s*\)/gi, "(мир да бъде с него)")
     .replace(/\bс\s*\/\s*у\b/gi, "мир да бъде с него")
-    .replace(/(?:\(\s*(?:saw|pbuh|с\.а\.с\.|с\.а\.в\.)\s*\)|\b(?:с\.а\.с\.|с\.а\.в\.|ﷺ)\b)/gi, "мир да бъде с него")
+    .replace(/(?:\(\s*(?:saw|pbuh|с\.а\.с\.|с\.а\.в\.)\s*\)|\b(?:с\.а\.с\.|с\.а\.в\.|ﷺ)\b)/gi, "(мир да бъде с него)")
+    .replace(/(?:\(\s*)?(?:sallallahu\s+ala(?:y|i)hi\s+wa\s+sallam|салл?аллаа?ху\s+але[йй]хи\s+(?:ва|уа|уе)\s+с[ае]лл[яе]м)(?:\s*\))?/gi, " (мир да бъде с него) ")
     .replace(/\(\s*(?:saw|pbuh|ﷺ|саллялляху алейхи (?:ва|уе) селлем)\s*\)/gi, "(мир да бъде с него)")
     .replace(/мир\s+да\s+бъде\s+със\s+него/gi, "мир да бъде с него")
     .replace(/\b(?:с\.в\.т\.|swt)\b/gi, "Субханаху ва Тааля")
     .replace(/(?:\(\s*(?:р\.а\.|ra|ра)\s*\)|\bр\.а\.)/gi, " (Аллах да е доволен от него) ")
-    .replace(/\b(?:radiyallahu\s+anhu|радияллаху\s+анху)\b/gi, " Аллах да е доволен от него ")
+    .replace(/(?:\(\s*)?(?:radiyallahu\s+anhu|ради[йя]ллаа?ху\s+анху)(?:\s*\))?/gi, " (Аллах да е доволен от него) ")
+    .replace(/(?:\(\s*)?(?:radiyallahu\s+anha|ради[йя]ллаа?ху\s+анха)(?:\s*\))?/gi, " (Аллах да е доволен от нея) ")
+    .replace(/(?:\(\s*)?(?:radiyallahu\s+anhum|ради[йя]ллаа?ху\s+анхум)(?:\s*\))?/gi, " (Аллах да е доволен от тях) ")
+    .replace(/\(\s*\(\s*(мир да бъде с него)\s*\)\s*\)/gi, "($1)")
+    .replace(/\(\s*\(\s*(Аллах да е доволен от [^)]+)\s*\)\s*\)/gi, "($1)")
     // Contextual fixes for proper Islamic terminology & preventing AI transliteration mistakes
     .replace(/\bal-djadjali\b/gi, "Ал-Даджжал")
     .replace(/\bал-джаджали\b/gi, "Ал-Даджжал")

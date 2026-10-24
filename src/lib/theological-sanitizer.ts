@@ -187,6 +187,21 @@ export function sanitizeTheologicalRespect(text: string): string {
     },
   );
 
+  // 7e. Written Islamic honorifics: Always write literary Bulgarian meaning in text displays
+  // Ensures all written titles, subtitles, captions, and summaries show "(мир да бъде с него)" and "(Аллах да е доволен от него)"
+  s = s
+    .replace(/\(\s*с\s*\/\s*у\s*\)/gi, "(мир да бъде с него)")
+    .replace(/(?<=^|[^\p{L}\p{N}])с\s*\/\s*у(?=[^\p{L}\p{N}]|$)/gui, "мир да бъде с него")
+    .replace(/(?:\(\s*(?:saw|pbuh|с\.а\.с\.|с\.а\.в\.)\s*\)|(?<=^|[^\p{L}\p{N}])(?:с\.а\.с\.|с\.а\.в\.|ﷺ)(?=[^\p{L}\p{N}]|$))/gui, "(мир да бъде с него)")
+    .replace(/(?:\(\s*)?(?:sallallahu\s+ala(?:y|i)hi\s+wa\s+sallam|салл?аллаа?ху\s+але[йй]хи\s+(?:ва|уа|уе)\s+с[ае]лл[яе]м)(?:\s*\))?/gi, " (мир да бъде с него) ")
+    .replace(/мир\s+да\s+бъде\s+със\s+него/gi, "мир да бъде с него")
+    .replace(/(?:\(\s*(?:р\.а\.|ra|ра)\s*\)|(?<=^|[^\p{L}\p{N}])(?:р\.а\.)(?=[^\p{L}\p{N}]|$))/gui, " (Аллах да е доволен от него) ")
+    .replace(/(?:\(\s*)?(?:radiyallahu\s+anhu|ради[йя]ллаа?ху\s+анху)(?:\s*\))?/gi, " (Аллах да е доволен от него) ")
+    .replace(/(?:\(\s*)?(?:radiyallahu\s+anha|ради[йя]ллаа?ху\s+анха)(?:\s*\))?/gi, " (Аллах да е доволен от нея) ")
+    .replace(/(?:\(\s*)?(?:radiyallahu\s+anhum|ради[йя]ллаа?ху\s+анхум)(?:\s*\))?/gi, " (Аллах да е доволен от тях) ")
+    .replace(/\(\s*\(\s*(мир да бъде с него)\s*\)\s*\)/gi, "($1)")
+    .replace(/\(\s*\(\s*(Аллах да е доволен от [^)]+)\s*\)\s*\)/gi, "($1)");
+
   // 8. Respectful and dignified Islamic emoji normalization:
   // Strictly replaces hype/gaming/casual or disrespectful emojis (fire, lightning, rocket, cartoon lightbulb)
   // with dignified, official Islamic symbols, and strips prohibited emojis (human hands, music notes, Kaaba as decorative icon).

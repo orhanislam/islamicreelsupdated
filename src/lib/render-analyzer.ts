@@ -26,6 +26,7 @@ import {
   normalizePhoneticsToDisplayWord,
   type WordTiming,
 } from "./tts.functions";
+import { remapSalawatTimingsToBulgarian } from "./salawat-timings";
 import { verifyAndCorrectSubtitleSync } from "./subtitle-sync.functions";
 import { TIKTOK_SAFE_ZONE } from "./safe-zone";
 import {
@@ -357,9 +358,11 @@ export function analyzeAndFixRenderPayloadSync(payload: any): {
   // 3. SUBTITLES & SAFE ZONE ANALYSIS
   // =========================================================================
   if (Array.isArray(data.bulgarianWordTimings) && data.bulgarianWordTimings.length > 0) {
+    // Remap any spoken Arabic Salawat / Sahabah timings to Bulgarian meaning tokens
+    const remapped = remapSalawatTimingsToBulgarian(data.bulgarianWordTimings);
     // Run verification & monotonic alignment
     const syncRes = verifyAndCorrectSubtitleSync(
-      data.bulgarianWordTimings,
+      remapped,
       tightDurationSec || 15,
     );
 

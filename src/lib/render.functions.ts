@@ -2,6 +2,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import type { Buffer } from "node:buffer";
 import { verifyAndCorrectSubtitleSync } from "./subtitle-sync.functions";
+import { remapSalawatTimingsToBulgarian } from "./salawat-timings";
 import { normalizeBulgarianNumbersForTts } from "./bulgarian-numbers";
 import {
   getSafeZone,
@@ -231,16 +232,17 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
       .replace(/\.{2,}/g, "")
       .replace(/…+/g, "")
       .trim();
-    let words = data.bulgarian.split(/\s+/).filter(Boolean).map((w: string) => w.toUpperCase());
+    let words = data.bulgarian.replace(/[()]/g, "").split(/\s+/).filter(Boolean).map((w: string) => w.toUpperCase());
     let timings = data.bulgarianWordTimings;
     if (timings && timings.length > 0) {
+      timings = remapSalawatTimingsToBulgarian(timings);
       const syncRes = verifyAndCorrectSubtitleSync(timings, audioDur);
       timings = syncRes.correctedTimings;
       if (timings.length > 0 && timings[0].word && timings[0].word !== "...") {
         timings = timings
           .map((t: any) => ({
             ...t,
-            word: (t.word || "").replace(/[\[\]]/g, "").trim().toUpperCase(),
+            word: (t.word || "").replace(/[\[\]()]/g, "").trim().toUpperCase(),
           }))
           .filter((t: any) => {
             if (!t.word) return false;

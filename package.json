@@ -14,7 +14,8 @@
     "test:carousel": "jiti src/lib/__tests__/verify-tawheed-carousel.test.ts",
     "test:viral": "jiti src/lib/__tests__/verify-viral-carousel.test.ts",
     "test:big-letters": "jiti src/lib/__tests__/verify-big-letters-text.test.ts",
-    "test": "jiti src/lib/__tests__/verify-big-letters-text.test.ts && jiti src/lib/__tests__/verify-tawheed-carousel.test.ts && jiti src/lib/__tests__/verify-sync.test.ts && jiti src/lib/__tests__/verify-goal-fixes.test.ts"
+    "test:salawat": "npx tsx --test src/lib/__tests__/verify-salawat-phonetics.test.ts",
+    "test": "jiti src/lib/__tests__/verify-big-letters-text.test.ts && jiti src/lib/__tests__/verify-tawheed-carousel.test.ts && jiti src/lib/__tests__/verify-sync.test.ts && jiti src/lib/__tests__/verify-goal-fixes.test.ts && npx tsx --test src/lib/__tests__/verify-salawat-phonetics.test.ts"
   },
   "dependencies": {
     "@ffmpeg-installer/ffmpeg": "^1.1.0",

@@ -5,8 +5,9 @@ import mp3Duration from "mp3-duration";
 import { sanitizeTheologicalRespect } from "./theological-sanitizer";
 import { normalizeBulgarianNumbersForTts, integerToBulgarianWords } from "./bulgarian-numbers";
 import { normalizeAllIslamicPhonetics, normalizeIslamicPhoneticsToDisplayWord } from "./islamic-phonetics";
+import { remapSalawatTimingsToBulgarian } from "./salawat-timings";
 
-export { normalizeBulgarianNumbersForTts, integerToBulgarianWords, normalizeAllIslamicPhonetics };
+export { normalizeBulgarianNumbersForTts, integerToBulgarianWords, normalizeAllIslamicPhonetics, remapSalawatTimingsToBulgarian };
 
 export type WordTiming = { start: number; end: number; word: string };
 
@@ -160,8 +161,22 @@ export function normalizeIslamicArabicPhoneticsForTts(text: string): string {
   // 0. Salafi Adab Gate: Reverence for Allah & Tawheed titles (eliminate diminutive "единичкият" & casual 'оня')
   res = sanitizeTheologicalRespect(res);
 
-  // 1. Invocations, Honorifics & Abbreviations
+  // 1. Invocations, Honorifics & Abbreviations (Pronounce authentic Arabic Salafi dialect in spoken audio)
   res = res
+    // Bulgarian salawat translations -> spoken Arabic Salawat
+    .replace(/\(\s*мир\s+да\s+бъде\s+с(?:ъс)?\s+него\s*\)/gi, " Саллаллааху 'алейхи ва саллям ")
+    .replace(/(?<=^|[^\p{L}\p{N}])мир\s+да\s+бъде\s+с(?:ъс)?\s+него(?=[^\p{L}\p{N}]|$)/gui, " Саллаллааху 'алейхи ва саллям ")
+    .replace(/\(\s*мир\s+нему(?:\s+и\s+благословия)?\s*\)/gi, " Саллаллааху 'алейхи ва саллям ")
+    .replace(/(?<=^|[^\p{L}\p{N}])мир\s+нему(?:\s+и\s+благословия)?(?=[^\p{L}\p{N}]|$)/gui, " Саллаллааху 'алейхи ва саллям ")
+    .replace(/(?:\(\s*)?Аллах\s+да\s+го\s+благослови\s+и\s+с\s+мир\s+да\s+го\s+дари(?:\s*\))?/gui, " Саллаллааху 'алейхи ва саллям ")
+    .replace(/(?:\(\s*)?благословии\s+и\s+мир\s+нему(?:\s*\))?/gui, " Саллаллааху 'алейхи ва саллям ")
+
+    // Bulgarian Sahabah translations -> spoken Arabic Sahabah honorific
+    .replace(/(?:\(\s*)?Аллах\s+да\s+е\s+доволен\s+от\s+него(?:\s*\))?/gui, " Радийаллааху 'анху ")
+    .replace(/(?:\(\s*)?Аллах\s+да\s+е\s+доволен\s+от\s+нея(?:\s*\))?/gui, " Радийаллааху 'анхаа ")
+    .replace(/(?:\(\s*)?Аллах\s+да\s+е\s+доволен\s+от\s+тях(?:\s*\))?/gui, " Радийаллааху 'анхум ")
+
+    // Abbreviations & Raw representations
     .replace(/\(\s*с\s*\/\s*у\s*\)/gi, " Саллаллааху 'алейхи ва саллям ")
     .replace(/(?<=^|[^\p{L}\p{N}])с\s*\/\s*у(?=[^\p{L}\p{N}]|$)/gui, " Саллаллааху 'алейхи ва саллям ")
     .replace(/(?:\(\s*(?:с\.а\.с\.|с\.а\.в\.|saw|pbuh)\s*\)|(?<=^|[^\p{L}\p{N}])(?:с\.а\.с\.|с\.а\.в\.|ﷺ)(?=[^\p{L}\p{N}]|$))/gui, " Саллаллааху 'алейхи ва саллям ")
@@ -201,7 +216,7 @@ export function normalizeIslamicArabicPhoneticsForTts(text: string): string {
   replaceWord("(?:barakallahu\\s+feek|barakallahu\\s+fik|barakallah|баракаллаху\\s+фик|баракаллах)", "Бааракаллааху фийк");
 
   // 5. Salawat & Companions
-  replaceWord("(?:sallallahu\\s+alayhi\\s+wa\\s+sallam|sallallahu\\s+alaihi\\s+wa\\s+sallam|саллаллаху\\s+алейхи\\s+уа\\s+саллям|саллаллаху\\s+алейхи\\s+ва\\s+саллям|саллаллаху\\s+алейхи\\s+ва\\s+селлем)", "Саллаллааху 'алейхи ва саллям");
+  replaceWord("(?:sallallahu\\s+alayhi\\s+wa\\s+sallam|sallallahu\\s+alaihi\\s+wa\\s+sallam|саллаллаху\\s+алейхи\\s+уа\\s+саллям|саллаллаху\\s+алейхи\\s+ва\\s+саллям|саллаллаху\\s+алейхи\\s+ва\\s+селлем|салляллаху\\s+алейхи\\s+ва\\s+саллям|салляллаху\\s+алейхи\\s+ва\\s+селлем)", "Саллаллааху 'алейхи ва саллям");
   replaceWord("(?:radiyallahu\\s+anhu|radiallahu\\s+anhu|радияллаху\\s+анху|радиалаху\\s+анху)", "Радийаллааху 'анху");
   replaceWord("(?:radiyallahu\\s+anha|radiallahu\\s+anha|радияллаху\\s+анха|радиалаху\\s+анха)", "Радийаллааху 'анхаа");
   replaceWord("(?:radiyallahu\\s+anhum|radiallahu\\s+anhum|радияллаху\\s+анхум|радиалаху\\s+анхум)", "Радийаллааху 'анхум");
@@ -536,6 +551,9 @@ export const synthesizeHadithNarration = createServerFn({ method: "POST" })
         console.warn("Audio alignment fallback:", alignErr);
       }
     }
+
+    // Remap spoken Arabic Salawat & Sahabah timings back to Bulgarian meaning words ("мир да бъде с него")
+    wordTimings = remapSalawatTimingsToBulgarian(wordTimings);
 
     const { verifyAndCorrectSubtitleSync } = await import("./subtitle-sync.functions");
     const verified = verifyAndCorrectSubtitleSync(wordTimings, duration);
