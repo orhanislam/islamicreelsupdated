@@ -23,6 +23,9 @@ export interface GenerationHistoryItem {
   theme?: string;
   reciter?: string;
   videoUrl?: string;
+  downloadUrl?: string;
+  completedAt?: number;
+  error?: string;
   status?: "completed" | "rendering" | "queued" | "error";
 }
 
@@ -150,20 +153,31 @@ function parseTypeAndDetails(title: string, data?: any): {
  */
 async function _readGenerationHistoryRaw(): Promise<GenerationHistoryItem[]> {
   const filePath = getHistoryFilePath();
+  let existingItems: GenerationHistoryItem[] = [];
   try {
     const raw = await fs.readFile(filePath, "utf-8");
     const parsed = JSON.parse(raw);
-    if (Array.isArray(parsed) && parsed.length > 0) {
-      return parsed;
+    if (Array.isArray(parsed)) {
+      existingItems = parsed;
     }
   } catch {
-    // file doesn't exist yet, we will auto-hydrate
+    // file doesn't exist yet
   }
 
-  // Auto-hydration from historical stores
-  const hydrated = await _hydrateFromHistoricalSources();
-  await _writeGenerationHistoryRaw(hydrated).catch(() => {});
-  return hydrated;
+  // Always synchronize and merge with historical sources, jobs, assistant chat, and disk
+  const merged = await _syncHistoryWithSources(existingItems);
+
+  // If items changed, write back
+  const hasChanged =
+    merged.length !== existingItems.length ||
+    JSON.stringify(merged.map((m) => [m.id, m.status, m.videoUrl])) !==
+      JSON.stringify(existingItems.map((m) => [m.id, m.status, m.videoUrl]));
+
+  if (hasChanged || existingItems.length === 0) {
+    await _writeGenerationHistoryRaw(merged).catch(() => {});
+  }
+
+  return merged;
 }
 
 async function _writeGenerationHistoryRaw(items: GenerationHistoryItem[]): Promise<void> {
@@ -184,183 +198,257 @@ async function _writeGenerationHistoryRaw(items: GenerationHistoryItem[]): Promi
 }
 
 /**
- * Intelligently imports historical items from jobs.json, downloaded_jobs.json,
- * jobs_raw.txt, and assistant_memory.json.
+ * Robust synchronization that unifies existing generation history with
+ * jobs.json, assistant_chat_history.json, assistant_memory.json, downloaded_jobs.json,
+ * jobs_raw.txt, and on-disk completed MP4 files.
  */
-async function _hydrateFromHistoricalSources(): Promise<GenerationHistoryItem[]> {
-  const items: GenerationHistoryItem[] = [];
-  const seenKeys = new Set<string>();
+async function _syncHistoryWithSources(
+  existingItems: GenerationHistoryItem[],
+): Promise<GenerationHistoryItem[]> {
+  const itemMap = new Map<string, GenerationHistoryItem>();
+  const seenContentKeys = new Set<string>();
 
-  const addItem = (item: GenerationHistoryItem) => {
-    const key = `${item.type}:${item.title.toLowerCase().trim()}:${Math.round(item.timestamp / 60000)}`;
-    if (!seenKeys.has(key)) {
-      seenKeys.add(key);
-      items.push(item);
-    }
-  };
-
-  // 1. Check ~/.islamicreels_jobs/jobs.json
+  // 1. Load deleted IDs so manually deleted items do not resurrect
+  const deletedIds = new Set<string>();
+  const jobsDir = path.join(os.homedir(), ".islamicreels_jobs");
   try {
-    const jobsPath = path.join(os.homedir(), ".islamicreels_jobs", "jobs.json");
-    const raw = await fs.readFile(jobsPath, "utf-8");
-    const jobs = JSON.parse(raw);
-    if (Array.isArray(jobs)) {
-      for (const j of jobs) {
-        if (!j || !j.title) continue;
-        const details = parseTypeAndDetails(j.title, j.data);
-        addItem({
-          id: j.id || `job_${j.createdAt || Date.now()}`,
-          type: details.type,
-          title: j.title,
-          reference: details.reference,
-          surah: details.surah,
-          ayah: details.ayah,
-          ayahEnd: details.ayahEnd,
-          collection: details.collection,
-          hadithNumber: details.hadithNumber,
-          arabicText: j.data?.arabic || undefined,
-          bulgarianText: j.data?.bulgarian || undefined,
-          timestamp: j.createdAt || Date.now(),
-          format: "video",
-          theme: j.data?.tiktokTheme || j.data?.style || undefined,
-          reciter: j.data?.reciter || undefined,
-          status: j.status || "completed",
-        });
+    const delPath = path.join(jobsDir, "deleted_history_ids.json");
+    const raw = await fs.readFile(delPath, "utf-8").catch(() => "");
+    if (raw) {
+      const arr = JSON.parse(raw);
+      if (Array.isArray(arr)) {
+        arr.forEach((id: string) => deletedIds.add(id));
       }
     }
   } catch {}
 
-  // 2. Check downloaded_jobs.json in cwd
+  // 2. Put existing items
+  for (const item of existingItems) {
+    if (!item || !item.id || deletedIds.has(item.id)) continue;
+    itemMap.set(item.id, { ...item });
+  }
+
+  // 3. Scan on-disk MP4 files in ~/.islamicreels_jobs
+  const mp4Files = new Set<string>();
   try {
-    const cwd = process.cwd();
-    const djPath = path.join(cwd, "downloaded_jobs.json");
-    let content = await fs.readFile(djPath, "utf16le").catch(() => "");
-    if (!content) {
-      content = await fs.readFile(djPath, "utf-8").catch(() => "");
-    }
-    if (content) {
-      if (content.charCodeAt(0) === 0xfeff) content = content.slice(1);
-      const dj = JSON.parse(content);
-      if (Array.isArray(dj)) {
-        for (const j of dj) {
-          if (!j || !j.title) continue;
-          const details = parseTypeAndDetails(j.title, j.data);
-          addItem({
-            id: j.id || `dj_${j.createdAt || Date.now()}`,
-            type: details.type,
-            title: j.title,
-            reference: details.reference,
-            surah: details.surah,
-            ayah: details.ayah,
-            ayahEnd: details.ayahEnd,
-            collection: details.collection,
-            hadithNumber: details.hadithNumber,
-            arabicText: j.data?.arabic || undefined,
-            bulgarianText: j.data?.bulgarian || undefined,
-            timestamp: j.createdAt || Date.now(),
-            format: "video",
-            theme: j.data?.tiktokTheme || undefined,
-            status: j.status || "completed",
-          });
-        }
+    const files = await fs.readdir(jobsDir).catch(() => []);
+    for (const f of files) {
+      if (f.endsWith(".mp4")) {
+        mp4Files.add(f);
       }
     }
   } catch {}
 
-  // 3. Check jobs_raw.txt in cwd
+  // 4. Sync ~/.islamicreels_jobs/jobs.json
   try {
-    const cwd = process.cwd();
-    const rawPath = path.join(cwd, "jobs_raw.txt");
-    const txt = await fs.readFile(rawPath, "utf-8").catch(() => "");
-    if (txt) {
-      const startIdx = txt.indexOf("{");
-      if (startIdx !== -1) {
-        const json = JSON.parse(txt.slice(startIdx));
-        const arr = json?.p?.v?.[0]?.a;
-        if (Array.isArray(arr)) {
-          for (const entry of arr) {
-            const keys = entry?.p?.k;
-            const values = entry?.p?.v;
-            if (Array.isArray(keys) && Array.isArray(values)) {
-              const obj: any = {};
-              keys.forEach((k: string, i: number) => {
-                const val = values[i];
-                obj[k] = val?.s !== undefined ? val.s : val;
-              });
-              if (obj.title) {
-                const details = parseTypeAndDetails(obj.title);
-                addItem({
-                  id: obj.id || `raw_${obj.createdAt || Date.now()}`,
-                  type: details.type,
-                  title: obj.title,
-                  reference: details.reference,
-                  surah: details.surah,
-                  ayah: details.ayah,
-                  ayahEnd: details.ayahEnd,
-                  collection: details.collection,
-                  hadithNumber: details.hadithNumber,
-                  timestamp: typeof obj.createdAt === "number" ? obj.createdAt : Date.now(),
-                  format: "video",
-                  status: obj.status || "completed",
-                });
-              }
+    const jobsPath = path.join(jobsDir, "jobs.json");
+    const raw = await fs.readFile(jobsPath, "utf-8").catch(() => "");
+    if (raw) {
+      const jobs = JSON.parse(raw);
+      if (Array.isArray(jobs)) {
+        for (const j of jobs) {
+          if (!j || !j.id || deletedIds.has(j.id)) continue;
+          const hasMp4 = mp4Files.has(`${j.id}.mp4`);
+          const status = hasMp4 ? "completed" : (j.status || "completed");
+          const cleanName = (j.title || "islamic-reel").replace(/[^a-z0-9._-]+/gi, "_") + ".mp4";
+          const videoUrl = hasMp4 || status === "completed" ? `/api/download/${j.id}?inline=1` : undefined;
+          const downloadUrl =
+            hasMp4 || status === "completed"
+              ? `/api/download/${j.id}?filename=${encodeURIComponent(cleanName)}`
+              : undefined;
+
+          if (itemMap.has(j.id)) {
+            const existing = itemMap.get(j.id)!;
+            if (status === "completed" || existing.status !== "completed") {
+              existing.status = status;
+              if (videoUrl) existing.videoUrl = videoUrl;
+              if (downloadUrl) existing.downloadUrl = downloadUrl;
             }
+            if (j.data?.arabic && !existing.arabicText) existing.arabicText = j.data.arabic;
+            if (j.data?.bulgarian && !existing.bulgarianText) existing.bulgarianText = j.data.bulgarian;
+            if (j.completedAt && !existing.completedAt) existing.completedAt = j.completedAt;
+          } else {
+            const details = parseTypeAndDetails(j.title, j.data);
+            itemMap.set(j.id, {
+              id: j.id,
+              type: details.type,
+              title: j.title || details.reference || "Ислямско видео",
+              reference: details.reference || j.title || "Ислямско видео",
+              surah: details.surah,
+              ayah: details.ayah,
+              ayahEnd: details.ayahEnd,
+              collection: details.collection,
+              hadithNumber: details.hadithNumber,
+              arabicText: j.data?.arabic || undefined,
+              bulgarianText: j.data?.bulgarian || undefined,
+              timestamp: j.createdAt || Date.now(),
+              completedAt: j.completedAt,
+              format: "video",
+              theme: j.data?.tiktokTheme || j.data?.style || undefined,
+              reciter: j.data?.reciter || undefined,
+              status,
+              videoUrl,
+              downloadUrl,
+            });
           }
         }
       }
     }
   } catch {}
 
-  // 4. Check ~/.islamicreels_jobs/assistant_memory.json
+  // 5. Sync ~/.islamicreels_jobs/assistant_chat_history.json
   try {
-    const memPath = path.join(os.homedir(), ".islamicreels_jobs", "assistant_memory.json");
-    const raw = await fs.readFile(memPath, "utf-8");
-    const mem = JSON.parse(raw);
+    const chatPath = path.join(jobsDir, "assistant_chat_history.json");
+    const raw = await fs.readFile(chatPath, "utf-8").catch(() => "");
+    if (raw) {
+      const chat = JSON.parse(raw);
+      if (Array.isArray(chat)) {
+        for (const m of chat) {
+          if (!m) continue;
+          const prop = m.proposal;
+          const id =
+            m.jobId ||
+            (prop?.auditReport?.timestamp
+              ? `job_${prop.auditReport.timestamp}`
+              : undefined);
+          if (!id || deletedIds.has(id)) continue;
 
-    // Add carouselHistory
-    if (Array.isArray(mem.carouselHistory)) {
-      for (const c of mem.carouselHistory) {
-        if (!c || !c.title) continue;
-        addItem({
-          id: c.id || `car_${c.timestamp || Date.now()}`,
-          type: "carousel",
-          title: c.title,
-          reference: c.subtopicId || c.title,
-          bulgarianText: c.hook || c.premise || undefined,
-          timestamp: c.timestamp || Date.now(),
-          format: "carousel",
-          status: "completed",
-        });
-      }
-    }
+          const hasMp4 = mp4Files.has(`${id}.mp4`);
+          const status = hasMp4 ? "completed" : "completed";
+          const title =
+            prop?.title ||
+            m.text?.match(/за тема „([^“]+)“/)?.[1] ||
+            "Ислямско видео";
+          const cleanName = title.replace(/[^a-z0-9._-]+/gi, "_") + ".mp4";
+          const videoUrl = hasMp4 ? `/api/download/${id}?inline=1` : undefined;
+          const downloadUrl = hasMp4
+            ? `/api/download/${id}?filename=${encodeURIComponent(cleanName)}`
+            : undefined;
 
-    // Add usageHistory
-    if (Array.isArray(mem.usageHistory)) {
-      for (const u of mem.usageHistory) {
-        if (!u || !u.identifier) continue;
-        const details = parseTypeAndDetails(u.title || u.identifier);
-        addItem({
-          id: `uh_${u.identifier}_${u.timestamp}`,
-          type: u.type || details.type,
-          title: u.title || details.reference || u.identifier,
-          reference: details.reference || u.identifier,
-          surah: details.surah,
-          ayah: details.ayah,
-          ayahEnd: details.ayahEnd,
-          collection: details.collection,
-          hadithNumber: details.hadithNumber,
-          bulgarianText: u.hook || undefined,
-          timestamp: u.timestamp || Date.now(),
-          format: u.type === "carousel" ? "carousel" : "video",
-          status: "completed",
-        });
+          if (itemMap.has(id)) {
+            const existing = itemMap.get(id)!;
+            if (hasMp4) {
+              existing.status = "completed";
+              existing.videoUrl = videoUrl;
+              existing.downloadUrl = downloadUrl;
+            }
+            if (prop?.arabicText && !existing.arabicText) existing.arabicText = prop.arabicText;
+            if (prop?.scriptWorkflow?.sourceText && !existing.arabicText)
+              existing.arabicText = prop.scriptWorkflow.sourceText;
+            if (prop?.bulgarianText && !existing.bulgarianText) existing.bulgarianText = prop.bulgarianText;
+            if (prop?.scriptWorkflow?.explanation && !existing.bulgarianText)
+              existing.bulgarianText = prop.scriptWorkflow.explanation;
+          } else {
+            const details = parseTypeAndDetails(title, prop);
+            itemMap.set(id, {
+              id,
+              type: prop?.type === "hadith" ? "hadith" : details.type,
+              title,
+              reference: prop?.reference || details.reference || title,
+              surah: prop?.surah ?? details.surah,
+              ayah: prop?.ayah ?? details.ayah,
+              ayahEnd: prop?.ayahEnd ?? details.ayahEnd,
+              collection: prop?.collection || prop?.hadithCollection || details.collection,
+              hadithNumber: prop?.number || prop?.hadithNumber || details.hadithNumber,
+              arabicText:
+                prop?.arabicText ||
+                prop?.arabicScriptureText ||
+                prop?.scriptWorkflow?.sourceText ||
+                undefined,
+              bulgarianText:
+                prop?.bulgarianText ||
+                prop?.scriptWorkflow?.explanation ||
+                prop?.summaryBg ||
+                undefined,
+              timestamp:
+                prop?.auditReport?.timestamp ||
+                (id.startsWith("job_") ? parseInt(id.split("_")[1], 10) || Date.now() : Date.now()),
+              format: "video",
+              theme: prop?.tiktokTheme || "hormozi",
+              status,
+              videoUrl,
+              downloadUrl,
+            });
+          }
+        }
       }
     }
   } catch {}
 
-  // Sort descending by timestamp (newest first)
+  // 6. Sync ~/.islamicreels_jobs/assistant_memory.json
+  try {
+    const memPath = path.join(jobsDir, "assistant_memory.json");
+    const raw = await fs.readFile(memPath, "utf-8").catch(() => "");
+    if (raw) {
+      const mem = JSON.parse(raw);
+      if (Array.isArray(mem.carouselHistory)) {
+        for (const c of mem.carouselHistory) {
+          if (!c || !c.title) continue;
+          const cId = c.id || `car_${c.timestamp || Date.now()}`;
+          if (deletedIds.has(cId) || itemMap.has(cId)) continue;
+          itemMap.set(cId, {
+            id: cId,
+            type: "carousel",
+            title: c.title,
+            reference: c.subtopicId || c.title,
+            bulgarianText: c.hook || c.premise || undefined,
+            timestamp: c.timestamp || Date.now(),
+            format: "carousel",
+            status: "completed",
+          });
+        }
+      }
+      if (Array.isArray(mem.usageHistory)) {
+        for (const u of mem.usageHistory) {
+          if (!u || !u.identifier) continue;
+          const uId = `uh_${u.identifier}_${u.timestamp}`;
+          if (deletedIds.has(uId) || itemMap.has(uId)) continue;
+          const details = parseTypeAndDetails(u.title || u.identifier);
+          itemMap.set(uId, {
+            id: uId,
+            type: u.type || details.type,
+            title: u.title || details.reference || u.identifier,
+            reference: details.reference || u.identifier,
+            surah: details.surah,
+            ayah: details.ayah,
+            ayahEnd: details.ayahEnd,
+            collection: details.collection,
+            hadithNumber: details.hadithNumber,
+            bulgarianText: u.hook || undefined,
+            timestamp: u.timestamp || Date.now(),
+            format: u.type === "carousel" ? "carousel" : "video",
+            status: "completed",
+          });
+        }
+      }
+    }
+  } catch {}
+
+  // 7. Verify all entries against on-disk MP4 files
+  for (const item of itemMap.values()) {
+    if (mp4Files.has(`${item.id}.mp4`)) {
+      item.status = "completed";
+      item.videoUrl = `/api/download/${item.id}?inline=1`;
+      const cleanName = (item.title || "islamic-reel").replace(/[^a-z0-9._-]+/gi, "_") + ".mp4";
+      item.downloadUrl = `/api/download/${item.id}?filename=${encodeURIComponent(cleanName)}`;
+    }
+  }
+
+  // Deduplicate items with identical type & clean title within 3 minutes
+  const items = Array.from(itemMap.values());
   items.sort((a, b) => b.timestamp - a.timestamp);
-  return items;
+
+  const deduplicated: GenerationHistoryItem[] = [];
+  for (const item of items) {
+    const timeKey = Math.round(item.timestamp / 180000); // 3-min window
+    const contentKey = `${item.type}:${(item.title || "").toLowerCase().trim()}:${timeKey}`;
+    if (!seenContentKeys.has(contentKey)) {
+      seenContentKeys.add(contentKey);
+      deduplicated.push(item);
+    }
+  }
+
+  return deduplicated.slice(0, 500);
 }
 
 // ---------------------------------------------------------------------------
@@ -394,16 +482,20 @@ export async function recordGenerationEntryDirect(
       arabicText: entry.arabicText,
       bulgarianText: entry.bulgarianText,
       timestamp: now,
+      completedAt: entry.completedAt,
       format: entry.format || "video",
       theme: entry.theme,
       reciter: entry.reciter,
       videoUrl: entry.videoUrl,
+      downloadUrl: entry.downloadUrl,
       status: entry.status || "completed",
+      error: entry.error,
     };
 
-    // Filter out potential immediate duplicate (same title within 2 minutes)
+    // Filter out same id or immediate duplicate (same title within 2 minutes)
     const filtered = items.filter(
       (x) =>
+        x.id !== id &&
         !(
           x.title.toLowerCase().trim() === newItem.title.toLowerCase().trim() &&
           Math.abs(x.timestamp - newItem.timestamp) < 2 * 60 * 1000
@@ -419,8 +511,70 @@ export async function recordGenerationEntryDirect(
   });
 }
 
+export async function updateGenerationEntryDirect(
+  id: string,
+  updates: Partial<GenerationHistoryItem>,
+): Promise<void> {
+  return withHistoryLock(async () => {
+    const items = await _readGenerationHistoryRaw();
+    const idx = items.findIndex((x) => x.id === id);
+    if (idx !== -1) {
+      items[idx] = {
+        ...items[idx],
+        ...updates,
+      };
+      await _writeGenerationHistoryRaw(items);
+    } else {
+      if (updates.title || updates.reference) {
+        const now = updates.timestamp || Date.now();
+        const details = parseTypeAndDetails(updates.title || updates.reference || "", updates);
+        const newItem: GenerationHistoryItem = {
+          id,
+          type: updates.type || details.type,
+          title: updates.title || details.reference,
+          reference: updates.reference || details.reference,
+          surah: updates.surah ?? details.surah,
+          ayah: updates.ayah ?? details.ayah,
+          ayahEnd: updates.ayahEnd ?? details.ayahEnd,
+          collection: updates.collection ?? details.collection,
+          hadithNumber: updates.hadithNumber ?? details.hadithNumber,
+          arabicText: updates.arabicText,
+          bulgarianText: updates.bulgarianText,
+          timestamp: now,
+          completedAt: updates.completedAt,
+          format: updates.format || "video",
+          theme: updates.theme,
+          reciter: updates.reciter,
+          videoUrl: updates.videoUrl,
+          downloadUrl: updates.downloadUrl,
+          status: updates.status || "completed",
+          error: updates.error,
+        };
+        items.unshift(newItem);
+        await _writeGenerationHistoryRaw(items.slice(0, 500));
+      }
+    }
+  });
+}
+
 export async function deleteGenerationEntryDirect(id: string): Promise<void> {
   return withHistoryLock(async () => {
+    // Record in deleted_history_ids.json so auto-sync never resurrects this item
+    try {
+      const dir = path.join(os.homedir(), ".islamicreels_jobs");
+      const delPath = path.join(dir, "deleted_history_ids.json");
+      let deletedIds: string[] = [];
+      try {
+        const raw = await fs.readFile(delPath, "utf-8");
+        deletedIds = JSON.parse(raw);
+        if (!Array.isArray(deletedIds)) deletedIds = [];
+      } catch {}
+      if (!deletedIds.includes(id)) {
+        deletedIds.push(id);
+        await fs.writeFile(delPath, JSON.stringify(deletedIds), "utf-8");
+      }
+    } catch {}
+
     const items = await _readGenerationHistoryRaw();
     const filtered = items.filter((x) => x.id !== id);
     await _writeGenerationHistoryRaw(filtered);
@@ -429,6 +583,22 @@ export async function deleteGenerationEntryDirect(id: string): Promise<void> {
 
 export async function clearGenerationHistoryDirect(): Promise<void> {
   return withHistoryLock(async () => {
+    const items = await _readGenerationHistoryRaw();
+    try {
+      const dir = path.join(os.homedir(), ".islamicreels_jobs");
+      const delPath = path.join(dir, "deleted_history_ids.json");
+      let deletedIds: string[] = [];
+      try {
+        const raw = await fs.readFile(delPath, "utf-8");
+        deletedIds = JSON.parse(raw);
+        if (!Array.isArray(deletedIds)) deletedIds = [];
+      } catch {}
+      for (const item of items) {
+        if (!deletedIds.includes(item.id)) deletedIds.push(item.id);
+      }
+      await fs.writeFile(delPath, JSON.stringify(deletedIds), "utf-8");
+    } catch {}
+
     await _writeGenerationHistoryRaw([]);
   });
 }
@@ -523,6 +693,13 @@ export const addGenerationHistoryEntry = createServerFn({ method: "POST" })
   .validator((input: { entry: Omit<GenerationHistoryItem, "id"> & { id?: string } }) => input)
   .handler(async ({ data: { entry } }): Promise<GenerationHistoryItem> => {
     return recordGenerationEntryDirect(entry);
+  });
+
+export const updateGenerationHistoryEntry = createServerFn({ method: "POST" })
+  .validator((input: { id: string; updates: Partial<GenerationHistoryItem> }) => input)
+  .handler(async ({ data: { id, updates } }): Promise<{ success: boolean }> => {
+    await updateGenerationEntryDirect(id, updates);
+    return { success: true };
   });
 
 export const recordRejectedProposalToHistory = createServerFn({ method: "POST" })

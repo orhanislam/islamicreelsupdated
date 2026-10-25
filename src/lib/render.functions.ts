@@ -10,7 +10,7 @@ import {
   getSafeAssStyles,
   TIKTOK_SAFE_ZONE,
 } from "./safe-zone";
-import { recordGenerationEntryDirect } from "./generation-history.functions";
+import { recordGenerationEntryDirect, updateGenerationEntryDirect } from "./generation-history.functions";
 
 
 /**
@@ -1496,8 +1496,8 @@ async function aggressivelyCleanServerDisk(forceAll = false) {
         isCompleted: boolean;
       }[] = [];
       for (const jf of jFiles) {
-        // STRICT EXEMPTION: Never purge metadata indexes or the permanent video cache directory
-        if (jf === "jobs.json" || jf === "video_cache" || jf === "halal_verified_videos.json") {
+        // STRICT EXEMPTION: Never purge metadata indexes, json stores, or the permanent video cache directory
+        if (jf.endsWith(".json") || jf === "video_cache" || jf === "halal_verified_videos.json") {
           continue;
         }
         const jp = path.join(jobsDir, jf);
@@ -1706,6 +1706,9 @@ async function processRenderQueue() {
           await writeJobsFile(startJobs);
         }
       });
+      await updateGenerationEntryDirect(item.id, {
+        status: "rendering",
+      }).catch((e) => console.error("[history] Failed to update rendering status:", e));
 
       // 1. Thorough disk cleanup right before starting EACH job to ensure 100% free /tmp space
       await aggressivelyCleanServerDisk(true);
@@ -1747,6 +1750,14 @@ async function processRenderQueue() {
       });
       console.log(`[server-queue] Render ${item.id} COMPLETED successfully!`);
 
+      const cleanName = (item.title || "islamic-reel").replace(/[^a-z0-9._-]+/gi, "_") + ".mp4";
+      await updateGenerationEntryDirect(item.id, {
+        status: "completed",
+        completedAt: Date.now(),
+        videoUrl: `/api/download/${item.id}?inline=1`,
+        downloadUrl: `/api/download/${item.id}?filename=${encodeURIComponent(cleanName)}`,
+      }).catch((e) => console.error("[history] Failed to update completed status:", e));
+
       // 2. Post-render cleanup of intermediate temp files before next job
       await aggressivelyCleanServerDisk(false);
     } catch (err: any) {
@@ -1760,6 +1771,10 @@ async function processRenderQueue() {
           await writeJobsFile(curJobs);
         }
       });
+      await updateGenerationEntryDirect(item.id, {
+        status: "error",
+        error: String(err?.message || err),
+      }).catch((e) => console.error("[history] Failed to update error status:", e));
       await aggressivelyCleanServerDisk(false);
     }
   }
@@ -1787,7 +1802,7 @@ export const startServerRenderJob = createServerFn({ method: "POST" })
     processRenderQueue().catch((e) => console.error("[server-queue] Queue processing error:", e));
 
     // Record into persistent generation history
-    const refStr = String(data?.reference || title || "");
+    const refStr = String(data?.scriptureReference || data?.reference || title || "");
     const inferredType =
       data?.type === "hadith" ||
       data?.collection ||
@@ -1798,8 +1813,8 @@ export const startServerRenderJob = createServerFn({ method: "POST" })
     recordGenerationEntryDirect({
       id: jobId,
       type: inferredType,
-      title: title || data?.reference || "Ислямско видео",
-      reference: data?.reference || title || "Ислямско видео",
+      title: title || data?.topic || data?.reference || "Ислямско видео",
+      reference: data?.scriptureReference || data?.reference || title || "Ислямско видео",
       arabicText: data?.arabic,
       bulgarianText: data?.bulgarian,
       timestamp: Date.now(),
@@ -1950,7 +1965,13 @@ export function scheduleServerMaintenance() {
   maintInterval?.unref?.();
 }
 
-if (typeof window === "undefined" && typeof process !== "undefined" && !maintenanceTimerStarted) {
+if (
+  typeof window === "undefined" &&
+  typeof process !== "undefined" &&
+  process.env.NODE_ENV !== "test" &&
+  !process.argv.some((a) => a.includes("test")) &&
+  !maintenanceTimerStarted
+) {
   try {
     scheduleServerMaintenance();
   } catch {}

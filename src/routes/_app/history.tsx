@@ -30,6 +30,9 @@ import {
   X,
   Share2,
   ShieldCheck,
+  Play,
+  Download,
+  Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -104,6 +107,8 @@ function HistoryPage() {
   const [sortOrder, setSortOrder] = useState<"desc" | "asc">("desc");
   const [clearDialogOpen, setClearDialogOpen] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [previewVideoUrl, setPreviewVideoUrl] = useState<string | null>(null);
+  const [previewTitle, setPreviewTitle] = useState<string>("");
 
   const loadHistory = async (isManualRefresh = false) => {
     try {
@@ -236,8 +241,11 @@ function HistoryPage() {
     const ayahs = items.filter((i) => i.type === "ayah").length;
     const hadiths = items.filter((i) => i.type === "hadith").length;
     const carousels = items.filter((i) => i.type === "carousel").length;
+    const readyVideos = items.filter(
+      (i) => i.status === "completed" && (i.format === "video" || i.videoUrl || i.id.startsWith("job_")),
+    ).length;
     const inCooldown = items.filter((i) => isItemWithinOneMonthCooldown(i.timestamp)).length;
-    return { total, ayahs, hadiths, carousels, inCooldown };
+    return { total, ayahs, hadiths, carousels, readyVideos, inCooldown };
   }, [items]);
 
   return (
@@ -343,26 +351,26 @@ function HistoryPage() {
 
           <Card className="p-4 bg-card/60 border-border/60">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-medium text-muted-foreground">Аяти от Корана</span>
-              <BookOpen className="size-4 text-emerald-500" />
+              <span className="text-xs font-medium text-muted-foreground">Готови видеа (MP4)</span>
+              <Video className="size-4 text-emerald-500" />
             </div>
-            <p className="text-2xl font-bold mt-1 text-emerald-500">{stats.ayahs}</p>
+            <p className="text-2xl font-bold mt-1 text-emerald-500">{stats.readyVideos}</p>
           </Card>
 
           <Card className="p-4 bg-card/60 border-border/60">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-medium text-muted-foreground">Хадиси</span>
+              <span className="text-xs font-medium text-muted-foreground">Аяти от Корана</span>
+              <BookOpen className="size-4 text-emerald-400" />
+            </div>
+            <p className="text-2xl font-bold mt-1 text-emerald-400">{stats.ayahs}</p>
+          </Card>
+
+          <Card className="p-4 bg-card/60 border-border/60">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-medium text-muted-foreground">Хадиси от Сунната</span>
               <ScrollText className="size-4 text-amber-500" />
             </div>
             <p className="text-2xl font-bold mt-1 text-amber-500">{stats.hadiths}</p>
-          </Card>
-
-          <Card className="p-4 bg-card/60 border-border/60">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-medium text-muted-foreground">Карусели</span>
-              <Layers className="size-4 text-blue-500" />
-            </div>
-            <p className="text-2xl font-bold mt-1 text-blue-500">{stats.carousels}</p>
           </Card>
         </div>
 
@@ -547,6 +555,29 @@ function HistoryPage() {
                           </Badge>
                         )}
 
+                        {/* Status Badge */}
+                        {item.status === "completed" ? (
+                          <Badge className="bg-emerald-500/15 text-emerald-400 border-emerald-500/30 gap-1 text-xs font-medium">
+                            <CheckCircle2 className="size-3" />
+                            Готово
+                          </Badge>
+                        ) : item.status === "rendering" ? (
+                          <Badge className="bg-amber-500/15 text-amber-400 border-amber-500/30 gap-1 text-xs animate-pulse font-medium">
+                            <Loader2 className="size-3 animate-spin" />
+                            Рендира се
+                          </Badge>
+                        ) : item.status === "queued" ? (
+                          <Badge variant="outline" className="text-xs text-muted-foreground gap-1">
+                            <Clock className="size-3" />
+                            В опашка
+                          </Badge>
+                        ) : item.status === "error" ? (
+                          <Badge variant="destructive" className="text-xs gap-1">
+                            <AlertTriangle className="size-3" />
+                            Грешка
+                          </Badge>
+                        ) : null}
+
                         {item.theme && (
                           <Badge variant="secondary" className="text-xs uppercase tracking-wider font-mono">
                             {item.theme}
@@ -629,6 +660,52 @@ function HistoryPage() {
                     {/* Actions Row */}
                     <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-border/30">
                       <div className="flex flex-wrap items-center gap-2">
+                        {/* Watch / Download Video for completed video items */}
+                        {item.status === "completed" && (item.format === "video" || item.videoUrl || item.id.startsWith("job_")) && (
+                          <>
+                            <Button
+                              size="sm"
+                              variant="default"
+                              onClick={() => {
+                                setPreviewVideoUrl(item.videoUrl || `/api/download/${item.id}?inline=1`);
+                                setPreviewTitle(item.title);
+                              }}
+                              className="gap-1.5 text-xs font-semibold bg-primary hover:bg-primary/90 text-primary-foreground shadow-sm"
+                            >
+                              <Play className="size-3.5 fill-current" />
+                              Гледай видео
+                            </Button>
+
+                            <a
+                              href={item.downloadUrl || `/api/download/${item.id}?filename=${encodeURIComponent((item.title || "islamic-reel").replace(/[^a-z0-9._-]+/gi, "_") + ".mp4")}`}
+                              download
+                            >
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="gap-1.5 text-xs text-emerald-400 border-emerald-500/40 hover:bg-emerald-500/10 font-medium"
+                              >
+                                <Download className="size-3.5" />
+                                Свали MP4
+                              </Button>
+                            </a>
+                          </>
+                        )}
+
+                        {/* Rendering in progress indicator */}
+                        {(item.status === "rendering" || item.status === "queued") && (
+                          <Link to="/downloads">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="gap-1.5 text-xs text-amber-400 border-amber-500/40 hover:bg-amber-500/10"
+                            >
+                              <Loader2 className="size-3.5 animate-spin" />
+                              {item.status === "rendering" ? "Рендира се на сървъра..." : "В опашка за рендер..."}
+                            </Button>
+                          </Link>
+                        )}
+
                         {/* Open in Create button */}
                         <Button
                           size="sm"
@@ -681,6 +758,26 @@ function HistoryPage() {
             })}
           </div>
         )}
+
+        {/* Video Player Preview Modal */}
+        <Dialog open={Boolean(previewVideoUrl)} onOpenChange={(open) => { if (!open) setPreviewVideoUrl(null); }}>
+          <DialogContent className="max-w-md p-4 sm:p-6 bg-card border-border">
+            <DialogHeader>
+              <DialogTitle className="text-base sm:text-lg font-bold line-clamp-1">{previewTitle}</DialogTitle>
+            </DialogHeader>
+            {previewVideoUrl && (
+              <div className="relative aspect-[9/16] w-full max-h-[70vh] bg-black rounded-xl overflow-hidden shadow-2xl flex items-center justify-center">
+                <video
+                  src={previewVideoUrl}
+                  controls
+                  playsInline
+                  autoPlay
+                  className="w-full h-full object-contain"
+                />
+              </div>
+            )}
+          </DialogContent>
+        </Dialog>
       </div>
     </div>
   );
