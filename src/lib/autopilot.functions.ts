@@ -37,6 +37,13 @@ export interface AutopilotConfig {
   historyLog: AutopilotHistoryEntry[];
 }
 
+export const DEFAULT_UPLOAD_POST_API_KEY =
+  (typeof process !== "undefined" && process.env?.UPLOAD_POST_API_KEY) ||
+  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJlbWFpbCI6Im5heWRlbnRhc2hrb3ZAZ21haWwuY29tIiwiZXhwIjo0OTQ2NTcwMTE5LCJqdGkiOiJkY2U1Yzg3Yi03NzQ2LTRlOWEtYjg2ZS1lYzdkNjk1MjBjOTcifQ.SQviBwJALtBFxyEG7pL2Aou09bRpE2LqRyySdJ7gVlE";
+
+export const DEFAULT_UPLOAD_POST_USER =
+  (typeof process !== "undefined" && process.env?.UPLOAD_POST_USER) || "default";
+
 export const DEFAULT_AUTOPILOT_CONFIG: AutopilotConfig = {
   enabled: true,
   scheduleTimes: ["09:00", "18:00"],
@@ -44,12 +51,12 @@ export const DEFAULT_AUTOPILOT_CONFIG: AutopilotConfig = {
   contentMode: "explained_mix",
   autoDownloadOnOpen: true,
   webhookUrl: "",
-  uploadPostEnabled: false,
-  uploadPostApiKey: "",
-  uploadPostUser: "",
+  uploadPostEnabled: true,
+  uploadPostApiKey: DEFAULT_UPLOAD_POST_API_KEY,
+  uploadPostUser: DEFAULT_UPLOAD_POST_USER,
   uploadPostPlatforms: ["tiktok"],
   lastRunStatus: "idle",
-  lastRunMessage: "Готов за автоматично генериране по график.",
+  lastRunMessage: "Готов за автоматично генериране и публикуване в TikTok (@orhan.islam).",
   totalAutopilotVideos: 0,
   historyLog: [],
 };
@@ -101,8 +108,14 @@ function normalizeConfig(raw: Partial<AutopilotConfig> | null | undefined): Auto
       typeof raw.uploadPostEnabled === "boolean"
         ? raw.uploadPostEnabled
         : DEFAULT_AUTOPILOT_CONFIG.uploadPostEnabled,
-    uploadPostApiKey: typeof raw.uploadPostApiKey === "string" ? raw.uploadPostApiKey.trim() : "",
-    uploadPostUser: typeof raw.uploadPostUser === "string" ? raw.uploadPostUser.trim() : "",
+    uploadPostApiKey:
+      typeof raw.uploadPostApiKey === "string" && raw.uploadPostApiKey.trim().length > 0
+        ? raw.uploadPostApiKey.trim()
+        : DEFAULT_UPLOAD_POST_API_KEY,
+    uploadPostUser:
+      typeof raw.uploadPostUser === "string" && raw.uploadPostUser.trim().length > 0
+        ? raw.uploadPostUser.trim()
+        : DEFAULT_UPLOAD_POST_USER,
     uploadPostPlatforms:
       Array.isArray(raw.uploadPostPlatforms) && raw.uploadPostPlatforms.length > 0
         ? (raw.uploadPostPlatforms.filter((p) =>
@@ -254,8 +267,14 @@ export async function publishVideoViaUploadPostDirect(params: {
   error?: string;
 }> {
   const cfg = await readAutopilotConfigDirect();
-  const rawKey = (params.apiKey ?? cfg.uploadPostApiKey ?? "").trim().replace(/^Apikey\s+/i, "");
-  const userHandle = (params.user ?? cfg.uploadPostUser ?? "").trim();
+  const rawKey = (
+    params.apiKey !== undefined ? params.apiKey : cfg.uploadPostApiKey || DEFAULT_UPLOAD_POST_API_KEY
+  )
+    .trim()
+    .replace(/^ApiKey\s+/i, "");
+  const userHandle = (
+    params.user !== undefined ? params.user : cfg.uploadPostUser || DEFAULT_UPLOAD_POST_USER
+  ).trim();
   const platforms =
     params.platforms && params.platforms.length > 0
       ? params.platforms
@@ -379,6 +398,42 @@ export const publishServerJobToUploadPost = createServerFn({ method: "POST" })
     }
 
     return res;
+  });
+
+export const verifyUploadPostAccount = createServerFn({ method: "POST" })
+  .validator((input?: { apiKey?: string }) => input || {})
+  .handler(async ({ data }) => {
+    const cfg = await readAutopilotConfigDirect();
+    const rawKey = (data?.apiKey || cfg.uploadPostApiKey || DEFAULT_UPLOAD_POST_API_KEY)
+      .trim()
+      .replace(/^ApiKey\s+/i, "");
+    try {
+      const res = await fetch("https://api.upload-post.com/api/uploadposts/users", {
+        headers: {
+          Authorization: `Apikey ${rawKey}`,
+        },
+      });
+      const json: any = await res.json();
+      if (!res.ok || !json?.success) {
+        return {
+          valid: false,
+          error: json?.message || json?.error || `HTTP ${res.status}`,
+        };
+      }
+      const firstProfile = Array.isArray(json.profiles) ? json.profiles[0] : null;
+      const tiktokInfo = firstProfile?.social_accounts?.tiktok;
+      return {
+        valid: true,
+        username: firstProfile?.username || "default",
+        tiktokHandle: tiktokInfo?.handle || tiktokInfo?.display_name || "",
+        plan: json.plan || "basic",
+      };
+    } catch (err: any) {
+      return {
+        valid: false,
+        error: String(err?.message || err),
+      };
+    }
   });
 
 const AUTOPILOT_SPIRITUAL_TOPICS = [

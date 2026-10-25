@@ -1645,9 +1645,14 @@ function AssistantPage() {
               <div className="flex items-center gap-2">
                 <span className="text-base">📲</span>
                 <div>
-                  <h4 className="text-xs sm:text-sm font-bold text-emerald-300">
-                    Директно Авто-Публикуване в TikTok чрез Upload-Post.com
-                  </h4>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h4 className="text-xs sm:text-sm font-bold text-emerald-300">
+                      Директно Авто-Публикуване в TikTok чрез Upload-Post.com
+                    </h4>
+                    <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-emerald-500/20 border border-emerald-500/40 text-emerald-300">
+                      ✅ Свързан TikTok: @orhan.islam (Профил: {autopilotConfig.uploadPostUser || "default"})
+                    </span>
+                  </div>
                   <p className="text-[11px] text-muted-foreground">
                     Всяко готово видео от сървъра автоматично се качва и публикува в TikTok (заедно с пълното описание и хаштагове) през <code className="text-emerald-400">api.upload-post.com/api/upload</code>.
                   </p>
