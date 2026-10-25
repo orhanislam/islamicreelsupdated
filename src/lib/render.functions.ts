@@ -1142,10 +1142,11 @@ export async function executeRenderTask(opts: any): Promise<any> {
                     .inputOptions(["-stream_loop -1"])
                     .outputOptions([
                       `-t ${seg.duration.toFixed(2)}`,
-                      "-vf scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,fps=30,format=yuv420p",
+                      "-vf scale=1080:1920:force_original_aspect_ratio=increase:flags=lanczos,crop=1080:1920,fps=30,format=yuv420p",
                       "-c:v libx264",
-                      "-preset ultrafast",
-                      "-crf 20",
+                      "-preset superfast",
+                      "-profile:v high",
+                      "-crf 13",
                       "-pix_fmt yuv420p",
                       "-an",
                     ])
@@ -1229,7 +1230,7 @@ export async function executeRenderTask(opts: any): Promise<any> {
 
         cmd = cmd.input(audioPath);
 
-        const is1080p = data.quality !== "720p";
+        const is1080p = data.quality !== "720p" || Boolean(data.isAutopilot);
         const width = is1080p ? 1080 : 720;
         const height = is1080p ? 1920 : 1280;
 
@@ -1237,8 +1238,8 @@ export async function executeRenderTask(opts: any): Promise<any> {
 
         cmd
           .complexFilter([
-            // Crisp 1080p scaling + subtle BT.709 color grade + burned-in 68px TikTok subtitles (optimized for iPhone 16 Pro Max without CPU lag)
-            `[0:v]crop='min(iw,ih*9/16)':'min(iw*16/9,ih)',scale=${width}:${height}:force_original_aspect_ratio=increase,crop=${width}:${height},eq=contrast=1.04:saturation=1.08,subtitles='${escapedAssPath}'[v]`,
+            // Crisp 1080p Lanczos scaling + optical micro-sharpening + BT.709 color grade + burned-in 76px TikTok subtitles
+            `[0:v]crop='min(iw,ih*9/16)':'min(iw*16/9,ih)',scale=${width}:${height}:force_original_aspect_ratio=increase:flags=lanczos,crop=${width}:${height},unsharp=3:3:0.35:3:3:0.0,eq=contrast=1.04:saturation=1.08,subtitles='${escapedAssPath}'[v]`,
             `[1:a]highpass=f=45,treble=g=2:f=3500:w=0.7,acompressor=threshold=-18dB:ratio=2.5:attack=5:release=50,bass=g=3:f=110:w=0.6,loudnorm=I=-14:LRA=9:TP=-1.0,apad[a]`,
           ])
           .outputOptions([
@@ -1246,22 +1247,26 @@ export async function executeRenderTask(opts: any): Promise<any> {
             "-map [a]",
             "-c:v libx264",
             "-tag:v avc1",
+            "-preset veryfast",
             "-profile:v high",
-            "-level 4.2",
+            "-level 4.1",
             "-pix_fmt yuv420p",
             "-colorspace bt709",
             "-color_trc bt709",
             "-color_primaries bt709",
+            "-color_range tv",
             "-movflags +faststart",
-            "-preset ultrafast",
-            "-crf 19",
-            "-maxrate 25M",
-            "-bufsize 50M",
+            "-crf 17",
+            "-maxrate 10M",
+            "-bufsize 20M",
+            "-refs 3",
+            "-bf 3",
             "-r 30",
             "-vsync cfr",
             "-g 60",
             "-keyint_min 60",
             "-sc_threshold 0",
+            "-x264-params aq-mode=3:aq-strength=0.9",
             "-c:a aac",
             "-profile:a aac_low",
             "-b:a 256k",

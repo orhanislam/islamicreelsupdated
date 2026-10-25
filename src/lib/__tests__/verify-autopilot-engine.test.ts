@@ -6,6 +6,8 @@ import {
   DEFAULT_AUTOPILOT_CONFIG,
 } from "../autopilot.functions";
 import { generateAndStorePostRenderSocialKit, getJobsDir } from "../render.functions";
+import { pickBestFile } from "../pexels.functions";
+import { analyzeAndFixRenderPayloadSync } from "../render-analyzer";
 
 async function testAutopilotConfigPersistence() {
   console.log("1. Testing AutopilotConfig persistence (including Upload-Post.com integration)...");
@@ -149,10 +151,51 @@ async function testAutonomousCycleDryRun() {
   console.log("✔ Autonomous Zero-Click Autopilot Cycle verified: Proposal generated, audited 100%, and queued with zero clicks!");
 }
 
+async function testUltraHdQualityPipeline() {
+  console.log("4. Testing Ultra-HD 1080p High-Profile Quality Pipeline & Pexels Selection...");
+  // Case A: Pexels video with 4K (2160x3840) and 720p (720x1280) -> MUST pick 4K, NEVER 720p!
+  const best4kOver720p = pickBestFile({
+    id: 9001,
+    video_files: [
+      { quality: "sd", width: 540, height: 960, link: "https://cdn.test/540p.mp4", file_type: "video/mp4", fps: 30 },
+      { quality: "hd", width: 720, height: 1280, link: "https://cdn.test/720p.mp4", file_type: "video/mp4", fps: 30 },
+      { quality: "uhd", width: 2160, height: 3840, link: "https://cdn.test/4k.mp4", file_type: "video/mp4", fps: 60 },
+    ],
+    video_pictures: [],
+  });
+  if (best4kOver720p?.link !== "https://cdn.test/4k.mp4") {
+    throw new Error(`Expected 4K stream over 720p, but got: ${JSON.stringify(best4kOver720p)}`);
+  }
+
+  // Case B: Multiple 1080x1920 streams -> MUST pick 60fps high-bitrate over 25fps low-bitrate!
+  const best1080p60 = pickBestFile({
+    id: 9002,
+    video_files: [
+      { quality: "hd", width: 1080, height: 1920, link: "https://cdn.test/1080p_25fps_low.mp4", file_type: "video/mp4", fps: 25, size: 4_000_000 },
+      { quality: "hd", width: 1080, height: 1920, link: "https://cdn.test/1080p_60fps_high.mp4", file_type: "video/mp4", fps: 60, size: 15_000_000 },
+    ],
+    video_pictures: [],
+  });
+  if (best1080p60?.link !== "https://cdn.test/1080p_60fps_high.mp4") {
+    throw new Error(`Expected 1080p 60fps high-bitrate stream, got: ${JSON.stringify(best1080p60)}`);
+  }
+
+  // Case C: Render Analyzer auto-upgrades 720p payload to 1080p Full HD
+  const { data: analyzedData } = analyzeAndFixRenderPayloadSync({
+    bulgarian: "Аллах Всевишният е с търпеливите.",
+    quality: "720p",
+  });
+  if (analyzedData.quality !== "1080p") {
+    throw new Error(`Expected Render Analyzer to upgrade 720p -> 1080p, got: ${analyzedData.quality}`);
+  }
+  console.log("✔ Ultra-HD 1080p High-Profile Quality Pipeline & Pexels 4K/60fps Selection verified!");
+}
+
 async function main() {
   console.log("=== Running Autopilot Engine Verification Suite ===");
   await testAutopilotConfigPersistence();
   await testPostRenderSocialKitAndCaptionGeneration();
+  await testUltraHdQualityPipeline();
   await testAutonomousCycleDryRun();
   console.log("✔ ALL AUTOPILOT ENGINE TESTS PASSED SUCCESSFULLY!");
   process.exit(0);

@@ -249,6 +249,131 @@ export const testAutopilotWebhook = createServerFn({ method: "POST" })
   });
 
 /**
+ * Ensures any MP4 file sent to Upload-Post / TikTok Direct Post API is encoded
+ * in True H.264 High Profile (High@L4.1, 1080x1920, CABAC, B-frames, <=12 Mbps sweet spot)
+ * so TikTok's server-side ingestion never triggers its penalty downscaler.
+ */
+async function ensureHighProfileMasterForUploadPost(mp4FilePath: string): Promise<void> {
+  try {
+    const { execFile } = await import("child_process");
+    const util = await import("util");
+    const fs = (await import("fs")).promises;
+    const execFileAsync = util.promisify(execFile);
+
+    const { stdout } = await execFileAsync("ffprobe", [
+      "-v",
+      "error",
+      "-select_streams",
+      "v:0",
+      "-show_entries",
+      "stream=profile,width,height,bit_rate",
+      "-of",
+      "json",
+      mp4FilePath,
+    ]);
+    const info = JSON.parse(stdout || "{}");
+    const stream = info?.streams?.[0];
+    if (!stream) return;
+
+    const profile = String(stream.profile || "");
+    const width = Number(stream.width) || 0;
+    const height = Number(stream.height) || 0;
+    const bitRate = Number(stream.bit_rate) || 0;
+
+    const isOptimalHighProfile =
+      profile.toLowerCase().includes("high") &&
+      width === 1080 &&
+      height === 1920 &&
+      (bitRate === 0 || bitRate <= 13_500_000);
+
+    if (isOptimalHighProfile) {
+      return;
+    }
+
+    console.log(
+      `[upload-post] Remastering ${mp4FilePath} from (${profile}, ${width}x${height}, ${(bitRate / 1e6).toFixed(1)} Mbps) -> High@L4.1 1080p HD for zero-loss TikTok upload...`,
+    );
+
+    let ffmpegPath = "ffmpeg";
+    try {
+      const installerMod = await import("@ffmpeg-installer/ffmpeg");
+      const installer = installerMod.default || installerMod;
+      if (installer?.path) ffmpegPath = installer.path;
+    } catch {}
+
+    const remasteredPath = `${mp4FilePath}.hq_remaster.mp4`;
+    await execFileAsync(ffmpegPath, [
+      "-y",
+      "-i",
+      mp4FilePath,
+      "-vf",
+      "scale=1080:1920:force_original_aspect_ratio=increase:flags=lanczos,crop=1080:1920,unsharp=3:3:0.35:3:3:0.0",
+      "-c:v",
+      "libx264",
+      "-tag:v",
+      "avc1",
+      "-preset",
+      "veryfast",
+      "-profile:v",
+      "high",
+      "-level",
+      "4.1",
+      "-pix_fmt",
+      "yuv420p",
+      "-colorspace",
+      "bt709",
+      "-color_trc",
+      "bt709",
+      "-color_primaries",
+      "bt709",
+      "-color_range",
+      "tv",
+      "-movflags",
+      "+faststart",
+      "-crf",
+      "17",
+      "-maxrate",
+      "10M",
+      "-bufsize",
+      "20M",
+      "-refs",
+      "3",
+      "-bf",
+      "3",
+      "-g",
+      "60",
+      "-keyint_min",
+      "60",
+      "-sc_threshold",
+      "0",
+      "-x264-params",
+      "aq-mode=3:aq-strength=0.9",
+      "-c:a",
+      "aac",
+      "-b:a",
+      "256k",
+      "-ar",
+      "48000",
+      "-ac",
+      "2",
+      remasteredPath,
+    ]);
+
+    const stat = await fs.stat(remasteredPath).catch(() => null);
+    if (stat && stat.size > 50_000) {
+      await fs.rename(remasteredPath, mp4FilePath);
+      console.log(
+        `[upload-post] Remastered ${mp4FilePath} to High@L4.1 1080p (${(stat.size / (1024 * 1024)).toFixed(1)} MB).`,
+      );
+    } else {
+      await fs.unlink(remasteredPath).catch(() => {});
+    }
+  } catch (err) {
+    console.warn("[upload-post] Pre-upload High-Profile check skipped:", err);
+  }
+}
+
+/**
  * Direct Upload-Post.com API Integration (https://app.upload-post.com)
  * Sends the rendered MP4 video file + full TikTok caption directly to TikTok / Instagram / YouTube.
  */
@@ -290,6 +415,8 @@ export async function publishVideoViaUploadPostDirect(params: {
   }
 
   try {
+    await ensureHighProfileMasterForUploadPost(params.mp4FilePath);
+
     const fs = (await import("fs")).promises;
     const fileBuf = await fs.readFile(params.mp4FilePath);
     const captionText = (params.caption || params.title || "Ислямска мъдрост").slice(0, 2200);
@@ -299,6 +426,14 @@ export async function publishVideoViaUploadPostDirect(params: {
     form.append("title", captionText);
     for (const p of platforms) {
       form.append("platform[]", p);
+    }
+    if (platforms.includes("tiktok")) {
+      form.append("privacy_level", "PUBLIC_TO_EVERYONE");
+      form.append("post_mode", "DIRECT_POST");
+      form.append("disable_duet", "false");
+      form.append("disable_comment", "false");
+      form.append("disable_stitch", "false");
+      form.append("cover_timestamp", "1000");
     }
 
     const blob = new Blob([new Uint8Array(fileBuf)], { type: "video/mp4" });

@@ -477,9 +477,14 @@ export function analyzeAndFixRenderPayloadSync(payload: any): {
     data.bRollUrls = cleanBRolls;
   }
 
-  // Ensure aspect ratio is explicitly configured for 9:16 vertical 1080x1920
+  // Ensure aspect ratio is explicitly configured for 9:16 vertical 1080x1920 Full HD
   aspectRatioHandled = true;
-  data.quality = data.quality || "1080p";
+  if (data.quality === "720p") {
+    issuesFound++;
+    issuesFixed++;
+    actionsTaken.push("Автоматично надграждане на резолюцията от 720p към 1080p Full HD (High@L4.1) за максимално TikTok качество.");
+  }
+  data.quality = "1080p";
 
   // Build the comprehensive report
   const report: RenderAnalysisReport = {

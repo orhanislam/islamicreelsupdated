@@ -1377,7 +1377,7 @@ export async function pexelsPhotoQuery(key: string, query: string, perPage = 9) 
 
 export async function pexelsVideoQuery(key: string, query: string, perPage = 80) {
   const safeQuery = sanitizeSearchQuery(query);
-  const url = `https://api.pexels.com/videos/search?query=${encodeURIComponent(safeQuery)}&orientation=portrait&size=medium&per_page=${perPage}`;
+  const url = `https://api.pexels.com/videos/search?query=${encodeURIComponent(safeQuery)}&orientation=portrait&per_page=${perPage}`;
   const res = await fetch(url, { headers: { Authorization: key } });
   if (!res.ok) throw new Error(`Pexels грешка ${res.status}`);
   const j = await res.json();
@@ -1404,8 +1404,13 @@ export function scoreVideo(v: PexelsVideo, file: PexelsVideoFile, targetMin = 30
   }
   const aspect = file.width > 0 ? file.height / file.width : 0;
   s += Math.max(0, 10 - Math.abs(aspect - 16 / 9) * 8);
-  if (file.height >= 1280) s += 6;
-  if (file.height >= 1920) s += 8;
+  if (file.height >= 1920 && file.width >= 1080) {
+    s += 25; // Strongly reward true Full HD 1080p+ vertical streams
+  } else if (file.height >= 1280) {
+    s -= 10; // Penalize 720p streams when 1080p streams exist
+  } else {
+    s -= 35; // Heavily penalize SD (<720p) streams
+  }
   if (file.height >= 3840) s += 10;
   if ((file.fps ?? 0) >= 30) s += 5;
   if ((file.fps ?? 0) >= 60) s += 4;
@@ -1432,12 +1437,31 @@ export function pickBestFile(v: PexelsVideo): PexelsVideoFile | undefined {
   const mp4s = (v.video_files || []).filter((f) => f.file_type === "video/mp4");
   if (!mp4s.length) return (v.video_files || [])[0];
   mp4s.sort((a, b) => {
+    // 1. Vertical orientation first (height >= width)
     const aVert = a.height >= a.width ? 1 : 0;
     const bVert = b.height >= b.width ? 1 : 0;
     if (aVert !== bVert) return bVert - aVert;
-    const aDiff = Math.abs(a.height - 1920);
-    const bDiff = Math.abs(b.height - 1920);
-    return aDiff - bDiff;
+
+    // 2. Strictly prefer True Full HD+ (height >= 1920 && width >= 1080) over 720p/540p/SD!
+    // Never pick a 720p (1280) file when a 1080p (1920), 2K (2560), or 4K (3840) file exists!
+    const aIsFullHdPlus = a.height >= 1920 && a.width >= 1080 ? 1 : 0;
+    const bIsFullHdPlus = b.height >= 1920 && b.width >= 1080 ? 1 : 0;
+    if (aIsFullHdPlus !== bIsFullHdPlus) return bIsFullHdPlus - aIsFullHdPlus;
+
+    // 3. Among Full HD+ files: prefer native 1080x1920 or clean 2K/4K master, then higher FPS and bitrate
+    if (aIsFullHdPlus && bIsFullHdPlus) {
+      const aDiff = Math.abs(a.height - 1920);
+      const bDiff = Math.abs(b.height - 1920);
+      if (aDiff !== bDiff) return aDiff - bDiff;
+      const aFps = Math.min(60, a.fps || 30);
+      const bFps = Math.min(60, b.fps || 30);
+      if (aFps !== bFps) return bFps - aFps;
+      return (b.size || 0) - (a.size || 0);
+    }
+
+    // 4. Fallback if only sub-1080p files exist: pick the highest available resolution
+    if (a.height !== b.height) return b.height - a.height;
+    return (b.width || 0) - (a.width || 0);
   });
   return mp4s[0];
 }
