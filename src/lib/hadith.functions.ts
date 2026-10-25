@@ -1,5 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
-import { fetchSunnahHadith, randomSahihHadith } from "./sunnah.functions";
+import { fetchSunnahHadithDirect, randomSahihHadithDirect } from "./sunnah.functions";
 
 export type HadithData = {
   collection: string;
@@ -32,7 +32,7 @@ export const fetchHadith = createServerFn({ method: "POST" })
     return { number: n };
   })
   .handler(async ({ data }): Promise<HadithData> => {
-    const h = await fetchSunnahHadith({ data: { collection: "nawawi40", number: data.number } });
+    const h = await fetchSunnahHadithDirect("nawawi40", data.number, false);
     return {
       collection: "nawawi40",
       number: h.number,
@@ -44,7 +44,7 @@ export const fetchHadith = createServerFn({ method: "POST" })
   });
 
 export const randomNawawi = createServerFn({ method: "POST" }).handler(async (): Promise<HadithData> => {
-  const h = await randomSahihHadith({ data: { collection: "nawawi40" } });
+  const h = await randomSahihHadithDirect("nawawi40");
   return {
     collection: "nawawi40",
     number: h.number,

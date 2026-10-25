@@ -538,33 +538,49 @@ export function detectScriptureFromText(text: string): {
     }
   }
 
-  // Hadith collections (supports "бухари 1", "хадис 1 от бухари", "бухари #6424", etc.)
+  // Nawawi 40 Hadith collections (supports "hadith 27 hadith book collections of forty", "40 hadith 27", "хадис 27 от 40 хадиса на науауи", "науауи 27", etc.)
+  const isNawawi = /(?:навауи|науауи|nawawi|40\s*хадис|четиридесет\s*хадис|40\s*hadith|forty\s*hadith|collections?\s*of\s*forty|book\s*of\s*forty|\bforty\b)/i.test(lower);
+  if (isNawawi) {
+    const markerMatch = lower.match(/(?:#|№|номер|no\.?|хадис|hadith)\s*(\d+)/i);
+    if (markerMatch) {
+      const n = parseInt(markerMatch[1], 10);
+      if (n >= 1 && n <= 42) return { type: "hadith", collection: "nawawi40", number: n };
+    }
+    const afterColl = lower.match(/(?:навауи|науауи|nawawi|40\s*хадиса?|40\s*hadiths?)\s*(?:#|№|номер|no\.?)?\s*(\d+)/i);
+    if (afterColl) {
+      const n = parseInt(afterColl[1], 10);
+      if (n >= 1 && n <= 42) return { type: "hadith", collection: "nawawi40", number: n };
+    }
+    const allNums = Array.from(lower.matchAll(/\b(\d+)\b/g)).map((m) => parseInt(m[1], 10));
+    const candidate = allNums.find((n) => n !== 40 && n >= 1 && n <= 42);
+    if (candidate) {
+      return { type: "hadith", collection: "nawawi40", number: candidate };
+    }
+  }
+
+  // Hadith collections (supports "бухари 1", "хадис 1 от бухари", "бухари #6424", "bukhari hadith 1", etc.)
   const bukhariMatch =
-    lower.match(/(?:бухари|bukhari)\s*(?:#|№|номер)?\s*(\d+)/i) ||
-    lower.match(/хадис\s*(?:#|№|номер)?\s*(\d+)\s*(?:от|на)?\s*(?:сахих\s*ал[- ]?)?бухари/i);
-  if (bukhariMatch) {
-    return { type: "hadith", collection: "bukhari", number: parseInt(bukhariMatch[1], 10) };
+    lower.match(/(?:бухари|bukhari)\s*(?:#|№|номер|no\.?|hadith|хадис)?\s*(\d+)/i) ||
+    lower.match(/(?:хадис|hadith)\s*(?:#|№|номер|no\.?)?\s*(\d+)\s*(?:от|на|of|from|in)?\s*(?:сахих\s*ал[- ]?|sahih\s*al[- ]?)?(?:бухари|bukhari)/i);
+  if (bukhariMatch && !isNawawi) {
+    const n = parseInt(bukhariMatch[1], 10);
+    if (n > 0) return { type: "hadith", collection: "bukhari", number: n };
   }
 
   const muslimMatch =
-    lower.match(/(?:муслим|muslim)\s*(?:#|№|номер)?\s*(\d+)/i) ||
-    lower.match(/хадис\s*(?:#|№|номер)?\s*(\d+)\s*(?:от|на)?\s*(?:сахих\s*)?муслим/i);
-  if (muslimMatch) {
-    return { type: "hadith", collection: "muslim", number: parseInt(muslimMatch[1], 10) };
-  }
-
-  const nawawiMatch =
-    lower.match(/(?:навауи|науауи|nawawi|40\s*хадиса)\s*(?:#|№|номер)?\s*(\d+)/i) ||
-    lower.match(/хадис\s*(?:#|№|номер)?\s*(\d+)\s*(?:от|на)?\s*(?:40\s*хадиса\s*(?:на)?\s*)?(?:навауи|науауи|nawawi)/i);
-  if (nawawiMatch) {
-    return { type: "hadith", collection: "nawawi40", number: parseInt(nawawiMatch[1], 10) };
+    lower.match(/(?:муслим|muslim)\s*(?:#|№|номер|no\.?|hadith|хадис)?\s*(\d+)/i) ||
+    lower.match(/(?:хадис|hadith)\s*(?:#|№|номер|no\.?)?\s*(\d+)\s*(?:от|на|of|from|in)?\s*(?:сахих\s*|sahih\s*)?(?:муслим|muslim)/i);
+  if (muslimMatch && !isNawawi) {
+    const n = parseInt(muslimMatch[1], 10);
+    if (n > 0) return { type: "hadith", collection: "muslim", number: n };
   }
 
   const tirmidhiMatch =
-    lower.match(/(?:тирмизи|tirmidhi|ат-тирмизи|at-tirmidhi)\s*(?:#|№|номер)?\s*(\d+)/i) ||
-    lower.match(/хадис\s*(?:#|№|номер)?\s*(\d+)\s*(?:от|на)?\s*(?:сунан\s*|джами\s*)?(?:ат[- ]?)?тирмизи/i);
+    lower.match(/(?:тирмизи|tirmidhi|ат-тирмизи|at-tirmidhi)\s*(?:#|№|номер|no\.?|hadith|хадис)?\s*(\d+)/i) ||
+    lower.match(/(?:хадис|hadith)\s*(?:#|№|номер|no\.?)?\s*(\d+)\s*(?:от|на|of|from|in)?\s*(?:сунан\s*|джами\s*|jami\s*|sunan\s*)?(?:ат[- ]?|at[- ]?)?(?:тирмизи|tirmidhi)/i);
   if (tirmidhiMatch) {
-    return { type: "hadith", collection: "tirmidhi", number: parseInt(tirmidhiMatch[1], 10) };
+    const n = parseInt(tirmidhiMatch[1], 10);
+    if (n > 0) return { type: "hadith", collection: "tirmidhi", number: n };
   }
 
   return { type: null };

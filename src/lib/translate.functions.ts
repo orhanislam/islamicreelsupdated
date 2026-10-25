@@ -67,148 +67,157 @@ export function normalizeIslamicTermsBulgarian(t: string): string {
   return sanitizeTheologicalRespect(enrichUnfamiliarQuranicTerms(cleaned));
 }
 
-export const translateToBulgarian = createServerFn({ method: "POST" })
-  .inputValidator((input: { english: string; sourceRef: string; arabic?: string; ayahBounds?: any[] }) => input)
-  .handler(async ({ data }) => {
-    const sanitize = (t: string) => normalizeIslamicTermsBulgarian(t);
+export async function translateToBulgarianDirect(data: {
+  english: string;
+  sourceRef: string;
+  arabic?: string;
+  ayahBounds?: any[];
+}): Promise<{ bulgarian: string; ayahBounds?: any[]; cached: boolean }> {
+  const sanitize = (t: string) => normalizeIslamicTermsBulgarian(t);
 
-    if (data.ayahBounds && Array.isArray(data.ayahBounds) && data.ayahBounds.length > 0) {
-      const getCached = (b: any) => {
-        const key = `ayah_v2_${b.ayah}_${(b.english || "").trim()}`;
-        const val = globalCache.get(key);
-        if (!val || val.trim().length === 0) return null;
-        if (/[\u0600-\u06FF]/.test(val)) {
-          globalCache.delete(key);
-          return null;
+  if (data.ayahBounds && Array.isArray(data.ayahBounds) && data.ayahBounds.length > 0) {
+    const getCached = (b: any) => {
+      const key = `ayah_v2_${b.ayah}_${(b.english || "").trim()}`;
+      const val = globalCache.get(key);
+      if (!val || val.trim().length === 0) return null;
+      if (/[\u0600-\u06FF]/.test(val)) {
+        globalCache.delete(key);
+        return null;
+      }
+      return val.trim();
+    };
+
+    const uncached = data.ayahBounds.filter((b) => !getCached(b));
+
+    if (uncached.length > 0) {
+      try {
+        const prompt = `Източник: ${data.sourceRef}\n\nМоля, преведи следните аяти на възвишен, точен и граматически безупречен КНИЖОВЕН БЪЛГАРСКИ ЕЗИК (на кирилица!).\nВАЖНО: НЕ връщай арабския текст! Върни САМО превода на български език!\nЗа всеки аят върни превода във формат:\n=== AYAH номер ===\nтекст на превода на български език\n\nАяти за превод:\n${uncached.map((b) => `Аят ${b.ayah}:\n${b.arabic ? `Арабски оригинал: ${b.arabic}\n` : ""}Английски превод: ${b.english || ""}`).join("\n\n")}`;
+
+        const rawResp = await geminiChat(
+          "gemini-3.1-pro",
+          [
+            { role: "system", content: SYSTEM },
+            { role: "user", content: prompt },
+          ],
+          false
+        );
+
+        const delimiterRegex = /===\s*(?:AYAH|АЯТ)\s*(\d+)\s*===/i;
+        if (delimiterRegex.test(rawResp)) {
+          const parts = rawResp.split(delimiterRegex);
+          for (let i = 1; i < parts.length; i += 2) {
+            const ayahNum = Number(parts[i]);
+            let text = (parts[i + 1] || "").trim();
+            text = text.replace(/===\s*(?:AYAH|АЯТ).*$/is, "").trim();
+            if (ayahNum && text) {
+              const targetB = uncached.find((b) => Number(b.ayah) === ayahNum);
+              if (targetB) {
+                let cleanText = sanitize(text);
+                cleanText = cleanText.replace(new RegExp(`^(?:\\(${targetB.ayah}\\)|\\[${targetB.ayah}\\]|${targetB.ayah}\\.?)\\s*`), "").trim();
+                globalCache.set(`ayah_v2_${targetB.ayah}_${(targetB.english || "").trim()}`, cleanText);
+              }
+            }
+          }
         }
-        return val.trim();
-      };
 
-      const uncached = data.ayahBounds.filter((b) => !getCached(b));
-
-      if (uncached.length > 0) {
-        try {
-          const prompt = `Източник: ${data.sourceRef}\n\nМоля, преведи следните аяти на възвишен, точен и граматически безупречен КНИЖОВЕН БЪЛГАРСКИ ЕЗИК (на кирилица!).\nВАЖНО: НЕ връщай арабския текст! Върни САМО превода на български език!\nЗа всеки аят върни превода във формат:\n=== AYAH номер ===\nтекст на превода на български език\n\nАяти за превод:\n${uncached.map((b) => `Аят ${b.ayah}:\n${b.arabic ? `Арабски оригинал: ${b.arabic}\n` : ""}Английски превод: ${b.english || ""}`).join("\n\n")}`;
-
-          const rawResp = await geminiChat(
-            "gemini-3.1-pro",
-            [
-              { role: "system", content: SYSTEM },
-              { role: "user", content: prompt },
-            ],
-            false
-          );
-
-          const delimiterRegex = /===\s*(?:AYAH|АЯТ)\s*(\d+)\s*===/i;
-          if (delimiterRegex.test(rawResp)) {
-            const parts = rawResp.split(delimiterRegex);
-            for (let i = 1; i < parts.length; i += 2) {
-              const ayahNum = Number(parts[i]);
-              let text = (parts[i + 1] || "").trim();
-              text = text.replace(/===\s*(?:AYAH|АЯТ).*$/is, "").trim();
-              if (ayahNum && text) {
-                const targetB = uncached.find((b) => Number(b.ayah) === ayahNum);
-                if (targetB) {
-                  let cleanText = sanitize(text);
-                  cleanText = cleanText.replace(new RegExp(`^(?:\\(${targetB.ayah}\\)|\\[${targetB.ayah}\\]|${targetB.ayah}\\.?)\\s*`), "").trim();
-                  globalCache.set(`ayah_v2_${targetB.ayah}_${(targetB.english || "").trim()}`, cleanText);
-                }
-              }
-            }
-          }
-
-          for (const targetB of uncached) {
-            const cacheKey = `ayah_v2_${targetB.ayah}_${(targetB.english || "").trim()}`;
-            if (!globalCache.get(cacheKey) || !globalCache.get(cacheKey)!.trim()) {
-              const lineRegex = new RegExp(`(?:^|\\n)\\s*(?:\\(${targetB.ayah}\\)|\\[${targetB.ayah}\\]|${targetB.ayah}\\.)\\s*([^\\n]+(?:\\n(?!\\s*(?:\\(|\\[|\\d+\\.))[^\n]+)*)`, "i");
-              const match = rawResp.match(lineRegex);
-              if (match && match[1]) {
-                const cleanText = sanitize(match[1]).trim();
-                const formattedText = cleanText.replace(/^(?:\(\d+\)|\[\d+\]|\d+\.)\s*/, "");
-                globalCache.set(cacheKey, formattedText);
-              }
-            }
-          }
-
-          if (uncached.length === 1 && rawResp.trim()) {
-            const singleB = uncached[0];
-            const cacheKey = `ayah_v2_${singleB.ayah}_${(singleB.english || "").trim()}`;
-            if (!globalCache.get(cacheKey) || !globalCache.get(cacheKey)!.trim()) {
-              const cleanText = sanitize(rawResp).trim();
+        for (const targetB of uncached) {
+          const cacheKey = `ayah_v2_${targetB.ayah}_${(targetB.english || "").trim()}`;
+          if (!globalCache.get(cacheKey) || !globalCache.get(cacheKey)!.trim()) {
+            const lineRegex = new RegExp(`(?:^|\\n)\\s*(?:\\(${targetB.ayah}\\)|\\[${targetB.ayah}\\]|${targetB.ayah}\\.)\\s*([^\\n]+(?:\\n(?!\\s*(?:\\(|\\[|\\d+\\.))[^\n]+)*)`, "i");
+            const match = rawResp.match(lineRegex);
+            if (match && match[1]) {
+              const cleanText = sanitize(match[1]).trim();
               const formattedText = cleanText.replace(/^(?:\(\d+\)|\[\d+\]|\d+\.)\s*/, "");
               globalCache.set(cacheKey, formattedText);
             }
           }
-        } catch (e) {
-          console.warn("[translate] Batch translate failed, falling back to sequential:", e);
         }
 
-        const stillMissing = data.ayahBounds.filter((b) => !getCached(b));
-        if (stillMissing.length > 0) {
-          try {
-            await new Promise((r) => setTimeout(r, 1000));
-            const prompt2 = `Източник: ${data.sourceRef}\n\nМоля, преведи следните аяти на КНИЖОВЕН БЪЛГАРСКИ ЕЗИК (на кирилица!), като всеки аят започва с номера му в скоби (напр. (1) ...):\nНЕ връщай арабски текст!\n\n${stillMissing.map((b) => `(${b.ayah}) ${b.english || b.arabic || ""}`).join("\n\n")}`;
-            const raw2 = await geminiChat("gemini-3.1-pro", [
-              { role: "system", content: SYSTEM },
-              { role: "user", content: prompt2 },
-            ]);
-            for (const b of stillMissing) {
-              const cacheKey = `ayah_v2_${b.ayah}_${(b.english || "").trim()}`;
-              const lineRegex = new RegExp(`(?:^|\\n)\\s*(?:\\(${b.ayah}\\)|\\[${b.ayah}\\]|${b.ayah}\\.)\\s*([^\\n]+(?:\\n(?!\\s*(?:\\(|\\[|\\d+\\.))[^\n]+)*)`, "i");
-              const match = raw2.match(lineRegex);
-              if (match && match[1]) {
-                const cleanText = sanitize(match[1]).trim();
-                const formattedText = cleanText.replace(/^(?:\(\d+\)|\[\d+\]|\d+\.)\s*/, "");
-                globalCache.set(cacheKey, formattedText);
-              }
-            }
-            if (stillMissing.length === 1 && raw2.trim()) {
-              const singleB = stillMissing[0];
-              const cacheKey = `ayah_v2_${singleB.ayah}_${(singleB.english || "").trim()}`;
-              if (!getCached(singleB)) {
-                const cleanText = sanitize(raw2).trim();
-                const formattedText = cleanText.replace(/^(?:\(\d+\)|\[\d+\]|\d+\.)\s*/, "");
-                globalCache.set(cacheKey, formattedText);
-              }
-            }
-          } catch (err) {
-            console.error("[translate] Single batch retry failed:", err);
+        if (uncached.length === 1 && rawResp.trim()) {
+          const singleB = uncached[0];
+          const cacheKey = `ayah_v2_${singleB.ayah}_${(singleB.english || "").trim()}`;
+          if (!globalCache.get(cacheKey) || !globalCache.get(cacheKey)!.trim()) {
+            const cleanText = sanitize(rawResp).trim();
+            const formattedText = cleanText.replace(/^(?:\(\d+\)|\[\d+\]|\d+\.)\s*/, "");
+            globalCache.set(cacheKey, formattedText);
           }
         }
+      } catch (e) {
+        console.warn("[translate] Batch translate failed, falling back to sequential:", e);
       }
 
-      const updatedBounds = data.ayahBounds.map((b) => {
-        const cacheKey = `ayah_v2_${b.ayah}_${(b.english || "").trim()}`;
-        const cached = globalCache.get(cacheKey);
-        const existingBg = b.bulgarian ? (b.bulgarian.startsWith(`(${b.ayah})`) ? b.bulgarian : `(${b.ayah}) ${b.bulgarian}`) : "";
-        return { ...b, bulgarian: cached || existingBg || `(${b.ayah}) ${b.english || ""}` };
-      });
-      let bulgarian = updatedBounds
-        .map((b) => b.bulgarian)
-        .filter(Boolean)
-        .join("\n\n");
-
-      return { bulgarian, ayahBounds: updatedBounds, cached: false };
+      const stillMissing = data.ayahBounds.filter((b) => !getCached(b));
+      if (stillMissing.length > 0) {
+        try {
+          await new Promise((r) => setTimeout(r, 1000));
+          const prompt2 = `Източник: ${data.sourceRef}\n\nМоля, преведи следните аяти на КНИЖОВЕН БЪЛГАРСКИ ЕЗИК (на кирилица!), като всеки аят започва с номера му в скоби (напр. (1) ...):\nНЕ връщай арабски текст!\n\n${stillMissing.map((b) => `(${b.ayah}) ${b.english || b.arabic || ""}`).join("\n\n")}`;
+          const raw2 = await geminiChat("gemini-3.1-pro", [
+            { role: "system", content: SYSTEM },
+            { role: "user", content: prompt2 },
+          ]);
+          for (const b of stillMissing) {
+            const cacheKey = `ayah_v2_${b.ayah}_${(b.english || "").trim()}`;
+            const lineRegex = new RegExp(`(?:^|\\n)\\s*(?:\\(${b.ayah}\\)|\\[${b.ayah}\\]|${b.ayah}\\.)\\s*([^\\n]+(?:\\n(?!\\s*(?:\\(|\\[|\\d+\\.))[^\n]+)*)`, "i");
+            const match = raw2.match(lineRegex);
+            if (match && match[1]) {
+              const cleanText = sanitize(match[1]).trim();
+              const formattedText = cleanText.replace(/^(?:\(\d+\)|\[\d+\]|\d+\.)\s*/, "");
+              globalCache.set(cacheKey, formattedText);
+            }
+          }
+          if (stillMissing.length === 1 && raw2.trim()) {
+            const singleB = stillMissing[0];
+            const cacheKey = `ayah_v2_${singleB.ayah}_${(singleB.english || "").trim()}`;
+            if (!getCached(singleB)) {
+              const cleanText = sanitize(raw2).trim();
+              const formattedText = cleanText.replace(/^(?:\(\d+\)|\[\d+\]|\d+\.)\s*/, "");
+              globalCache.set(cacheKey, formattedText);
+            }
+          }
+        } catch (err) {
+          console.error("[translate] Single batch retry failed:", err);
+        }
+      }
     }
 
-    const cacheKey = `v2_${data.sourceRef}_${data.english.trim()}`;
-    const cachedVal = globalCache.get(cacheKey);
-    if (cachedVal && cachedVal.trim().length > 0 && !/[\u0600-\u06FF]/.test(cachedVal)) {
-      return { bulgarian: cachedVal.trim(), cached: true };
-    }
+    const updatedBounds = data.ayahBounds.map((b) => {
+      const cacheKey = `ayah_v2_${b.ayah}_${(b.english || "").trim()}`;
+      const cached = globalCache.get(cacheKey);
+      const existingBg = b.bulgarian ? (b.bulgarian.startsWith(`(${b.ayah})`) ? b.bulgarian : `(${b.ayah}) ${b.bulgarian}`) : "";
+      return { ...b, bulgarian: cached || existingBg || `(${b.ayah}) ${b.english || ""}` };
+    });
+    let bulgarian = updatedBounds
+      .map((b) => b.bulgarian)
+      .filter(Boolean)
+      .join("\n\n");
 
-    const prompt = `Източник: ${data.sourceRef}\n\nМоля, преведи следния свещен текст / хадис на възвишен, книжовен и граматически безупречен БЪЛГАРСКИ ЕЗИК (на кирилица).\nНЕ връщай арабски текст! Върни САМО българския превод (без въведения и без коментари):\n\n${data.arabic ? `Арабски оригинал (за смислова точност):\n${data.arabic}\n\n` : ""}Английски превод:\n${data.english}`;
+    return { bulgarian, ayahBounds: updatedBounds, cached: false };
+  }
 
-    const raw = await geminiChat(
-      "gemini-3.1-pro",
-      [
-        { role: "system", content: SYSTEM },
-        { role: "user", content: prompt },
-      ],
-    );
-    const bulgarian = sanitize(raw).trim() || data.english.trim();
-    if (!bulgarian) throw new Error("Празен превод");
+  const cacheKey = `v2_${data.sourceRef}_${data.english.trim()}`;
+  const cachedVal = globalCache.get(cacheKey);
+  if (cachedVal && cachedVal.trim().length > 0 && !/[\u0600-\u06FF]/.test(cachedVal)) {
+    return { bulgarian: cachedVal.trim(), cached: true };
+  }
 
-    globalCache.set(cacheKey, bulgarian);
-    return { bulgarian, cached: false };
+  const prompt = `Източник: ${data.sourceRef}\n\nМоля, преведи следния свещен текст / хадис на възвишен, книжовен и граматически безупречен БЪЛГАРСКИ ЕЗИК (на кирилица).\nНЕ връщай арабски текст! Върни САМО българския превод (без въведения и без коментари):\n\n${data.arabic ? `Арабски оригинал (за смислова точност):\n${data.arabic}\n\n` : ""}Английски превод:\n${data.english}`;
+
+  const raw = await geminiChat(
+    "gemini-3.1-pro",
+    [
+      { role: "system", content: SYSTEM },
+      { role: "user", content: prompt },
+    ],
+  );
+  const bulgarian = sanitize(raw).trim() || data.english.trim();
+  if (!bulgarian) throw new Error("Празен превод");
+
+  globalCache.set(cacheKey, bulgarian);
+  return { bulgarian, cached: false };
+}
+
+export const translateToBulgarian = createServerFn({ method: "POST" })
+  .inputValidator((input: { english: string; sourceRef: string; arabic?: string; ayahBounds?: any[] }) => input)
+  .handler(async ({ data }) => {
+    return translateToBulgarianDirect(data);
   });

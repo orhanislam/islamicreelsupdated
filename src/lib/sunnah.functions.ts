@@ -161,34 +161,48 @@ export const listSunnahCollections = createServerFn({ method: "GET" }).handler(a
   }));
 });
 
+export async function fetchSunnahHadithDirect(
+  collection: SunnahCollection,
+  number: number,
+  requireSahih = true,
+): Promise<SunnahHadith> {
+  const meta = COLLECTIONS[collection];
+  if (!meta) throw new Error("Невалидна колекция");
+  const n = Math.max(1, Math.min(meta.max, Math.floor(number)));
+  const h = await scrape(collection, n);
+  if (requireSahih && !meta.allSahih && !isSahihGrade(h.grade)) {
+    throw new Error(`Хадис ${h.reference} не е сахих (${h.grade ?? "няма степен"}). Опитай друг номер.`);
+  }
+  return h;
+}
+
+export async function randomSahihHadithDirect(
+  collection: SunnahCollection,
+): Promise<SunnahHadith> {
+  const meta = COLLECTIONS[collection];
+  if (!meta) throw new Error("Невалидна колекция");
+  // Bukhari & Muslim — всичко е сахих, един опит стига.
+  // Tirmidhi — пробваме до 8 пъти, докато паднем на сахих.
+  const attempts = meta.allSahih ? 3 : 8;
+  let lastErr: unknown = null;
+  for (let i = 0; i < attempts; i++) {
+    const n = 1 + Math.floor(Math.random() * meta.max);
+    try {
+      const h = await scrape(collection, n);
+      if (meta.allSahih || isSahihGrade(h.grade)) return h;
+    } catch (e) { lastErr = e; }
+  }
+  throw new Error(lastErr instanceof Error ? lastErr.message : "Не намерих сахих хадис, опитай отново.");
+}
+
 export const fetchSunnahHadith = createServerFn({ method: "POST" })
   .inputValidator((input: { collection: SunnahCollection; number: number; requireSahih?: boolean }) => input)
   .handler(async ({ data }): Promise<SunnahHadith> => {
-    const meta = COLLECTIONS[data.collection];
-    if (!meta) throw new Error("Невалидна колекция");
-    const n = Math.max(1, Math.min(meta.max, Math.floor(data.number)));
-    const h = await scrape(data.collection, n);
-    if (data.requireSahih && !meta.allSahih && !isSahihGrade(h.grade)) {
-      throw new Error(`Хадис ${h.reference} не е сахих (${h.grade ?? "няма степен"}). Опитай друг номер.`);
-    }
-    return h;
+    return fetchSunnahHadithDirect(data.collection, data.number, data.requireSahih);
   });
 
 export const randomSahihHadith = createServerFn({ method: "POST" })
   .inputValidator((input: { collection: SunnahCollection }) => input)
   .handler(async ({ data }): Promise<SunnahHadith> => {
-    const meta = COLLECTIONS[data.collection];
-    if (!meta) throw new Error("Невалидна колекция");
-    // Bukhari & Muslim — всичко е сахих, един опит стига.
-    // Tirmidhi — пробваме до 8 пъти, докато паднем на сахих.
-    const attempts = meta.allSahih ? 3 : 8;
-    let lastErr: unknown = null;
-    for (let i = 0; i < attempts; i++) {
-      const n = 1 + Math.floor(Math.random() * meta.max);
-      try {
-        const h = await scrape(data.collection, n);
-        if (meta.allSahih || isSahihGrade(h.grade)) return h;
-      } catch (e) { lastErr = e; }
-    }
-    throw new Error(lastErr instanceof Error ? lastErr.message : "Не намерих сахих хадис, опитай отново.");
+    return randomSahihHadithDirect(data.collection);
   });

@@ -1,8 +1,8 @@
 import { createServerFn } from "@tanstack/react-start";
 import { geminiChat, type ChatMessage } from "./gemini";
-import { fetchSunnahHadith, type SunnahCollection } from "./sunnah.functions";
+import { fetchSunnahHadith, fetchSunnahHadithDirect, type SunnahCollection } from "./sunnah.functions";
 import { fetchAyah } from "./quran.functions";
-import { translateToBulgarian } from "./translate.functions";
+import { translateToBulgarian, translateToBulgarianDirect } from "./translate.functions";
 import { searchPexelsVideos, matchTheologicalConcept } from "./pexels.functions";
 import { synthesizeHadithNarration } from "./tts.functions";
 import { startServerRenderJob, getJobsDir } from "./render.functions";
@@ -560,9 +560,9 @@ CAPCUT-ПОДОБНИ ИНСТРУКЦИИ ЗА РЕДАКТИРАНЕ:
   "newLearnedFact": "Ако в това съобщение потребителят ти е казал нещо важно за себе си или ново предпочитание, запиши го тук (иначе остави null)",
   "proposal": {
     "title": "Точно заглавие на български (напр. [Коран 2:255] Аят ал-Курси или [Сахих ал-Бухари #6424] Изпитанията). СТРИКТНО ЗАБРАНЕНО Е да слагаш мета префикси като '[tiktok carousels]', '[tiktok carousel]', '[tiktok]' или '[карусел]' в заглавието!",
-    "type": "hadith" | "quran" | "tiktok" | "general" | "carousel",
-    "collection": "nawawi40" | "bukhari" | "muslim" | "tirmidhi" (ако type е hadith),
-    "number": число номер на хадиса (ако type е hadith),
+    "type": "hadith" | "quran" | "tiktok" | "general" | "carousel" | "explained_video",
+    "collection": "nawawi40" | "bukhari" | "muslim" | "tirmidhi" (ЗАДЪЛЖИТЕЛНО ако се цитира хадис, независимо дали type е hadith или explained_video),
+    "number": точно число номер на хадиса (ЗАДЪЛЖИТЕЛНО ако се цитира хадис, напр. 27 за 40 хадиса на Навауи #27 или 6424 за Бухари #6424),
     "surah": точно число на сурата от 1 до 114 (ЗАДЪЛЖИТЕЛНО ако type е quran, напр. 2 за Ал-Бакара),
     "ayah": точно число на началния аят (ЗАДЪЛЖИТЕЛНО ако type е quran, напр. 255),
     "count": точно число брой аяти от 1 до 7 (ЗАДЪЛЖИТЕЛНО ако type е quran, напр. 1),
@@ -989,10 +989,12 @@ export async function preFetchHadithDalilFull(
     }
 
     // 2. Fetch from Sunnah.com API + Bulgarian translation
-    const h = await fetchSunnahHadith({ data: { collection: coll, number: num } });
+    const h = await fetchSunnahHadithDirect(coll, num, false);
     if (h && h.english) {
-      const t = await translateToBulgarian({
-        data: { english: h.english, sourceRef: h.reference },
+      const t = await translateToBulgarianDirect({
+        english: h.english,
+        sourceRef: h.reference,
+        arabic: h.arabic,
       });
       const clean = (t.bulgarian || "")
         .replace(/(^|\n)\s*(?:\(\d+\)|\[\d+\]|\d+\.)\s*/g, "$1")
@@ -2130,8 +2132,21 @@ export function formatSpokenCitation(rawRef: string, isQuran: boolean): string {
       if (parts.length > 0) return parts.join(", ");
     }
   } else {
-    // Hadith format: 'Сахих ал-Бухари #6424', 'Сахих ал-Бухари #1', 'Сахих ал-Бухари (#1)', 'Сахих Муслим № 1', 'Сахих ал-Бухари No. 1'
-    const m2 = ref.match(/^([^#№\d]+?)(?:\s*\(?(?:#|№|No\.|No|Nº|N°|Nr\.|Nr|номер|ном\.)\s*(\d+)\)?)?$/i);
+    // Hadith format: '40 Хадиса на ан-Навауи • Хадис № 27', '[40 Хадиса на ан-Науауи #27]', 'Сахих ал-Бухари #6424', 'Сахих Муслим № 1'
+    let cleanRef = ref.replace(/^[\[\(]+|[\]\)]+$/g, "").trim();
+
+    // 1. Nawawi 40 hadiths (contains number 40 in title, so match separately)
+    const nawawiMatch =
+      cleanRef.match(/(40\s*хадиса(?:\s*на\s*(?:ан[- ])?на[ву]ау?и)?)(?:[•\-–—\s]+(?:хадис\s*)?(?:#|№|номер|no\.?)?\s*(\d+))/i) ||
+      cleanRef.match(/(40\s*хадиса(?:\s*на\s*(?:ан[- ])?на[ву]ау?и)?).*?(?:#|№|номер|no\.?|хадис)\s*(\d+)/i);
+    if (nawawiMatch) {
+      const collName = "40 Хадиса на ан-Навауи";
+      const num = nawawiMatch[2];
+      if (num) return `${collName}, хадис номер ${num}`;
+      return collName;
+    }
+
+    const m2 = cleanRef.match(/^([^#№\d]+?)(?:\s*\(?(?:#|№|No\.|No|Nº|N°|Nr\.|Nr|номер|ном\.)\s*(\d+)\)?)?$/i);
     if (m2) {
       const coll = m2[1].trim().replace(/[-–—•\(\[\s]+$/, "");
       const num = m2[2];
@@ -2529,19 +2544,43 @@ export const confirmAndGenerateVideo = createServerFn({ method: "POST" })
       }
     }
 
+    // Auto-sync hadith number from title if title specifies a specific number (e.g. #27)
+    if (!proposal.surah && !proposal.ayah) {
+      const detected = detectScriptureFromText(proposal.title || "");
+      if (detected.type === "hadith" && detected.number) {
+        if (!proposal.number || (proposal.number === 1 && detected.number !== 1)) {
+          proposal.number = detected.number;
+          if (detected.collection) proposal.collection = detected.collection;
+        }
+      }
+    }
+
     if (
       proposal.type === "hadith" ||
-      (!proposal.surah && !proposal.ayah && proposal.collection && proposal.number)
+      (!proposal.surah && !proposal.ayah && (proposal.collection || proposal.number || /хадис|hadith|бухари|муслим|тирмизи|навауи|науауи|nawawi/i.test(proposal.title || "")))
     ) {
-      const coll = (proposal.collection || "nawawi40") as
+      let coll = (proposal.collection || "nawawi40") as
         "bukhari" | "muslim" | "tirmidhi" | "nawawi40";
-      const num = Number(proposal.number) || 1;
-      const h = await fetchSunnahHadith({ data: { collection: coll, number: num } });
+      let num = Number(proposal.number) || 0;
+      if (!num) {
+        const detected = detectScriptureFromText(proposal.title || "");
+        if (detected.number) {
+          num = detected.number;
+          if (detected.collection) coll = detected.collection as any;
+        }
+      }
+      if (!num) num = 1;
+      proposal.number = num;
+      proposal.collection = coll;
+
+      const h = await fetchSunnahHadithDirect(coll, num, false);
       arabic = h.arabic;
       english = h.english;
       reference = h.reference;
-      const t = await translateToBulgarian({
-        data: { english: h.english, sourceRef: h.reference },
+      const t = await translateToBulgarianDirect({
+        english: h.english,
+        sourceRef: h.reference,
+        arabic: h.arabic,
       });
       bulgarian = t.bulgarian;
 

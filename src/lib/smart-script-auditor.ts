@@ -396,19 +396,36 @@ export function validateAndHealHadithDaleel(proposal: AuditedProposalInput): {
   let coll = (proposal.collection || "").toLowerCase().trim();
   let num = Number(proposal.number) || 0;
 
-  // Extract from title if missing
-  const titleHadithMatch = (proposal.title || "").match(
-    /\[\s*(?:сахих\s+ал-бухари|бухари|сахих\s+муслим|муслим|тирмизи|навауи|40\s+хадиса)\s*#?(\d+)\s*\]/i,
-  );
-  if (titleHadithMatch && !num) {
-    num = parseInt(titleHadithMatch[1], 10);
+  // 1. Extract number from title if missing or if num was erroneously set to 1 while title specifies another number
+  const titleStr = proposal.title || "";
+  let extractedTitleNum = 0;
+
+  // Match #27, № 27, No. 27, номер 27, хадис 27, hadith 27
+  const hashMatch = titleStr.match(/(?:#|№|No\.|No|Nº|N°|Nr\.|Nr|номер|хадис|hadith)\s*(\d+)/i);
+  if (hashMatch) {
+    extractedTitleNum = parseInt(hashMatch[1], 10);
+  } else {
+    // Numbers inside [ ... ] or anywhere that are not 40
+    const bracketNums = Array.from(titleStr.matchAll(/\b(\d+)\b/g)).map((m) => parseInt(m[1], 10));
+    const candidate = bracketNums.find((n) => n !== 40);
+    if (candidate) extractedTitleNum = candidate;
+    else if (bracketNums.length > 0) extractedTitleNum = bracketNums[0];
+  }
+
+  // If num is missing, or if num is 1 while title explicitly requested another hadith (e.g. #27):
+  if (extractedTitleNum > 0 && (!num || (num === 1 && extractedTitleNum !== 1))) {
+    num = extractedTitleNum;
+    proposal.number = extractedTitleNum;
+    healed = true;
+    fixes.push(`Синхронизиран номер на хадис от заглавието: #${extractedTitleNum}`);
   }
 
   const allowed = ["bukhari", "muslim", "tirmidhi", "nawawi40", "abudawud"];
   if (!coll || !allowed.includes(coll)) {
-    if (/бухари/i.test(proposal.title || "")) coll = "bukhari";
-    else if (/муслим/i.test(proposal.title || "")) coll = "muslim";
-    else if (/тирмизи/i.test(proposal.title || "")) coll = "tirmidhi";
+    if (/бухари|bukhari/i.test(proposal.title || "")) coll = "bukhari";
+    else if (/муслим|muslim/i.test(proposal.title || "")) coll = "muslim";
+    else if (/тирмизи|tirmidhi/i.test(proposal.title || "")) coll = "tirmidhi";
+    else if (/навауи|науауи|nawawi|40\s*(?:хадиса|hadith)/i.test(proposal.title || "")) coll = "nawawi40";
     else coll = "nawawi40";
     proposal.collection = coll;
     healed = true;
@@ -420,6 +437,8 @@ export function validateAndHealHadithDaleel(proposal: AuditedProposalInput): {
     proposal.number = 1;
     healed = true;
     fixes.push("Коригиран номер на хадис: Зададен начален хадис #1");
+  } else {
+    proposal.number = num;
   }
 
   // Cross-check against verified database (verified-hadith-sharh.json)

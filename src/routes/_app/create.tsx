@@ -276,22 +276,22 @@ function CreatePage() {
           } else if (title.includes("Сахих ал-Бухари") || title.toLowerCase().includes("bukhari")) {
             pType = "hadith";
             collection = "bukhari";
-            const numMatch = title.match(/#(\d+)/);
+            const numMatch = title.match(/(?:#|№|No\.|No|номер|хадис|hadith)\s*(\d+)/i) || title.match(/#(\d+)/);
             if (numMatch) number = parseInt(numMatch[1], 10);
           } else if (title.includes("Сахих Муслим") || title.toLowerCase().includes("muslim")) {
             pType = "hadith";
             collection = "muslim";
-            const numMatch = title.match(/#(\d+)/);
+            const numMatch = title.match(/(?:#|№|No\.|No|номер|хадис|hadith)\s*(\d+)/i) || title.match(/#(\d+)/);
             if (numMatch) number = parseInt(numMatch[1], 10);
           } else if (title.includes("Тирмизи") || title.toLowerCase().includes("tirmidhi")) {
             pType = "hadith";
             collection = "tirmidhi";
-            const numMatch = title.match(/#(\d+)/);
+            const numMatch = title.match(/(?:#|№|No\.|No|номер|хадис|hadith)\s*(\d+)/i) || title.match(/#(\d+)/);
             if (numMatch) number = parseInt(numMatch[1], 10);
-          } else if (title.includes("Навауи") || title.toLowerCase().includes("nawawi")) {
+          } else if (/навауи|науауи|nawawi|40\s*(?:хадиса|hadith)/i.test(title)) {
             pType = "hadith";
             collection = "nawawi40";
-            const numMatch = title.match(/№\s*(\d+)|#\s*(\d+)/);
+            const numMatch = title.match(/(?:#|№|No\.|No|номер|хадис|hadith)\s*(\d+)/i) || title.match(/№\s*(\d+)|#\s*(\d+)/);
             if (numMatch) number = parseInt(numMatch[1] || numMatch[2], 10);
           }
         }
@@ -314,6 +314,9 @@ function CreatePage() {
           setTab("hadith");
           setHadithSource(collection as SunnahCollection);
           setSunnahNum(number);
+          if (collection === "nawawi40") {
+            setHadithNum(number);
+          }
           setTimeout(() => {
             loadSunnah(collection as SunnahCollection, number, true, cleanTitle);
           }, 100);
