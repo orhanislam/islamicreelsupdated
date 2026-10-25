@@ -179,7 +179,7 @@ export function getVerifiedHadithSharhDirect(params: {
   if (!num) return null;
 
   // 1. Exact match in verifiedSharhData
-  const matches = (verifiedSharhData.hadiths as HadithSharhEntry[]).find((h) => {
+  let matches = (verifiedSharhData.hadiths as HadithSharhEntry[]).find((h) => {
     const c = h.collection.toLowerCase().trim();
     const collMatch =
       c === coll ||
@@ -189,6 +189,36 @@ export function getVerifiedHadithSharhDirect(params: {
       (c.includes("nawawi") && coll.includes("nawawi"));
     return collMatch && Number(h.number) === num;
   });
+
+  const simpleColl = coll.includes("bukhari")
+    ? "bukhari"
+    : coll.includes("muslim")
+    ? "muslim"
+    : coll.includes("tirmidhi")
+    ? "tirmidhi"
+    : coll.includes("nawawi")
+    ? "nawawi40"
+    : coll;
+
+  // 1b. Alternative print numbering alias map -> maps alternative prints to canonical Sunnah.com numbering
+  const altPrintAliasMap: Record<string, { collection: string; number: number }> = {
+    "bukhari:5058": { collection: "bukhari", number: 5027 },
+    "bukhari:6065": { collection: "bukhari", number: 6018 },
+    "bukhari:6116": { collection: "bukhari", number: 6114 },
+    "muslim:2687": { collection: "muslim", number: 1893 },
+    "muslim:2749": { collection: "muslim", number: 2752 },
+    "tirmidhi:1956": { collection: "tirmidhi", number: 2002 },
+    "tirmidhi:1987": { collection: "tirmidhi", number: 2396 },
+    "tirmidhi:2317": { collection: "tirmidhi", number: 2324 },
+  };
+
+  const lookupKey = `${simpleColl}:${num}`;
+  if (!matches && altPrintAliasMap[lookupKey]) {
+    const target = altPrintAliasMap[lookupKey];
+    matches = (verifiedSharhData.hadiths as HadithSharhEntry[]).find(
+      (h) => h.collection === target.collection && Number(h.number) === target.number
+    );
+  }
 
   if (matches) {
     return {
@@ -210,8 +240,10 @@ export function getVerifiedHadithSharhDirect(params: {
     "bukhari:52": { collection: "nawawi40", number: 6 },
     "muslim:1599": { collection: "nawawi40", number: 6 },
     "bukhari:13": { collection: "nawawi40", number: 13 },
+    "bukhari:5027": { collection: "bukhari", number: 5027 },
     "bukhari:6018": { collection: "nawawi40", number: 15 },
     "bukhari:6065": { collection: "nawawi40", number: 15 },
+    "bukhari:6114": { collection: "nawawi40", number: 16 },
     "bukhari:6116": { collection: "nawawi40", number: 16 },
     "tirmidhi:2516": { collection: "nawawi40", number: 19 },
     "muslim:38": { collection: "nawawi40", number: 21 },
@@ -221,21 +253,12 @@ export function getVerifiedHadithSharhDirect(params: {
     "muslim:1009": { collection: "nawawi40", number: 26 },
     "muslim:49": { collection: "nawawi40", number: 34 },
     "muslim:2564": { collection: "nawawi40", number: 35 },
+    "muslim:1893": { collection: "nawawi40", number: 36 },
     "muslim:2699": { collection: "nawawi40", number: 36 },
     "bukhari:6491": { collection: "nawawi40", number: 37 },
     "bukhari:6502": { collection: "nawawi40", number: 38 },
     "bukhari:6416": { collection: "nawawi40", number: 40 },
   };
-
-  const simpleColl = coll.includes("bukhari")
-    ? "bukhari"
-    : coll.includes("muslim")
-    ? "muslim"
-    : coll.includes("tirmidhi")
-    ? "tirmidhi"
-    : coll.includes("nawawi")
-    ? "nawawi40"
-    : coll;
 
   const crossKey = `${simpleColl}:${num}`;
   if (crossMap[crossKey]) {

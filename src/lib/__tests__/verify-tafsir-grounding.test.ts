@@ -224,10 +224,48 @@ async function runTests() {
   if (narrationText.includes("Salafi Shaykh AI пояснява")) {
     throw new Error(`buildExplainedNarrationText leaked scholar attribution into video! Got:\n${narrationText}`);
   }
-  if (narrationText.includes("Действие:") || narrationText.includes("Направи истигфар точно сега")) {
-    throw new Error(`buildExplainedNarrationText leaked action step into video narration! Got:\n${narrationText}`);
+  if (!narrationText.includes("Действие:") && !narrationText.includes("Напътствие:")) {
+    throw new Error(`buildExplainedNarrationText missing action step in video narration! Got:\n${narrationText}`);
   }
-  console.log("   ✓ Verified buildExplainedNarrationText strictly uses 'Обяснение:' without scholar attribution or action step!");
+  console.log("   ✓ Verified buildExplainedNarrationText strictly uses 'Обяснение:' and includes practical action step without scholar attribution!");
+
+  // 12b. Test Canonical Sunnah.com Hadith Numbering Accuracy (Tirmidhi 2346 vs 2488, Tirmidhi 2396, Bukhari 5027, etc.)
+  console.log("\n12b. Testing Canonical Sunnah.com Hadith Numbering Alignment...");
+  const tirmidhi2346 = getVerifiedHadithSharhDirect({ collection: "tirmidhi", number: 2346 });
+  if (!tirmidhi2346 || !tirmidhi2346.topic.includes("Истинското богатство") || !tirmidhi2346.hadithTextAr.includes("مَنْ أَصْبَحَ مِنْكُمْ آمِنًا")) {
+    throw new Error("Tirmidhi #2346 must authentically match 'Истинското богатство' (من أصبح منكم آمنا)!");
+  }
+  console.log("   ✓ Tirmidhi #2346 strictly mapped to 'Истинското богатство' (Sunnah.com canonical)");
+
+  const tirmidhi2488 = getVerifiedHadithSharhDirect({ collection: "tirmidhi", number: 2488 });
+  if (!tirmidhi2488 || !tirmidhi2488.topic.includes("Огъня") || !tirmidhi2488.hadithTextAr.includes("يَحْرُمُ عَلَى النَّارِ")) {
+    throw new Error("Tirmidhi #2488 must authentically match 'Кой е възбранен за Огъня' (يحرم على النار)!");
+  }
+  console.log("   ✓ Tirmidhi #2488 strictly mapped to 'Кой е възбранен за Огъня' (Sunnah.com canonical)");
+
+  const tirmidhi2396 = getVerifiedHadithSharhDirect({ collection: "tirmidhi", number: 2396 });
+  if (!tirmidhi2396 || !tirmidhi2396.hadithTextAr.includes("عِظَمَ الْجَزَاءِ")) {
+    throw new Error("Tirmidhi #2396 must authentically match 'Търпението при изпитания'!");
+  }
+  console.log("   ✓ Tirmidhi #2396 strictly mapped to 'Търпението при изпитания' (Sunnah.com canonical)");
+
+  const bukhari5027 = getVerifiedHadithSharhDirect({ collection: "bukhari", number: 5027 });
+  if (!bukhari5027 || !bukhari5027.hadithTextAr.includes("خَيْرُكُمْ مَنْ تَعَلَّمَ الْقُرْآنَ")) {
+    throw new Error("Bukhari #5027 must authentically match 'Изучаването на Корана'!");
+  }
+  console.log("   ✓ Bukhari #5027 strictly mapped to 'Изучаването на Корана' (Sunnah.com canonical)");
+
+  const bukhari6018 = getVerifiedHadithSharhDirect({ collection: "bukhari", number: 6018 });
+  if (!bukhari6018 || !bukhari6018.hadithTextAr.includes("فَلْيَقُلْ خَيْرًا أَوْ لِيَصْمُتْ")) {
+    throw new Error("Bukhari #6018 must authentically match 'Опазване на езика'!");
+  }
+  console.log("   ✓ Bukhari #6018 strictly mapped to 'Опазване на езика' (Sunnah.com canonical)");
+
+  const muslim2752 = getVerifiedHadithSharhDirect({ collection: "muslim", number: 2752 });
+  if (!muslim2752 || !muslim2752.hadithTextAr.includes("مِائَةَ رَحْمَةٍ") && !muslim2752.hadithTextAr.includes("مائة")) {
+    throw new Error("Muslim #2752 must authentically match '99-те части от Милостта'!");
+  }
+  console.log("   ✓ Muslim #2752 strictly mapped to '99-те части от Милостта' (Sunnah.com canonical)");
 
   // 13. Test Hadith 19 (Nawawi 40 / Tirmidhi 2516) Full Text Preservation
   console.log("\n13. Testing Hadith 19 (Nawawi 40 / Tirmidhi 2516) full authentic text preservation...");

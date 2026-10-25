@@ -146,10 +146,11 @@ async function scrape(collection: SunnahCollection, number: number): Promise<Sun
 
 function isSahihGrade(grade: string | null): boolean {
   if (!grade) return false;
-  // Reject Hasan/Daif/Mawdu etc. Accept anything containing "Sahih" (Darussalam/Albani/etc.)
+  // Strictly reject Daif / Mawdu / Fabricated / Munkar.
+  // Accept authentic grades: Sahih, Hasan Sahih, Hasan (authentic Sunnah hadith by Albani/Darussalam).
   const g = grade.toLowerCase();
   if (/da'?if|daeef|weak|mawdu|fabricated|munkar/.test(g)) return false;
-  return /sahih|sahīh|saheeh/.test(g);
+  return /sahih|sahīh|saheeh|hasan|ḥasan/.test(g);
 }
 
 export const listSunnahCollections = createServerFn({ method: "GET" }).handler(async () => {

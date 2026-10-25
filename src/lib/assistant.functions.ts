@@ -3038,8 +3038,8 @@ export const VIRAL_HADITH_SERIES_PRESETS = [
   },
   {
     collection: "tirmidhi",
-    number: 1987,
-    title: "Сунан Ат-Тирмизи #1987 (Търпението)",
+    number: 2396,
+    title: "Джами ат-Тирмизи #2396 (Търпението)",
     summaryBg: "Вътрешният мир и сабр в трудни моменти.",
     query: "mountains calm fog cinematic",
   },
@@ -3060,8 +3060,8 @@ export const VIRAL_HADITH_SERIES_PRESETS = [
   },
   {
     collection: "bukhari",
-    number: 6065,
-    title: "Сахих ал-Бухари #6065 (Мълчанието)",
+    number: 6018,
+    title: "Сахих ал-Бухари #6018 (Мълчанието)",
     summaryBg: "Който вярва в Аллах и в Сетния ден, нека говори добро или да мълчи.",
     query: "calm lake reflection cinematic nature",
   },
