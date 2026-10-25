@@ -1569,7 +1569,125 @@ export type ServerJobRecord = {
   auditReport?: any;
   downloadUrl?: string;
   error?: string;
+  isAutopilot?: boolean;
+  seoTitle?: string;
+  viralCaption?: string;
+  webhookDispatched?: boolean;
+  tiktokPublished?: boolean;
+  tiktokPublishRequestId?: string;
+  tiktokPublishError?: string;
 };
+
+export async function generateAndStorePostRenderSocialKit(params: {
+  jobId: string;
+  title: string;
+  jobData?: any;
+  isAutopilot?: boolean;
+  dispatchWebhook?: boolean;
+  mp4FilePath?: string;
+}): Promise<{
+  seoTitle: string;
+  viralCaption: string;
+  webhookDispatched: boolean;
+  tiktokPublished?: boolean;
+  tiktokPublishRequestId?: string;
+  tiktokPublishError?: string;
+}> {
+  const { generateTikTokSEOTitle, formatViralSocialCaption } = await import("./caption.functions");
+  const rawTitle = params.title || params.jobData?.scriptureReference || params.jobData?.topic || "Ислямска мъдрост";
+  const sw = params.jobData?.scriptWorkflow;
+  const dalilText = params.jobData?.fullDalilText || sw?.dalilText || "";
+  const explanation = sw?.explanation || params.jobData?.summaryBg || "";
+  const hookQuestion = sw?.hookQuestion || "";
+  const actionStep = sw?.actionStep || "";
+  const isQuran = !/бухари|муслим|тирмизи|навауи|науауи|хадис|bukhari|muslim|tirmidhi|nawawi/i.test(
+    `${rawTitle} ${params.jobData?.scriptureReference || ""}`,
+  );
+
+  const seoTitle = generateTikTokSEOTitle(rawTitle);
+  const viralCaption = formatViralSocialCaption(rawTitle, params.jobData?.summaryBg, {
+    title: rawTitle,
+    summary: params.jobData?.summaryBg,
+    hookQuestion,
+    dalilText,
+    explanation,
+    actionStep,
+    isQuran,
+  });
+
+  try {
+    const fs = (await import("fs")).promises;
+    const path = await import("path");
+    const dir = await getJobsDir();
+    await fs.writeFile(path.join(dir, `${params.jobId}_caption.txt`), viralCaption, "utf-8");
+  } catch (e) {
+    console.warn("[social-kit] Could not write caption file:", e);
+  }
+
+  let webhookDispatched = false;
+  let tiktokPublished = false;
+  let tiktokPublishRequestId: string | undefined;
+  let tiktokPublishError: string | undefined;
+
+  if (params.dispatchWebhook !== false) {
+    try {
+      const {
+        dispatchAutopilotWebhookDirect,
+        readAutopilotConfigDirect,
+        publishVideoViaUploadPostDirect,
+      } = await import("./autopilot.functions");
+      const cleanName = (rawTitle || "islamic-reel").replace(/[^a-z0-9._-]+/gi, "_") + ".mp4";
+      const whRes = await dispatchAutopilotWebhookDirect({
+        event: "video_completed",
+        jobId: params.jobId,
+        title: rawTitle,
+        seoTitle,
+        caption: viralCaption,
+        downloadUrl: `/api/download/${params.jobId}?filename=${encodeURIComponent(cleanName)}`,
+        videoUrl: `/api/download/${params.jobId}?inline=1`,
+        isAutopilot: Boolean(params.isAutopilot ?? params.jobData?.isAutopilot),
+        completedAt: Date.now(),
+      });
+      webhookDispatched = whRes.sent;
+
+      // Automatic Upload-Post.com Direct TikTok / Reels / Shorts Publishing
+      const cfg = await readAutopilotConfigDirect();
+      if (
+        cfg.uploadPostEnabled &&
+        cfg.uploadPostApiKey &&
+        cfg.uploadPostUser &&
+        params.mp4FilePath
+      ) {
+        console.log(`[upload-post] Auto-publishing ${params.jobId} to ${cfg.uploadPostPlatforms.join(", ")}...`);
+        const upRes = await publishVideoViaUploadPostDirect({
+          jobId: params.jobId,
+          mp4FilePath: params.mp4FilePath,
+          title: rawTitle,
+          caption: viralCaption,
+        });
+        tiktokPublished = upRes.published;
+        tiktokPublishRequestId = upRes.requestId;
+        if (!upRes.published && upRes.error) {
+          tiktokPublishError = upRes.error;
+          console.warn(`[upload-post] Auto-publish warning for ${params.jobId}:`, upRes.error);
+        } else {
+          console.log(`[upload-post] Successfully auto-published ${params.jobId} to TikTok!`);
+        }
+      }
+    } catch (whErr) {
+      console.warn("[social-kit] Webhook / Upload-Post dispatch error:", whErr);
+    }
+  }
+
+  return {
+    seoTitle,
+    viralCaption,
+    webhookDispatched,
+    tiktokPublished,
+    tiktokPublishRequestId,
+    tiktokPublishError,
+  };
+}
 
 let jobsWriteLock: Promise<any> = Promise.resolve();
 
@@ -1736,12 +1854,34 @@ async function processRenderQueue() {
         await fs.writeFile(targetMp4, BufferMod.from(renderResult, "base64"));
       }
 
+      const socialKit = await generateAndStorePostRenderSocialKit({
+        jobId: item.id,
+        title: item.title,
+        jobData: item.data,
+        isAutopilot: Boolean(item.data?.isAutopilot),
+        dispatchWebhook: true,
+        mp4FilePath: targetMp4,
+      });
+
       await withJobsLock(async () => {
         const curJobs = await loadJobs();
         const idx = curJobs.findIndex((j: any) => j.id === item.id);
         if (idx !== -1) {
           curJobs[idx].status = "completed";
           curJobs[idx].completedAt = Date.now();
+          curJobs[idx].seoTitle = socialKit.seoTitle;
+          curJobs[idx].viralCaption = socialKit.viralCaption;
+          curJobs[idx].webhookDispatched = socialKit.webhookDispatched;
+          if (socialKit.tiktokPublished) {
+            curJobs[idx].tiktokPublished = true;
+            curJobs[idx].tiktokPublishRequestId = socialKit.tiktokPublishRequestId;
+          }
+          if (socialKit.tiktokPublishError) {
+            curJobs[idx].tiktokPublishError = socialKit.tiktokPublishError;
+          }
+          if (item.data?.isAutopilot) {
+            curJobs[idx].isAutopilot = true;
+          }
           if (parsedAuditReport) {
             curJobs[idx].auditReport = parsedAuditReport;
           }
@@ -1783,9 +1923,16 @@ async function processRenderQueue() {
 }
 
 export const startServerRenderJob = createServerFn({ method: "POST" })
-  .validator((input: { data: any; title: string }) => input)
-  .handler(async ({ data: { data, title } }) => {
+  .validator((input: { data: any; title: string; isAutopilot?: boolean }) => input)
+  .handler(async ({ data: { data, title, isAutopilot } }) => {
     const jobId = `job_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
+    const preKit = await generateAndStorePostRenderSocialKit({
+      jobId,
+      title: title || "Ислямско видео (Фонов рендер)",
+      jobData: data,
+      isAutopilot: Boolean(isAutopilot || data?.isAutopilot),
+      dispatchWebhook: false,
+    });
     await withJobsLock(async () => {
       const jobs = await loadJobs();
       jobs.unshift({
@@ -1794,6 +1941,9 @@ export const startServerRenderJob = createServerFn({ method: "POST" })
         status: "queued",
         createdAt: Date.now(),
         data,
+        isAutopilot: Boolean(isAutopilot || data?.isAutopilot),
+        seoTitle: preKit.seoTitle,
+        viralCaption: preKit.viralCaption,
       });
       await writeJobsFile(jobs);
     });

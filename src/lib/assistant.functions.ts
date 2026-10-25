@@ -975,7 +975,17 @@ export async function preFetchHadithDalilFull(
   number: number | string,
 ): Promise<{ bulgarian: string; arabic?: string; english?: string }> {
   try {
-    const coll = String(collection || "bukhari").toLowerCase().trim() as SunnahCollection;
+    const rawColl = String(collection || "bukhari").toLowerCase().trim();
+    const coll: SunnahCollection =
+      rawColl === "bukhari" || rawColl === "muslim" || rawColl === "tirmidhi" || rawColl === "nawawi40"
+        ? rawColl
+        : /тирмизи|tirmidhi/i.test(rawColl)
+        ? "tirmidhi"
+        : /муслим|muslim/i.test(rawColl)
+        ? "muslim"
+        : /навауи|науауи|nawawi|40/i.test(rawColl)
+        ? "nawawi40"
+        : "bukhari";
     const num = Number(number) || 1;
 
     // 1. Try local verified sharh data first
@@ -1544,14 +1554,28 @@ ${userTopic}${preGroundingPrompt ? `\n\n${preGroundingPrompt}` : ""}
     };
   }
 
-  // Ensure exact WYSIWYG Bulgarian Dalil text when pre-fetched or for Quran proposals
+  // Ensure exact WYSIWYG Bulgarian Dalil text when pre-fetched or for Quran/Hadith proposals
   if (parsed.proposal && parsed.proposal.scriptWorkflow) {
+    if (
+      chosenCandidateInfo?.type === "hadith" &&
+      chosenCandidateInfo.collection &&
+      chosenCandidateInfo.number
+    ) {
+      parsed.proposal.collection = chosenCandidateInfo.collection as any;
+      parsed.proposal.number = Number(chosenCandidateInfo.number);
+      if (preFetchedDalilBg) {
+        parsed.proposal.fullDalilText = preFetchedDalilBg;
+        parsed.proposal.scriptWorkflow.dalilText = preFetchedDalilBg;
+      }
+    }
+
     const matchesPreChosenQuran =
       chosenCandidateInfo?.type === "quran" &&
       Number(parsed.proposal.surah) === Number(chosenCandidateInfo.surah) &&
       Number(parsed.proposal.ayah) === Number(chosenCandidateInfo.ayah);
 
     if (matchesPreChosenQuran && preFetchedDalilBg) {
+      parsed.proposal.fullDalilText = preFetchedDalilBg;
       parsed.proposal.scriptWorkflow.dalilText = preFetchedDalilBg;
     } else if (parsed.proposal.surah && parsed.proposal.ayah) {
       const freshBg = await preFetchQuranDalilBg(
@@ -1560,6 +1584,7 @@ ${userTopic}${preGroundingPrompt ? `\n\n${preGroundingPrompt}` : ""}
         Number(parsed.proposal.count) || 1,
       );
       if (freshBg) {
+        parsed.proposal.fullDalilText = freshBg;
         parsed.proposal.scriptWorkflow.dalilText = freshBg;
       }
     }
@@ -2466,6 +2491,7 @@ export function buildExplainedNarrationText(params: {
     .replace(/\[(?:коран|сура|хадис|бухари|муслим|тирмизи|навауи)[^\]]*\]/gi, "")
     .replace(/\((?:коран|сура|хадис|бухари|муслим|тирмизи|навауи)[^)]*\)/gi, "")
     .replace(/^["„“']+|["„“']+$/g, "")
+    .replace(/[“”"]/g, "'")
     .replace(/^(?:чуй\s+какво\s+)?(?:ни\s+)?казва\s+(?:се\s+)?(?:ни\s+)?за\s*[^:]*:\s*/i, "")
     .trim()));
 
@@ -2503,8 +2529,8 @@ export function buildExplainedNarrationText(params: {
 }
 
 export const confirmAndGenerateVideo = createServerFn({ method: "POST" })
-  .validator((input: { proposal: VideoProposal; force?: boolean }) => input)
-  .handler(async ({ data: { proposal, force } }) => {
+  .validator((input: { proposal: VideoProposal; force?: boolean; isAutopilot?: boolean }) => input)
+  .handler(async ({ data: { proposal, force, isAutopilot } }) => {
     // 1. Full 100% Salafi & Grammar Autonomous Self-Healing on explanation, guidance, and dalil
     const { proposal: auditedProposal, report } = auditAndRefineProposal(proposal as any, { maxPasses: 5 });
     proposal = auditedProposal as VideoProposal;
@@ -2577,30 +2603,47 @@ export const confirmAndGenerateVideo = createServerFn({ method: "POST" })
       arabic = h.arabic;
       english = h.english;
       reference = h.reference;
-      const t = await translateToBulgarianDirect({
-        english: h.english,
-        sourceRef: h.reference,
-        arabic: h.arabic,
-      });
-      bulgarian = t.bulgarian;
+
+      // WYSIWYG Synchronization: Always prefer the exact Bulgarian Dalil text already shown in the AI Assistant card
+      // or the verified local Hadith database before calling live LLM translation!
+      const previewDalil = (proposal.fullDalilText || proposal.scriptWorkflow?.dalilText || "")
+        .replace(/^["„“']+|["„“']+$/g, "")
+        .trim();
+      const verifiedSharh = getVerifiedHadithSharhDirect({ collection: coll, number: num });
+      const verifiedDalilBg = (verifiedSharh?.hadithTextBg || "")
+        .replace(/^["„“']+|["„“']+$/g, "")
+        .trim();
+
+      if (
+        previewDalil.length > 20 &&
+        !previewDalil.includes("...") &&
+        !previewDalil.includes("…") &&
+        previewDalil !== proposal.title
+      ) {
+        bulgarian = sanitizeTheologicalRespect(enrichUnfamiliarQuranicTerms(previewDalil));
+      } else if (verifiedDalilBg.length > 15) {
+        bulgarian = sanitizeTheologicalRespect(enrichUnfamiliarQuranicTerms(verifiedDalilBg));
+      } else {
+        const t = await translateToBulgarianDirect({
+          english: h.english,
+          sourceRef: h.reference,
+          arabic: h.arabic,
+        });
+        bulgarian = sanitizeTheologicalRespect(enrichUnfamiliarQuranicTerms(t.bulgarian));
+      }
 
       if (proposal.type === "explained_video" || proposal.scriptWorkflow) {
-        const effectiveDalil =
-          proposal.fullDalilText && proposal.fullDalilText.trim().length > 20
-            ? proposal.fullDalilText.trim()
-            : proposal.scriptWorkflow?.dalilText && proposal.scriptWorkflow.dalilText.trim().length > 20
-            ? proposal.scriptWorkflow.dalilText.trim()
-            : bulgarian;
-
         bulgarian = buildExplainedNarrationText({
           viralTitle,
           reference: h.reference,
-          quoteText: effectiveDalil,
+          quoteText: bulgarian,
           isQuran: false,
           scriptWorkflow: proposal.scriptWorkflow,
           summaryBg: proposal.summaryBg,
         });
       } else {
+        const quotedHadith = `„${bulgarian.replace(/^["„“']+|["„“']+$/g, "").replace(/[“”"]/g, "'").trim()}“`;
+        bulgarian = quotedHadith;
         const cleanExplanation = stripScholarAttribution(proposal.summaryBg || "");
         if (cleanExplanation && cleanExplanation.length > 15 && !bulgarian.includes(cleanExplanation)) {
           bulgarian = `${bulgarian} <break time="0.8s" /> Обяснение: ${cleanExplanation}`;
@@ -2637,7 +2680,7 @@ export const confirmAndGenerateVideo = createServerFn({ method: "POST" })
         bulgarian = buildExplainedNarrationText({
           viralTitle,
           reference: proposal.title,
-          quoteText: proposal.scriptWorkflow?.dalilText || proposal.summaryBg || proposal.title,
+          quoteText: proposal.fullDalilText || proposal.scriptWorkflow?.dalilText || proposal.summaryBg || proposal.title,
           isQuran: false,
           scriptWorkflow: proposal.scriptWorkflow,
           summaryBg: proposal.summaryBg,
@@ -2733,35 +2776,46 @@ export const confirmAndGenerateVideo = createServerFn({ method: "POST" })
         ayahBounds = q.ayahBounds;
         arabicWordCount = q.arabicWordCount;
 
-        const t = await translateToBulgarian({
-          data: {
-            english: q.english,
-            sourceRef: reference,
-            arabic: q.arabic,
-            ayahBounds: q.ayahBounds,
-          },
-        });
-        bulgarian = t.bulgarian.replace(/(^|\n)\s*(?:\(\d+\)|\[\d+\]|\d+\.)\s*/g, "$1").trim();
+        // WYSIWYG Synchronization: Use the exact Bulgarian Quran translation shown in the AI Assistant card if present and complete
+        const candidateDalil = (proposal.fullDalilText || proposal.scriptWorkflow?.dalilText || "")
+          .replace(/^["„“']+|["„“']+$/g, "")
+          .trim();
+
+        if (
+          candidateDalil.length > 20 &&
+          !candidateDalil.includes("...") &&
+          !candidateDalil.includes("…") &&
+          candidateDalil !== proposal.title
+        ) {
+          bulgarian = sanitizeTheologicalRespect(enrichUnfamiliarQuranicTerms(candidateDalil));
+        } else {
+          const t = await translateToBulgarian({
+            data: {
+              english: q.english,
+              sourceRef: reference,
+              arabic: q.arabic,
+              ayahBounds: q.ayahBounds,
+            },
+          });
+          bulgarian = sanitizeTheologicalRespect(
+            enrichUnfamiliarQuranicTerms(
+              t.bulgarian.replace(/(^|\n)\s*(?:\(\d+\)|\[\d+\]|\d+\.)\s*/g, "$1").trim(),
+            ),
+          );
+        }
 
         if (proposal.type === "explained_video" || proposal.scriptWorkflow) {
-          const candidateDalil = (proposal.fullDalilText || proposal.scriptWorkflow?.dalilText || "").trim();
-          const effectiveDalil =
-            candidateDalil.length > 20 &&
-            !candidateDalil.includes("...") &&
-            !candidateDalil.includes("…") &&
-            candidateDalil !== proposal.title
-              ? candidateDalil
-              : bulgarian;
-
           bulgarian = buildExplainedNarrationText({
             viralTitle,
             reference,
-            quoteText: effectiveDalil,
+            quoteText: bulgarian,
             isQuran: true,
             scriptWorkflow: proposal.scriptWorkflow,
             summaryBg: proposal.summaryBg,
           });
         } else {
+          const quotedQuran = `„${bulgarian.replace(/^["„“']+|["„“']+$/g, "").replace(/[“”"]/g, "'").trim()}“`;
+          bulgarian = quotedQuran;
           const cleanExplanation = stripScholarAttribution(proposal.summaryBg || "");
           if (cleanExplanation && cleanExplanation.length > 15 && !bulgarian.includes(cleanExplanation)) {
             bulgarian = `${bulgarian} <break time="0.8s" /> Обяснение: ${cleanExplanation}`;
@@ -2856,6 +2910,7 @@ export const confirmAndGenerateVideo = createServerFn({ method: "POST" })
     const { jobId } = await startServerRenderJob({
       data: {
         title: proposal.title || topic || reference,
+        isAutopilot: Boolean(isAutopilot),
         data: {
           backgroundUrl: bestVid,
           backgroundVideoUrl: bestVid,
@@ -2880,6 +2935,10 @@ export const confirmAndGenerateVideo = createServerFn({ method: "POST" })
           quality: proposal.quality || "1080p", // create.tsx uses 1080p instead of high
           bRollUrls,
           bRollSegments,
+          isAutopilot: Boolean(isAutopilot),
+          scriptWorkflow: proposal.scriptWorkflow,
+          fullDalilText: proposal.fullDalilText,
+          summaryBg: proposal.summaryBg,
         },
       },
     });
@@ -3095,10 +3154,28 @@ export const startBatchViralHadithSeries = createServerFn({ method: "POST" })
     },
   );
 
-async function getHistoryFilePath() {
+export async function getHistoryFilePath() {
   const path = await import("path");
   const dir = await getJobsDir();
   return path.join(dir, "assistant_chat_history.json");
+}
+
+function sanitizeHistoryMessages(rawHistory: unknown): unknown[] {
+  if (!Array.isArray(rawHistory)) return [];
+  return rawHistory.map((m: any) => {
+    if (!m || typeof m !== "object") return m;
+    const copy = { ...m };
+    if (typeof copy.text === "string" && copy.role === "assistant") {
+      copy.text = sanitizeTheologicalRespect(copy.text);
+    }
+    if (copy.proposal) {
+      copy.proposal = sanitizeProposalFields(copy.proposal);
+    }
+    if (Array.isArray(copy.proposals)) {
+      copy.proposals = copy.proposals.map((p: VideoProposal) => sanitizeProposalFields(p));
+    }
+    return copy;
+  });
 }
 
 export const getAssistantHistory = createServerFn({ method: "POST" }).handler(async () => {
@@ -3106,7 +3183,7 @@ export const getAssistantHistory = createServerFn({ method: "POST" }).handler(as
   const file = await getHistoryFilePath();
   try {
     const txt = await fs.readFile(file, "utf-8");
-    return JSON.parse(txt);
+    return sanitizeHistoryMessages(JSON.parse(txt));
   } catch {
     return [];
   }
@@ -3282,9 +3359,9 @@ export const checkActiveBackgroundTasks = createServerFn({ method: "POST" }).han
   }
   const fs = (await import("fs")).promises;
   const file = await getHistoryFilePath();
-  let history = [];
+  let history: unknown[] = [];
   try {
-    history = JSON.parse(await fs.readFile(file, "utf-8"));
+    history = sanitizeHistoryMessages(JSON.parse(await fs.readFile(file, "utf-8")));
   } catch {
     // Ignore read failure
   }
@@ -3371,35 +3448,19 @@ export const startBackgroundBatchGeneration = createServerFn({ method: "POST" })
     return { success: true, count: proposals.length, taskId: task.id };
   });
 
-if (typeof process !== "undefined" && typeof window === "undefined") {
+if (
+  typeof process !== "undefined" &&
+  typeof window === "undefined" &&
+  process.env.NODE_ENV !== "test" &&
+  !process.argv.some((a) => a.includes("test"))
+) {
   const globalForCron = globalThis as unknown as { __cronStarted: boolean };
   if (!globalForCron.__cronStarted) {
     globalForCron.__cronStarted = true;
-    import("node-cron")
-      .then((cron) => {
-        cron.default.schedule("0 9 * * *", async () => {
-          try {
-            console.log("Running daily automatic viral TikTok trend analysis...");
-            const { geminiChat } = await import("./gemini");
-            const prompt =
-              "Ти си AI TikTok продуцент. Направи бързо търсене в интернет и ми кажи: какви ислямски теми за таухид, мотивация или трудности задържат най-много вниманието на зрителите в TikTok в момента? Анализирай какво се търси и какво се гледа най-много. Избери САМО една тема, която е най-вирална. Върни само името на темата в 3 до 5 думи, без обяснения.";
-            const res = await geminiChat(
-              "gemini-3.1-pro",
-              [{ role: "user", content: prompt }],
-              false,
-              true,
-            );
-            const chosenTopic = res ? res.trim() : "Таухид и успех в живота";
-
-            console.log("Daily auto-topic chosen:", chosenTopic);
-            await startBackgroundPlanGeneration({
-              data: { count: 3, topic: chosenTopic, targetType: "carousel" },
-            });
-          } catch (e) {
-            console.error("Daily cron error:", e);
-          }
-        });
+    import("./autopilot.functions")
+      .then((mod) => {
+        mod.initAutopilotScheduler();
       })
-      .catch((e) => console.error("Failed to load node-cron", e));
+      .catch((e) => console.error("Failed to initialize Autopilot Scheduler:", e));
   }
 }

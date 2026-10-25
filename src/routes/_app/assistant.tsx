@@ -12,6 +12,9 @@ import { getAiMemory, updateAiMemory, type AiMemory } from "@/lib/memory.functio
 import { getOneMonthCooldownSummary, recordRejectedProposalToHistory } from "@/lib/generation-history.functions";
 import { generateViralThumbnail } from "@/lib/thumbnail.functions";
 import { formatViralSocialCaption, generateTikTokSEOTitle } from "@/lib/caption.functions";
+import { getAutopilotConfig, updateAutopilotConfig, triggerAutopilotCycleNow, testAutopilotWebhook, type AutopilotConfig } from "@/lib/autopilot.functions";
+import { listServerRenderJobs } from "@/lib/render.functions";
+import { sanitizeFilename } from "@/lib/download-media";
 import { playStudioClick } from "@/lib/sfx";
 import { getNextTawheedTopic, getTawheedTaxonomy } from "@/lib/tawheed-taxonomy";
 
@@ -113,6 +116,12 @@ function AssistantPage() {
   const [auditingMsgIdx, setAuditingMsgIdx] = useState<number | null>(null);
   const [showMemory, setShowMemory] = useState(false);
   const [showEngineInspector, setShowEngineInspector] = useState(false);
+  const [showAutopilotPanel, setShowAutopilotPanel] = useState(true);
+  const [autopilotConfig, setAutopilotConfig] = useState<AutopilotConfig | null>(null);
+  const [autopilotRunning, setAutopilotRunning] = useState(false);
+  const [testingWebhook, setTestingWebhook] = useState(false);
+  const [newScheduleTime, setNewScheduleTime] = useState("12:00");
+  const autoDownloadedRef = useRef<Set<string>>(new Set());
   const [inspectorInputText, setInspectorInputText] = useState("");
   const [inspectorRunning, setInspectorRunning] = useState(false);
   const [inspectorResult, setInspectorResult] = useState<CustomTextAuditResult | null>(null);
@@ -430,8 +439,133 @@ function AssistantPage() {
 
   useEffect(() => {
     getAiMemory().then((m) => setMemory(m)).catch(() => {});
+    getAutopilotConfig().then((cfg) => setAutopilotConfig(cfg)).catch(() => {});
     refreshCooldownSummary();
   }, []);
+
+  // Poll Autopilot config & automatically download newly completed server videos when browser is open
+  useEffect(() => {
+    const checkAutoDownloads = async () => {
+      try {
+        const [cfg, jobs] = await Promise.all([
+          getAutopilotConfig().catch(() => null),
+          listServerRenderJobs().catch(() => []),
+        ]);
+        if (cfg) {
+          setAutopilotConfig(cfg);
+          setAutopilotRunning(cfg.lastRunStatus === "running");
+        }
+        const shouldAutoDownload = cfg ? cfg.autoDownloadOnOpen : true;
+        if (!shouldAutoDownload || typeof window === "undefined") return;
+
+        const completedJobs = jobs.filter((j) => j.status === "completed");
+        if (completedJobs.length === 0) return;
+
+        let alreadyDownloaded: string[] = [];
+        try {
+          const raw = window.localStorage.getItem("auto_downloaded_server_jobs");
+          if (raw) {
+            const parsed = JSON.parse(raw);
+            if (Array.isArray(parsed)) alreadyDownloaded = parsed;
+          }
+        } catch {}
+
+        const downloadedSet = new Set(alreadyDownloaded);
+        const pending = completedJobs.filter(
+          (j) => !downloadedSet.has(j.id) && !autoDownloadedRef.current.has(j.id),
+        );
+        if (pending.length === 0) return;
+
+        for (const job of pending) {
+          autoDownloadedRef.current.add(job.id);
+          downloadedSet.add(job.id);
+          try {
+            window.localStorage.setItem(
+              "auto_downloaded_server_jobs",
+              JSON.stringify(Array.from(downloadedSet).slice(-200)),
+            );
+          } catch {}
+
+          const filename = sanitizeFilename(job.title || "islamic-reel", "islamic-reel") + ".mp4";
+          const caption =
+            job.viralCaption && job.viralCaption.trim().length > 20
+              ? job.viralCaption
+              : formatViralSocialCaption(cleanProposalTitle(job.title || "Ислямска мъдрост"));
+          copyToClipboardFallback(caption);
+          toast.success(`🤖 Автопилот: Автоматично сваляне на „${job.title}“ (описанието за TikTok е копирано)!`);
+          const a = document.createElement("a");
+          a.href = `/api/download/${job.id}?filename=${encodeURIComponent(filename)}`;
+          a.download = filename;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          await new Promise((r) => setTimeout(r, 1200));
+        }
+      } catch {}
+    };
+
+    checkAutoDownloads();
+    const timer = setInterval(checkAutoDownloads, 6000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const handleUpdateAutopilot = async (updates: Partial<AutopilotConfig>) => {
+    try {
+      playStudioClick("click");
+      const nextCfg = await updateAutopilotConfig({ data: updates });
+      setAutopilotConfig(nextCfg);
+      toast.success("🤖 Настройките на Пълния Автопилот са запазени!");
+    } catch (err: any) {
+      toast.error(err?.message || "Грешка при запазване на настройките на Автопилота");
+    }
+  };
+
+  const handleTriggerAutopilotNow = async () => {
+    if (autopilotRunning) {
+      toast.info("🤖 Автопилотът вече работи в момента!");
+      return;
+    }
+    try {
+      playStudioClick("start");
+      setAutopilotRunning(true);
+      const count = autopilotConfig?.videosPerRun || 2;
+      toast.message(
+        `🤖 Стартирам Пълен Автопилот: автоматичен избор на ${count} теми, 100% Салафи одит и директно рендиране без нужда от одобрение!`,
+      );
+      await triggerAutopilotCycleNow({
+        data: {
+          count,
+          contentMode: autopilotConfig?.contentMode || "explained_mix",
+        },
+      });
+      playStudioClick("success");
+    } catch (err: any) {
+      setAutopilotRunning(false);
+      toast.error(err?.message || "Грешка при стартиране на Автопилота");
+    }
+  };
+
+  const handleTestWebhook = async () => {
+    const url = autopilotConfig?.webhookUrl?.trim();
+    if (!url) {
+      toast.error("Моля, въведете Webhook URL (напр. от Make.com или Zapier) преди тест!");
+      return;
+    }
+    try {
+      setTestingWebhook(true);
+      playStudioClick("click");
+      const res = await testAutopilotWebhook({ data: { webhookUrl: url } });
+      if (res.sent) {
+        toast.success(`✅ Тестовият пакет (видео + TikTok описание) беше изпратен успешно към Webhook-а (HTTP ${res.status})!`);
+      } else {
+        toast.error(`❌ Неуспешно изпращане към Webhook: ${res.error || "Грешка"}`);
+      }
+    } catch (err: any) {
+      toast.error(err?.message || "Грешка при тест на Webhook");
+    } finally {
+      setTestingWebhook(false);
+    }
+  };
 
   const handleAddInstruction = async () => {
     if (!newInstruction.trim() || !memory) return;
@@ -1246,6 +1380,15 @@ function AssistantPage() {
             <span>Изчисти чата</span>
           </Button>
           <Button
+            variant={showAutopilotPanel ? "default" : "outline"}
+            onClick={() => setShowAutopilotPanel(!showAutopilotPanel)}
+            className="flex items-center gap-1.5 rounded-xl text-xs cursor-pointer border-amber-500/50 text-amber-300 bg-amber-500/15 hover:bg-amber-500/25 font-bold"
+            title="Пълен Автопилот 24/7 — 100% автономно избиране, одит и рендиране без кликове"
+          >
+            <Bot className="size-4 text-amber-400" />
+            <span>{showAutopilotPanel ? "Скрий Автопилота" : "🤖 Автопилот 24/7"}</span>
+          </Button>
+          <Button
             variant={showEngineInspector ? "default" : "outline"}
             onClick={() => setShowEngineInspector(!showEngineInspector)}
             className="flex items-center gap-1.5 rounded-xl text-xs cursor-pointer border-emerald-500/40 text-emerald-400 hover:bg-emerald-500/10"
@@ -1289,6 +1432,337 @@ function AssistantPage() {
                 </div>
               </div>
             ))}
+          </div>
+        </Card>
+      )}
+
+      {showAutopilotPanel && autopilotConfig && (
+        <Card className="mb-6 border-2 border-amber-500/50 bg-gradient-to-br from-amber-950/35 via-card to-emerald-950/25 p-5 shadow-2xl space-y-4 rounded-2xl animate-in fade-in duration-300">
+          <div className="flex items-center justify-between border-b border-amber-500/30 pb-3 flex-wrap gap-3">
+            <div className="flex items-center gap-3">
+              <div className="flex size-10 items-center justify-center rounded-xl bg-amber-500/20 border border-amber-500/40 text-xl shadow-inner">
+                🤖
+              </div>
+              <div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h3 className="font-extrabold text-foreground text-sm sm:text-base flex items-center gap-1.5">
+                    Пълен Автопилот 24/7 (Zero-Click Автономен Режим)
+                  </h3>
+                  <span
+                    className={`text-[10px] px-2.5 py-0.5 rounded-full font-bold border ${
+                      autopilotConfig.enabled
+                        ? "bg-emerald-500/20 border-emerald-500/50 text-emerald-300"
+                        : "bg-muted border-border text-muted-foreground"
+                    }`}
+                  >
+                    {autopilotConfig.enabled ? "🟢 АКТИВЕН 24/7 ПО ГРАФИК" : "⏸️ НА ПАУЗА"}
+                  </span>
+                  {(autopilotConfig.totalAutopilotVideos || 0) > 0 && (
+                    <span className="text-[10px] px-2 py-0.5 rounded-full font-semibold bg-amber-500/15 border border-amber-500/30 text-amber-300">
+                      🎬 Общо създадени: {autopilotConfig.totalAutopilotVideos} видеа
+                    </span>
+                  )}
+                </div>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Сам избира уникални теми (Коран с Тефсир ас-Са'ди и Сахих Хадиси), минава през 100% Салафи & Граматичен одит, рендира без нужда от одобрение и сваля готовите MP4 видеа автоматично!
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                variant={autopilotConfig.enabled ? "default" : "outline"}
+                size="sm"
+                onClick={() => handleUpdateAutopilot({ enabled: !autopilotConfig.enabled })}
+                className={`rounded-xl text-xs font-bold cursor-pointer ${
+                  autopilotConfig.enabled
+                    ? "bg-emerald-600 hover:bg-emerald-500 text-white"
+                    : "border-emerald-500/40 text-emerald-400"
+                }`}
+              >
+                {autopilotConfig.enabled ? "✅ Автопилот ВКЛЮЧЕН" : "Включи Автопилот 24/7"}
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setShowAutopilotPanel(false)}
+                className="size-7 text-muted-foreground hover:text-foreground cursor-pointer"
+              >
+                <X className="size-4" />
+              </Button>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            {/* Schedule Times */}
+            <div className="rounded-xl bg-background/70 border border-border/60 p-3 space-y-2">
+              <label className="text-xs font-bold text-amber-300 flex items-center justify-between">
+                <span>⏰ Часове за автоматичен старт:</span>
+              </label>
+              <div className="flex flex-wrap gap-1.5">
+                {autopilotConfig.scheduleTimes.map((timeStr) => (
+                  <span
+                    key={timeStr}
+                    className="inline-flex items-center gap-1 rounded-lg bg-amber-500/15 border border-amber-500/40 px-2 py-1 text-xs font-mono font-bold text-amber-200"
+                  >
+                    {timeStr} ч.
+                    {autopilotConfig.scheduleTimes.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          handleUpdateAutopilot({
+                            scheduleTimes: autopilotConfig.scheduleTimes.filter((t) => t !== timeStr),
+                          })
+                        }
+                        className="text-amber-300/70 hover:text-rose-400 ml-1 cursor-pointer"
+                        title="Премахни час"
+                      >
+                        ×
+                      </button>
+                    )}
+                  </span>
+                ))}
+              </div>
+              <div className="flex items-center gap-1.5 pt-1">
+                <Input
+                  type="time"
+                  value={newScheduleTime}
+                  onChange={(e) => setNewScheduleTime(e.target.value)}
+                  className="h-8 text-xs font-mono bg-background"
+                />
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    if (!newScheduleTime || autopilotConfig.scheduleTimes.includes(newScheduleTime)) return;
+                    handleUpdateAutopilot({
+                      scheduleTimes: [...autopilotConfig.scheduleTimes, newScheduleTime].sort(),
+                    });
+                  }}
+                  className="h-8 text-xs px-2.5 rounded-lg border-amber-500/40 text-amber-300 hover:bg-amber-500/15 cursor-pointer shrink-0"
+                >
+                  <Plus className="size-3.5 mr-1" /> Добави час
+                </Button>
+              </div>
+            </div>
+
+            {/* Videos per run & Content Mode */}
+            <div className="rounded-xl bg-background/70 border border-border/60 p-3 space-y-2.5">
+              <div>
+                <label className="text-xs font-bold text-emerald-300 block mb-1">
+                  🎬 Брой видеа на всяко пускане:
+                </label>
+                <div className="flex items-center gap-1.5">
+                  {[1, 2, 3, 4, 5].map((num) => (
+                    <button
+                      key={num}
+                      type="button"
+                      onClick={() => handleUpdateAutopilot({ videosPerRun: num })}
+                      className={`h-8 flex-1 rounded-lg text-xs font-bold border transition cursor-pointer ${
+                        autopilotConfig.videosPerRun === num
+                          ? "bg-emerald-500/25 border-emerald-400 text-emerald-200 shadow-xs"
+                          : "bg-background/60 border-border/60 text-muted-foreground hover:text-foreground"
+                      }`}
+                    >
+                      {num}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <label className="text-xs font-bold text-emerald-300 block mb-1">
+                  📖 Тип съдържание (с глас и субтитри):
+                </label>
+                <select
+                  value={autopilotConfig.contentMode}
+                  onChange={(e) =>
+                    handleUpdateAutopilot({
+                      contentMode: e.target.value as AutopilotConfig["contentMode"],
+                    })
+                  }
+                  className="w-full h-8 rounded-lg bg-background border border-border/70 px-2 text-xs text-foreground outline-hidden"
+                >
+                  <option value="explained_mix">🔄 Смесено: Коран (Тефсир ас-Са'ди) + Сахих Хадиси</option>
+                  <option value="quran_only">📖 Само Коран с Тефсир ас-Са'ди</option>
+                  <option value="hadith_only">📜 Само Сахих Хадиси с Шарх</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Auto-Download & Webhook */}
+            <div className="rounded-xl bg-background/70 border border-border/60 p-3 space-y-2.5">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-xs font-bold text-sky-300">
+                  📥 Авто-сваляне при отваряне:
+                </span>
+                <button
+                  type="button"
+                  onClick={() =>
+                    handleUpdateAutopilot({ autoDownloadOnOpen: !autopilotConfig.autoDownloadOnOpen })
+                  }
+                  className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border transition cursor-pointer ${
+                    autopilotConfig.autoDownloadOnOpen
+                      ? "bg-sky-500/20 border-sky-400 text-sky-200"
+                      : "bg-background border-border text-muted-foreground"
+                  }`}
+                >
+                  {autopilotConfig.autoDownloadOnOpen ? "ВКЛЮЧЕНО" : "ИЗКЛЮЧЕНО"}
+                </button>
+              </div>
+              <div className="space-y-1">
+                <label className="text-[11px] font-semibold text-muted-foreground block">
+                  🌐 Make.com / TikTok Webhook URL (по избор):
+                </label>
+                <div className="flex items-center gap-1.5">
+                  <Input
+                    type="url"
+                    placeholder="https://hook.eu1.make.com/..."
+                    value={autopilotConfig.webhookUrl || ""}
+                    onChange={(e) =>
+                      setAutopilotConfig({ ...autopilotConfig, webhookUrl: e.target.value })
+                    }
+                    onBlur={() =>
+                      handleUpdateAutopilot({ webhookUrl: autopilotConfig.webhookUrl })
+                    }
+                    className="h-8 text-xs bg-background"
+                  />
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={testingWebhook}
+                    onClick={handleTestWebhook}
+                    className="h-8 text-xs px-2.5 rounded-lg border-sky-500/40 text-sky-300 hover:bg-sky-500/15 cursor-pointer shrink-0"
+                  >
+                    {testingWebhook ? <Loader2 className="size-3.5 animate-spin" /> : "Тест"}
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Direct Upload-Post.com Auto-Publishing Integration */}
+          <div className="rounded-xl bg-background/80 border border-emerald-500/40 p-3.5 space-y-3">
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <div className="flex items-center gap-2">
+                <span className="text-base">📲</span>
+                <div>
+                  <h4 className="text-xs sm:text-sm font-bold text-emerald-300">
+                    Директно Авто-Публикуване в TikTok чрез Upload-Post.com
+                  </h4>
+                  <p className="text-[11px] text-muted-foreground">
+                    Всяко готово видео от сървъра автоматично се качва и публикува в TikTok (заедно с пълното описание и хаштагове) през <code className="text-emerald-400">api.upload-post.com/api/upload</code>.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() =>
+                  handleUpdateAutopilot({ uploadPostEnabled: !autopilotConfig.uploadPostEnabled })
+                }
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition cursor-pointer ${
+                  autopilotConfig.uploadPostEnabled
+                    ? "bg-emerald-500/25 border-emerald-400 text-emerald-200"
+                    : "bg-background border-border text-muted-foreground"
+                }`}
+              >
+                {autopilotConfig.uploadPostEnabled
+                  ? "🟢 АВТО-ПУБЛИКУВАНЕ ВКЛЮЧЕНО"
+                  : "⚪ Включи Upload-Post.com"}
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+              <div className="space-y-1">
+                <label className="text-[11px] font-semibold text-muted-foreground block">
+                  🔑 Upload-Post API Key:
+                </label>
+                <Input
+                  type="password"
+                  placeholder="Въведете API Key от app.upload-post.com"
+                  value={autopilotConfig.uploadPostApiKey || ""}
+                  onChange={(e) =>
+                    setAutopilotConfig({ ...autopilotConfig, uploadPostApiKey: e.target.value })
+                  }
+                  onBlur={() =>
+                    handleUpdateAutopilot({ uploadPostApiKey: autopilotConfig.uploadPostApiKey })
+                  }
+                  className="h-8 text-xs bg-background font-mono"
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-[11px] font-semibold text-muted-foreground block">
+                  👤 Профил (User Identifier в Upload-Post):
+                </label>
+                <Input
+                  type="text"
+                  placeholder="напр. islamic_reels_bg"
+                  value={autopilotConfig.uploadPostUser || ""}
+                  onChange={(e) =>
+                    setAutopilotConfig({ ...autopilotConfig, uploadPostUser: e.target.value })
+                  }
+                  onBlur={() =>
+                    handleUpdateAutopilot({ uploadPostUser: autopilotConfig.uploadPostUser })
+                  }
+                  className="h-8 text-xs bg-background font-mono"
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-[11px] font-semibold text-muted-foreground block">
+                  🌐 Платформи за автоматично качване:
+                </label>
+                <div className="flex items-center gap-1.5 h-8">
+                  {(["tiktok", "instagram", "youtube"] as const).map((plat) => {
+                    const isSel = (autopilotConfig.uploadPostPlatforms || ["tiktok"]).includes(plat);
+                    return (
+                      <button
+                        key={plat}
+                        type="button"
+                        onClick={() => {
+                          const cur = autopilotConfig.uploadPostPlatforms || ["tiktok"];
+                          const next = isSel
+                            ? cur.filter((p) => p !== plat)
+                            : [...cur, plat];
+                          if (next.length === 0) return;
+                          handleUpdateAutopilot({ uploadPostPlatforms: next });
+                        }}
+                        className={`h-8 flex-1 rounded-lg text-[11px] font-bold border transition cursor-pointer ${
+                          isSel
+                            ? "bg-emerald-500/20 border-emerald-400 text-emerald-200"
+                            : "bg-background border-border/60 text-muted-foreground"
+                        }`}
+                      >
+                        {plat === "tiktok" ? "TikTok" : plat === "instagram" ? "Reels" : "Shorts"}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-1">
+            <div className="text-xs text-muted-foreground flex items-center gap-2">
+              <span className="inline-block size-2 rounded-full bg-emerald-400" />
+              <span>
+                <strong>Последен статус:</strong> {autopilotConfig.lastRunMessage || "Готов за старт."}
+              </span>
+            </div>
+            <Button
+              onClick={handleTriggerAutopilotNow}
+              disabled={autopilotRunning}
+              className="rounded-xl bg-gradient-to-r from-amber-500 via-emerald-500 to-teal-500 text-black font-extrabold text-xs sm:text-sm px-5 py-2.5 shadow-lg hover:opacity-95 cursor-pointer shrink-0"
+            >
+              {autopilotRunning ? (
+                <>
+                  <Loader2 className="size-4 animate-spin mr-2" />
+                  Автопилотът генерира и рендира...
+                </>
+              ) : (
+                <>
+                  <Sparkles className="size-4 mr-1.5" />
+                  ⚡ Изпълни Автопилот цикъл веднага ({autopilotConfig.videosPerRun} видеа без одобрение)
+                </>
+              )}
+            </Button>
           </div>
         </Card>
       )}

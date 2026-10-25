@@ -162,15 +162,28 @@ export const listSunnahCollections = createServerFn({ method: "GET" }).handler(a
   }));
 });
 
+export function normalizeSunnahCollection(raw: string): SunnahCollection {
+  const s = String(raw || "").toLowerCase().trim();
+  if (s === "bukhari" || s === "muslim" || s === "tirmidhi" || s === "nawawi40") {
+    return s;
+  }
+  if (/тирмизи|tirmidhi/i.test(s)) return "tirmidhi";
+  if (/муслим|muslim/i.test(s)) return "muslim";
+  if (/навауи|науауи|nawawi|40/i.test(s)) return "nawawi40";
+  if (/бухари|bukhari/i.test(s)) return "bukhari";
+  return "bukhari";
+}
+
 export async function fetchSunnahHadithDirect(
-  collection: SunnahCollection,
+  collection: SunnahCollection | string,
   number: number,
   requireSahih = true,
 ): Promise<SunnahHadith> {
-  const meta = COLLECTIONS[collection];
+  const normColl = normalizeSunnahCollection(collection);
+  const meta = COLLECTIONS[normColl];
   if (!meta) throw new Error("Невалидна колекция");
   const n = Math.max(1, Math.min(meta.max, Math.floor(number)));
-  const h = await scrape(collection, n);
+  const h = await scrape(normColl, n);
   if (requireSahih && !meta.allSahih && !isSahihGrade(h.grade)) {
     throw new Error(`Хадис ${h.reference} не е сахих (${h.grade ?? "няма степен"}). Опитай друг номер.`);
   }

@@ -713,18 +713,22 @@ export async function enrichProposalWithAuthenticTafsir(proposal: ScripturePropo
         proposal.scriptWorkflow.sourceType = "salafi_ai";
         proposal.scriptWorkflow.isAuthenticVerified = true;
 
-        // Ensure authentic, untruncated dalilText
+        // Ensure authentic, untruncated dalilText and 1:1 sync with fullDalilText
         if (sharh?.hadithTextBg) {
-          const currentDalil = (proposal.scriptWorkflow.dalilText || "").trim();
+          const cleanVerifiedBg = sharh.hadithTextBg.replace(/^["„“']+|["„“']+$/g, "").trim();
+          const currentDalil = (proposal.scriptWorkflow.dalilText || "").replace(/^["„“']+|["„“']+$/g, "").trim();
           const isTruncatedOrMissing =
             !currentDalil ||
             currentDalil.length < 20 ||
             currentDalil.includes("...") ||
             currentDalil.includes("…") ||
-            currentDalil.length < sharh.hadithTextBg.length * 0.75;
+            currentDalil.length < cleanVerifiedBg.length * 0.75;
 
           if (isTruncatedOrMissing) {
-            proposal.scriptWorkflow.dalilText = sharh.hadithTextBg;
+            proposal.scriptWorkflow.dalilText = cleanVerifiedBg;
+            (proposal as any).fullDalilText = cleanVerifiedBg;
+          } else if (!(proposal as any).fullDalilText) {
+            (proposal as any).fullDalilText = proposal.scriptWorkflow.dalilText;
           }
         }
         if (sharh?.hadithTextAr && !(proposal as any).arabicText) {

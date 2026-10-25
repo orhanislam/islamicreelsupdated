@@ -705,116 +705,129 @@ export async function auditScriptWithSalafiScholarAI(params: {
 
 /**
  * Checks and polishes Bulgarian grammar, official politeness, and preposition euphony.
+ * Preserves authentic grammatical person inside sacred scripture quotes („...“ or isSacredQuote=true)
+ * while self-healing any 3rd-person verb/clitic corruptions everywhere.
  */
-export function auditAndRefineBulgarianGrammar(text: string): { refinedText: string; fixes: string[] } {
+export function auditAndRefineBulgarianGrammar(
+  text: string,
+  options?: { isSacredQuote?: boolean },
+): { refinedText: string; fixes: string[] } {
   if (!text) return { refinedText: "", fixes: [] };
   const fixes: string[] = [];
   let s = text;
 
-  // 1. Enforce exalted Tawheed and theological reverence
+  // 1. Enforce exalted Tawheed, theological reverence, and self-healing of 3rd-person verbs ("ще те пази")
   const beforeSanitize = s;
   s = sanitizeTheologicalRespect(s);
   if (s !== beforeSanitize) {
-    fixes.push("Коригирани богословски титли за Аллах и премахнати непочтителни изрази");
+    fixes.push("Коригирани богословски титли за Аллах и граматическо съгласуване на глаголите");
   }
 
-  // 2. Polite official address ("Вие" form) and verbs
-  const beforePolite = s;
-  s = s.replace(/(?<=^|[^\p{L}\p{N}])ти\s+знаеш\s+ли(?=[^\p{L}\p{N}]|$)/giu, (m) =>
-    m[0] === m[0].toUpperCase() ? "Вие знаете ли" : "вие знаете ли",
-  );
-  s = s.replace(/(?<=^|[^\p{L}\p{N}])знаеш\s+ли(?=[^\p{L}\p{N}]|$)/giu, (m) =>
-    m[0] === m[0].toUpperCase() ? "Знаете ли" : "знаете ли",
-  );
-  s = s.replace(/(?<=^|[^\p{L}\p{N}])ти\s+знаеш(?=[^\p{L}\p{N}]|$)/giu, (m) =>
-    m[0] === m[0].toUpperCase() ? "Вие знаете" : "вие знаете",
-  );
-  s = s.replace(/(?<=^|[^\p{L}\p{N}])ти(?=[^\p{L}\p{N}]|$)/giu, (m) =>
-    m[0] === m[0].toUpperCase() ? "Вие" : "вие",
-  );
-  s = s.replace(/(?<=^|[^\p{L}\p{N}])теб(?=[^\p{L}\p{N}]|$)/giu, (m) =>
-    m[0] === m[0].toUpperCase() ? "Вас" : "вас",
-  );
-  s = s.replace(/(?<=^|[^\p{L}\p{N}])тебе(?=[^\p{L}\p{N}]|$)/giu, (m) =>
-    m[0] === m[0].toUpperCase() ? "Вас" : "вас",
-  );
-  s = s.replace(/(?<=^|[^\p{L}\p{N}])твоя(?=[^\p{L}\p{N}]|$)/giu, (m) =>
-    m[0] === m[0].toUpperCase() ? "Вашия" : "вашия",
-  );
-  s = s.replace(/(?<=^|[^\p{L}\p{N}])твоята(?=[^\p{L}\p{N}]|$)/giu, (m) =>
-    m[0] === m[0].toUpperCase() ? "Вашата" : "вашата",
-  );
-  s = s.replace(/(?<=^|[^\p{L}\p{N}])твоето(?=[^\p{L}\p{N}]|$)/giu, (m) =>
-    m[0] === m[0].toUpperCase() ? "Вашето" : "вашето",
-  );
-  s = s.replace(/(?<=^|[^\p{L}\p{N}])твоите(?=[^\p{L}\p{N}]|$)/giu, (m) =>
-    m[0] === m[0].toUpperCase() ? "Вашите" : "вашите",
-  );
-  s = s.replace(/(?<=^|[^\p{L}\p{N}])чуй(?=[^\p{L}\p{N}]|$)/giu, (m) =>
-    m[0] === m[0].toUpperCase() ? "Чуйте" : "чуйте",
-  );
-  s = s.replace(/(?<=^|[^\p{L}\p{N}])помни(?=[^\p{L}\p{N}]|$)/giu, (m) =>
-    m[0] === m[0].toUpperCase() ? "Помнете" : "помнете",
-  );
-  s = s.replace(/(?<=^|[^\p{L}\p{N}])погледни(?=[^\p{L}\p{N}]|$)/giu, (m) =>
-    m[0] === m[0].toUpperCase() ? "Погледнете" : "погледнете",
-  );
-  s = s.replace(/(?<=^|[^\p{L}\p{N}])спри(?=[^\p{L}\p{N}]|$)/giu, (m) =>
-    m[0] === m[0].toUpperCase() ? "Спрете" : "спрете",
-  );
-  s = s.replace(/(?<=^|[^\p{L}\p{N}])направи(?=[^\p{L}\p{N}]|$)/giu, (m) =>
-    m[0] === m[0].toUpperCase() ? "Направете" : "направете",
-  );
-  s = s.replace(/(?<=^|[^\p{L}\p{N}])помисли(?=[^\p{L}\p{N}]|$)/giu, (m) =>
-    m[0] === m[0].toUpperCase() ? "Помислете" : "помислете",
-  );
-  s = s.replace(/(?<=^|[^\p{L}\p{N}])потърси(?=[^\p{L}\p{N}]|$)/giu, (m) =>
-    m[0] === m[0].toUpperCase() ? "Потърсете" : "потърсете",
-  );
-  s = s.replace(/(?<=^|[^\p{L}\p{N}])виж(?=[^\p{L}\p{N}]|$)/giu, (m) =>
-    m[0] === m[0].toUpperCase() ? "Вижте" : "вижте",
-  );
-  s = s.replace(/(?<=^|[^\p{L}\p{N}])вземи(?=[^\p{L}\p{N}]|$)/giu, (m) =>
-    m[0] === m[0].toUpperCase() ? "Вземете" : "вземете",
-  );
-  s = s.replace(/(?<=^|[^\p{L}\p{N}])отвори(?=[^\p{L}\p{N}]|$)/giu, (m) =>
-    m[0] === m[0].toUpperCase() ? "Отворете" : "отворете",
-  );
-  s = s.replace(/(?<=^|[^\p{L}\p{N}])прочети(?=[^\p{L}\p{N}]|$)/giu, (m) =>
-    m[0] === m[0].toUpperCase() ? "Прочетете" : "прочетете",
-  );
-  s = s.replace(/(?<=^|[^\p{L}\p{N}])поискай(?=[^\p{L}\p{N}]|$)/giu, (m) =>
-    m[0] === m[0].toUpperCase() ? "Поискайте" : "поискайте",
-  );
-  s = s.replace(/(?<=^|[^\p{L}\p{N}])започни(?=[^\p{L}\p{N}]|$)/giu, (m) =>
-    m[0] === m[0].toUpperCase() ? "Започнете" : "започнете",
-  );
-  s = s.replace(/(?<=^|[^\p{L}\p{N}])благодари(?=[^\p{L}\p{N}]|$)/giu, (m) =>
-    m[0] === m[0].toUpperCase() ? "Благодарете" : "благодарете",
-  );
-  s = s.replace(/(?<=^|[^\p{L}\p{N}])пази(?=[^\p{L}\p{N}]|$)/giu, (m) =>
-    m[0] === m[0].toUpperCase() ? "Пазете" : "пазете",
-  );
-  s = s.replace(/(?<=^|[^\p{L}\p{N}])обърни\s+се(?=[^\p{L}\p{N}]|$)/giu, (m) =>
-    m[0] === m[0].toUpperCase() ? "Обърнете се" : "обърнете се",
-  );
-  s = s.replace(/(?<=^|[^\p{L}\p{N}])не\s+губи(?=[^\p{L}\p{N}]|$)/giu, (m) =>
-    m[0] === m[0].toUpperCase() ? "Не губете" : "не губете",
-  );
-  s = s.replace(/(?<=^|[^\p{L}\p{N}])не\s+забравяй(?=[^\p{L}\p{N}]|$)/giu, (m) =>
-    m[0] === m[0].toUpperCase() ? "Не забравяйте" : "не забравяйте",
-  );
-  s = s.replace(/(?<=^|[^\p{L}\p{N}])не\s+се\s+отчайвай(?=[^\p{L}\p{N}]|$)/giu, (m) =>
-    m[0] === m[0].toUpperCase() ? "Не се отчайвайте" : "не се отчайвайте",
-  );
-  s = s.replace(/(?<=^|[^\p{L}\p{N}])не\s+се\s+бой(?=[^\p{L}\p{N}]|$)/giu, (m) =>
-    m[0] === m[0].toUpperCase() ? "Не се бойте" : "не се бойте",
-  );
-  s = s.replace(/(?<=^|[^\p{L}\p{N}])сподели(?=[^\p{L}\p{N}]|$)/giu, (m) =>
-    m[0] === m[0].toUpperCase() ? "Споделете" : "споделете",
-  );
-  if (s !== beforePolite) {
-    fixes.push("Приложена учтива форма на обръщение ('Вие' вместо фамилиарно 'ти')");
+  // 2. Polite official address ("Вие" form) and verbs — ONLY outside sacred scripture quotes!
+  if (!options?.isSacredQuote) {
+    const beforePolite = s;
+    const quotePlaceholders: string[] = [];
+    // Mask sacred quotes inside „...“ or «...» so their authentic scriptural 2nd-person singular is never distorted
+    s = s.replace(/(?:„[^“”"]*“|«[^»]*»)/gu, (match) => {
+      const idx = quotePlaceholders.length;
+      quotePlaceholders.push(match);
+      return `__SACRED_QUOTE_${idx}__`;
+    });
+
+    // Skip polite pronoun/imperative mutation if the string is the canonical Hadith 19 aphorism ("Пази [заповедите на] Аллах и Той ще те пази")
+    const isHadith19Aphorism = /пази\s+(?:заповедите\s+на\s+)?аллах\s+и\s+той\s+ще\s+те\s+пази/iu.test(s);
+
+    if (!isHadith19Aphorism) {
+      s = s.replace(/(?<=^|[^\p{L}\p{N}])ти\s+знаеш\s+ли(?=[^\p{L}\p{N}]|$)/giu, (m) =>
+        m[0] === m[0].toUpperCase() ? "Вие знаете ли" : "вие знаете ли",
+      );
+      s = s.replace(/(?<=^|[^\p{L}\p{N}])знаеш\s+ли(?=[^\p{L}\p{N}]|$)/giu, (m) =>
+        m[0] === m[0].toUpperCase() ? "Знаете ли" : "знаете ли",
+      );
+      s = s.replace(/(?<=^|[^\p{L}\p{N}])ти\s+знаеш(?=[^\p{L}\p{N}]|$)/giu, (m) =>
+        m[0] === m[0].toUpperCase() ? "Вие знаете" : "вие знаете",
+      );
+      s = s.replace(/(?<=^|[^\p{L}\p{N}])ти\s+си(?=[^\p{L}\p{N}]|$)/giu, (m) =>
+        m[0] === m[0].toUpperCase() ? "Вие сте" : "вие сте",
+      );
+      s = s.replace(/(?<=^|[^\p{L}\p{N}])ти\s+имаш(?=[^\p{L}\p{N}]|$)/giu, (m) =>
+        m[0] === m[0].toUpperCase() ? "Вие имате" : "вие имате",
+      );
+      s = s.replace(/(?<=^|[^\p{L}\p{N}])ти\s+можеш(?=[^\p{L}\p{N}]|$)/giu, (m) =>
+        m[0] === m[0].toUpperCase() ? "Вие можете" : "вие можете",
+      );
+      s = s.replace(/(?<=^|[^\p{L}\p{N}])ти\s+търсиш(?=[^\p{L}\p{N}]|$)/giu, (m) =>
+        m[0] === m[0].toUpperCase() ? "Вие търсите" : "вие търсите",
+      );
+      s = s.replace(/(?<=^|[^\p{L}\p{N}])ти\s+чувстваш(?=[^\p{L}\p{N}]|$)/giu, (m) =>
+        m[0] === m[0].toUpperCase() ? "Вие чувствате" : "вие чувствате",
+      );
+      s = s.replace(/(?<=^|[^\p{L}\p{N}])ти\s+усещаш(?=[^\p{L}\p{N}]|$)/giu, (m) =>
+        m[0] === m[0].toUpperCase() ? "Вие усещате" : "вие усещате",
+      );
+      s = s.replace(/(?<=^|[^\p{L}\p{N}])ти\s+виждаш(?=[^\p{L}\p{N}]|$)/giu, (m) =>
+        m[0] === m[0].toUpperCase() ? "Вие виждате" : "вие виждате",
+      );
+      s = s.replace(/(?<=^|[^\p{L}\p{N}])теб(?=[^\p{L}\p{N}]|$)/giu, (m) =>
+        m[0] === m[0].toUpperCase() ? "Вас" : "вас",
+      );
+      s = s.replace(/(?<=^|[^\p{L}\p{N}])тебе(?=[^\p{L}\p{N}]|$)/giu, (m) =>
+        m[0] === m[0].toUpperCase() ? "Вас" : "вас",
+      );
+      s = s.replace(/(?<=^|[^\p{L}\p{N}])твоя(?=[^\p{L}\p{N}]|$)/giu, (m) =>
+        m[0] === m[0].toUpperCase() ? "Вашия" : "вашия",
+      );
+      s = s.replace(/(?<=^|[^\p{L}\p{N}])твоята(?=[^\p{L}\p{N}]|$)/giu, (m) =>
+        m[0] === m[0].toUpperCase() ? "Вашата" : "вашата",
+      );
+      s = s.replace(/(?<=^|[^\p{L}\p{N}])твоето(?=[^\p{L}\p{N}]|$)/giu, (m) =>
+        m[0] === m[0].toUpperCase() ? "Вашето" : "вашето",
+      );
+      s = s.replace(/(?<=^|[^\p{L}\p{N}])твоите(?=[^\p{L}\p{N}]|$)/giu, (m) =>
+        m[0] === m[0].toUpperCase() ? "Вашите" : "вашите",
+      );
+
+      // Guarded imperative replacements: NEVER replace when preceded by 3rd-person subjects, auxiliaries (ще/да), or object clitics (те/ти/Ви/го/я/ги)
+      const non3rdGuard =
+        "(?<!(?:ще|да|нека|би|който|която|което|които|че|ако|когато|докато|защото|Аллах|Той|Господ|Творецът|Създателят|Всевишният|Пратеникът|Пророкът|човекът|човек|вярващият|те|ти|Ви|ви|го|я|ги|ни|ми|му|й|се)\\s+)";
+
+      const imperativePairs: Array<[string, string, string]> = [
+        ["чуй", "Чуйте", "чуйте"],
+        ["помни", "Помнете", "помнете"],
+        ["погледни", "Погледнете", "погледнете"],
+        ["спри", "Спрете", "спрете"],
+        ["направи", "Направете", "направете"],
+        ["помисли", "Помислете", "помислете"],
+        ["потърси", "Потърсете", "потърсете"],
+        ["виж", "Вижте", "вижте"],
+        ["вземи", "Вземете", "вземете"],
+        ["отвори", "Отворете", "отворете"],
+        ["прочети", "Прочетете", "прочетете"],
+        ["поискай", "Поискайте", "поискайте"],
+        ["започни", "Започнете", "започнете"],
+        ["благодари", "Благодарете", "благодарете"],
+        ["обърни\\s+се", "Обърнете се", "обърнете се"],
+        ["не\\s+губи", "Не губете", "не губете"],
+        ["не\\s+забравяй", "Не забравяйте", "не забравяйте"],
+        ["не\\s+се\\s+отчайвай", "Не се отчайвайте", "не се отчайвайте"],
+        ["не\\s+се\\s+бой", "Не се бойте", "не се бойте"],
+        ["сподели", "Споделете", "споделете"],
+      ];
+
+      for (const [singPattern, capPlur, lowPlur] of imperativePairs) {
+        s = s.replace(
+          new RegExp(`(?<=^|[^\\p{L}\\p{N}])${non3rdGuard}${singPattern}(?=[^\\p{L}\\p{N}]|$)`, "giu"),
+          (m) => (m[0] === m[0].toUpperCase() ? capPlur : lowPlur),
+        );
+      }
+    }
+
+    // Restore masked sacred quotes
+    s = s.replace(/__SACRED_QUOTE_(\d+)__/g, (_, idx) => quotePlaceholders[Number(idx)] || "");
+
+    if (s !== beforePolite) {
+      fixes.push("Приложена учтива форма на обръщение ('Вие' вместо фамилиарно 'ти')");
+    }
   }
 
   // Capitalization of sacred Islamic nouns
@@ -971,13 +984,17 @@ export function validateAndEnforceFourStepArchitecture(
     fixes.push("Добавен въпросителен знак в края на въпроса за куката");
   }
 
-  // Ensure polite form in hook
-  hookQ = hookQ.replace(/\bти\b/g, "Вие").replace(/\bтеб\b/g, "Вас").replace(/\bтвоя\b/gi, "Вашия").replace(/\bтвоето\b/gi, "Вашето");
+  const gramHookQ = auditAndRefineBulgarianGrammar(hookQ);
+  hookQ = gramHookQ.refinedText;
+  fixes.push(...gramHookQ.fixes);
 
   if (!hookCtx) {
     hookCtx = "Често търсите утеха в преходния свят, но Вашата душа жадува за истината на Божественото откровение.";
     fixes.push("Добавен свързващ контекст към куката (Hook Context)");
   }
+  const gramHookCtx = auditAndRefineBulgarianGrammar(hookCtx);
+  hookCtx = gramHookCtx.refinedText;
+  fixes.push(...gramHookCtx.fixes);
   sw.hookQuestion = hookQ;
   sw.hookContext = hookCtx;
 
@@ -1264,6 +1281,17 @@ export function auditAndRefineProposal(
       p.summaryBg = g.refinedText;
       passCorrections.push(...g.fixes);
     }
+    if (p.fullDalilText) {
+      const theo = detectAndHealSalafiTheologicalDeviations(p.fullDalilText);
+      if (theo.healed) {
+        p.fullDalilText = theo.healedText;
+        passTheoCorrections.push(...theo.fixes);
+        passCorrections.push(...theo.fixes);
+      }
+      const g = auditAndRefineBulgarianGrammar(p.fullDalilText, { isSacredQuote: true });
+      p.fullDalilText = g.refinedText;
+      passCorrections.push(...g.fixes);
+    }
 
     // 5. 4-Step Narrative Workflow Enforcement
     if (p.scriptWorkflow) {
@@ -1274,10 +1302,23 @@ export function auditAndRefineProposal(
 
       for (const field of ["hookQuestion", "hookContext", "dalilIntro", "dalilText", "explanation", "actionStep"] as const) {
         if (p.scriptWorkflow[field]) {
-          const g = auditAndRefineBulgarianGrammar(p.scriptWorkflow[field]!);
+          const g = auditAndRefineBulgarianGrammar(p.scriptWorkflow[field]!, {
+            isSacredQuote: field === "dalilText",
+          });
           p.scriptWorkflow[field] = g.refinedText;
           passCorrections.push(...g.fixes);
         }
+      }
+
+      // Synchronize fullDalilText and scriptWorkflow.dalilText 1:1 so the AI Assistant UI preview and video audio/subtitles NEVER diverge
+      const fullClean = (p.fullDalilText || "").replace(/^["„“']+|["„“']+$/g, "").trim();
+      const swClean = (p.scriptWorkflow.dalilText || "").replace(/^["„“']+|["„“']+$/g, "").trim();
+      if (fullClean.length > swClean.length && !fullClean.includes("...")) {
+        p.scriptWorkflow.dalilText = fullClean;
+        p.fullDalilText = fullClean;
+      } else if (swClean.length > 0 && (!fullClean || swClean.length >= fullClean.length)) {
+        p.fullDalilText = swClean;
+        p.scriptWorkflow.dalilText = swClean;
       }
     }
 
@@ -1285,7 +1326,9 @@ export function auditAndRefineProposal(
       for (const slide of p.carouselSlides) {
         for (const f of ["topTitle", "mainText", "bottomText", "footerText", "quoteText", "commentaryText"] as const) {
           if ((slide as any)[f]) {
-            const g = auditAndRefineBulgarianGrammar((slide as any)[f]);
+            const g = auditAndRefineBulgarianGrammar((slide as any)[f], {
+              isSacredQuote: f === "quoteText",
+            });
             (slide as any)[f] = g.refinedText;
             passCorrections.push(...g.fixes);
           }

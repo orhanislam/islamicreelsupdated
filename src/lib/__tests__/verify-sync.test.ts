@@ -1249,6 +1249,102 @@ async function testSalafiTheologyAndDaleelSelfHealing() {
   console.log("✔ testSalafiTheologyAndDaleelSelfHealing passed: 100% multi-pass convergence, Quran ayah clamping, Mawdu hadith auto-replacement, Tawheed al-Uluhiyyah, Amulet bans, Divine Attributes affirmation, pronoun gender agreement, and explanation/guidance auto-healing all 100% verified!");
 }
 
+async function testWysiwygDalilSyncAndVerbAgreement() {
+  const { buildExplainedNarrationText, sanitizeProposalFields } = await import("../assistant.functions");
+  const { getVerifiedHadithSharhDirect } = await import("../tafsir.functions");
+
+  // 1. Ensure "Аллах ще те пази" / "Пази заповедите на Аллах и Той ще те пази!" is NEVER corrupted into "пазете"
+  const hadith19Text =
+    "О, младежо! Ще те науча на няколко слова: Пази заповедите на Аллах и Той ще те пази! Пази границите Му и ще Го намериш пред себе си! Когато просиш, проси от Аллах! Когато търсиш помощ, търси помощ от Аллах! И знай, че ако целият народ се събере, за да ти принесе някаква полза, не ще ти принесе друга полза, освен онази, която Аллах вече ти е предписал.";
+
+  const proposal19: any = {
+    title: "[40 Хадиса на ан-Науауи #19] Пази заповедите на Аллах и Той ще те пази",
+    type: "explained_video",
+    collection: "nawawi40",
+    number: 19,
+    fullDalilText: hadith19Text,
+    scriptWorkflow: {
+      hookQuestion: "Защо се страхувате от хората, след като Аллах държи съдбата ти?",
+      hookContext: "Истинската сигурност идва единствено от връзката с Твореца.",
+      dalilIntro: "Пратеникът на Аллах ﷺ ни учи:",
+      dalilText: hadith19Text,
+      explanation: "Обяснение: Опознайте Аллах в благоденствие чрез спазване на заповедите Му, и Той ще те пази в беда.",
+      actionStep: "Напътствие: Поискайте помощ единствено от Аллах Всевишният днес!",
+    },
+  };
+
+  const sanitizedProp = sanitizeProposalFields(proposal19);
+
+  // Verify 1:1 synchronization between fullDalilText and scriptWorkflow.dalilText
+  if (sanitizedProp.fullDalilText !== sanitizedProp.scriptWorkflow?.dalilText) {
+    throw new Error(
+      `Mismatch between fullDalilText and scriptWorkflow.dalilText!\nfullDalilText: ${sanitizedProp.fullDalilText}\ndalilText: ${sanitizedProp.scriptWorkflow?.dalilText}`,
+    );
+  }
+
+  // Verify zero "пазете" corruption in title, fullDalilText, dalilText, and explanation
+  if (
+    sanitizedProp.title.includes("пазете") ||
+    sanitizedProp.fullDalilText?.includes("пазете") ||
+    sanitizedProp.scriptWorkflow?.dalilText?.includes("пазете") ||
+    sanitizedProp.scriptWorkflow?.explanation?.includes("ще те пазете") ||
+    sanitizedProp.scriptWorkflow?.explanation?.includes("ще Ви пазете")
+  ) {
+    throw new Error(`Found corrupted 'пазете' in sanitized proposal: ${JSON.stringify(sanitizedProp)}`);
+  }
+
+  // Verify clitic "ти" was NOT corrupted into "вие" ("Аллах вече вие е предписал" / "съдбата вие")
+  if (
+    sanitizedProp.fullDalilText?.includes("вие е предписал") ||
+    sanitizedProp.fullDalilText?.includes("да вие принесе") ||
+    sanitizedProp.scriptWorkflow?.hookQuestion?.includes("съдбата вие")
+  ) {
+    throw new Error(`Found corrupted clitic 'вие' in sanitized proposal: ${JSON.stringify(sanitizedProp)}`);
+  }
+
+  // 2. Verify buildExplainedNarrationText + auditAndRefineNarrationScript preserves exact Dalil text
+  const narration = buildExplainedNarrationText({
+    viralTitle: "Пази заповедите на Аллах и Той ще те пази",
+    reference: "40 Хадиса на ан-Навауи #19",
+    quoteText: sanitizedProp.fullDalilText!,
+    isQuran: false,
+    scriptWorkflow: sanitizedProp.scriptWorkflow,
+    summaryBg: sanitizedProp.summaryBg,
+  });
+  const finalNarration = auditAndRefineNarrationScript(narration).refinedNarration;
+
+  if (finalNarration.includes("ще те пазете") || finalNarration.includes("ще Ви пазете") || finalNarration.includes("Той пазете")) {
+    throw new Error(`Video narration corrupted 'ще те пази' into 'пазете'!\nNarration:\n${finalNarration}`);
+  }
+  if (!finalNarration.includes("Пази заповедите на Аллах и Той ще те пази!")) {
+    throw new Error(`Video narration does not match preview Dalil text!\nNarration:\n${finalNarration}`);
+  }
+
+  // 3. Verify automatic self-healing of already-corrupted inputs
+  const corruptedInput =
+    "Аллах ще те пазете и Той ще Ви пазете! Аллах вече вие е предписал какво има в сърцето вие. Една ден ще разберете.";
+  const healed = auditAndRefineBulgarianGrammar(corruptedInput).refinedText;
+  if (
+    !healed.includes("Аллах ще те пази") ||
+    !healed.includes("Той ще Ви пази") ||
+    !healed.includes("Аллах вече ти е предписал") ||
+    !healed.includes("сърцето ти") ||
+    !healed.includes("Един ден")
+  ) {
+    throw new Error(`Self-healing failed on corrupted input!\nGot: ${healed}`);
+  }
+
+  // 4. Verify all 42 Nawawi Hadiths have both hadithTextBg and hadithTextAr populated
+  for (let i = 1; i <= 42; i++) {
+    const sharh = getVerifiedHadithSharhDirect({ collection: "nawawi40", number: i });
+    if (!sharh || !sharh.hadithTextBg || sharh.hadithTextBg.length < 20 || !sharh.hadithTextAr) {
+      throw new Error(`Nawawi Hadith #${i} is missing hadithTextBg or hadithTextAr!`);
+    }
+  }
+
+  console.log("✔ testWysiwygDalilSyncAndVerbAgreement passed: 100% WYSIWYG Dalil sync, zero 'ще те пазете' corruption, automatic self-healing, and full 42 Nawawi translations verified!");
+}
+
 async function runAllTests() {
   console.log("Running subtitle synchronization verification tests...");
   testMonotonicityAndBounds();
@@ -1269,6 +1365,7 @@ async function runAllTests() {
   await testGoalTikTokSubtitlesSemanticBRollAndTranslation();
   await testSmartScriptAuditorAndPreRenderHealing();
   await testSalafiTheologyAndDaleelSelfHealing();
+  await testWysiwygDalilSyncAndVerbAgreement();
   console.log("✔ All subtitle synchronization verification tests passed successfully!");
   process.exit(0);
 }

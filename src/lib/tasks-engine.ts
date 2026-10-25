@@ -2,7 +2,7 @@ import { getJobsDir } from "./render.functions";
 
 export interface BackgroundTaskRecord {
   id: string;
-  type: "plan_generation" | "batch_generation";
+  type: "plan_generation" | "batch_generation" | "autopilot_cycle";
   status: "queued" | "processing" | "completed" | "failed";
   progress: number;
   title: string;
@@ -68,7 +68,7 @@ export async function saveTasksList(tasks: BackgroundTaskRecord[]): Promise<void
 }
 
 export async function createTask(
-  type: "plan_generation" | "batch_generation",
+  type: "plan_generation" | "batch_generation" | "autopilot_cycle",
   title: string,
   message: string,
   payload: any

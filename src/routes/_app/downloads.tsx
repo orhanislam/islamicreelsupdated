@@ -18,6 +18,7 @@ import {
 import { generateViralThumbnail } from "@/lib/thumbnail.functions";
 import { formatViralSocialCaption, generateTikTokSEOTitle } from "@/lib/caption.functions";
 import { cleanProposalTitle, clearAllBackgroundTasks } from "@/lib/assistant.functions";
+import { getAutopilotConfig, publishServerJobToUploadPost, type AutopilotConfig } from "@/lib/autopilot.functions";
 import { saveMediaBlob, saveMediaFromUrl, isIOSMediaDevice, sanitizeFilename } from "@/lib/download-media";
 import { Download, Trash2, CheckCircle2, ArrowLeft, Video, Film, RefreshCw, Loader2, AlertCircle, CloudCheck, Image as ImageIcon, Sparkles, Copy, Package, MoreVertical } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -73,10 +74,42 @@ function DownloadsPage() {
   const [downloadingKitId, setDownloadingKitId] = useState<string | null>(null);
   const [generatingThumbId, setGeneratingThumbId] = useState<string | null>(null);
   const [cleaningDisk, setCleaningDisk] = useState(false);
+  const [publishingJobId, setPublishingJobId] = useState<string | null>(null);
   const [preloadedUrls, setPreloadedUrls] = useState<Record<string, string>>({});
+  const [autopilotConfig, setAutopilotConfig] = useState<AutopilotConfig | null>(null);
   const preloadingRef = useRef<Set<string>>(new Set());
+  const autoDownloadingRef = useRef<Set<string>>(new Set());
 
-  const handleCopyTikTokCaption = (title: string) => {
+  const handlePublishToTikTok = async (job: ServerJob) => {
+    try {
+      setPublishingJobId(job.id);
+      toast.message(`📲 Качване и публикуване на „${job.title}“ в TikTok чрез Upload-Post.com...`);
+      const res = await publishServerJobToUploadPost({ data: { jobId: job.id } });
+      if (res.published) {
+        toast.success(`✅ Видеото е изпратено успешно за публикуване в TikTok (Upload-Post)!`);
+        loadAll();
+      } else {
+        toast.error(`❌ Грешка от Upload-Post.com: ${res.error || "Проверете API Key и User в Автопилота"}`);
+      }
+    } catch (e: any) {
+      toast.error(e?.message || "Грешка при публикуване към Upload-Post.com");
+    } finally {
+      setPublishingJobId(null);
+    }
+  };
+
+  const getJobCaption = (job: ServerJob) => {
+    if (job.viralCaption && job.viralCaption.trim().length > 20) {
+      return job.viralCaption;
+    }
+    return formatViralSocialCaption(cleanProposalTitle(job.title || "Ислямска мъдрост"));
+  };
+
+  const handleCopyTikTokCaption = (title: string, job?: ServerJob) => {
+    if (job) {
+      copyToClipboardFallback(getJobCaption(job));
+      return;
+    }
     copyToClipboardFallback(formatViralSocialCaption(cleanProposalTitle(title)));
   };
 
@@ -111,6 +144,9 @@ function DownloadsPage() {
 
   useEffect(() => {
     loadAll();
+    getAutopilotConfig()
+      .then((cfg) => setAutopilotConfig(cfg))
+      .catch(() => {});
   }, []);
 
   // Poll every 3 seconds while page is open so newly started background jobs appear immediately
@@ -132,6 +168,46 @@ function DownloadsPage() {
       }
     });
   }, [items]);
+
+  // Zero-Click Autopilot Auto-Download: Automatically download newly completed server videos when browser opens
+  useEffect(() => {
+    if (!autopilotConfig?.autoDownloadOnOpen || typeof window === "undefined") return;
+    const completedServer = serverJobs.filter((j) => j.status === "completed");
+    if (completedServer.length === 0) return;
+
+    let alreadyDownloaded: string[] = [];
+    try {
+      const raw = window.localStorage.getItem("auto_downloaded_server_jobs");
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) alreadyDownloaded = parsed;
+      }
+    } catch {}
+
+    const downloadedSet = new Set(alreadyDownloaded);
+    const pendingJobs = completedServer.filter(
+      (j) => !downloadedSet.has(j.id) && !autoDownloadingRef.current.has(j.id),
+    );
+
+    if (pendingJobs.length === 0) return;
+
+    (async () => {
+      for (const job of pendingJobs) {
+        autoDownloadingRef.current.add(job.id);
+        downloadedSet.add(job.id);
+        try {
+          window.localStorage.setItem(
+            "auto_downloaded_server_jobs",
+            JSON.stringify(Array.from(downloadedSet).slice(-200)),
+          );
+        } catch {}
+
+        toast.message(`🤖 Автопилот: Автоматично сваляне на готово видео „${job.title}“...`);
+        await handleDownloadServerJob(job);
+        await new Promise((r) => setTimeout(r, 1200));
+      }
+    })();
+  }, [serverJobs, autopilotConfig?.autoDownloadOnOpen]);
 
   const triggerDownload = async (item: DownloadItem, manual = false) => {
     setDownloadedIds((prev) => new Set([...prev, item.id]));
@@ -213,7 +289,7 @@ function DownloadsPage() {
       const downloadUrl = `/api/download/${job.id}?filename=${encodeURIComponent(filename)}`;
 
       toast.message("Изтеглянето стартира... (Провери мениджъра за изтегляния на браузъра)");
-      copyToClipboardFallback(formatViralSocialCaption(job.title || "Ислямска мъдрост"));
+      copyToClipboardFallback(getJobCaption(job));
       
       // Use direct navigation for server files to trigger native OS download manager.
       window.location.href = downloadUrl;
@@ -566,7 +642,24 @@ function DownloadsPage() {
               >
                 <div className="flex items-start justify-between gap-3 mb-4">
                   <div>
-                    <h3 className="font-semibold text-base line-clamp-1">{job.title}</h3>
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <h3 className="font-semibold text-base line-clamp-1">{job.title}</h3>
+                      {job.isAutopilot && (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-bold text-amber-400 border border-amber-500/30">
+                          🤖 Автопилот
+                        </span>
+                      )}
+                      {job.webhookDispatched && (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-sky-500/15 px-2 py-0.5 text-[10px] font-bold text-sky-400 border border-sky-500/30">
+                          🌐 Webhook
+                        </span>
+                      )}
+                      {job.tiktokPublished && (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-bold text-emerald-400 border border-emerald-500/30">
+                          📲 Качено в TikTok
+                        </span>
+                      )}
+                    </div>
                     <p className="text-xs text-muted-foreground mt-0.5">
                       iPhone 16 Pro Max • 1080×1920 30 FPS (CRF 18 • Lossless TikTok)
                     </p>
@@ -661,9 +754,21 @@ function DownloadsPage() {
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end" className="w-56">
                           <DropdownMenuItem
+                            onClick={() => handlePublishToTikTok(job)}
+                            disabled={publishingJobId === job.id}
+                            className="cursor-pointer font-semibold text-emerald-400"
+                          >
+                            {publishingJobId === job.id ? (
+                              <Loader2 className="size-4 mr-2 animate-spin" />
+                            ) : (
+                              <Sparkles className="size-4 mr-2 text-emerald-400" />
+                            )}
+                            <span>Публикувай в TikTok (Upload-Post)</span>
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
                             onSelect={(e) => {
                               e.preventDefault();
-                              handleCopyTikTokCaption(job.title);
+                              handleCopyTikTokCaption(job.title, job);
                             }}
                             className="cursor-pointer"
                           >
