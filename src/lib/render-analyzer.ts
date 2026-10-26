@@ -19,13 +19,12 @@
  *    - Blasphemy, shirk, vulgarity, and diminutive term elimination
  */
 
-import { sanitizeTheologicalRespect } from "./theological-sanitizer";
-import { detectAndHealSalafiTheologicalDeviations } from "./smart-script-auditor";
+import { sanitizeTheologicalRespect, detectAndHealSalafiTheologicalDeviations } from "./theological-sanitizer";
 import {
   normalizeIslamicArabicPhoneticsForTts,
   normalizePhoneticsToDisplayWord,
   type WordTiming,
-} from "./tts.functions";
+} from "./islamic-phonetics";
 import { remapSalawatTimingsToBulgarian } from "./salawat-timings";
 import { verifyAndCorrectSubtitleSync } from "./subtitle-sync.functions";
 import { TIKTOK_SAFE_ZONE } from "./safe-zone";
@@ -568,8 +567,8 @@ export async function analyzeAndFixRenderPayload(
   const result = analyzeAndFixRenderPayloadSync(payload);
   const { data, report } = result;
 
-  // If audioUrl is missing but text exists and synthesis is requested:
-  if (!data.audioUrl && (options.synthesizeAudioIfMissing || data.requireAudio)) {
+  // If audioUrl is missing but text exists and synthesis is requested (server-only):
+  if (import.meta.env.SSR && !data.audioUrl && (options.synthesizeAudioIfMissing || data.requireAudio)) {
     const textForTts = data.ttsSpeechText || data.bulgarian || data.script || data.text;
     if (textForTts && typeof textForTts === "string" && textForTts.trim().length > 0) {
       try {

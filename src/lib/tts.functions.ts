@@ -1,15 +1,26 @@
 /// <reference path="../types/declarations.d.ts" />
 import { createServerFn } from "@tanstack/react-start";
-import * as googleTTS from "google-tts-api";
-import mp3Duration from "mp3-duration";
 import { sanitizeTheologicalRespect } from "./theological-sanitizer";
 import { normalizeBulgarianNumbersForTts, integerToBulgarianWords } from "./bulgarian-numbers";
-import { normalizeAllIslamicPhonetics, normalizeIslamicPhoneticsToDisplayWord } from "./islamic-phonetics";
+import {
+  normalizeAllIslamicPhonetics,
+  normalizeIslamicPhoneticsToDisplayWord,
+  normalizeIslamicArabicPhoneticsForTts,
+  normalizePhoneticsToDisplayWord,
+  type WordTiming,
+} from "./islamic-phonetics";
 import { remapSalawatTimingsToBulgarian } from "./salawat-timings";
 
-export { normalizeBulgarianNumbersForTts, integerToBulgarianWords, normalizeAllIslamicPhonetics, remapSalawatTimingsToBulgarian };
-
-export type WordTiming = { start: number; end: number; word: string };
+export {
+  normalizeBulgarianNumbersForTts,
+  integerToBulgarianWords,
+  normalizeAllIslamicPhonetics,
+  normalizeIslamicPhoneticsToDisplayWord,
+  normalizeIslamicArabicPhoneticsForTts,
+  normalizePhoneticsToDisplayWord,
+  remapSalawatTimingsToBulgarian,
+  type WordTiming,
+};
 
 function estimateWordTimings(text: string, totalDuration: number): WordTiming[] {
   const words = text.split(/\s+/).filter(Boolean);
@@ -148,196 +159,6 @@ function parseVttTimings(vttText: string): WordTiming[] {
   return timings;
 }
 
-export function normalizeIslamicArabicPhoneticsForTts(text: string): string {
-  if (!text) return "";
-
-  let res = text;
-
-  const replaceWord = (pattern: string, replacement: string) => {
-    const reg = new RegExp(`(?<=^|[^\\p{L}\\p{N}])(?:${pattern})(?=[^\\p{L}\\p{N}]|$)`, "gui");
-    res = res.replace(reg, replacement);
-  };
-
-  // 0. Salafi Adab Gate: Reverence for Allah & Tawheed titles (eliminate diminutive "единичкият" & casual 'оня')
-  res = sanitizeTheologicalRespect(res);
-
-  // 1. Invocations, Honorifics & Abbreviations (Pronounce authentic Arabic Salafi dialect in spoken audio)
-  res = res
-    // Bulgarian salawat translations -> spoken Arabic Salawat
-    .replace(/\(\s*мир\s+да\s+бъде\s+с(?:ъс)?\s+него\s*\)/gi, " Саллаллааху 'алейхи ва саллям ")
-    .replace(/(?<=^|[^\p{L}\p{N}])мир\s+да\s+бъде\s+с(?:ъс)?\s+него(?=[^\p{L}\p{N}]|$)/gui, " Саллаллааху 'алейхи ва саллям ")
-    .replace(/\(\s*мир\s+нему(?:\s+и\s+благословия)?\s*\)/gi, " Саллаллааху 'алейхи ва саллям ")
-    .replace(/(?<=^|[^\p{L}\p{N}])мир\s+нему(?:\s+и\s+благословия)?(?=[^\p{L}\p{N}]|$)/gui, " Саллаллааху 'алейхи ва саллям ")
-    .replace(/(?:\(\s*)?Аллах\s+да\s+го\s+благослови\s+и\s+с\s+мир\s+да\s+го\s+дари(?:\s*\))?/gui, " Саллаллааху 'алейхи ва саллям ")
-    .replace(/(?:\(\s*)?благословии\s+и\s+мир\s+нему(?:\s*\))?/gui, " Саллаллааху 'алейхи ва саллям ")
-
-    // Bulgarian Sahabah translations -> spoken Arabic Sahabah honorific
-    .replace(/(?:\(\s*)?Аллах\s+да\s+е\s+доволен\s+от\s+него(?:\s*\))?/gui, " Радийаллааху 'анху ")
-    .replace(/(?:\(\s*)?Аллах\s+да\s+е\s+доволен\s+от\s+нея(?:\s*\))?/gui, " Радийаллааху 'анхаа ")
-    .replace(/(?:\(\s*)?Аллах\s+да\s+е\s+доволен\s+от\s+тях(?:\s*\))?/gui, " Радийаллааху 'анхум ")
-
-    // Abbreviations & Raw representations
-    .replace(/\(\s*с\s*\/\s*у\s*\)/gi, " Саллаллааху 'алейхи ва саллям ")
-    .replace(/(?<=^|[^\p{L}\p{N}])с\s*\/\s*у(?=[^\p{L}\p{N}]|$)/gui, " Саллаллааху 'алейхи ва саллям ")
-    .replace(/(?:\(\s*(?:с\.а\.с\.|с\.а\.в\.|saw|pbuh)\s*\)|(?<=^|[^\p{L}\p{N}])(?:с\.а\.с\.|с\.а\.в\.|ﷺ)(?=[^\p{L}\p{N}]|$))/gui, " Саллаллааху 'алейхи ва саллям ")
-    .replace(/(?<=^|[^\p{L}\p{N}])(?:с\.в\.т\.|swt|свт)(?=[^\p{L}\p{N}]|$)/gui, " Субхаанаху ва Та'ааля ")
-    .replace(/(?:\(\s*(?:р\.а\.|ra|ра)\s*\)|(?<=^|[^\p{L}\p{N}])(?:р\.а\.)(?=[^\p{L}\p{N}]|$))/gui, " Радийаллааху 'анху ")
-    .replace(/(?<=^|[^\p{L}\p{N}])(?:radiyallahu\s+anhu|радияллаху\s+анху)(?=[^\p{L}\p{N}]|$)/gui, " Радийаллааху 'анху ");
-
-  // Disabled: We let the TTS engine natively read digits to keep subtitle timings 1:1 with digits.
-  // 1.6. Authentic Arabic Quran Surah Names & Islamic Terminologies Normalization
-  // Ensures all 114 Quran Surah names (e.g. Ал-Фатиха, Ал-Бакара, Ал-Ихляс, Аш-Шарх, Ал-Мулк, Ар-Рахман)
-  // and Islamic concepts/phrases are pronounced with authentic Arabic tajweed/salafi diction
-  res = normalizeAllIslamicPhonetics(res);
-
-  // 2. Astaghfirullah & Istighfar (Salafi Arabic Diction - user requirement)
-  // Replaces "astafirullah", "астафируллах", "астафирулла", "astaghfirullah" with authentic Arabic Salafi "Астагфируллаах"
-  replaceWord("(?:astafirullah|astafirulla|astaghfirullah|astaghfirulla|астафируллах|астафирулла|астагфирулла|астагфируллах)", "Астагфируллаах");
-  replaceWord("(?:astaghfirullahal\\s+adheem|astaghfirullahal\\s+azim|астагфируллах\\s+ал-?ази[йм]м?|астафируллах\\s+ал-?ази[йм]м?)", "Астагфируллаах ал-Азиим");
-  replaceWord("(?:istighfar|istigfar|истигфар)", "истигфаар");
-  replaceWord("истигфара", "истигфаара");
-  replaceWord("истигфарът", "истигфаарът");
-
-  // 3. SubhanAllah, Alhamdulillah, Allahu Akbar, Bismillah
-  replaceWord("(?:subhanallah|subhan\\s+allah|субханаллах)", "Субхааналлаах");
-  replaceWord("(?:subhanahu\\s+wa\\s+ta'?ala|subhanahu\\s+wa\\s+taala|субханаху\\s+ва\\s+та'?а[ля|ла])", "Субхаанаху ва Та'ааля");
-  replaceWord("(?:alhamdulillah|al\\s+hamdulillah|elhamdulillah|алхамдулиллях|алхамдулиллах|елхамдулиллях)", "Алхамдулиллаах");
-  replaceWord("(?:bismillah\\s+ar-?rahmani?\\s+ar-?rahim|bismillahi\\s+ar-?rahmani?\\s+ar-?rahim|бисмилляхир\\s+рахманир\\s+рахим|бисмиллахир\\s+рахманир\\s+рахим)", "Бисмилляяхи р-Рахмаани р-Рахийм");
-  replaceWord("(?:bismillah|bismillahi|бисмиллях|бисмиллах)", "Бисмилляях");
-  replaceWord("(?:allahu\\s+akbar|allahuakbar|аллаху\\s+акбар)", "Аллааху Акбар");
-  replaceWord("(?:la\\s+ilaha\\s+illallah|la\\s+ilaha\\s+illa\\s+allah|ля\\s+иляха\\s+илляллах|ля\\s+иляха\\s+иллаллах)", "Ляя иляяха илляллаах");
-  replaceWord("(?:la\\s+hawla\\s+wa\\s+la\\s+quwwata\\s+illa\\s+billah|ля\\s+хаула\\s+ва\\s+ля\\s+куввата\\s+илля\\s+биллях)", "Ляя хауля ва ляя куувата илляя билляах");
-  replaceWord("(?:hasbunallah|hasbunallahu\\s+wa\\s+ni'mal\\s+wakeel|хасбуналлах|хасбуналлаху\\s+ва\\s+ни'ма\\s+ал-вакил)", "Хасбуналлааху ва ни'ма-л-Вакиил");
-
-  // 4. Inshallah, MashaAllah, JazakAllah, BarakAllah
-  replaceWord("(?:inshallah|in\\s+sha\\s+allah|inshaallah|иншаллах|иншааллах|ин\\s+шаа\\s+аллах)", "Ин шаа Аллаах");
-  replaceWord("(?:mashaallah|ma\\s+sha\\s+allah|mashallah|машаллах|машааллах|ма\\s+шаа\\s+аллах)", "Маа шаа Аллаах");
-  replaceWord("(?:jazakallahu\\s+khayran|jazakallah\\s+khair|jazakallah|джазакаллаху\\s+хайран|джазакаллах\\s+хайран|джазакаллах)", "Джазаакаллааху хайран");
-  replaceWord("(?:barakallahu\\s+feek|barakallahu\\s+fik|barakallah|баракаллаху\\s+фик|баракаллах)", "Бааракаллааху фийк");
-
-  // 5. Salawat & Companions
-  replaceWord("(?:sallallahu\\s+alayhi\\s+wa\\s+sallam|sallallahu\\s+alaihi\\s+wa\\s+sallam|саллаллаху\\s+алейхи\\s+уа\\s+саллям|саллаллаху\\s+алейхи\\s+ва\\s+саллям|саллаллаху\\s+алейхи\\s+ва\\s+селлем|салляллаху\\s+алейхи\\s+ва\\s+саллям|салляллаху\\s+алейхи\\s+ва\\s+селлем)", "Саллаллааху 'алейхи ва саллям");
-  replaceWord("(?:radiyallahu\\s+anhu|radiallahu\\s+anhu|радияллаху\\s+анху|радиалаху\\s+анху)", "Радийаллааху 'анху");
-  replaceWord("(?:radiyallahu\\s+anha|radiallahu\\s+anha|радияллаху\\s+анха|радиалаху\\s+анха)", "Радийаллааху 'анхаа");
-  replaceWord("(?:radiyallahu\\s+anhum|radiallahu\\s+anhum|радияллаху\\s+анхум|радиалаху\\s+анхум)", "Радийаллааху 'анхум");
-
-  // 6. Islamic Creed & Concepts (Aqeedah / Fiqh)
-  replaceWord("(?:tawheed|tawhid|таухид)", "таухиийд");
-  replaceWord("таухида", "таухиийда");
-  replaceWord("таухидът", "таухиийдът");
-  replaceWord("(?:shirk|ширк)", "ширк");
-  replaceWord("(?:bid'ah|bidah|бид'а|бид'ат|бида)", "бид'а");
-  replaceWord("(?:sahih|сахих)", "сахийх");
-  replaceWord("(?:hadith|ahadith|хадис)", "хадиис");
-  replaceWord("хадиса", "хадииса");
-  replaceWord("хадисът", "хадиисът");
-  replaceWord("хадиси", "хадииси");
-  replaceWord("хадисите", "хадиисите");
-  replaceWord("(?:ayah|аят)", "аяат");
-  replaceWord("аята", "аяата");
-  replaceWord("аятът", "аяатът");
-  replaceWord("(?:ayat|аяти)", "аяати");
-  replaceWord("аятите", "аяатите");
-  replaceWord("(?:surah|surat|сура)", "суура");
-  replaceWord("сурата", "суурата");
-  replaceWord("сури", "суури");
-  replaceWord("сурите", "суурите");
-  replaceWord("(?:quran|kur'an)", "Кур'аан");
-  replaceWord("(?:dua|du'a|дуа)", "ду'аа");
-  replaceWord("дуата", "ду'аата");
-  replaceWord("(?:taqwa|таква)", "такваа");
-  replaceWord("таквата", "такваата");
-  replaceWord("(?:sabr|сабр)", "сабр");
-  replaceWord("сабъра", "сабъра");
-  replaceWord("(?:ikhlas|ихлас)", "ихлаас");
-  replaceWord("ихласа", "ихлааса");
-  replaceWord("(?:jannah|jannat|джанна|джаннат|дженнет)", "джаннат");
-  replaceWord("(?:jahannam|джаханнам|дженхем)", "джаханнам");
-  replaceWord("(?:salah|salat|салят)", "саляят");
-  replaceWord("салята", "саляята");
-  replaceWord("(?:sujood|sujud|суджуд|сежде)", "суджууд");
-  replaceWord("суджуда", "суджууда");
-  replaceWord("(?:ruku|руку)", "рукуу'");
-  replaceWord("(?:sadaqah\\s+jariyah|sadaqa\\s+jariya|садака\\s+джария)", "садака джаария");
-  replaceWord("(?:sadaqah|sadaqa|садака)", "садака");
-  replaceWord("(?:zakat|закат)", "закаат");
-  replaceWord("заката", "закаата");
-  replaceWord("(?:ummah|умма)", "умма");
-  replaceWord("уммата", "уммата");
-  replaceWord("(?:fitnah|fitna|фитна)", "фитна");
-  replaceWord("фитната", "фитната");
-  replaceWord("(?:dawah|da'wah|дауа)", "да'уа");
-  replaceWord("(?:qiyamah|qiyama|кияма|киямет|къямет)", "кияама");
-  replaceWord("(?:shaytan|shaitan|шайтан|шейтан)", "шайтаан");
-  replaceWord("шайтана", "шайтаана");
-  replaceWord("(?:dajjal|al-dajjal|ал-даджал|ал-джаджали|даджал)", "Ал-Даджджаал");
-  replaceWord("(?:kaaba|ka'bah|кааба)", "Ал-Ка'ба");
-
-  // 7. Scholars & References
-  replaceWord("(?:al-bukhari|bukhari|ал-бухари|бухари)", "Ал-Бухаари");
-  replaceWord("(?:muslim|муслим)", "Муслим");
-  replaceWord("ал-муслим", "Ал-Муслим");
-  replaceWord("(?:at-tirmidhi|tirmidhi|ат-тирмизи|тирмизи|ал-тирмизи)", "Ат-Тирмизи");
-  replaceWord("(?:abu\\s+dawud|abu\\s+dawood|абу\\s+давуд)", "Абу Даавуд");
-  replaceWord("(?:an-nasa'i|an-nasai|nasai|ан-насаи)", "Ан-Насаа'и");
-  replaceWord("(?:ibn\\s+majah|ибн\\s+маджа)", "Ибн Мааджа");
-  replaceWord("(?:an-nawawi|nawawi|ан-навави|навави)", "Ан-Навави");
-  replaceWord("(?:ibn\\s+kathir|ибн\\s+касир)", "Ибн Касиир");
-  replaceWord("(?:ibn\\s+taymiyyah|ibn\\s+taymiyyah|ibn\\s+taymiya|ибн\\s+теймия|ибн\\s+таймия)", "Ибн Таймийя");
-  replaceWord("(?:ibn\\s+al-qayyim|ibn\\s+qayyim|ибн\\s+ал-каййим)", "Ибн ал-Каййим");
-  replaceWord("(?:al-albani|albani|ал-албани|албани)", "Ал-Албаани");
-  replaceWord("(?:ibn\\s+baz|ибн\\s+баз)", "Ибн Бааз");
-  replaceWord("(?:salafi\\s+shaykh\\s+ai|салафи\\s+шейх\\s+ai|салафи\\s+шейх\\s+аи)", "Салафи Шейх А И");
-  replaceWord("(?:ibn\\s+uthaymeen|ibn\\s+uthaimeen|ибн\\s+усеймин|ибн\\s+утаймин)", "Ибн Усаймийн");
-
-  // 8. Fix Arabic prefixes that cause Bulgarian TTS to expand them as abbreviations
-  replaceWord("(?:Ар-Ра'д|Ar-Ra'd|Ра'д|Ra'd)", "Ар-Раад");
-  res = res
-    .replace(/(?<=^|[^\p{L}\p{N}])(А|а)л-(?=\p{L})/gu, "$1л ")
-    .replace(/(?<=^|[^\p{L}\p{N}])(А|а)т-(?=\p{L})/gu, "$1т ")
-    .replace(/(?<=^|[^\p{L}\p{N}])(А|а)н-(?=\p{L})/gu, "$1н ")
-    .replace(/(?<=^|[^\p{L}\p{N}])(А|а)з-(?=\p{L})/gu, "$1з ")
-    .replace(/(?<=^|[^\p{L}\p{N}])(А|а)с-(?=\p{L})/gu, "$1с ")
-    .replace(/(?<=^|[^\p{L}\p{N}])(А|а)ш-(?=\p{L})/gu, "$1ш ")
-    .replace(/(?<=^|[^\p{L}\p{N}])(А|а)д-(?=\p{L})/gu, "$1д ")
-    .replace(/[_…]+/g, ", ")
-    .replace(/\.{2,}/g, ", ")
-    .replace(/,\s*,+/g, ", ")
-    .replace(/[ \t]+/g, " ")
-    .trim();
-
-  return res;
-}
-
-export function normalizePhoneticsToDisplayWord(word: string): string {
-  if (!word) return "";
-  let clean = word.replace(/[\[\]]/g, "").trim();
-  clean = clean.replace(/^\.{2,}|\.{2,}$/g, "").replace(/\.{2,}/g, "").trim();
-  clean = clean.replace(/(?<=^|[^\p{L}\p{N}])Ар-Раад(?=[^\p{L}\p{N}]|$)/gui, "Ар-Ра'д");
-  clean = normalizeIslamicPhoneticsToDisplayWord(clean);
-  return clean
-    .replace(/(?<=^|[^\p{L}\p{N}])Астагфируллаах(?=[^\p{L}\p{N}]|$)/gui, "Астагфируллах")
-    .replace(/(?<=^|[^\p{L}\p{N}])Субхааналлаах(?=[^\p{L}\p{N}]|$)/gui, "Субханаллах")
-    .replace(/(?<=^|[^\p{L}\p{N}])Алхамдулиллаах(?=[^\p{L}\p{N}]|$)/gui, "Алхамдулиллях")
-    .replace(/(?<=^|[^\p{L}\p{N}])Аллааху(?=[^\p{L}\p{N}]|$)/gui, "Аллаху")
-    .replace(/(?<=^|[^\p{L}\p{N}])Бисмилляях(?=[^\p{L}\p{N}]|$)/gui, "Бисмиллях")
-    .replace(/(?<=^|[^\p{L}\p{N}])Ляя(?=[^\p{L}\p{N}]|$)/gui, "Ля")
-    .replace(/(?<=^|[^\p{L}\p{N}])иляяха(?=[^\p{L}\p{N}]|$)/gui, "иляха")
-    .replace(/(?<=^|[^\p{L}\p{N}])илляллаах(?=[^\p{L}\p{N}]|$)/gui, "илляллах")
-    .replace(/(?<=^|[^\p{L}\p{N}])таухиийд/gui, "таухид")
-    .replace(/(?<=^|[^\p{L}\p{N}])истигфаар/gui, "истигфар")
-    .replace(/(?<=^|[^\p{L}\p{N}])сахийх/gui, "сахих")
-    .replace(/(?<=^|[^\p{L}\p{N}])хадиис/gui, "хадис")
-    .replace(/(?<=^|[^\p{L}\p{N}])аяат/gui, "аят")
-    .replace(/(?<=^|[^\p{L}\p{N}])суура/gui, "сура")
-    .replace(/(?<=^|[^\p{L}\p{N}])ду'аа/gui, "дуа")
-    .replace(/(?<=^|[^\p{L}\p{N}])такваа/gui, "таква")
-    .replace(/(?<=^|[^\p{L}\p{N}])ихлаас/gui, "ихлас")
-    .replace(/(?<=^|[^\p{L}\p{N}])шайтаан/gui, "шайтан")
-    .replace(/(?<=^|[^\p{L}\p{N}])саляят/gui, "салят")
-    .replace(/(?<=^|[^\p{L}\p{N}])суджууд/gui, "суджуд");
-}
-
 export async function synthesizeHadithNarrationDirect(
   data: string | { text: string; reference?: string },
 ): Promise<{
@@ -345,6 +166,10 @@ export async function synthesizeHadithNarrationDirect(
   mimeType: string;
   wordTimings: WordTiming[];
 }> {
+  if (!import.meta.env.SSR) {
+    throw new Error("synthesizeHadithNarrationDirect is a server-only function");
+  }
+
   const rawText = typeof data === "string" ? data : data?.text;
   const textInput = String(rawText ?? "").trim();
   if (!textInput) throw new Error("Празен текст за озвучаване");
@@ -490,6 +315,7 @@ export async function synthesizeHadithNarrationDirect(
             .replace(/,\s*,+/g, ", ")
             .replace(/\s{2,}/g, " ")
             .trim();
+          const googleTTS = await import("google-tts-api");
           const base64Audio = await googleTTS.getAudioBase64(cleanForGoogle.slice(0, 200), {
             lang: "bg",
             slow: false,
@@ -531,6 +357,8 @@ export async function synthesizeHadithNarrationDirect(
     }
   } catch {
     try {
+      const mp3DurationMod = await import("mp3-duration");
+      const mp3Duration = mp3DurationMod.default || mp3DurationMod;
       duration = await mp3Duration(audioBuffer);
     } catch (err) {
       console.warn("Failed to get MP3 duration", err);

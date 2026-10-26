@@ -2533,7 +2533,10 @@ export async function confirmAndGenerateVideoDirect(input: {
   force?: boolean;
   isAutopilot?: boolean;
 }) {
-    let { proposal, force, isAutopilot } = input;
+  if (!import.meta.env.SSR) {
+    throw new Error("confirmAndGenerateVideoDirect can only be called on server");
+  }
+  let { proposal, force, isAutopilot } = input;
     // 1. Full 100% Salafi & Grammar Autonomous Self-Healing on explanation, guidance, and dalil
     const { proposal: auditedProposal, report } = auditAndRefineProposal(proposal as any, { maxPasses: 5 });
     proposal = auditedProposal as VideoProposal;

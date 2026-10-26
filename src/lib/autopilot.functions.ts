@@ -849,6 +849,9 @@ export async function runAutopilotCycleDirect(options?: {
   proposals: any[];
   message: string;
 }> {
+  if (!import.meta.env.SSR) {
+    throw new Error("runAutopilotCycleDirect can only be called on server");
+  }
   if (isAutopilotCycleRunning) {
     return {
       success: false,
@@ -1112,6 +1115,9 @@ export async function checkAndTriggerScheduledAutopilotDirect(): Promise<{
   slot?: string;
   bgTime?: string;
 }> {
+  if (!import.meta.env.SSR) {
+    return { triggered: false, reason: "Client environment" };
+  }
   const cfg = await readAutopilotConfigDirect();
   if (!cfg.enabled) {
     return { triggered: false, reason: "Автопилотът е изключен" };
@@ -1169,7 +1175,7 @@ export const checkAndTriggerScheduledAutopilot = createServerFn({ method: "POST"
   });
 
 export function initAutopilotScheduler() {
-  if (typeof process === "undefined" || typeof window !== "undefined") return;
+  if (!import.meta.env.SSR) return;
   const globalForAutopilot = globalThis as unknown as {
     __autopilotSchedulerStarted?: boolean;
     __autopilotCheckInterval?: any;

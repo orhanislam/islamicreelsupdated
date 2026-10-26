@@ -46,6 +46,7 @@ async function fetchBufferWithRetry(url: string, retries = 2): Promise<ArrayBuff
 }
 
 async function sliceQuranCdnAudio(audioUrl: string, startSec: number, endSec: number): Promise<{ dataUrl: string; actualDuration: number } | null> {
+  if (!import.meta.env.SSR) return null;
   try {
     const fs = (await import("node:fs")).promises;
     const os = await import("node:os");
@@ -177,6 +178,9 @@ export async function fetchAyahDirect(input: {
   ayah: number;
   ayahEnd?: number;
 }): Promise<AyahData> {
+  if (!import.meta.env.SSR) {
+    throw new Error("fetchAyahDirect is a server-only function");
+  }
   const surah = Math.floor(Number(input.surah));
   const ayah = Math.floor(Number(input.ayah));
   let ayahEnd =

@@ -1,19 +1,8 @@
-import fs from "node:fs";
-import path from "node:path";
-
 function getApiKeys(): string[] {
   const keys: string[] = [];
-  try {
-    const envPath = path.resolve(process.cwd(), ".env");
-    if (fs.existsSync(envPath)) {
-      const content = fs.readFileSync(envPath, "utf-8");
-      const matches = Array.from(content.matchAll(/GEMINI_API_KEY=["']?([^"'\r\n]+)["']?/g));
-      if (matches.length > 0) {
-        keys.push(matches[matches.length - 1][1].trim());
-      }
-    }
-  } catch {}
-  if (process.env.GEMINI_API_KEY) keys.push(process.env.GEMINI_API_KEY);
+  if (typeof process !== "undefined" && process.env?.GEMINI_API_KEY) {
+    keys.push(process.env.GEMINI_API_KEY);
+  }
   return Array.from(new Set(keys.filter(Boolean)));
 }
 

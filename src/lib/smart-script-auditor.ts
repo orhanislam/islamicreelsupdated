@@ -8,7 +8,8 @@
  * 4. Render-readiness, subtitle timing bounds, and semantic B-Roll visual alignment
  */
 
-import { sanitizeTheologicalRespect } from "./theological-sanitizer";
+import { sanitizeTheologicalRespect, detectAndHealSalafiTheologicalDeviations } from "./theological-sanitizer";
+export { detectAndHealSalafiTheologicalDeviations };
 import { enrichUnfamiliarQuranicTerms } from "./islamic-glossary";
 import verifiedSharhData from "./data/verified-hadith-sharh.json";
 import { geminiChat } from "./gemini";
@@ -536,107 +537,8 @@ export function detectAndHealFabricatedHadith(proposal: AuditedProposalInput): {
 }
 
 /**
- * Scans and heals Salafi theological deviations (Shirk in Dua, amulets/charms, Ta'weel of Divine Attributes).
+ * Scans and heals Salafi theological deviations (re-exported from theological-sanitizer for pure bundling).
  */
-export function detectAndHealSalafiTheologicalDeviations(text: string): {
-  healedText: string;
-  healed: boolean;
-  fixes: string[];
-} {
-  if (!text) return { healedText: "", healed: false, fixes: [] };
-  const fixes: string[] = [];
-  let s = text;
-  let healed = false;
-
-  // 1. Shirk in Dua / Calling upon the dead or intermediaries (Истигаса към мъртви/аулия)
-  const shirkInDuaPattern = /(?<=^|[^\p{L}\p{N}])(?:мол(?:ете|ите|им|и|е)\s+се\s+на|(?:искай(?:те)?|търс(?:ете|ите|им|и))\s+(?:(?:помощ|закрила|спасение)\s+)?от)\s+(?:светци(?:те)?|аулия(?:та)?|покойници(?:те)?|мъртви(?:те)?|гробове(?:те)?|шейхове(?:те)?)(?:\s+и\s+(?:светци(?:те)?|аулия(?:та)?|покойници(?:те)?|мъртви(?:те)?|гробове(?:те)?|шейхове(?:те)?))*(?=[^\p{L}\p{N}]|$)/giu;
-  const beforeShirk = s;
-  s = s.replace(
-    shirkInDuaPattern,
-    "отправете Вашата дуа и молба ЕДИНСТВЕНО към Аллах Всевишният, без никакви посредници",
-  );
-  if (s !== beforeShirk) {
-    healed = true;
-    fixes.push("🚨 КОРИГИРАНО ТЕОЛОГИЧЕСКО ОТКЛОНЕНИЕ (Таухид ал-Улухийя): Моленето към покойници/светци беше заменено с чиста дуа единствено към Аллах [Коран 72:18]");
-  }
-
-  // 2. Amulets, Talismans, Blue Beads, Evil Eye Charms (Суеверия и амулети)
-  const amuletPattern = /(?<=^|[^\p{L}\p{N}])(?:синьо(?:то)?\s+око(?:\s+против\s+уроци)?|червен(?:ия|ият)?\s+конец(?:\s+против\s+уроци)?|муска(?:та)?(?:\s+(?:пази|защитава|носи))?|талисман(?:ът|а)?(?:\s+(?:пази|носи))?|амулет(?:ът|а)?(?:\s+(?:пази|носи))?|око(?:то)?\s+против\s+уроци)(?=[^\p{L}\p{N}]|$)/giu;
-  const beforeAmulet = s;
-  s = s.replace(
-    amuletPattern,
-    "носенето на амулети и талисмани е забранено в Исляма, а истинската защита е единствено чрез четене на Коран (сурите Ал-Фаляк, Ан-Нас, Аят ал-Курси) и упование в Твореца",
-  );
-  if (s !== beforeAmulet) {
-    healed = true;
-    fixes.push("🚨 КОРИГИРАНО СУЕВЕРИЕ (Ширк в причините): Сини очи и амулети заменени с автентична Сунна рукя и Тауаккул");
-  }
-
-  // 3. Ta'weel / Metaphorical denial of Allah's Attributes (Та'тил и Тахриф)
-  const taweelPattern = /(?<=^|[^\p{L}\p{N}])(?:ръката\s+на\s+аллах\s+е\s+(?:само\s+)?метафора\s+за\s+сила|аллах\s+е\s+навсякъде\s+физически|тронът\s+на\s+аллах\s+е\s+(?:просто\s+)?символ)(?=[^\p{L}\p{N}]|$)/giu;
-  const beforeTaweel = s;
-  s = s.replace(
-    taweelPattern,
-    "Аллах Всевишният е над Своя Трон над седемте небеса, със Своето Знание обхваща всяко нещо, и ние утвърждаваме Неговите Божествени Качества без изкривяване, отричане или оприличаване на творенията",
-  );
-  if (s !== beforeTaweel) {
-    healed = true;
-    fixes.push("🚨 КОРИГИРАНО ОТКЛОНЕНИЕ (Таухид ал-Асма уас-Сифат): Утвърдена чистата Салафитска Акида за Трона и Божествените Атрибути [Коран 42:11]");
-  }
-
-  // 4. Tawheed Reverence: Check for casual diminutive forms of Allah
-  const casualAllah = /(?<=^|[^\p{L}\p{N}])(?:единичък|единичкият|единичният|оня\s+горе|тоя\s+горе)(?=[^\p{L}\p{N}]|$)/giu;
-  const beforeCasual = s;
-  s = s.replace(casualAllah, "Единственият Творец");
-  if (s !== beforeCasual) {
-    healed = true;
-    fixes.push("Коригиран неподходящ израз за Аллах: Заменен с 'Единственият Творец'");
-  }
-
-  // 5. Shirk in Dua / Calling upon the Prophet ﷺ for help or forgiveness after his death
-  const prophetDuaPattern = /(?<=^|[^\p{L}\p{N}])(?:о[,\s]+пратенико\s+на\s+аллах|йа\s+расулуллах|йа\s+пророко|о[,\s]+пророко)\s*[,–—\s]+(?:помогни\s+ми|спаси\s+ме|излекувай\s+ме|прости\s+ми|дай\s+ми)(?=[^\p{L}\p{N}]|$)/giu;
-  const beforeProphetDua = s;
-  s = s.replace(
-    prophetDuaPattern,
-    "отправете Вашата дуа единствено към Аллах Всевишният, Който чува и откликва, а към Пратеника ﷺ изпращаме благослов (саляуат)",
-  );
-  if (s !== beforeProphetDua) {
-    healed = true;
-    fixes.push("🚨 КОРИГИРАНО ТЕОЛОГИЧЕСКО ОТКЛОНЕНИЕ: Дуа се отправя единствено към Аллах Всевишният, без зов към творение [Коран 72:18]");
-  }
-
-  // 6. Swearing by creations / Oaths by other than Allah
-  const oathPattern = /(?<=^|[^\p{L}\p{N}])(?:кълна\s+се\s+в\s+(?:децата|майка|хляба|гроба|пророка|пратеника|небето|земята)|заклевам\s+се\s+в\s+(?:децата|майка|хляба|гроба|пророка|пратеника))(?=[^\p{L}\p{N}]|$)/giu;
-  const beforeOath = s;
-  s = s.replace(oathPattern, "кълна се в Аллах, Твореца на световете");
-  if (s !== beforeOath) {
-    healed = true;
-    fixes.push("🚨 КОРИГИРАНА КЛЕТВА (Ширк Асгар): Клетвата в Исляма е позволена единствено в името на Аллах");
-  }
-
-  // 7. Horoscopes, astrology, fortune-telling
-  const horoscopePattern = /(?<=^|[^\p{L}\p{N}])(?:хороскоп(?:ът|а|и|ите|ата)?|зоди(?:ята|ите|я)?\s+(?:казва|предсказва|определя)|гледане\s+на\s+(?:кафе|карти|ръка|боб)|гадател(?:и|ство|ка)?)(?=[^\p{L}\p{N}]|$)/giu;
-  const beforeHoro = s;
-  s = s.replace(
-    horoscopePattern,
-    "бъдещето и неведомото (ал-Гайб) са известни единствено на Аллах Всевишният, а астрологията и гаданията са грях в Исляма",
-  );
-  if (s !== beforeHoro) {
-    healed = true;
-    fixes.push("🚨 КОРИГИРАНО СУЕВЕРИЕ: Хороскопите и гаданията са отхвърлени, утвърдено знанието на Аллах за Неведомото [Коран 27:65]");
-  }
-
-  // 8. Secular pantheism / "вселената чува / дава / грижи се"
-  const universePattern = /(?<=^|[^\p{L}\p{N}])(?:вселената\s+(?:чува|дава|се\s+грижи|ще\s+ти\s+върне|откликва)|енергията\s+на\s+вселената|космическа\s+енергия)(?=[^\p{L}\p{N}]|$)/giu;
-  const beforeUniverse = s;
-  s = s.replace(universePattern, "Аллах Всевишният, Единственият Творец и Господар на световете");
-  if (s !== beforeUniverse) {
-    healed = true;
-    fixes.push("🚨 КОРИГИРАН СВЕТСКИ ТЕРМИН: Премахнато обожествяване на 'вселената', заменено с Единствения Творец");
-  }
-
-  return { healedText: s, healed, fixes };
-}
 
 /**
  * Asynchronous deep theological inspection using Gemini when dynamic scripts are generated.

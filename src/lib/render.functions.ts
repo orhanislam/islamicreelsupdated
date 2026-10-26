@@ -724,6 +724,9 @@ async function getRenderQueue() {
 }
 
 export async function executeRenderTask(opts: any): Promise<any> {
+  if (!import.meta.env.SSR) {
+    throw new Error("executeRenderTask can only be called on server");
+  }
   const data = opts.data || opts;
   const queue = await getRenderQueue();
   return await queue.add(async () => {
@@ -1979,6 +1982,9 @@ export async function startServerRenderJobDirect(input: {
   title: string;
   isAutopilot?: boolean;
 }): Promise<{ jobId: string; status: string }> {
+  if (!import.meta.env.SSR) {
+    throw new Error("startServerRenderJobDirect can only be called on server");
+  }
   const { data, title, isAutopilot } = input;
   const jobId = `job_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
   const preKit = await generateAndStorePostRenderSocialKit({
@@ -2177,10 +2183,10 @@ export function scheduleServerMaintenance() {
 }
 
 if (
-  typeof window === "undefined" &&
+  import.meta.env.SSR &&
   typeof process !== "undefined" &&
   process.env.NODE_ENV !== "test" &&
-  !process.argv.some((a) => a.includes("test")) &&
+  !process.argv?.some?.((a) => a.includes("test")) &&
   !maintenanceTimerStarted
 ) {
   try {
