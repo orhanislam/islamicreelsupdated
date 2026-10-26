@@ -1,11 +1,11 @@
 import { createServerFn } from "@tanstack/react-start";
 import { geminiChat, type ChatMessage } from "./gemini";
 import { fetchSunnahHadith, fetchSunnahHadithDirect, type SunnahCollection } from "./sunnah.functions";
-import { fetchAyah } from "./quran.functions";
+import { fetchAyah, fetchAyahDirect } from "./quran.functions";
 import { translateToBulgarian, translateToBulgarianDirect } from "./translate.functions";
-import { searchPexelsVideos, matchTheologicalConcept } from "./pexels.functions";
-import { synthesizeHadithNarration } from "./tts.functions";
-import { startServerRenderJob, getJobsDir } from "./render.functions";
+import { searchPexelsVideos, searchPexelsVideosDirect, fetchMultiSceneBRollDirect, matchTheologicalConcept } from "./pexels.functions";
+import { synthesizeHadithNarration, synthesizeHadithNarrationDirect } from "./tts.functions";
+import { startServerRenderJob, startServerRenderJobDirect, getJobsDir } from "./render.functions";
 import { getAiMemory, updateAiMemory, readAiMemory, recordProposalUsages, recordProposalUsagesDirect } from "./memory.functions";
 import { createTask, updateTask, listTasks, clearAllTasks } from "./tasks-engine";
 import {
@@ -2528,9 +2528,12 @@ export function buildExplainedNarrationText(params: {
   return sanitizeTheologicalRespect(joined);
 }
 
-export const confirmAndGenerateVideo = createServerFn({ method: "POST" })
-  .validator((input: { proposal: VideoProposal; force?: boolean; isAutopilot?: boolean }) => input)
-  .handler(async ({ data: { proposal, force, isAutopilot } }) => {
+export async function confirmAndGenerateVideoDirect(input: {
+  proposal: VideoProposal;
+  force?: boolean;
+  isAutopilot?: boolean;
+}) {
+    let { proposal, force, isAutopilot } = input;
     // 1. Full 100% Salafi & Grammar Autonomous Self-Healing on explanation, guidance, and dalil
     const { proposal: auditedProposal, report } = auditAndRefineProposal(proposal as any, { maxPasses: 5 });
     proposal = auditedProposal as VideoProposal;
@@ -2661,7 +2664,7 @@ export const confirmAndGenerateVideo = createServerFn({ method: "POST" })
       bulgarian = auditAndRefineNarrationScript(bulgarian).refinedNarration;
 
       try {
-        const narr = await synthesizeHadithNarration({ data: { text: bulgarian } });
+        const narr = await synthesizeHadithNarrationDirect(bulgarian);
         audioUrl = `data:${narr.mimeType || "audio/mp3"};base64,${narr.base64}`;
         bulgarianWordTimings = narr.wordTimings;
       } catch (e) {
@@ -2700,7 +2703,7 @@ export const confirmAndGenerateVideo = createServerFn({ method: "POST" })
       bulgarian = auditAndRefineNarrationScript(bulgarian).refinedNarration;
 
       try {
-        const narr = await synthesizeHadithNarration({ data: { text: bulgarian } });
+        const narr = await synthesizeHadithNarrationDirect(bulgarian);
         audioUrl = `data:${narr.mimeType || "audio/mp3"};base64,${narr.base64}`;
         bulgarianWordTimings = narr.wordTimings;
       } catch (e) {
@@ -2767,7 +2770,7 @@ export const confirmAndGenerateVideo = createServerFn({ method: "POST" })
 
       try {
         const ayahEnd = ayah + count - 1;
-        const q = await fetchAyah({ data: { surah, ayah, ayahEnd } });
+        const q = await fetchAyahDirect({ surah, ayah, ayahEnd });
         arabic = q.arabic;
         english = q.english;
         reference = `Сура ${q.surahName} (${surah}:${ayah}${count > 1 ? `-${ayah + count - 1}` : ""})`;
@@ -2789,13 +2792,11 @@ export const confirmAndGenerateVideo = createServerFn({ method: "POST" })
         ) {
           bulgarian = sanitizeTheologicalRespect(enrichUnfamiliarQuranicTerms(candidateDalil));
         } else {
-          const t = await translateToBulgarian({
-            data: {
-              english: q.english,
-              sourceRef: reference,
-              arabic: q.arabic,
-              ayahBounds: q.ayahBounds,
-            },
+          const t = await translateToBulgarianDirect({
+            english: q.english,
+            sourceRef: reference,
+            arabic: q.arabic,
+            ayahBounds: q.ayahBounds,
           });
           bulgarian = sanitizeTheologicalRespect(
             enrichUnfamiliarQuranicTerms(
@@ -2834,7 +2835,7 @@ export const confirmAndGenerateVideo = createServerFn({ method: "POST" })
         bulgarian = auditAndRefineNarrationScript(bulgarian).refinedNarration;
 
         try {
-          const narr = await synthesizeHadithNarration({ data: { text: bulgarian } });
+          const narr = await synthesizeHadithNarrationDirect(bulgarian);
           audioUrl = `data:${narr.mimeType || "audio/mp3"};base64,${narr.base64}`;
           bulgarianWordTimings = narr.wordTimings;
         } catch (e) {
@@ -2865,11 +2866,9 @@ export const confirmAndGenerateVideo = createServerFn({ method: "POST" })
 
     let bestVid = "https://videos.pexels.com/video-files/30054113/12891205_1080_1920_30fps.mp4";
     try {
-      const vidSearch = await searchPexelsVideos({
-        data: {
-          text: resolvedQuery,
-          minDuration: 30,
-        },
+      const vidSearch = await searchPexelsVideosDirect({
+        text: resolvedQuery,
+        minDuration: 30,
       });
       if (vidSearch.videos && vidSearch.videos.length > 0) {
         bestVid = vidSearch.videos[0].link;
@@ -2882,17 +2881,14 @@ export const confirmAndGenerateVideo = createServerFn({ method: "POST" })
     let bRollUrls: string[] | undefined;
     let bRollSegments: any[] | undefined;
     try {
-      const { fetchMultiSceneBRoll } = await import("./pexels.functions");
       const estAudioDur = bulgarianWordTimings && bulgarianWordTimings.length > 0
         ? Math.max(...bulgarianWordTimings.map((t) => Number(t.end) || 0))
         : undefined;
-      const bRollResult = await fetchMultiSceneBRoll({
-        data: {
-          query: resolvedQuery,
-          text: bulgarian,
-          wordTimings: bulgarianWordTimings,
-          audioDuration: estAudioDur,
-        },
+      const bRollResult = await fetchMultiSceneBRollDirect({
+        query: resolvedQuery,
+        text: bulgarian,
+        wordTimings: bulgarianWordTimings,
+        audioDuration: estAudioDur,
       });
       if (bRollResult.clips && bRollResult.clips.length > 0) {
         bRollUrls = bRollResult.clips;
@@ -2907,39 +2903,37 @@ export const confirmAndGenerateVideo = createServerFn({ method: "POST" })
 
     const subtitleStyle = proposal.subtitlePosition || "middle";
 
-    const { jobId } = await startServerRenderJob({
+    const { jobId } = await startServerRenderJobDirect({
+      title: proposal.title || topic || reference,
+      isAutopilot: Boolean(isAutopilot),
       data: {
-        title: proposal.title || topic || reference,
+        backgroundUrl: bestVid,
+        backgroundVideoUrl: bestVid,
+        arabic,
+        bulgarian,
+        reference: topic, // Display TOPIC at the top of the video (SAFE_TOP + 40)!
+        topic,
+        scriptureReference: reference,
+        viralTitle: topic,
+        style: subtitleStyle,
+        tiktokTheme: proposal.tiktokTheme || "hormozi",
+        subtitlePosition: subtitleStyle,
+        subtitleSlicingMode: "phrase",
+        pacingMode: "punchy",
+        audioUrl: audioUrl || undefined,
+        requireAudio: Boolean(audioUrl),
+        fallbackDuration: 10,
+        wordSegments: undefined, // undefined to force punchy mode
+        ayahBounds: undefined, // undefined to force punchy mode
+        arabicWordCount: undefined,
+        bulgarianWordTimings,
+        quality: "1080p",
+        bRollUrls,
+        bRollSegments,
         isAutopilot: Boolean(isAutopilot),
-        data: {
-          backgroundUrl: bestVid,
-          backgroundVideoUrl: bestVid,
-          arabic,
-          bulgarian,
-          reference: topic, // Display TOPIC at the top of the video (SAFE_TOP + 40)!
-          topic,
-          scriptureReference: reference,
-          viralTitle: topic,
-          style: subtitleStyle,
-          tiktokTheme: proposal.tiktokTheme || "hormozi",
-          subtitlePosition: subtitleStyle,
-          subtitleSlicingMode: "phrase",
-          pacingMode: "punchy",
-          audioUrl: audioUrl || undefined,
-          requireAudio: Boolean(audioUrl),
-          fallbackDuration: 10,
-          wordSegments: undefined, // undefined to force punchy mode
-          ayahBounds: undefined, // undefined to force punchy mode
-          arabicWordCount: undefined,
-          bulgarianWordTimings,
-          quality: proposal.quality || "1080p", // create.tsx uses 1080p instead of high
-          bRollUrls,
-          bRollSegments,
-          isAutopilot: Boolean(isAutopilot),
-          scriptWorkflow: proposal.scriptWorkflow,
-          fullDalilText: proposal.fullDalilText,
-          summaryBg: proposal.summaryBg,
-        },
+        scriptWorkflow: proposal.scriptWorkflow,
+        fullDalilText: proposal.fullDalilText,
+        summaryBg: proposal.summaryBg,
       },
     });
 
@@ -2965,6 +2959,12 @@ export const confirmAndGenerateVideo = createServerFn({ method: "POST" })
       proposal,
       report,
     };
+}
+
+export const confirmAndGenerateVideo = createServerFn({ method: "POST" })
+  .validator((input: { proposal: VideoProposal; force?: boolean; isAutopilot?: boolean }) => input)
+  .handler(async ({ data }) => {
+    return await confirmAndGenerateVideoDirect(data);
   });
 
 export const approveAndRenderAssistantIdea = confirmAndGenerateVideo;
@@ -3319,7 +3319,7 @@ export async function triggerBackgroundTaskWorker() {
               progress: pct,
               message: `Обработка на видео ${i + 1} от ${proposals.length}: ${prop.title}`,
             });
-            await confirmAndGenerateVideo({ data: { proposal: prop } });
+            await confirmAndGenerateVideoDirect({ proposal: prop });
           }
           await updateTask(nextTask.id, {
             status: "completed",

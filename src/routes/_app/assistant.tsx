@@ -12,7 +12,7 @@ import { getAiMemory, updateAiMemory, type AiMemory } from "@/lib/memory.functio
 import { getOneMonthCooldownSummary, recordRejectedProposalToHistory } from "@/lib/generation-history.functions";
 import { generateViralThumbnail, getServerJobThumbnail } from "@/lib/thumbnail.functions";
 import { formatViralSocialCaption, generateTikTokSEOTitle } from "@/lib/caption.functions";
-import { getAutopilotConfig, updateAutopilotConfig, triggerAutopilotCycleNow, testAutopilotWebhook, type AutopilotConfig } from "@/lib/autopilot.functions";
+import { getAutopilotConfig, updateAutopilotConfig, triggerAutopilotCycleNow, testAutopilotWebhook, checkAndTriggerScheduledAutopilot, type AutopilotConfig } from "@/lib/autopilot.functions";
 import { getBulgarianTime, getNextBulgarianRun } from "@/lib/bulgarian-time";
 import { listServerRenderJobs } from "@/lib/render.functions";
 import { sanitizeFilename } from "@/lib/download-media";
@@ -127,7 +127,9 @@ function AssistantPage() {
   useEffect(() => {
     const timer = setInterval(() => {
       setBgClock(getBulgarianTime());
-    }, 10000);
+      // Heartbeat: Check schedule in Bulgarian time and trigger autonomous cycle if slot is reached
+      checkAndTriggerScheduledAutopilot().catch(() => {});
+    }, 15000);
     return () => clearInterval(timer);
   }, []);
   const autoDownloadedRef = useRef<Set<string>>(new Set());
@@ -1490,7 +1492,13 @@ function AssistantPage() {
               <Button
                 variant={autopilotConfig.enabled ? "default" : "outline"}
                 size="sm"
-                onClick={() => handleUpdateAutopilot({ enabled: !autopilotConfig.enabled })}
+                onClick={() => {
+                  const nextEnabled = !autopilotConfig.enabled;
+                  handleUpdateAutopilot({
+                    enabled: nextEnabled,
+                    uploadPostEnabled: nextEnabled ? true : autopilotConfig.uploadPostEnabled,
+                  });
+                }}
                 className={`rounded-xl text-xs font-bold cursor-pointer ${
                   autopilotConfig.enabled
                     ? "bg-emerald-600 hover:bg-emerald-500 text-white"
@@ -1784,6 +1792,36 @@ function AssistantPage() {
                     );
                   })}
                 </div>
+              </div>
+            </div>
+
+            <div className="pt-1 border-t border-border/50 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <span className="text-[11px] font-semibold text-emerald-300">
+                🎯 Режим на качване в TikTok (в точния зададен час):
+              </span>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleUpdateAutopilot({ tiktokPostMode: "DIRECT_POST" })}
+                  className={`px-3 py-1.5 rounded-lg text-[11px] font-bold border transition cursor-pointer ${
+                    (autopilotConfig.tiktokPostMode || "DIRECT_POST") === "DIRECT_POST"
+                      ? "bg-emerald-500/25 border-emerald-400 text-emerald-200"
+                      : "bg-background border-border/60 text-muted-foreground"
+                  }`}
+                >
+                  🚀 Директно публикуване (DIRECT_POST HD)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleUpdateAutopilot({ tiktokPostMode: "MEDIA_UPLOAD" })}
+                  className={`px-3 py-1.5 rounded-lg text-[11px] font-bold border transition cursor-pointer ${
+                    autopilotConfig.tiktokPostMode === "MEDIA_UPLOAD"
+                      ? "bg-amber-500/25 border-amber-400 text-amber-200"
+                      : "bg-background border-border/60 text-muted-foreground"
+                  }`}
+                >
+                  📥 В Чернови / Drafts (MEDIA_UPLOAD)
+                </button>
               </div>
             </div>
           </div>

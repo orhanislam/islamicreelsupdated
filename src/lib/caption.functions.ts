@@ -377,7 +377,8 @@ export function formatViralSocialCaption(
   let actionBlock = "";
   if (actionStep) {
     const cleanAction = actionStep
-      .replace(/^(?:действие|дуа|action|dua)\s*:\s*/i, "")
+      .replace(/^(?:действие|напътствие|призив|дуа|action|dua)\s*:\s*/i, "")
+      .replace(/^(?:действие|напътствие|призив|дуа|action|dua)\s*:\s*/i, "")
       .trim();
     const isDua = /астагфируллах|субханаллах|алхамдулиллях|аллаху|ля иляха|дуа|молитва|зикр|дуа:/i.test(actionStep);
     const actionLabel = isDua ? "🤍 Дуа:" : "📌 Напътствие:";

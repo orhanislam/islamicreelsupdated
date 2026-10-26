@@ -1434,7 +1434,9 @@ export function scoreVideo(v: PexelsVideo, file: PexelsVideoFile, targetMin = 30
 }
 
 export function pickBestFile(v: PexelsVideo): PexelsVideoFile | undefined {
-  const mp4s = (v.video_files || []).filter((f) => f.file_type === "video/mp4");
+  const allMp4s = (v.video_files || []).filter((f) => f.file_type === "video/mp4");
+  const cleanMp4s = allMp4s.filter((f) => !String(f.link || "").includes("images.pexels.com/videos/"));
+  const mp4s = cleanMp4s.length > 0 ? cleanMp4s : allMp4s;
   if (!mp4s.length) return (v.video_files || [])[0];
   mp4s.sort((a, b) => {
     // 1. Vertical orientation first (height >= width)
@@ -1575,54 +1577,63 @@ export const searchPexelsPhotos = createServerFn({ method: "POST" })
     };
   });
 
+export async function searchPexelsVideosDirect(data: {
+  text: string;
+  query?: string;
+  avoid?: string[];
+  minDuration?: number;
+}) {
+  const key = process.env.PEXELS_API_KEY;
+  if (!key) throw new Error("Pexels не е конфигуриран");
+  const targetMin = data.minDuration ?? 30;
+
+  if (data.query?.trim()) {
+    const safeQ = sanitizeSearchQuery(data.query.trim());
+    const vs = await pexelsVideoQuery(key, safeQ);
+    const safeBuilt = await getHalalVideos(vs, targetMin, 4);
+    return {
+      query: safeQ,
+      theme: "",
+      mood: "calm" as Mood,
+      queriesTried: [safeQ],
+      videos: safeBuilt,
+    };
+  }
+
+  const analysis = await analyzeVisualThemes(data.text, data.avoid);
+  const tried: string[] = [];
+  let chosenQuery = analysis.queries[0];
+  let videos: Out[] = [];
+  for (const q of analysis.queries) {
+    const safeQ = sanitizeSearchQuery(q);
+    tried.push(safeQ);
+    const vs = await pexelsVideoQuery(key, safeQ);
+    const safeBuilt = await getHalalVideos(vs, targetMin, 3);
+    if (safeBuilt.length >= 3) {
+      chosenQuery = safeQ;
+      videos = safeBuilt;
+      break;
+    }
+    if (safeBuilt.length > videos.length) {
+      videos = safeBuilt;
+      chosenQuery = safeQ;
+    }
+  }
+
+  return {
+    query: chosenQuery,
+    theme: analysis.theme,
+    mood: analysis.mood,
+    videos,
+  };
+}
+
 export const searchPexelsVideos = createServerFn({ method: "POST" })
   .inputValidator(
     (input: { text: string; query?: string; avoid?: string[]; minDuration?: number }) => input,
   )
   .handler(async ({ data }) => {
-    const key = process.env.PEXELS_API_KEY;
-    if (!key) throw new Error("Pexels не е конфигуриран");
-    const targetMin = data.minDuration ?? 30;
-
-    if (data.query?.trim()) {
-      const safeQ = sanitizeSearchQuery(data.query.trim());
-      const vs = await pexelsVideoQuery(key, safeQ);
-      const safeBuilt = await getHalalVideos(vs, targetMin, 4);
-      return {
-        query: safeQ,
-        theme: "",
-        mood: "calm" as Mood,
-        queriesTried: [safeQ],
-        videos: safeBuilt,
-      };
-    }
-
-    const analysis = await analyzeVisualThemes(data.text, data.avoid);
-    const tried: string[] = [];
-    let chosenQuery = analysis.queries[0];
-    let videos: Out[] = [];
-    for (const q of analysis.queries) {
-      const safeQ = sanitizeSearchQuery(q);
-      tried.push(safeQ);
-      const vs = await pexelsVideoQuery(key, safeQ);
-      const safeBuilt = await getHalalVideos(vs, targetMin, 3);
-      if (safeBuilt.length >= 3) {
-        chosenQuery = safeQ;
-        videos = safeBuilt;
-        break;
-      }
-      if (safeBuilt.length > videos.length) {
-        videos = safeBuilt;
-        chosenQuery = safeQ;
-      }
-    }
-
-    return {
-      query: chosenQuery,
-      theme: analysis.theme,
-      mood: analysis.mood,
-      videos,
-    };
+    return await searchPexelsVideosDirect(data);
   });
 
 export async function fetchMultiSceneBRollDirect(data: {

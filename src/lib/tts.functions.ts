@@ -338,94 +338,119 @@ export function normalizePhoneticsToDisplayWord(word: string): string {
     .replace(/(?<=^|[^\p{L}\p{N}])суджууд/gui, "суджуд");
 }
 
-export const synthesizeHadithNarration = createServerFn({ method: "POST" })
-  .validator((input: { text: string; reference?: string }) => {
-    const text = String(input.text ?? "").trim();
-    if (!text) throw new Error("Празен текст за озвучаване");
-    if (text.length > 4500) throw new Error("Текстът е твърде дълъг за един запис");
-    return { text, reference: input.reference ?? "" };
-  })
-  .handler(async ({ data }): Promise<{
-    base64: string;
-    mimeType: string;
-    wordTimings: WordTiming[];
-  }> => {
-    // Authentically normalize Islamic Arabic terminology for Salafi Arabic diction
-    let cleaned = normalizeIslamicArabicPhoneticsForTts(data.text);
-    // Explicitly normalize Bulgarian numbers, citations, and symbols (#1, №1, 2:255, ordinals, percentages) for natural verbalization
-    cleaned = normalizeBulgarianNumbersForTts(cleaned);
+export async function synthesizeHadithNarrationDirect(data: {
+  text: string;
+  reference?: string;
+}): Promise<{
+  base64: string;
+  mimeType: string;
+  wordTimings: WordTiming[];
+}> {
+  const textInput = String(data.text ?? "").trim();
+  if (!textInput) throw new Error("Празен текст за озвучаване");
+  if (textInput.length > 4500) throw new Error("Текстът е твърде дълъг за един запис");
 
-    let audioBuffer: any = null;
-    let exactWordTimings: WordTiming[] | null = null;
-    const BufferMod = (await import("node:buffer")).Buffer;
+  // Authentically normalize Islamic Arabic terminology for Salafi Arabic diction
+  let cleaned = normalizeIslamicArabicPhoneticsForTts(textInput);
+  // Explicitly normalize Bulgarian numbers, citations, and symbols (#1, №1, 2:255, ordinals, percentages) for natural verbalization
+  cleaned = normalizeBulgarianNumbersForTts(cleaned);
 
-    const elevenKey = process.env.ELEVENLABS_API_KEY || process.env.VITE_ELEVENLABS_API_KEY;
-    const elevenVoice = process.env.ELEVENLABS_VOICE_ID || process.env.VITE_ELEVENLABS_VOICE_ID || "pNInz6obpgDQGcFmaJgB"; // Default: Adam (Deep, realistic male) / Multilingual v2
+  let audioBuffer: any = null;
+  let exactWordTimings: WordTiming[] | null = null;
+  const BufferMod = (await import("node:buffer")).Buffer;
 
-    if (elevenKey) {
-      try {
-        console.log("[tts] Synthesizing with ElevenLabs API (with-timestamps)...");
-        const cleanForEleven = cleaned
-          .replace(/<break[^>]*\/>/gi, ",\n\n")
-          .replace(/<[^>]+>/g, " ")
-          .replace(/\[(?:tiktok|carousel|карусел|видео|кука|далил|обяснение|напътствие|hook|dalil|explanation|guidance|action)[^\]]*\]/gi, " ")
-          .replace(/[\[\]]/g, " ")
-          .replace(/\.{2,}/g, ", ")
-          .replace(/…+/g, ", ")
-          .replace(/,\s*,+/g, ", ")
-          .replace(/\s{2,}/g, " ")
-          .trim();
-        const res = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${elevenVoice}/with-timestamps`, {
-          method: "POST",
-          headers: {
-            "xi-api-key": elevenKey,
-            "Content-Type": "application/json",
+  const elevenKey = process.env.ELEVENLABS_API_KEY || process.env.VITE_ELEVENLABS_API_KEY;
+  const elevenVoice = process.env.ELEVENLABS_VOICE_ID || process.env.VITE_ELEVENLABS_VOICE_ID || "pNInz6obpgDQGcFmaJgB"; // Default: Adam (Deep, realistic male) / Multilingual v2
+
+  if (elevenKey) {
+    try {
+      console.log("[tts] Synthesizing with ElevenLabs API (with-timestamps)...");
+      const cleanForEleven = cleaned
+        .replace(/<break[^>]*\/>/gi, ",\n\n")
+        .replace(/<[^>]+>/g, " ")
+        .replace(/\[(?:tiktok|carousel|карусел|видео|кука|далил|обяснение|напътствие|hook|dalil|explanation|guidance|action)[^\]]*\]/gi, " ")
+        .replace(/[\[\]]/g, " ")
+        .replace(/\.{2,}/g, ", ")
+        .replace(/…+/g, ", ")
+        .replace(/,\s*,+/g, ", ")
+        .replace(/\s{2,}/g, " ")
+        .trim();
+      const res = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${elevenVoice}/with-timestamps`, {
+        method: "POST",
+        headers: {
+          "xi-api-key": elevenKey,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          text: cleanForEleven,
+          model_id: "eleven_multilingual_v2",
+          voice_settings: {
+            stability: 0.5,
+            similarity_boost: 0.8,
           },
-          body: JSON.stringify({
-            text: cleanForEleven,
-            model_id: "eleven_multilingual_v2",
-            voice_settings: {
-              stability: 0.5,
-              similarity_boost: 0.8,
-            },
-          }),
-        });
-        if (res.ok) {
-          const jsonRes = await res.json();
-          if (jsonRes.audio_base64) {
-            audioBuffer = BufferMod.from(jsonRes.audio_base64, "base64");
-            if (jsonRes.alignment) {
-              const parsed = parseElevenLabsTimings(jsonRes.alignment);
-              if (parsed.length > 0) {
-                exactWordTimings = parsed;
-              }
-            }
-            console.log("[tts] Successfully generated audio & exact timestamps via ElevenLabs");
-          }
-        } else {
-          console.warn(`[tts] ElevenLabs API error ${res.status}: ${await res.text()}, falling back to EdgeTTS`);
-        }
-      } catch (err) {
-        console.warn("[tts] ElevenLabs request failed, falling back to EdgeTTS:", err);
-      }
-    }
-
-    if (!audioBuffer) {
-      const { EdgeTTS } = await import("node-edge-tts");
-      const tts = new EdgeTTS({
-        voice: "bg-BG-BorislavNeural", // Premium natural male voice for Bulgarian
-        lang: "bg-BG",
-        outputFormat: "audio-24khz-48kbitrate-mono-mp3",
-        rate: "-2%",
-        pitch: "-2Hz",
+        }),
       });
+      if (res.ok) {
+        const jsonRes = await res.json();
+        if (jsonRes.audio_base64) {
+          audioBuffer = BufferMod.from(jsonRes.audio_base64, "base64");
+          if (jsonRes.alignment) {
+            const parsed = parseElevenLabsTimings(jsonRes.alignment);
+            if (parsed.length > 0) {
+              exactWordTimings = parsed;
+            }
+          }
+          console.log("[tts] Successfully generated audio & exact timestamps via ElevenLabs");
+        }
+      } else {
+        console.warn(`[tts] ElevenLabs API error ${res.status}: ${await res.text()}, falling back to EdgeTTS`);
+      }
+    } catch (err) {
+      console.warn("[tts] ElevenLabs request failed, falling back to EdgeTTS:", err);
+    }
+  }
 
+  if (!audioBuffer) {
+    const { EdgeTTS } = await import("node-edge-tts");
+    const tts = new EdgeTTS({
+      voice: "bg-BG-BorislavNeural", // Premium natural male voice for Bulgarian
+      lang: "bg-BG",
+      outputFormat: "audio-24khz-48kbitrate-mono-mp3",
+      rate: "-2%",
+      pitch: "-2Hz",
+    });
+
+    try {
+      const os = await import("os");
+      const path = await import("path");
+      const fs = await import("fs/promises");
+
+      const tmpPath = path.join(os.tmpdir(), `tts-${Date.now()}-${Math.random().toString(36).slice(2)}.mp3`);
+      const cleanForEdge = cleaned
+        .replace(/<break[^>]*\/>/gi, ",\n\n")
+        .replace(/<[^>]+>/g, " ")
+        .replace(/\[(?:tiktok|carousel|карусел|видео|кука|далил|обяснение|напътствие|hook|dalil|explanation|guidance|action)[^\]]*\]/gi, " ")
+        .replace(/[\[\]]/g, " ")
+        .replace(/\.{2,}/g, ", ")
+        .replace(/…+/g, ", ")
+        .replace(/,\s*,+/g, ", ")
+        .replace(/\s{2,}/g, " ")
+        .trim();
+      await tts.ttsPromise(cleanForEdge, tmpPath);
+      audioBuffer = await fs.readFile(tmpPath);
+      await fs.unlink(tmpPath).catch(() => {});
+    } catch (e: any) {
+      console.warn("[tts] Node EdgeTTS failed, trying Python edge-tts realistic male voice:", e);
       try {
         const os = await import("os");
         const path = await import("path");
         const fs = await import("fs/promises");
+        const { execFile } = await import("child_process");
+        const util = await import("util");
+        const execFileAsync = util.promisify(execFile);
 
-        const tmpPath = path.join(os.tmpdir(), `tts-${Date.now()}-${Math.random().toString(36).slice(2)}.mp3`);
+        const tmpPyPath = path.join(os.tmpdir(), `py-tts-${Date.now()}.mp3`);
+        const tmpVttPath = path.join(os.tmpdir(), `py-tts-${Date.now()}.vtt`);
         const cleanForEdge = cleaned
           .replace(/<break[^>]*\/>/gi, ",\n\n")
           .replace(/<[^>]+>/g, " ")
@@ -436,23 +461,27 @@ export const synthesizeHadithNarration = createServerFn({ method: "POST" })
           .replace(/,\s*,+/g, ", ")
           .replace(/\s{2,}/g, " ")
           .trim();
-        await tts.ttsPromise(cleanForEdge, tmpPath);
-        audioBuffer = await fs.readFile(tmpPath);
-        await fs.unlink(tmpPath).catch(() => {});
-      } catch (e: any) {
-        console.warn("[tts] Node EdgeTTS failed, trying Python edge-tts realistic male voice:", e);
+        await execFileAsync("edge-tts", [
+          "--voice", "bg-BG-BorislavNeural",
+          "--text", cleanForEdge,
+          "--write-media", tmpPyPath,
+          "--write-subtitles", tmpVttPath
+        ]);
+        audioBuffer = await fs.readFile(tmpPyPath);
         try {
-          const os = await import("os");
-          const path = await import("path");
-          const fs = await import("fs/promises");
-          const { execFile } = await import("child_process");
-          const util = await import("util");
-          const execFileAsync = util.promisify(execFile);
-
-          const tmpPyPath = path.join(os.tmpdir(), `py-tts-${Date.now()}.mp3`);
-          const tmpVttPath = path.join(os.tmpdir(), `py-tts-${Date.now()}.vtt`);
-          const cleanForEdge = cleaned
-            .replace(/<break[^>]*\/>/gi, ",\n\n")
+          const vttContent = await fs.readFile(tmpVttPath, "utf-8");
+          const parsedVtt = parseVttTimings(vttContent);
+          if (parsedVtt.length > 0) {
+            exactWordTimings = parsedVtt;
+          }
+        } catch { /* ignore vtt parse errors */ }
+        await fs.unlink(tmpPyPath).catch(() => {});
+        await fs.unlink(tmpVttPath).catch(() => {});
+      } catch (pyErr) {
+        console.warn("[tts] Python edge-tts failed, falling back to Google TTS:", pyErr);
+        try {
+          const cleanForGoogle = cleaned
+            .replace(/<break[^>]*\/>/gi, ", ")
             .replace(/<[^>]+>/g, " ")
             .replace(/\[(?:tiktok|carousel|карусел|видео|кука|далил|обяснение|напътствие|hook|dalil|explanation|guidance|action)[^\]]*\]/gi, " ")
             .replace(/[\[\]]/g, " ")
@@ -461,110 +490,92 @@ export const synthesizeHadithNarration = createServerFn({ method: "POST" })
             .replace(/,\s*,+/g, ", ")
             .replace(/\s{2,}/g, " ")
             .trim();
-          await execFileAsync("edge-tts", [
-            "--voice", "bg-BG-BorislavNeural",
-            "--text", cleanForEdge,
-            "--write-media", tmpPyPath,
-            "--write-subtitles", tmpVttPath
-          ]);
-          audioBuffer = await fs.readFile(tmpPyPath);
-          try {
-            const vttContent = await fs.readFile(tmpVttPath, "utf-8");
-            const parsedVtt = parseVttTimings(vttContent);
-            if (parsedVtt.length > 0) {
-              exactWordTimings = parsedVtt;
-            }
-          } catch { /* ignore vtt parse errors */ }
-          await fs.unlink(tmpPyPath).catch(() => {});
-          await fs.unlink(tmpVttPath).catch(() => {});
-        } catch (pyErr) {
-          console.warn("[tts] Python edge-tts failed, falling back to Google TTS:", pyErr);
-          try {
-            const cleanForGoogle = cleaned
-              .replace(/<break[^>]*\/>/gi, ", ")
-              .replace(/<[^>]+>/g, " ")
-              .replace(/\[(?:tiktok|carousel|карусел|видео|кука|далил|обяснение|напътствие|hook|dalil|explanation|guidance|action)[^\]]*\]/gi, " ")
-              .replace(/[\[\]]/g, " ")
-              .replace(/\.{2,}/g, ", ")
-              .replace(/…+/g, ", ")
-              .replace(/,\s*,+/g, ", ")
-              .replace(/\s{2,}/g, " ")
-              .trim();
-            const base64Audio = await googleTTS.getAudioBase64(cleanForGoogle.slice(0, 200), {
-              lang: "bg",
-              slow: false,
-              host: "https://translate.google.com",
-              timeout: 10000,
-            });
-            audioBuffer = BufferMod.from(base64Audio, "base64");
-          } catch (gErr: any) {
-            throw new Error("Грешка при генериране на аудио озвучаване: " + (e?.message || gErr?.message || "Неуспешен запис"));
-          }
+          const base64Audio = await googleTTS.getAudioBase64(cleanForGoogle.slice(0, 200), {
+            lang: "bg",
+            slow: false,
+            host: "https://translate.google.com",
+            timeout: 10000,
+          });
+          audioBuffer = BufferMod.from(base64Audio, "base64");
+        } catch (gErr: any) {
+          throw new Error("Грешка при генериране на аудио озвучаване: " + (e?.message || gErr?.message || "Неуспешен запис"));
         }
       }
     }
+  }
 
-    // Get exact audio duration (probe via ffprobe with fallback to mp3Duration)
-    let duration = 5; // fallback
+  // Get exact audio duration (probe via ffprobe with fallback to mp3Duration)
+  let duration = 5; // fallback
+  try {
+    const { execFile } = await import("child_process");
+    const util = await import("util");
+    const execFileAsync = util.promisify(execFile);
+    const os = await import("os");
+    const path = await import("path");
+    const fs = await import("fs/promises");
+    const tmpProbe = path.join(os.tmpdir(), `probe-${Date.now()}-${Math.random().toString(36).slice(2)}.mp3`);
+    await fs.writeFile(tmpProbe, audioBuffer);
     try {
-      const { execFile } = await import("child_process");
-      const util = await import("util");
-      const execFileAsync = util.promisify(execFile);
-      const os = await import("os");
-      const path = await import("path");
-      const fs = await import("fs/promises");
-      const tmpProbe = path.join(os.tmpdir(), `probe-${Date.now()}-${Math.random().toString(36).slice(2)}.mp3`);
-      await fs.writeFile(tmpProbe, audioBuffer);
-      try {
-        const { stdout } = await execFileAsync("ffprobe", [
-          "-v", "error",
-          "-show_entries", "format=duration",
-          "-of", "default=noprint_wrappers=1:nokey=1",
-          tmpProbe,
-        ]);
-        const parsed = parseFloat(stdout.trim());
-        if (!isNaN(parsed) && parsed > 0) {
-          duration = parsed;
-        }
-      } finally {
-        await fs.unlink(tmpProbe).catch(() => {});
+      const { stdout } = await execFileAsync("ffprobe", [
+        "-v", "error",
+        "-show_entries", "format=duration",
+        "-of", "default=noprint_wrappers=1:nokey=1",
+        tmpProbe,
+      ]);
+      const parsed = parseFloat(stdout.trim());
+      if (!isNaN(parsed) && parsed > 0) {
+        duration = parsed;
       }
-    } catch {
-      try {
-        duration = await mp3Duration(audioBuffer);
-      } catch (err) {
-        console.warn("Failed to get MP3 duration", err);
-      }
+    } finally {
+      await fs.unlink(tmpProbe).catch(() => {});
     }
-
-    let wordTimings = exactWordTimings || estimateWordTimings(cleaned, duration);
-
-    if (!exactWordTimings) {
-      try {
-        const { detectSpeechIntervals, alignTimestampsToSpeech } = await import("./audio-align.functions");
-        const base64Url = `data:audio/mp3;base64,${audioBuffer.toString("base64")}`;
-        const speechIntervals = await detectSpeechIntervals(base64Url);
-        if (speechIntervals.length > 0) {
-          wordTimings = alignTimestampsToSpeech(wordTimings, speechIntervals);
-        }
-      } catch (alignErr) {
-        console.warn("Audio alignment fallback:", alignErr);
-      }
+  } catch {
+    try {
+      duration = await mp3Duration(audioBuffer);
+    } catch (err) {
+      console.warn("Failed to get MP3 duration", err);
     }
+  }
 
-    // Remap spoken Arabic Salawat & Sahabah timings back to Bulgarian meaning words ("мир да бъде с него")
-    wordTimings = remapSalawatTimingsToBulgarian(wordTimings);
+  let wordTimings = exactWordTimings || estimateWordTimings(cleaned, duration);
 
-    const { verifyAndCorrectSubtitleSync } = await import("./subtitle-sync.functions");
-    const verified = verifyAndCorrectSubtitleSync(wordTimings, duration);
-    wordTimings = verified.correctedTimings.map((t: WordTiming) => ({
-      ...t,
-      word: normalizePhoneticsToDisplayWord(t.word),
-    }));
+  if (!exactWordTimings) {
+    try {
+      const { detectSpeechIntervals, alignTimestampsToSpeech } = await import("./audio-align.functions");
+      const base64Url = `data:audio/mp3;base64,${audioBuffer.toString("base64")}`;
+      const speechIntervals = await detectSpeechIntervals(base64Url);
+      if (speechIntervals.length > 0) {
+        wordTimings = alignTimestampsToSpeech(wordTimings, speechIntervals);
+      }
+    } catch (alignErr) {
+      console.warn("Audio alignment fallback:", alignErr);
+    }
+  }
 
-    return {
-      base64: audioBuffer.toString("base64"),
-      mimeType: "audio/mpeg",
-      wordTimings,
-    };
+  // Remap spoken Arabic Salawat & Sahabah timings back to Bulgarian meaning words ("мир да бъде с него")
+  wordTimings = remapSalawatTimingsToBulgarian(wordTimings);
+
+  const { verifyAndCorrectSubtitleSync } = await import("./subtitle-sync.functions");
+  const verified = verifyAndCorrectSubtitleSync(wordTimings, duration);
+  wordTimings = verified.correctedTimings.map((t: WordTiming) => ({
+    ...t,
+    word: normalizePhoneticsToDisplayWord(t.word),
+  }));
+
+  return {
+    base64: audioBuffer.toString("base64"),
+    mimeType: "audio/mpeg",
+    wordTimings,
+  };
+}
+
+export const synthesizeHadithNarration = createServerFn({ method: "POST" })
+  .validator((input: { text: string; reference?: string }) => {
+    const text = String(input.text ?? "").trim();
+    if (!text) throw new Error("Празен текст за озвучаване");
+    if (text.length > 4500) throw new Error("Текстът е твърде дълъг за един запис");
+    return { text, reference: input.reference ?? "" };
+  })
+  .handler(async ({ data }) => {
+    return await synthesizeHadithNarrationDirect(data);
   });

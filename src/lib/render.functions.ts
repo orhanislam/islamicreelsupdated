@@ -501,7 +501,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                 : wrapTextToSafeWidth(sp, fs, maxLineWidth);
             const formattedText = lines.join("\\N");
             const useAnim = isLast && sIdx === subPhrases.length - 1 ? `\\fad(0,120)` : ``;
-            const ayahStyleTag = `{${posTag}\\blur1.2\\fs${fs}\\1c&H00FFFFFF&${useAnim}}`;
+            const ayahStyleTag = `{${posTag}\\blur0\\fs${fs}\\1c&H00FFFFFF&${useAnim}}`;
 
             ass += `Dialogue: 0,${formatTime(sStart)},${formatTime(sEnd)},Bulgarian,,0,0,0,,${ayahStyleTag}${formattedText}\n`;
           }
@@ -647,7 +647,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
           if (sliceEnd <= sliceStart) continue;
 
           const useAnim = isLastPhrase && wIdx === p.words.length - 1 ? `\\fad(0,100)` : ``;
-          const phraseStyleTag = `{${posTag}\\fs${phraseFs}\\blur1.2${useAnim}}`;
+          const phraseStyleTag = `{${posTag}\\fs${phraseFs}\\blur0${useAnim}}`;
 
           let wordCounter = 0;
           const formattedLineStrings = linesOfWords.map((lineStr) => {
@@ -1119,15 +1119,24 @@ export async function executeRenderTask(opts: any): Promise<any> {
 
             for (let i = 0; i < schedule.length; i++) {
               const seg = schedule[i];
-              let rawClipPath = downloadedByUrl.get(seg.url);
+              let targetSegUrl = seg.url;
+              if (!targetSegUrl || targetSegUrl.includes("images.pexels.com/videos/")) {
+                targetSegUrl = getHalalVideoByConceptId(undefined, i).url;
+              }
+              let rawClipPath = downloadedByUrl.get(targetSegUrl);
               if (!rawClipPath) {
                 const p = path.join(tmpDir, `broll_${i}_${Date.now()}.mp4`);
-                const r = await fetch(seg.url, { headers: { "User-Agent": "Mozilla/5.0" } });
-                if (r.ok) {
+                let r = await fetch(targetSegUrl, { headers: { "User-Agent": "Mozilla/5.0" } }).catch(() => null);
+                if (!r || !r.ok) {
+                  const fbUrl = getHalalVideoByConceptId(undefined, i).url;
+                  targetSegUrl = fbUrl;
+                  r = await fetch(fbUrl, { headers: { "User-Agent": "Mozilla/5.0" } }).catch(() => null);
+                }
+                if (r && r.ok) {
                   const buf = await r.arrayBuffer();
                   await fs.writeFile(p, BufferMod.from(buf));
                   rawClipPath = p;
-                  downloadedByUrl.set(seg.url, p);
+                  downloadedByUrl.set(targetSegUrl, p);
                   bRollFiles.push(p);
                   sessionTempFiles.add(p);
                 }
@@ -1144,9 +1153,9 @@ export async function executeRenderTask(opts: any): Promise<any> {
                       `-t ${seg.duration.toFixed(2)}`,
                       "-vf scale=1080:1920:force_original_aspect_ratio=increase:flags=lanczos,crop=1080:1920,fps=30,format=yuv420p",
                       "-c:v libx264",
-                      "-preset superfast",
+                      "-preset fast",
                       "-profile:v high",
-                      "-crf 13",
+                      "-crf 12",
                       "-pix_fmt yuv420p",
                       "-an",
                     ])
@@ -1239,7 +1248,7 @@ export async function executeRenderTask(opts: any): Promise<any> {
         cmd
           .complexFilter([
             // Crisp 1080p Lanczos scaling + optical micro-sharpening + BT.709 color grade + burned-in 76px TikTok subtitles
-            `[0:v]crop='min(iw,ih*9/16)':'min(iw*16/9,ih)',scale=${width}:${height}:force_original_aspect_ratio=increase:flags=lanczos,crop=${width}:${height},unsharp=3:3:0.35:3:3:0.0,eq=contrast=1.04:saturation=1.08,subtitles='${escapedAssPath}'[v]`,
+            `[0:v]crop='min(iw,ih*9/16)':'min(iw*16/9,ih)',scale=${width}:${height}:force_original_aspect_ratio=increase:flags=lanczos,crop=${width}:${height},unsharp=5:5:0.85:5:5:0.45,eq=contrast=1.04:saturation=1.08,subtitles='${escapedAssPath}'[v]`,
             `[1:a]highpass=f=45,treble=g=2:f=3500:w=0.7,acompressor=threshold=-18dB:ratio=2.5:attack=5:release=50,bass=g=3:f=110:w=0.6,loudnorm=I=-14:LRA=9:TP=-1.0,apad[a]`,
           ])
           .outputOptions([
@@ -1247,7 +1256,7 @@ export async function executeRenderTask(opts: any): Promise<any> {
             "-map [a]",
             "-c:v libx264",
             "-tag:v avc1",
-            "-preset veryfast",
+            "-preset fast",
             "-profile:v high",
             "-level 4.1",
             "-pix_fmt yuv420p",
@@ -1257,8 +1266,8 @@ export async function executeRenderTask(opts: any): Promise<any> {
             "-color_range tv",
             "-movflags +faststart",
             "-crf 17",
-            "-maxrate 10M",
-            "-bufsize 20M",
+            "-maxrate 8M",
+            "-bufsize 16M",
             "-refs 3",
             "-bf 3",
             "-r 30",
@@ -1266,10 +1275,10 @@ export async function executeRenderTask(opts: any): Promise<any> {
             "-g 60",
             "-keyint_min 60",
             "-sc_threshold 0",
-            "-x264-params aq-mode=3:aq-strength=0.9",
+            "-x264-params aq-mode=3:aq-strength=0.85:deblock=-1,-1",
             "-c:a aac",
             "-profile:a aac_low",
-            "-b:a 256k",
+            "-b:a 320k",
             "-ar 48000",
             "-ac 2",
             `-t ${Number(audioDur).toFixed(2)}`,
@@ -1522,19 +1531,21 @@ async function aggressivelyCleanServerDisk(forceAll = false) {
       // Sort newest to oldest
       fileStats.sort((a, b) => b.mtimeMs - a.mtimeMs);
 
-      let completedCount = 0;
+      let completedMp4Count = 0;
       for (const fsItem of fileStats) {
         if (fsItem.isActive) continue;
 
         if (fsItem.isCompleted || fsItem.name.endsWith(".mp4")) {
-          completedCount++;
+          if (fsItem.name.endsWith(".mp4")) {
+            completedMp4Count++;
+          }
           // STRICT LIMIT: If we already kept 8 completed MP4 files, delete any older ones immediately regardless of age
-          if (completedCount > 8) {
+          if (completedMp4Count > 8) {
             await fs.rm(fsItem.path, { recursive: true, force: true }).catch(() => {});
             continue;
           }
-          // Age threshold: 3 hours for forceAll, 24 hours for routine check
-          const completedThreshold = forceAll ? 3 * 60 * 60 * 1000 : 24 * 60 * 60 * 1000;
+          // Keep completed jobs for 24 hours so user can download/inspect them
+          const completedThreshold = 24 * 60 * 60 * 1000;
           if (now - fsItem.mtimeMs >= completedThreshold) {
             await fs.rm(fsItem.path, { recursive: true, force: true }).catch(() => {});
           }
@@ -1963,58 +1974,67 @@ async function processRenderQueue() {
   isQueueProcessing = false;
 }
 
+export async function startServerRenderJobDirect(input: {
+  data: any;
+  title: string;
+  isAutopilot?: boolean;
+}): Promise<{ jobId: string; status: string }> {
+  const { data, title, isAutopilot } = input;
+  const jobId = `job_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
+  const preKit = await generateAndStorePostRenderSocialKit({
+    jobId,
+    title: title || "Ислямско видео (Фонов рендер)",
+    jobData: data,
+    isAutopilot: Boolean(isAutopilot || data?.isAutopilot),
+    dispatchWebhook: false,
+  });
+  await withJobsLock(async () => {
+    const jobs = await loadJobs();
+    jobs.unshift({
+      id: jobId,
+      title: title || "Ислямско видео (Фонов рендер)",
+      status: "queued",
+      createdAt: Date.now(),
+      data,
+      isAutopilot: Boolean(isAutopilot || data?.isAutopilot),
+      seoTitle: preKit.seoTitle,
+      viralCaption: preKit.viralCaption,
+    });
+    await writeJobsFile(jobs);
+  });
+
+  backgroundRenderQueue.push({ id: jobId, data, title: title || "Ислямско видео" });
+  processRenderQueue().catch((e) => console.error("[server-queue] Queue processing error:", e));
+
+  // Record into persistent generation history
+  const refStr = String(data?.scriptureReference || data?.reference || title || "");
+  const inferredType =
+    data?.type === "hadith" ||
+    data?.collection ||
+    /бухари|муслим|тирмизи|навауи|хадис|bukhari|muslim|tirmidhi|nawawi/i.test(refStr)
+      ? "hadith"
+      : "ayah";
+
+  recordGenerationEntryDirect({
+    id: jobId,
+    type: inferredType,
+    title: title || data?.topic || data?.reference || "Ислямско видео",
+    reference: data?.scriptureReference || data?.reference || title || "Ислямско видео",
+    arabicText: data?.arabic,
+    bulgarianText: data?.bulgarian,
+    timestamp: Date.now(),
+    format: "video",
+    theme: data?.tiktokTheme || data?.style,
+    status: "queued",
+  }).catch((e) => console.error("[history] Failed to record generation:", e));
+
+  return { jobId, status: "queued" };
+}
+
 export const startServerRenderJob = createServerFn({ method: "POST" })
   .validator((input: { data: any; title: string; isAutopilot?: boolean }) => input)
-  .handler(async ({ data: { data, title, isAutopilot } }) => {
-    const jobId = `job_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
-    const preKit = await generateAndStorePostRenderSocialKit({
-      jobId,
-      title: title || "Ислямско видео (Фонов рендер)",
-      jobData: data,
-      isAutopilot: Boolean(isAutopilot || data?.isAutopilot),
-      dispatchWebhook: false,
-    });
-    await withJobsLock(async () => {
-      const jobs = await loadJobs();
-      jobs.unshift({
-        id: jobId,
-        title: title || "Ислямско видео (Фонов рендер)",
-        status: "queued",
-        createdAt: Date.now(),
-        data,
-        isAutopilot: Boolean(isAutopilot || data?.isAutopilot),
-        seoTitle: preKit.seoTitle,
-        viralCaption: preKit.viralCaption,
-      });
-      await writeJobsFile(jobs);
-    });
-
-    backgroundRenderQueue.push({ id: jobId, data, title: title || "Ислямско видео" });
-    processRenderQueue().catch((e) => console.error("[server-queue] Queue processing error:", e));
-
-    // Record into persistent generation history
-    const refStr = String(data?.scriptureReference || data?.reference || title || "");
-    const inferredType =
-      data?.type === "hadith" ||
-      data?.collection ||
-      /бухари|муслим|тирмизи|навауи|хадис|bukhari|muslim|tirmidhi|nawawi/i.test(refStr)
-        ? "hadith"
-        : "ayah";
-
-    recordGenerationEntryDirect({
-      id: jobId,
-      type: inferredType,
-      title: title || data?.topic || data?.reference || "Ислямско видео",
-      reference: data?.scriptureReference || data?.reference || title || "Ислямско видео",
-      arabicText: data?.arabic,
-      bulgarianText: data?.bulgarian,
-      timestamp: Date.now(),
-      format: "video",
-      theme: data?.tiktokTheme || data?.style,
-      status: "queued",
-    }).catch((e) => console.error("[history] Failed to record generation:", e));
-
-    return { jobId, status: "queued" };
+  .handler(async ({ data }) => {
+    return await startServerRenderJobDirect(data);
   });
 
 export const retryServerRenderJob = createServerFn({ method: "POST" })

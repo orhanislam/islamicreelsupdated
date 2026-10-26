@@ -172,30 +172,30 @@ function getCorrectedVerseTimings(surah: number, ayahNum: number, vt: any) {
   return vt;
 }
 
-export const fetchAyah = createServerFn({ method: "POST" })
-  .inputValidator((input: { surah: number; ayah: number; ayahEnd?: number }) => {
-    const surah = Math.floor(Number(input.surah));
-    const ayah = Math.floor(Number(input.ayah));
-    let ayahEnd = input.ayahEnd !== undefined && input.ayahEnd !== null && String(input.ayahEnd) !== ""
+export async function fetchAyahDirect(input: {
+  surah: number;
+  ayah: number;
+  ayahEnd?: number;
+}): Promise<AyahData> {
+  const surah = Math.floor(Number(input.surah));
+  const ayah = Math.floor(Number(input.ayah));
+  let ayahEnd =
+    input.ayahEnd !== undefined && input.ayahEnd !== null && String(input.ayahEnd) !== ""
       ? Math.floor(Number(input.ayahEnd))
       : ayah;
-    if (!Number.isFinite(surah) || surah < 1 || surah > 114) {
-      throw new Error(`Невалидна сура: ${input.surah} (трябва 1–114)`);
-    }
-    if (!Number.isFinite(ayah) || ayah < 1) {
-      throw new Error(`Невалиден аят: ${input.ayah}`);
-    }
-    if (!Number.isFinite(ayahEnd) || ayahEnd < ayah) {
-      ayahEnd = ayah;
-    }
-    if (ayahEnd - ayah > 10) {
-      throw new Error("Моля, избери интервал от най-много 10 аята за едно видео.");
-    }
-    return { surah, ayah, ayahEnd };
-  })
-  .handler(async ({ data }): Promise<AyahData> => {
-    const { surah, ayah, ayahEnd } = data;
-    const count = ayahEnd - ayah + 1;
+  if (!Number.isFinite(surah) || surah < 1 || surah > 114) {
+    throw new Error(`Невалидна сура: ${input.surah} (трябва 1–114)`);
+  }
+  if (!Number.isFinite(ayah) || ayah < 1) {
+    throw new Error(`Невалиден аят: ${input.ayah}`);
+  }
+  if (!Number.isFinite(ayahEnd) || ayahEnd < ayah) {
+    ayahEnd = ayah;
+  }
+  if (ayahEnd - ayah > 10) {
+    throw new Error("Моля, избери интервал от най-много 10 аята за едно видео.");
+  }
+  const count = ayahEnd - ayah + 1;
 
     const mp3Duration = (await import("mp3-duration")).default;
     const BufferMod = (await import("node:buffer")).Buffer;
@@ -350,4 +350,10 @@ export const fetchAyah = createServerFn({ method: "POST" })
       ayahBounds,
       arabicWordCount,
     };
+}
+
+export const fetchAyah = createServerFn({ method: "POST" })
+  .inputValidator((input: { surah: number; ayah: number; ayahEnd?: number }) => input)
+  .handler(async ({ data }): Promise<AyahData> => {
+    return await fetchAyahDirect(data);
   });

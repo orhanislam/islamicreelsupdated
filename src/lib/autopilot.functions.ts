@@ -29,6 +29,7 @@ export interface AutopilotConfig {
   uploadPostApiKey: string;
   uploadPostUser: string;
   uploadPostPlatforms: Array<"tiktok" | "instagram" | "youtube">;
+  tiktokPostMode?: "DIRECT_POST" | "MEDIA_UPLOAD";
   lastRunAt?: number;
   lastRunScheduleSlot?: string;
   lastRunStatus?: "idle" | "running" | "completed" | "failed";
@@ -62,6 +63,7 @@ export const DEFAULT_AUTOPILOT_CONFIG: AutopilotConfig = {
   uploadPostApiKey: DEFAULT_UPLOAD_POST_API_KEY,
   uploadPostUser: DEFAULT_UPLOAD_POST_USER,
   uploadPostPlatforms: ["tiktok"],
+  tiktokPostMode: "DIRECT_POST",
   lastRunStatus: "idle",
   lastRunMessage: "Готов за автоматично генериране и публикуване в TikTok (@orhan.islam).",
   totalAutopilotVideos: 0,
@@ -129,6 +131,10 @@ function normalizeConfig(raw: Partial<AutopilotConfig> | null | undefined): Auto
             p === "tiktok" || p === "instagram" || p === "youtube",
           ) as Array<"tiktok" | "instagram" | "youtube">)
         : ["tiktok"],
+    tiktokPostMode:
+      raw.tiktokPostMode === "MEDIA_UPLOAD" || raw.tiktokPostMode === "DIRECT_POST"
+        ? raw.tiktokPostMode
+        : "DIRECT_POST",
     lastRunAt: typeof raw.lastRunAt === "number" ? raw.lastRunAt : undefined,
     lastRunScheduleSlot: typeof raw.lastRunScheduleSlot === "string" ? raw.lastRunScheduleSlot : undefined,
     lastRunStatus: raw.lastRunStatus || "idle",
@@ -143,6 +149,11 @@ function normalizeConfig(raw: Partial<AutopilotConfig> | null | undefined): Auto
 }
 
 export async function readAutopilotConfigDirect(): Promise<AutopilotConfig> {
+  // Ensure the background scheduler is awake on every direct configuration access
+  try {
+    initAutopilotScheduler();
+  } catch {}
+
   try {
     const fs = (await import("fs")).promises;
     const filePath = await getAutopilotConfigFilePath();
@@ -156,6 +167,11 @@ export async function readAutopilotConfigDirect(): Promise<AutopilotConfig> {
 export async function writeAutopilotConfigDirect(
   updates: Partial<AutopilotConfig>,
 ): Promise<AutopilotConfig> {
+  // If user enabled autopilot, automatically ensure uploadPostEnabled is true if API key is present
+  if (updates.enabled === true && updates.uploadPostEnabled === undefined) {
+    updates.uploadPostEnabled = true;
+  }
+
   return withConfigLock(async () => {
     const fs = (await import("fs")).promises;
     const filePath = await getAutopilotConfigFilePath();
@@ -178,6 +194,7 @@ export async function writeAutopilotConfigDirect(
 }
 
 export const getAutopilotConfig = createServerFn({ method: "POST" }).handler(async () => {
+  initAutopilotScheduler();
   return await readAutopilotConfigDirect();
 });
 
@@ -261,47 +278,23 @@ export const testAutopilotWebhook = createServerFn({ method: "POST" })
 
 /**
  * Ensures any MP4 file sent to Upload-Post / TikTok Direct Post API is encoded
- * in True H.264 High Profile (High@L4.1, 1080x1920, CABAC, B-frames, <=12 Mbps sweet spot)
- * and has the viral cover art attached as the MP4 container's official poster image
- * (stream disposition attached_pic), so TikTok and video galleries display the viral thumbnail.
+ * in True H.264 High Profile (High@L4.1, 1080x1920, CABAC, B-frames, progressive)
+ * with strictly ONE clean H.264 video stream and ONE AAC audio stream.
+ * 
+ * CRITICAL FIX: NEVER embed an MJPEG attached_pic stream into the MP4 container for TikTok!
+ * Having multiple video streams (H.264 + MJPEG attached_pic) causes TikTok's ingestion service
+ * to reject native passthrough and fall back to blurry 540p / 720p 1.5 Mbps recompression.
+ * The cover art is sent natively via Upload-Post Cloudflare R2 media_url & multipart image form fields.
  */
 async function ensureHighProfileMasterForUploadPost(
   mp4FilePath: string,
-  coverImagePath?: string,
+  _coverImagePath?: string,
 ): Promise<void> {
   try {
     const { execFile } = await import("child_process");
     const util = await import("util");
     const fs = (await import("fs")).promises;
     const execFileAsync = util.promisify(execFile);
-
-    const { stdout } = await execFileAsync("ffprobe", [
-      "-v",
-      "error",
-      "-select_streams",
-      "v:0",
-      "-show_entries",
-      "stream=profile,width,height,bit_rate",
-      "-of",
-      "json",
-      mp4FilePath,
-    ]);
-    const info = JSON.parse(stdout || "{}");
-    const stream = info?.streams?.[0];
-    if (!stream) return;
-
-    const profile = String(stream.profile || "");
-    const width = Number(stream.width) || 0;
-    const height = Number(stream.height) || 0;
-    const bitRate = Number(stream.bit_rate) || 0;
-
-    const hasCoverImage = Boolean(coverImagePath && (await fs.stat(coverImagePath).catch(() => null)));
-
-    const isOptimalHighProfile =
-      profile.toLowerCase().includes("high") &&
-      width === 1080 &&
-      height === 1920 &&
-      (bitRate === 0 || bitRate <= 13_500_000);
 
     let ffmpegPath = "ffmpeg";
     try {
@@ -310,62 +303,71 @@ async function ensureHighProfileMasterForUploadPost(
       if (installer?.path) ffmpegPath = installer.path;
     } catch {}
 
-    if (isOptimalHighProfile) {
-      // If already optimal 1080p High profile, check if attached_pic cover art is already present
-      if (hasCoverImage && coverImagePath) {
-        try {
-          const { stdout: probeStreams } = await execFileAsync("ffprobe", [
-            "-v",
-            "error",
-            "-show_entries",
-            "stream=index,codec_name,disposition",
-            "-of",
-            "json",
-            mp4FilePath,
-          ]);
-          const probeJson = JSON.parse(probeStreams || "{}");
-          const alreadyHasCover = (probeJson.streams || []).some(
-            (s: any) => s.disposition?.attached_pic === 1 || s.codec_name === "mjpeg",
-          );
-          if (!alreadyHasCover) {
-            console.log(
-              `[upload-post] Embedding viral cover image into MP4 container as attached_pic: ${mp4FilePath}`,
-            );
-            const coverMuxedPath = `${mp4FilePath}.with_cover.mp4`;
-            await execFileAsync(ffmpegPath, [
-              "-y",
-              "-i",
-              mp4FilePath,
-              "-i",
-              coverImagePath,
-              "-map",
-              "0:v:0",
-              "-map",
-              "0:a?",
-              "-map",
-              "1:v:0",
-              "-c",
-              "copy",
-              "-disposition:v:1",
-              "attached_pic",
-              coverMuxedPath,
-            ]);
-            const statMux = await fs.stat(coverMuxedPath).catch(() => null);
-            if (statMux && statMux.size > 50_000) {
-              await fs.rename(coverMuxedPath, mp4FilePath);
-            } else {
-              await fs.unlink(coverMuxedPath).catch(() => {});
-            }
-          }
-        } catch (embedErr) {
-          console.warn("[upload-post] MP4 cover stream embedding non-fatal warning:", embedErr);
-        }
+    const { stdout: probeStreams } = await execFileAsync("ffprobe", [
+      "-v",
+      "error",
+      "-show_entries",
+      "stream=index,codec_type,codec_name,profile,width,height,bit_rate,disposition",
+      "-of",
+      "json",
+      mp4FilePath,
+    ]);
+    const probeJson = JSON.parse(probeStreams || "{}");
+    const streams = probeJson?.streams || [];
+    const videoStreams = streams.filter((s: any) => s.codec_type === "video");
+    const v0 = videoStreams[0];
+    if (!v0) return;
+
+    const profile = String(v0.profile || "");
+    const width = Number(v0.width) || 0;
+    const height = Number(v0.height) || 0;
+    const bitRate = Number(v0.bit_rate) || 0;
+
+    // Check if the MP4 contains multiple video streams (e.g. an attached_pic mjpeg stream from a prior remux)
+    const hasMultipleVideoStreams = videoStreams.length > 1;
+
+    const isOptimal1080pHighProfile =
+      !hasMultipleVideoStreams &&
+      profile.toLowerCase().includes("high") &&
+      width === 1080 &&
+      height === 1920 &&
+      (bitRate === 0 || bitRate <= 15_000_000);
+
+    if (isOptimal1080pHighProfile) {
+      console.log(`[upload-post] ${mp4FilePath} is optimal True 1080p High Profile (1 stream). Ready for TikTok direct ingest.`);
+      return;
+    }
+
+    if (hasMultipleVideoStreams && width === 1080 && height === 1920) {
+      // If resolution is already 1080p, cleanly strip out any secondary attached_pic / mjpeg streams without re-encoding!
+      console.log(`[upload-post] Stripping secondary attached_pic video stream from ${mp4FilePath} to prevent TikTok recompression blur...`);
+      const cleanedPath = `${mp4FilePath}.clean.mp4`;
+      await execFileAsync(ffmpegPath, [
+        "-y",
+        "-i",
+        mp4FilePath,
+        "-map",
+        "0:v:0",
+        "-map",
+        "0:a?",
+        "-c",
+        "copy",
+        "-movflags",
+        "+faststart",
+        cleanedPath,
+      ]);
+      const stat = await fs.stat(cleanedPath).catch(() => null);
+      if (stat && stat.size > 50_000) {
+        await fs.rename(cleanedPath, mp4FilePath);
+        console.log(`[upload-post] Cleaned container: single video stream preserved (${(stat.size / (1024 * 1024)).toFixed(1)} MB).`);
+      } else {
+        await fs.unlink(cleanedPath).catch(() => {});
       }
       return;
     }
 
     console.log(
-      `[upload-post] Remastering ${mp4FilePath} from (${profile}, ${width}x${height}, ${(bitRate / 1e6).toFixed(1)} Mbps) -> High@L4.1 1080p HD with cover art...`,
+      `[upload-post] Remastering ${mp4FilePath} from (${profile}, ${width}x${height}, ${(bitRate / 1e6).toFixed(1)} Mbps) -> Clean High@L4.1 1080p HD (Single Stream)...`,
     );
 
     const remasteredPath = `${mp4FilePath}.hq_remaster.mp4`;
@@ -373,21 +375,18 @@ async function ensureHighProfileMasterForUploadPost(
       "-y",
       "-i",
       mp4FilePath,
-    ];
-
-    if (hasCoverImage && coverImagePath) {
-      ffmpegArgs.push("-i", coverImagePath);
-    }
-
-    ffmpegArgs.push(
+      "-map",
+      "0:v:0",
+      "-map",
+      "0:a?",
       "-vf",
-      "scale=1080:1920:force_original_aspect_ratio=increase:flags=lanczos,crop=1080:1920,unsharp=3:3:0.35:3:3:0.0",
+      "scale=1080:1920:force_original_aspect_ratio=increase:flags=lanczos,crop=1080:1920,unsharp=5:5:0.8:5:5:0.4",
       "-c:v",
       "libx264",
       "-tag:v",
       "avc1",
       "-preset",
-      "veryfast",
+      "fast",
       "-profile:v",
       "high",
       "-level",
@@ -405,11 +404,11 @@ async function ensureHighProfileMasterForUploadPost(
       "-movflags",
       "+faststart",
       "-crf",
-      "17",
+      "16",
       "-maxrate",
-      "10M",
+      "14M",
       "-bufsize",
-      "20M",
+      "28M",
       "-refs",
       "3",
       "-bf",
@@ -425,42 +424,27 @@ async function ensureHighProfileMasterForUploadPost(
       "-c:a",
       "aac",
       "-b:a",
-      "256k",
+      "320k",
       "-ar",
       "48000",
       "-ac",
       "2",
-    );
+      remasteredPath,
+    ];
 
-    if (hasCoverImage && coverImagePath) {
-      ffmpegArgs.push(
-        "-map",
-        "0:v:0",
-        "-map",
-        "0:a?",
-        "-map",
-        "1:v:0",
-        "-c:v:1",
-        "copy",
-        "-disposition:v:1",
-        "attached_pic",
-      );
-    }
-
-    ffmpegArgs.push(remasteredPath);
     await execFileAsync(ffmpegPath, ffmpegArgs);
 
     const stat = await fs.stat(remasteredPath).catch(() => null);
     if (stat && stat.size > 50_000) {
       await fs.rename(remasteredPath, mp4FilePath);
       console.log(
-        `[upload-post] Remastered ${mp4FilePath} to High@L4.1 1080p with cover art (${(stat.size / (1024 * 1024)).toFixed(1)} MB).`,
+        `[upload-post] Remastered ${mp4FilePath} to True High@L4.1 1080p (${(stat.size / (1024 * 1024)).toFixed(1)} MB).`,
       );
     } else {
       await fs.unlink(remasteredPath).catch(() => {});
     }
   } catch (err) {
-    console.warn("[upload-post] Pre-upload High-Profile check skipped:", err);
+    console.warn("[upload-post] Pre-upload High-Profile check warning:", err);
   }
 }
 
@@ -661,12 +645,21 @@ export async function publishVideoViaUploadPostDirect(params: {
       form.append("platform[]", p);
     }
     if (platforms.includes("tiktok")) {
-      form.append("privacy_level", "PUBLIC_TO_EVERYONE");
-      form.append("post_mode", "DIRECT_POST");
-      form.append("disable_duet", "false");
-      form.append("disable_comment", "false");
-      form.append("disable_stitch", "false");
-      form.append("cover_timestamp", "0");
+      const postMode = cfg.tiktokPostMode === "MEDIA_UPLOAD" ? "MEDIA_UPLOAD" : "DIRECT_POST";
+      if (postMode === "MEDIA_UPLOAD") {
+        form.append("post_mode", "MEDIA_UPLOAD");
+        form.append("tiktokPostMode", "MEDIA_UPLOAD");
+        form.append("tiktokUploadToDraft", "true");
+        form.append("upload_to_draft", "true");
+      } else {
+        form.append("privacy_level", "PUBLIC_TO_EVERYONE");
+        form.append("post_mode", "DIRECT_POST");
+        form.append("tiktokPostMode", "DIRECT_POST");
+        form.append("disable_duet", "false");
+        form.append("disable_comment", "false");
+        form.append("disable_stitch", "false");
+        form.append("cover_timestamp", "0");
+      }
     }
 
     if (params.scheduledDate) {
@@ -899,7 +892,7 @@ export async function runAutopilotCycleDirect(options?: {
 
     const {
       generateExplainedVideoProposalDirect,
-      confirmAndGenerateVideo,
+      confirmAndGenerateVideoDirect,
       getHistoryFilePath,
     } = await import("./assistant.functions");
 
@@ -952,12 +945,10 @@ export async function runAutopilotCycleDirect(options?: {
           message: `[${i + 1}/${count}] Автоматично озвучаване и стартиране на рендер: ${auditedProposal.title}`,
         });
 
-        const renderRes = await confirmAndGenerateVideo({
-          data: {
-            proposal: auditedProposal as any,
-            force: true,
-            isAutopilot: true,
-          },
+        const renderRes = await confirmAndGenerateVideoDirect({
+          proposal: auditedProposal as any,
+          force: true,
+          isAutopilot: true,
         });
 
         if (renderRes?.jobId) {
@@ -1110,6 +1101,72 @@ export const triggerAutopilotCycleNow = createServerFn({ method: "POST" })
     };
   });
 
+/**
+ * Checks current Bulgarian time against configured scheduleTimes and triggers the cycle
+ * if a slot is reached within a 30-minute grace window and has not run yet today.
+ */
+export async function checkAndTriggerScheduledAutopilotDirect(): Promise<{
+  triggered: boolean;
+  reason?: string;
+  slot?: string;
+  bgTime?: string;
+}> {
+  const cfg = await readAutopilotConfigDirect();
+  if (!cfg.enabled) {
+    return { triggered: false, reason: "Автопилотът е изключен" };
+  }
+  if (isAutopilotCycleRunning) {
+    return { triggered: false, reason: "В момента вече се изпълнява цикъл" };
+  }
+
+  const bgNow = getBulgarianTime();
+
+  for (const slot of cfg.scheduleTimes) {
+    const [sH, sM] = slot.split(":").map(Number);
+    if (isNaN(sH) || isNaN(sM)) continue;
+    const slotMinutes = sH * 60 + sM;
+    const diff = (bgNow.totalMinutes - slotMinutes + 1440) % 1440;
+
+    // Trigger if within a 120-minute window from the scheduled Bulgarian time
+    // and either this slot has not run yet, or its previous attempt failed
+    if (diff >= 0 && diff <= 120) {
+      const expectedSlotKey = bgNow.slotKey(slot);
+      const shouldRunSlot =
+        cfg.lastRunScheduleSlot !== expectedSlotKey ||
+        (cfg.lastRunScheduleSlot === expectedSlotKey && cfg.lastRunStatus === "failed");
+
+      if (shouldRunSlot) {
+        console.log(
+          `[autopilot-scheduler] 🇧🇬 Bulgarian slot ${slot} matched at ${bgNow.timeHm} (slotKey: ${expectedSlotKey})! Starting autonomous cycle...`,
+        );
+        // Mark slot key and set status to running immediately to prevent duplicate runs
+        await writeAutopilotConfigDirect({
+          lastRunScheduleSlot: expectedSlotKey,
+          lastRunStatus: "running",
+          uploadPostEnabled: Boolean(cfg.uploadPostApiKey) || cfg.uploadPostEnabled,
+        });
+
+        // Fire autonomous cycle
+        runAutopilotCycleDirect({
+          count: cfg.videosPerRun,
+          contentMode: cfg.contentMode,
+          triggerSource: "schedule",
+        }).catch((e) => console.error("[autopilot-scheduler] Scheduled cycle error:", e));
+
+        return { triggered: true, slot, bgTime: bgNow.timeHm };
+      }
+    }
+  }
+
+  return { triggered: false, reason: "Няма предстоящ час в активния интервал" };
+}
+
+export const checkAndTriggerScheduledAutopilot = createServerFn({ method: "POST" })
+  .handler(async () => {
+    initAutopilotScheduler();
+    return await checkAndTriggerScheduledAutopilotDirect();
+  });
+
 export function initAutopilotScheduler() {
   if (typeof process === "undefined" || typeof window !== "undefined") return;
   const globalForAutopilot = globalThis as unknown as {
@@ -1124,41 +1181,21 @@ export function initAutopilotScheduler() {
     `[autopilot-scheduler] 24/7 Zero-Click Autopilot Scheduler active! Current Bulgarian time: ${bg.fullText}`,
   );
 
+  // Run an immediate check on startup
+  setTimeout(() => {
+    checkAndTriggerScheduledAutopilotDirect().catch((err) => {
+      console.warn("[autopilot-scheduler] Initial startup check note:", err);
+    });
+  }, 2000);
+
+  // Check every 10 seconds 24/7 (keep interval referenced so event loop executes on time)
   const checkInterval = setInterval(async () => {
     try {
-      const cfg = await readAutopilotConfigDirect();
-      if (!cfg.enabled || isAutopilotCycleRunning) return;
-
-      const bgNow = getBulgarianTime();
-
-      for (const slot of cfg.scheduleTimes) {
-        const [sH, sM] = slot.split(":").map(Number);
-        if (isNaN(sH) || isNaN(sM)) continue;
-        const slotMinutes = sH * 60 + sM;
-        const diff = (bgNow.totalMinutes - slotMinutes + 1440) % 1440;
-
-        // Trigger if within a 3-minute grace window from the scheduled Bulgarian time
-        if (diff >= 0 && diff <= 3) {
-          const expectedSlotKey = bgNow.slotKey(slot);
-          if (cfg.lastRunScheduleSlot !== expectedSlotKey) {
-            console.log(
-              `[autopilot-scheduler] 🇧🇬 Bulgarian slot ${slot} matched at ${bgNow.timeHm} (slotKey: ${expectedSlotKey})! Starting autonomous cycle...`,
-            );
-            await writeAutopilotConfigDirect({ lastRunScheduleSlot: expectedSlotKey });
-            await runAutopilotCycleDirect({
-              count: cfg.videosPerRun,
-              contentMode: cfg.contentMode,
-              triggerSource: "schedule",
-            });
-            break; // Fire at most one scheduled cycle per interval check
-          }
-        }
-      }
+      await checkAndTriggerScheduledAutopilotDirect();
     } catch (err) {
       console.error("[autopilot-scheduler] Bulgarian check error:", err);
     }
-  }, 25 * 1000);
+  }, 10 * 1000);
 
   globalForAutopilot.__autopilotCheckInterval = checkInterval;
-  checkInterval?.unref?.();
 }

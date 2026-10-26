@@ -80,6 +80,8 @@ let patchedCount = 0;
 
 for (const filePath of allMjs) {
   let content = fs.readFileSync(filePath, 'utf8');
+  let modified = false;
+
   // Match import of esm-*.mjs
   const esmImportRegex = /import\s*\{([^}]+)\}\s*from\s*["']([^"']*\/_ssr\/esm-[^"']+\.mjs)["'];?/g;
 
@@ -91,8 +93,50 @@ for (const filePath of allMjs) {
       patchedCount++;
       return `import { ${imports.trim()} } from "${normalizedRel}";`;
     });
+    modified = true;
+  }
+
+  // Patch TanStack Start getStartContext so background timers/workers never throw "No Start context found in AsyncLocalStorage"
+  if (content.includes('No Start context found in AsyncLocalStorage')) {
+    content = content.replace(
+      /if\s*\(!context\s*&&\s*opts\?\.throwIfNotFound\s*!==\s*false\)\s*throw\s+new\s+Error\(`No Start context found in AsyncLocalStorage[^`]*`\);/g,
+      'if (!context) return { request: new Request("http://127.0.0.1/"), startOptions: {}, contextAfterGlobalMiddlewares: {} };'
+    );
+    modified = true;
+    console.log(`[fix-nitro-runtime] Patched getStartContext fallback in ${path.basename(filePath)}`);
+  }
+
+  if (modified) {
     fs.writeFileSync(filePath, content, 'utf8');
   }
 }
 
 console.log(`[fix-nitro-runtime] Patched ${patchedCount} imports across .output/server to use rolldown-runtime.mjs`);
+
+// 3. Inject Autonomous 24/7 Autopilot Scheduler startup hook + 15s internal SSR heartbeat into .output/server/index.mjs
+const serverIndexFile = path.join(serverDir, 'index.mjs');
+if (fs.existsSync(serverIndexFile)) {
+  let indexContent = fs.readFileSync(serverIndexFile, 'utf8');
+  if (!indexContent.includes('__autopilot_bootstrap_hook__')) {
+    const bootstrapSnippet = `
+// __autopilot_bootstrap_hook__
+// Guaranteed 24/7 Zero-Click Autopilot Scheduler process startup hook & 15s SSR heartbeat
+const __triggerAutopilotTick = async () => {
+  try {
+    if (globalThis.__nitro_vite_envs__ && globalThis.__nitro_vite_envs__["ssr"]) {
+      await globalThis.__nitro_vite_envs__["ssr"].fetch(new Request("http://127.0.0.1/api/autopilot-bootstrap"));
+    }
+  } catch (err) {
+    // non-fatal
+  }
+};
+setTimeout(async () => {
+  await __triggerAutopilotTick();
+  console.log("[autopilot-bootstrap] 24/7 Zero-Click Autopilot Scheduler booted immediately on process start.");
+}, 1500);
+setInterval(__triggerAutopilotTick, 15000);
+`;
+    fs.appendFileSync(serverIndexFile, bootstrapSnippet, 'utf8');
+    console.log('[fix-nitro-runtime] Injected 24/7 Autopilot Scheduler startup hook & 15s heartbeat into .output/server/index.mjs');
+  }
+}

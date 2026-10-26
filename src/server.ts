@@ -51,6 +51,16 @@ export default {
       }
 
       const url = new URL(request.url);
+      if (url.pathname === "/api/autopilot-bootstrap") {
+        const { initAutopilotScheduler, checkAndTriggerScheduledAutopilotDirect } = await import("./lib/autopilot.functions");
+        initAutopilotScheduler();
+        const schedRes = await checkAndTriggerScheduledAutopilotDirect().catch(() => null);
+        return new Response(JSON.stringify({ ok: true, scheduled: schedRes }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      }
+
       if (url.pathname.startsWith("/api/download/")) {
         const parts = url.pathname.split("/").filter(Boolean);
         const id = parts[parts.length - 1];

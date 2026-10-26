@@ -419,8 +419,8 @@ export function analyzeAndFixRenderPayloadSync(payload: any): {
   let bgUrl = data.backgroundVideoUrl || data.backgroundUrl || "";
   let bgReplaced = false;
 
-  if (!bgUrl || typeof bgUrl !== "string") {
-    // Missing background: auto-assign halal fallback
+  if (!bgUrl || typeof bgUrl !== "string" || bgUrl.includes("images.pexels.com/videos/")) {
+    // Missing or dead legacy Pexels CDN background: auto-assign halal fallback
     issuesFound++;
     issuesFixed++;
     const fallbackAsset = getLocalHalalVideoFallback(0);
@@ -428,7 +428,7 @@ export function analyzeAndFixRenderPayloadSync(payload: any): {
     fallbackId = fallbackAsset.id;
     replacedWithFallback = true;
     bgReplaced = true;
-    actionsTaken.push(`Липсващ фон: автоматично присвоен проверен 100% халал видео фон ('${fallbackAsset.title}').`);
+    actionsTaken.push(`Липсващ или неактивен видео фон: автоматично присвоен проверен 100% халал 1080p видео фон ('${fallbackAsset.title}').`);
   } else {
     // Check against forbidden tokens (faces, humans, wine, statues, music, etc.)
     const checkResult = isBackgroundUrlOrMetadataHaram(bgUrl);
@@ -455,8 +455,17 @@ export function analyzeAndFixRenderPayloadSync(payload: any): {
   // Check multi-scene B-Roll if provided
   if (Array.isArray(data.bRollUrls) && data.bRollUrls.length > 0) {
     const cleanBRolls: string[] = [];
-    for (const u of data.bRollUrls) {
+    for (let bIdx = 0; bIdx < data.bRollUrls.length; bIdx++) {
+      const u = data.bRollUrls[bIdx];
       if (typeof u === "string" && u.trim().length > 0) {
+        if (u.includes("images.pexels.com/videos/")) {
+          issuesFound++;
+          issuesFixed++;
+          const fb = getLocalHalalVideoFallback(bIdx).url;
+          cleanBRolls.push(fb);
+          actionsTaken.push(`Заменен остарял B-Roll URL с проверен 1080p HD клип.`);
+          continue;
+        }
         const check = isBackgroundUrlOrMetadataHaram(u);
         if (check.isHaram) {
           issuesFound++;
@@ -475,6 +484,15 @@ export function analyzeAndFixRenderPayloadSync(payload: any): {
       cleanBRolls.push(fb1, fb2);
     }
     data.bRollUrls = cleanBRolls;
+  }
+
+  if (Array.isArray(data.bRollSegments) && data.bRollSegments.length > 0) {
+    for (let sIdx = 0; sIdx < data.bRollSegments.length; sIdx++) {
+      const seg = data.bRollSegments[sIdx];
+      if (seg && typeof seg.url === "string" && seg.url.includes("images.pexels.com/videos/")) {
+        seg.url = getLocalHalalVideoFallback(sIdx).url;
+      }
+    }
   }
 
   // Ensure aspect ratio is explicitly configured for 9:16 vertical 1080x1920 Full HD
@@ -555,8 +573,8 @@ export async function analyzeAndFixRenderPayload(
     const textForTts = data.ttsSpeechText || data.bulgarian || data.script || data.text;
     if (textForTts && typeof textForTts === "string" && textForTts.trim().length > 0) {
       try {
-        const { synthesizeHadithNarration } = await import("./tts.functions");
-        const narr = await synthesizeHadithNarration({ data: { text: textForTts } });
+        const { synthesizeHadithNarrationDirect } = await import("./tts.functions");
+        const narr = await synthesizeHadithNarrationDirect(textForTts);
         data.audioUrl = `data:${narr.mimeType || "audio/mp3"};base64,${narr.base64}`;
         if (narr.wordTimings && narr.wordTimings.length > 0) {
           data.bulgarianWordTimings = narr.wordTimings;
