@@ -3457,10 +3457,12 @@ if (
   const globalForCron = globalThis as unknown as { __cronStarted: boolean };
   if (!globalForCron.__cronStarted) {
     globalForCron.__cronStarted = true;
-    import("./autopilot.functions")
-      .then((mod) => {
-        mod.initAutopilotScheduler();
-      })
-      .catch((e) => console.error("Failed to initialize Autopilot Scheduler:", e));
+    setTimeout(() => {
+      import("./autopilot.functions")
+        .then((mod) => {
+          mod.initAutopilotScheduler();
+        })
+        .catch((e) => console.error("Failed to initialize Autopilot Scheduler:", e));
+    }, 3000);
   }
 }

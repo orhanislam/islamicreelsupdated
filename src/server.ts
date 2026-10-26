@@ -3,17 +3,19 @@ import "./lib/error-capture";
 import { consumeLastCapturedError } from "./lib/error-capture";
 import { renderErrorPage } from "./lib/error-page";
 
-// 24/7 Autopilot Scheduler initialized unconditionally at server boot
+// 24/7 Autopilot Scheduler initialized unconditionally at server boot (delayed 2s to allow all ESM modules to finish loading)
 if (
   typeof process !== "undefined" &&
   process.env.NODE_ENV !== "test" &&
   !process.argv.some((a) => a.includes("test"))
 ) {
-  import("./lib/autopilot.functions")
-    .then((mod) => {
-      mod.initAutopilotScheduler();
-    })
-    .catch((err) => console.error("[server] Failed to initialize Autopilot Scheduler:", err));
+  setTimeout(() => {
+    import("./lib/autopilot.functions")
+      .then((mod) => {
+        mod.initAutopilotScheduler();
+      })
+      .catch((err) => console.error("[server] Failed to initialize Autopilot Scheduler:", err));
+  }, 2000);
 }
 
 type ServerEntry = {
