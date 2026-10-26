@@ -1050,6 +1050,7 @@ export async function runAutopilotCycleDirect(options?: {
     await writeAutopilotConfigDirect({
       lastRunAt: Date.now(),
       lastRunStatus: "failed",
+      lastRunScheduleSlot: triggerSource === "schedule" ? "" : config.lastRunScheduleSlot,
       lastRunMessage: `Грешка: ${errMsg}`,
       historyLog: updatedHistoryLog,
     });

@@ -1392,7 +1392,7 @@ async function aggressivelyCleanServerDisk(forceAll = false) {
           "journalctl --vacuum-time=1d 2>/dev/null",
           "apt-get clean 2>/dev/null",
           "npm cache clean --force 2>/dev/null",
-          "rm -rf /var/cache/* ~/.cache/* /root/.cache/* /home/*/.cache/* ~/.npm/* /root/.npm/* /home/*/.npm/* ~/.pm2/logs/* /root/.pm2/logs/* /home/*/.pm2/logs/* /var/log/*.gz /var/log/*/*/*.gz 2>/dev/null",
+          "rm -rf /var/cache/* ~/.cache/* /root/.cache/* /home/*/.cache/* ~/.npm/* /root/.npm/* /home/*/.npm/* /var/log/*.gz /var/log/*/*/*.gz 2>/dev/null",
         ].join("; ");
         exec(cmd, { timeout: 15000 }, () => resolve());
       });

@@ -338,15 +338,15 @@ export function normalizePhoneticsToDisplayWord(word: string): string {
     .replace(/(?<=^|[^\p{L}\p{N}])суджууд/gui, "суджуд");
 }
 
-export async function synthesizeHadithNarrationDirect(data: {
-  text: string;
-  reference?: string;
-}): Promise<{
+export async function synthesizeHadithNarrationDirect(
+  data: string | { text: string; reference?: string },
+): Promise<{
   base64: string;
   mimeType: string;
   wordTimings: WordTiming[];
 }> {
-  const textInput = String(data.text ?? "").trim();
+  const rawText = typeof data === "string" ? data : data?.text;
+  const textInput = String(rawText ?? "").trim();
   if (!textInput) throw new Error("Празен текст за озвучаване");
   if (textInput.length > 4500) throw new Error("Текстът е твърде дълъг за един запис");
 
