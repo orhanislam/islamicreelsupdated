@@ -12,7 +12,8 @@ import { getAiMemory, updateAiMemory, type AiMemory } from "@/lib/memory.functio
 import { getOneMonthCooldownSummary, recordRejectedProposalToHistory } from "@/lib/generation-history.functions";
 import { generateViralThumbnail, getServerJobThumbnail } from "@/lib/thumbnail.functions";
 import { formatViralSocialCaption, generateTikTokSEOTitle } from "@/lib/caption.functions";
-import { getAutopilotConfig, updateAutopilotConfig, triggerAutopilotCycleNow, testAutopilotWebhook, getBulgarianTime, getNextBulgarianRun, type AutopilotConfig } from "@/lib/autopilot.functions";
+import { getAutopilotConfig, updateAutopilotConfig, triggerAutopilotCycleNow, testAutopilotWebhook, type AutopilotConfig } from "@/lib/autopilot.functions";
+import { getBulgarianTime, getNextBulgarianRun } from "@/lib/bulgarian-time";
 import { listServerRenderJobs } from "@/lib/render.functions";
 import { sanitizeFilename } from "@/lib/download-media";
 import { playStudioClick } from "@/lib/sfx";

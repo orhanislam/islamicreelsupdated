@@ -3,21 +3,6 @@ import "./lib/error-capture";
 import { consumeLastCapturedError } from "./lib/error-capture";
 import { renderErrorPage } from "./lib/error-page";
 
-// 24/7 Autopilot Scheduler initialized unconditionally at server boot (delayed 2s to allow all ESM modules to finish loading)
-if (
-  typeof process !== "undefined" &&
-  process.env.NODE_ENV !== "test" &&
-  !process.argv.some((a) => a.includes("test"))
-) {
-  setTimeout(() => {
-    import("./lib/autopilot.functions")
-      .then((mod) => {
-        mod.initAutopilotScheduler();
-      })
-      .catch((err) => console.error("[server] Failed to initialize Autopilot Scheduler:", err));
-  }, 2000);
-}
-
 type ServerEntry = {
   fetch: (request: Request, env: unknown, ctx: unknown) => Promise<Response> | Response;
 };
@@ -55,6 +40,16 @@ async function normalizeCatastrophicSsrResponse(response: Response): Promise<Res
 export default {
   async fetch(request: Request, env: unknown, ctx: unknown) {
     try {
+      const globalForCron = globalThis as unknown as { __cronStarted: boolean };
+      if (!globalForCron.__cronStarted && typeof process !== "undefined" && process.env.NODE_ENV !== "test") {
+        globalForCron.__cronStarted = true;
+        setTimeout(() => {
+          import("./lib/autopilot.functions")
+            .then((m) => m.initAutopilotScheduler())
+            .catch((e) => console.error("Failed to init autopilot scheduler:", e));
+        }, 100);
+      }
+
       const url = new URL(request.url);
       if (url.pathname.startsWith("/api/download/")) {
         const parts = url.pathname.split("/").filter(Boolean);
