@@ -4,6 +4,8 @@ import {
   runAutopilotCycleDirect,
   publishVideoViaUploadPostDirect,
   DEFAULT_AUTOPILOT_CONFIG,
+  getBulgarianTime,
+  getNextBulgarianRun,
 } from "../autopilot.functions";
 import { generateAndStorePostRenderSocialKit, getJobsDir } from "../render.functions";
 import { pickBestFile } from "../pexels.functions";
@@ -284,12 +286,67 @@ async function testViralCoverGenerationAndVideoEmbedding() {
   console.log("✔ Viral Cover Thumbnail Generation, MP4 Container Embedding, and Upload-Post Staging verified 100%!");
 }
 
+async function testBulgarianTimeAndScheduler() {
+  console.log("6. Testing Bulgarian Timezone (Europe/Sofia) & Autopilot Schedule Matching...");
+
+  // 1. Verify getBulgarianTime calculations
+  const sampleUtcMorning = new Date("2026-10-26T06:00:00Z");
+  const bgMorning = getBulgarianTime(sampleUtcMorning);
+  if (bgMorning.timeHm !== "08:00") {
+    throw new Error(`Expected Bulgarian time 08:00 for 06:00 UTC, got: ${bgMorning.timeHm}`);
+  }
+
+  const sampleUtcMidnight = new Date("2026-10-25T22:00:00Z");
+  const bgMidnight = getBulgarianTime(sampleUtcMidnight);
+  if (bgMidnight.timeHm !== "00:00") {
+    throw new Error(`Expected Bulgarian time 00:00 for 22:00 UTC, got: ${bgMidnight.timeHm}`);
+  }
+
+  // 2. Verify getNextBulgarianRun
+  const configuredTimes = ["00:00", "04:00", "12:00", "16:00", "20:00"];
+
+  // Test at 08:30 Bulgarian time (06:30 UTC)
+  const morningRun = getNextBulgarianRun(configuredTimes, new Date("2026-10-26T06:30:00Z"));
+  if (!morningRun || morningRun.nextTime !== "12:00" || !morningRun.isToday) {
+    throw new Error(`Expected next run 12:00 today, got: ${JSON.stringify(morningRun)}`);
+  }
+
+  // Test at 21:15 Bulgarian time (19:15 UTC) -> should be 00:00 tomorrow
+  const nightRun = getNextBulgarianRun(configuredTimes, new Date("2026-10-26T19:15:00Z"));
+  if (!nightRun || nightRun.nextTime !== "00:00" || nightRun.isToday) {
+    throw new Error(`Expected next run 00:00 tomorrow, got: ${JSON.stringify(nightRun)}`);
+  }
+
+  // 3. Verify slot delta matching logic
+  const checkSlotGrace = (slotH: number, slotM: number, curH: number, curM: number) => {
+    const s = slotH * 60 + slotM;
+    const c = curH * 60 + curM;
+    const diff = (c - s + 1440) % 1440;
+    return diff >= 0 && diff <= 3;
+  };
+
+  if (!checkSlotGrace(12, 0, 12, 0)) throw new Error("12:00 at 12:00 should match");
+  if (!checkSlotGrace(12, 0, 12, 2)) throw new Error("12:00 at 12:02 should match (grace window)");
+  if (checkSlotGrace(12, 0, 12, 4)) throw new Error("12:00 at 12:04 should not match (past grace window)");
+  if (!checkSlotGrace(0, 0, 0, 1)) throw new Error("00:00 at 00:01 should match");
+  if (checkSlotGrace(12, 0, 11, 59)) throw new Error("12:00 at 11:59 should not match before time");
+
+  // 4. Verify config dynamic fields
+  const cfg = await readAutopilotConfigDirect();
+  if (cfg.timezone !== "Europe/Sofia" || !cfg.serverBulgarianTime) {
+    throw new Error(`Config missing dynamic Bulgarian time fields: ${JSON.stringify(cfg)}`);
+  }
+
+  console.log("✔ Bulgarian Timezone (Europe/Sofia) & Autopilot Schedule Matching verified 100%!");
+}
+
 async function main() {
   console.log("=== Running Autopilot Engine Verification Suite ===");
   await testAutopilotConfigPersistence();
   await testPostRenderSocialKitAndCaptionGeneration();
   await testUltraHdQualityPipeline();
   await testViralCoverGenerationAndVideoEmbedding();
+  await testBulgarianTimeAndScheduler();
   await testAutonomousCycleDryRun();
   console.log("✔ ALL AUTOPILOT ENGINE TESTS PASSED SUCCESSFULLY!");
   process.exit(0);

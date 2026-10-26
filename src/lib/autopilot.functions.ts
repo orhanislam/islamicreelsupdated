@@ -35,6 +35,103 @@ export interface AutopilotConfig {
   lastRunMessage?: string;
   totalAutopilotVideos: number;
   historyLog: AutopilotHistoryEntry[];
+  timezone?: string; // "Europe/Sofia"
+  serverBulgarianTime?: string;
+  serverBulgarianFullText?: string;
+  nextScheduledRunText?: string;
+}
+
+/**
+ * Bulgarian Time Helper (Europe/Sofia timezone: EET/EEST, UTC+2 / UTC+3).
+ * Guarantees 100% accurate Bulgarian local time regardless of VPS host timezone (e.g. CET/UTC).
+ */
+export function getBulgarianTime(date: Date = new Date()) {
+  const formatter = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Europe/Sofia",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  });
+  const parts = formatter.formatToParts(date);
+  const get = (type: string) => parts.find((p) => p.type === type)?.value || "00";
+  const year = get("year");
+  const month = get("month");
+  const day = get("day");
+  const hour = get("hour");
+  const minute = get("minute");
+  const second = get("second");
+
+  const hourNum = parseInt(hour, 10);
+  const minNum = parseInt(minute, 10);
+  const totalMinutes = hourNum * 60 + minNum;
+
+  return {
+    year,
+    month,
+    day,
+    hour,
+    minute,
+    second,
+    hourNum,
+    minNum,
+    totalMinutes,
+    timeHm: `${hour}:${minute}`,
+    dateKey: `${year}-${month}-${day}`,
+    slotKey: (slotHm: string) => `${year}-${month}-${day}_${slotHm}`,
+    fullText: `${day}.${month}.${year} г., ${hour}:${minute}:${second} ч. (Българско време, Europe/Sofia)`,
+  };
+}
+
+/**
+ * Calculates the next upcoming scheduled slot in Bulgarian time and human-readable countdown text.
+ */
+export function getNextBulgarianRun(
+  scheduleTimes: string[],
+  date: Date = new Date(),
+): {
+  nextTime: string;
+  isToday: boolean;
+  minutesRemaining: number;
+  formattedText: string;
+} | null {
+  if (!scheduleTimes || scheduleTimes.length === 0) return null;
+  const bg = getBulgarianTime(date);
+  const sortedTimes = [...scheduleTimes].sort();
+
+  for (const time of sortedTimes) {
+    const [h, m] = time.split(":").map(Number);
+    if (isNaN(h) || isNaN(m)) continue;
+    const slotMins = h * 60 + m;
+    if (slotMins > bg.totalMinutes) {
+      const remaining = slotMins - bg.totalMinutes;
+      const remH = Math.floor(remaining / 60);
+      const remM = remaining % 60;
+      const remText = remH > 0 ? `${remH} ч. и ${remM} мин.` : `${remM} мин.`;
+      return {
+        nextTime: time,
+        isToday: true,
+        minutesRemaining: remaining,
+        formattedText: `Днес в ${time} ч. (след ~${remText})`,
+      };
+    }
+  }
+
+  const firstTomorrow = sortedTimes[0];
+  const [fh, fm] = firstTomorrow.split(":").map(Number);
+  const slotMinsTomorrow = 1440 - bg.totalMinutes + (fh * 60 + fm);
+  const remH = Math.floor(slotMinsTomorrow / 60);
+  const remM = slotMinsTomorrow % 60;
+  const remText = remH > 0 ? `${remH} ч. и ${remM} мин.` : `${remM} мин.`;
+  return {
+    nextTime: firstTomorrow,
+    isToday: false,
+    minutesRemaining: slotMinsTomorrow,
+    formattedText: `Утре в ${firstTomorrow} ч. (след ~${remText})`,
+  };
 }
 
 export const DEFAULT_UPLOAD_POST_API_KEY =
@@ -128,6 +225,10 @@ function normalizeConfig(raw: Partial<AutopilotConfig> | null | undefined): Auto
     lastRunMessage: raw.lastRunMessage || DEFAULT_AUTOPILOT_CONFIG.lastRunMessage,
     totalAutopilotVideos: Number(raw.totalAutopilotVideos) || 0,
     historyLog: Array.isArray(raw.historyLog) ? raw.historyLog.slice(0, 30) : [],
+    timezone: "Europe/Sofia",
+    serverBulgarianTime: getBulgarianTime().timeHm,
+    serverBulgarianFullText: getBulgarianTime().fullText,
+    nextScheduledRunText: getNextBulgarianRun(scheduleTimes)?.formattedText || "Няма зададен час",
   };
 }
 
@@ -577,6 +678,8 @@ export async function publishVideoViaUploadPostDirect(params: {
   user?: string;
   platforms?: Array<"tiktok" | "instagram" | "youtube">;
   coverImagePath?: string;
+  scheduledDate?: string | Date | number;
+  timezone?: string;
 }): Promise<{
   published: boolean;
   status?: number;
@@ -654,6 +757,12 @@ export async function publishVideoViaUploadPostDirect(params: {
       form.append("disable_comment", "false");
       form.append("disable_stitch", "false");
       form.append("cover_timestamp", "0");
+    }
+
+    if (params.scheduledDate) {
+      const scheduledIso = new Date(params.scheduledDate).toISOString();
+      form.append("scheduled_date", scheduledIso);
+      form.append("timezone", params.timezone || "Europe/Sofia");
     }
 
     if (stagedCoverUrl) {
@@ -1093,37 +1202,53 @@ export const triggerAutopilotCycleNow = createServerFn({ method: "POST" })
 
 export function initAutopilotScheduler() {
   if (typeof process === "undefined" || typeof window !== "undefined") return;
-  const globalForAutopilot = globalThis as unknown as { __autopilotSchedulerStarted?: boolean };
+  const globalForAutopilot = globalThis as unknown as {
+    __autopilotSchedulerStarted?: boolean;
+    __autopilotCheckInterval?: any;
+  };
   if (globalForAutopilot.__autopilotSchedulerStarted) return;
   globalForAutopilot.__autopilotSchedulerStarted = true;
 
-  console.log("[autopilot-scheduler] 24/7 Zero-Click Autopilot Scheduler initialized.");
+  const bg = getBulgarianTime();
+  console.log(
+    `[autopilot-scheduler] 24/7 Zero-Click Autopilot Scheduler active! Current Bulgarian time: ${bg.fullText}`,
+  );
 
   const checkInterval = setInterval(async () => {
     try {
       const cfg = await readAutopilotConfigDirect();
       if (!cfg.enabled || isAutopilotCycleRunning) return;
 
-      const now = new Date();
-      const hh = String(now.getHours()).padStart(2, "0");
-      const mm = String(now.getMinutes()).padStart(2, "0");
-      const currentHm = `${hh}:${mm}`;
-      const dateKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
-      const slotKey = `${dateKey}_${currentHm}`;
+      const bgNow = getBulgarianTime();
 
-      if (cfg.scheduleTimes.includes(currentHm) && cfg.lastRunScheduleSlot !== slotKey) {
-        console.log(`[autopilot-scheduler] Scheduled slot ${slotKey} matched! Launching autonomous cycle...`);
-        await writeAutopilotConfigDirect({ lastRunScheduleSlot: slotKey });
-        await runAutopilotCycleDirect({
-          count: cfg.videosPerRun,
-          contentMode: cfg.contentMode,
-          triggerSource: "schedule",
-        });
+      for (const slot of cfg.scheduleTimes) {
+        const [sH, sM] = slot.split(":").map(Number);
+        if (isNaN(sH) || isNaN(sM)) continue;
+        const slotMinutes = sH * 60 + sM;
+        const diff = (bgNow.totalMinutes - slotMinutes + 1440) % 1440;
+
+        // Trigger if within a 3-minute grace window from the scheduled Bulgarian time
+        if (diff >= 0 && diff <= 3) {
+          const expectedSlotKey = bgNow.slotKey(slot);
+          if (cfg.lastRunScheduleSlot !== expectedSlotKey) {
+            console.log(
+              `[autopilot-scheduler] 🇧🇬 Bulgarian slot ${slot} matched at ${bgNow.timeHm} (slotKey: ${expectedSlotKey})! Starting autonomous cycle...`,
+            );
+            await writeAutopilotConfigDirect({ lastRunScheduleSlot: expectedSlotKey });
+            await runAutopilotCycleDirect({
+              count: cfg.videosPerRun,
+              contentMode: cfg.contentMode,
+              triggerSource: "schedule",
+            });
+            break; // Fire at most one scheduled cycle per interval check
+          }
+        }
       }
     } catch (err) {
-      console.error("[autopilot-scheduler] Check error:", err);
+      console.error("[autopilot-scheduler] Bulgarian check error:", err);
     }
-  }, 30 * 1000);
+  }, 25 * 1000);
 
+  globalForAutopilot.__autopilotCheckInterval = checkInterval;
   checkInterval?.unref?.();
 }

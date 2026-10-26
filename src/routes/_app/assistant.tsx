@@ -1,7 +1,7 @@
 import { CarouselRendererButton } from "@/components/CarouselRendererButton";
 import React, { useState, useEffect, useRef } from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { Bot, Send, Loader2, Sparkles, Download, CheckCircle2, Video, Pencil, Brain, Trash2, Plus, Copy, Image as ImageIcon, BookOpen, ScrollText, ShieldCheck, History, X } from "lucide-react";
+import { Bot, Send, Loader2, Sparkles, Download, CheckCircle2, Video, Pencil, Brain, Trash2, Plus, Copy, Image as ImageIcon, BookOpen, ScrollText, ShieldCheck, History, X, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
@@ -12,7 +12,7 @@ import { getAiMemory, updateAiMemory, type AiMemory } from "@/lib/memory.functio
 import { getOneMonthCooldownSummary, recordRejectedProposalToHistory } from "@/lib/generation-history.functions";
 import { generateViralThumbnail, getServerJobThumbnail } from "@/lib/thumbnail.functions";
 import { formatViralSocialCaption, generateTikTokSEOTitle } from "@/lib/caption.functions";
-import { getAutopilotConfig, updateAutopilotConfig, triggerAutopilotCycleNow, testAutopilotWebhook, type AutopilotConfig } from "@/lib/autopilot.functions";
+import { getAutopilotConfig, updateAutopilotConfig, triggerAutopilotCycleNow, testAutopilotWebhook, getBulgarianTime, getNextBulgarianRun, type AutopilotConfig } from "@/lib/autopilot.functions";
 import { listServerRenderJobs } from "@/lib/render.functions";
 import { sanitizeFilename } from "@/lib/download-media";
 import { playStudioClick } from "@/lib/sfx";
@@ -121,6 +121,14 @@ function AssistantPage() {
   const [autopilotRunning, setAutopilotRunning] = useState(false);
   const [testingWebhook, setTestingWebhook] = useState(false);
   const [newScheduleTime, setNewScheduleTime] = useState("12:00");
+  const [bgClock, setBgClock] = useState(() => getBulgarianTime());
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setBgClock(getBulgarianTime());
+    }, 10000);
+    return () => clearInterval(timer);
+  }, []);
   const autoDownloadedRef = useRef<Set<string>>(new Set());
   const [inspectorInputText, setInspectorInputText] = useState("");
   const [inspectorRunning, setInspectorRunning] = useState(false);
@@ -1503,17 +1511,37 @@ function AssistantPage() {
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
             {/* Schedule Times */}
-            <div className="rounded-xl bg-background/70 border border-border/60 p-3 space-y-2">
-              <label className="text-xs font-bold text-amber-300 flex items-center justify-between">
-                <span>⏰ Часове за автоматичен старт:</span>
-              </label>
+            <div className="rounded-xl bg-background/70 border border-border/60 p-3 space-y-2.5">
+              <div className="flex items-center justify-between flex-wrap gap-1">
+                <label className="text-xs font-bold text-amber-300 flex items-center gap-1.5">
+                  <Clock className="size-3.5 text-amber-400" />
+                  <span>Часове за качване (Българско време):</span>
+                </label>
+                <span className="text-[10px] font-mono font-bold text-emerald-300 bg-emerald-500/15 border border-emerald-500/30 px-2 py-0.5 rounded-full inline-flex items-center gap-1">
+                  <span className="size-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                  🇧🇬 {bgClock.timeHm} ч.
+                </span>
+              </div>
+
+              {(() => {
+                const nextBgRun = getNextBulgarianRun(autopilotConfig.scheduleTimes, new Date());
+                return nextBgRun ? (
+                  <div className="rounded-lg bg-amber-500/10 border border-amber-500/30 px-2.5 py-1.5 text-[11px] text-amber-200 flex items-center gap-1.5 font-medium">
+                    <span className="text-amber-400">⏳</span>
+                    <span>
+                      <strong>Следващо авто-качване:</strong> {nextBgRun.formattedText}
+                    </span>
+                  </div>
+                ) : null;
+              })()}
+
               <div className="flex flex-wrap gap-1.5">
                 {autopilotConfig.scheduleTimes.map((timeStr) => (
                   <span
                     key={timeStr}
-                    className="inline-flex items-center gap-1 rounded-lg bg-amber-500/15 border border-amber-500/40 px-2 py-1 text-xs font-mono font-bold text-amber-200"
+                    className="inline-flex items-center gap-1 rounded-lg bg-amber-500/15 border border-amber-500/40 px-2.5 py-1 text-xs font-mono font-bold text-amber-200"
                   >
-                    {timeStr} ч.
+                    ⏰ {timeStr} ч.
                     {autopilotConfig.scheduleTimes.length > 1 && (
                       <button
                         type="button"
@@ -1522,7 +1550,7 @@ function AssistantPage() {
                             scheduleTimes: autopilotConfig.scheduleTimes.filter((t) => t !== timeStr),
                           })
                         }
-                        className="text-amber-300/70 hover:text-rose-400 ml-1 cursor-pointer"
+                        className="text-amber-300/70 hover:text-rose-400 ml-1.5 cursor-pointer text-sm leading-none"
                         title="Премахни час"
                       >
                         ×
@@ -1531,7 +1559,8 @@ function AssistantPage() {
                   </span>
                 ))}
               </div>
-              <div className="flex items-center gap-1.5 pt-1">
+
+              <div className="flex items-center gap-1.5 pt-0.5">
                 <Input
                   type="time"
                   value={newScheduleTime}
@@ -1546,12 +1575,17 @@ function AssistantPage() {
                     handleUpdateAutopilot({
                       scheduleTimes: [...autopilotConfig.scheduleTimes, newScheduleTime].sort(),
                     });
+                    setNewScheduleTime("");
                   }}
                   className="h-8 text-xs px-2.5 rounded-lg border-amber-500/40 text-amber-300 hover:bg-amber-500/15 cursor-pointer shrink-0"
                 >
                   <Plus className="size-3.5 mr-1" /> Добави час
                 </Button>
               </div>
+
+              <p className="text-[10px] text-muted-foreground leading-snug">
+                Всички часове са фиксирани по <strong>Българско време (Europe/Sofia)</strong>. Точно в тези часове сървърът автономно рендира и качва готовите видеа в TikTok.
+              </p>
             </div>
 
             {/* Videos per run & Content Mode */}
@@ -2181,7 +2215,7 @@ function AssistantPage() {
                 return;
               }
               if (hadithSchedule === "scheduled" && hadithScheduleDate) {
-                toast.success(`📅 Серията от ${hadithBatchCount} хадиса е планирана за ${new Date(hadithScheduleDate).toLocaleString("bg-BG")}!`);
+                toast.success(`📅 Серията от ${hadithBatchCount} хадиса е планирана за ${new Date(hadithScheduleDate).toLocaleString("bg-BG", { timeZone: "Europe/Sofia" })} (Българско време)!`);
               }
               handleStartHadithBatchSeries(hadithBatchCount);
             }}
@@ -2265,7 +2299,7 @@ function AssistantPage() {
                 return;
               }
               if (quranSchedule === "scheduled" && quranScheduleDate) {
-                toast.success(`📅 Серията от ${batchCount} видеа от Корана е планирана за ${new Date(quranScheduleDate).toLocaleString("bg-BG")}!`);
+                toast.success(`📅 Серията от ${batchCount} видеа от Корана е планирана за ${new Date(quranScheduleDate).toLocaleString("bg-BG", { timeZone: "Europe/Sofia" })} (Българско време)!`);
               }
               handleStartBatchSeries(batchCount);
             }}
