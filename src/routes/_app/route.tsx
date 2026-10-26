@@ -1,5 +1,5 @@
 import { createFileRoute, Outlet, Link } from "@tanstack/react-router";
-import { PlusCircle, Bot, History, Download, Users } from "lucide-react";
+import { PlusCircle, Bot, History, Download, Users, Building2 } from "lucide-react";
 
 export const Route = createFileRoute("/_app")({
   ssr: false,
@@ -16,6 +16,14 @@ function AppShell() {
             <span className="text-base sm:text-lg font-semibold tracking-tight hidden xs:inline">Nur Studio</span>
           </Link>
           <nav className="font-ui flex items-center gap-1 sm:gap-1.5 text-xs sm:text-sm overflow-x-auto py-0.5 no-scrollbar">
+            <Link
+              to="/studio"
+              className="rounded-md px-2.5 sm:px-3 py-1.5 sm:py-2 hover:bg-secondary whitespace-nowrap flex items-center gap-1.5 transition-colors [&.active]:bg-secondary [&.active]:text-primary"
+              activeProps={{ className: "active" }}
+            >
+              <Building2 className="size-4 text-amber-400 shrink-0" />
+              <span>🏢 AI Офис</span>
+            </Link>
             <Link
               to="/assistant"
               search={{ tab: "team" }}

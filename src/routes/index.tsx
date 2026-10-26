@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { BookOpen, Sparkles, Video, History, Bot, Users } from "lucide-react";
+import { BookOpen, Sparkles, Video, History, Bot, Users, Building2 } from "lucide-react";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -27,6 +27,13 @@ function Landing() {
             <span className="text-xl font-semibold tracking-tight">Nur Studio</span>
           </div>
           <nav className="flex items-center gap-2 sm:gap-3">
+            <Link
+              to="/studio"
+              className="font-ui hidden sm:flex items-center gap-1.5 px-3 py-2 text-sm font-semibold text-amber-400 hover:text-amber-300 transition-colors"
+            >
+              <Building2 className="size-4 text-amber-400" />
+              🏢 AI Офис
+            </Link>
             <Link
               to="/assistant"
               search={{ tab: "team" }}
@@ -77,6 +84,10 @@ function Landing() {
         </p>
         
         <div className="mt-10 flex flex-wrap justify-center gap-4 font-ui animate-fade-up" style={{ animationDelay: "300ms" }}>
+          <Link to="/studio" className="rounded-full bg-gradient-to-r from-emerald-600 via-teal-600 to-indigo-600 px-8 py-3.5 text-white font-medium shadow-xl shadow-emerald-700/30 transition-all hover:scale-105 flex items-center gap-2">
+            <Building2 className="size-4 text-amber-300" />
+            Влез в AI Офиса (Студио с Бюра)
+          </Link>
           <Link to="/create" className="rounded-full bg-primary px-8 py-3.5 text-primary-foreground font-medium shadow-xl shadow-primary/30 transition-all hover:scale-105 hover:bg-primary/90">
             Започни безплатно
           </Link>

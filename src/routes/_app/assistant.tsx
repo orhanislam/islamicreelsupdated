@@ -1,8 +1,9 @@
 import { CarouselRendererButton } from "@/components/CarouselRendererButton";
 import { SalafiWorkersTeam } from "@/components/SalafiWorkersTeam";
+import { VirtualStudioOffice } from "@/components/VirtualStudioOffice";
 import React, { useState, useEffect, useRef } from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { Bot, Send, Loader2, Sparkles, Download, CheckCircle2, Video, Pencil, Brain, Trash2, Plus, Copy, Image as ImageIcon, BookOpen, ScrollText, ShieldCheck, History, X, Clock, Users } from "lucide-react";
+import { Bot, Send, Loader2, Sparkles, Download, CheckCircle2, Video, Pencil, Brain, Trash2, Plus, Copy, Image as ImageIcon, BookOpen, ScrollText, ShieldCheck, History, X, Clock, Users, Building2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
@@ -22,7 +23,7 @@ import { getNextTawheedTopic, getTawheedTaxonomy } from "@/lib/tawheed-taxonomy"
 
 export const Route = createFileRoute("/_app/assistant")({
   validateSearch: (search: Record<string, unknown>) => ({
-    tab: typeof search.tab === "string" ? search.tab : "team",
+    tab: typeof search.tab === "string" ? search.tab : "office",
   }),
   component: AssistantPage,
 });
@@ -84,13 +85,17 @@ export const EXPLAINED_VIDEO_THEME_PILLS = [
 function AssistantPage() {
   const search = Route.useSearch();
   const navigate = useNavigate();
-  const [viewMode, setViewMode] = useState<"chat" | "team">(search?.tab === "chat" ? "chat" : "team");
+  const [viewMode, setViewMode] = useState<"office" | "team" | "chat">(
+    search?.tab === "chat" ? "chat" : search?.tab === "team" ? "team" : "office"
+  );
 
   useEffect(() => {
     if (search?.tab === "chat") {
       setViewMode("chat");
     } else if (search?.tab === "team") {
       setViewMode("team");
+    } else if (search?.tab === "office") {
+      setViewMode("office");
     }
   }, [search?.tab]);
 
@@ -1443,9 +1448,27 @@ function AssistantPage() {
         </div>
       </div>
 
-      {/* Visual Workspace Switcher: 👥 Екип от AI Работници vs 💬 Чат с Главния Мениджър */}
+      {/* Visual Workspace Switcher: 🏢 AI Офис vs 👥 Екип от AI Работници vs 💬 Чат с Главния Мениджър */}
       <div className="mb-6 flex items-center justify-between border-b border-border/60 pb-3 flex-wrap gap-2">
         <div className="flex items-center gap-2 flex-wrap">
+          <button
+            type="button"
+            onClick={() => {
+              setViewMode("office");
+              if (typeof window !== "undefined") {
+                window.history.replaceState(null, "", "?tab=office");
+              }
+            }}
+            className={`flex items-center gap-2 px-3.5 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer ${
+              viewMode === "office"
+                ? "bg-gradient-to-r from-amber-600 via-orange-600 to-amber-700 text-white shadow-md shadow-amber-700/25 ring-2 ring-amber-500/50"
+                : "bg-secondary/40 text-muted-foreground hover:text-foreground hover:bg-secondary/70"
+            }`}
+          >
+            <Building2 className="size-4 text-amber-300" />
+            <span>🏢 AI Офис (Студио с Бюра)</span>
+            <span className="text-[10px] bg-amber-400 text-black px-1.5 py-0.2 rounded-full font-extrabold uppercase">3D/2D</span>
+          </button>
           <button
             type="button"
             onClick={() => {
@@ -1461,8 +1484,7 @@ function AssistantPage() {
             }`}
           >
             <Users className="size-4 text-emerald-300" />
-            <span>👥 Екип от AI Работници (Визуален Студиен Панел)</span>
-            <span className="text-[10px] bg-emerald-400 text-black px-1.5 py-0.2 rounded-full font-extrabold uppercase">Активно</span>
+            <span>👥 Екип Панел</span>
           </button>
           <button
             type="button"
@@ -1482,6 +1504,13 @@ function AssistantPage() {
             <span>💬 Чат с Главния Мениджър</span>
           </button>
         </div>
+        <Link
+          to="/studio"
+          className="text-xs text-amber-400 hover:text-amber-300 transition-colors font-semibold flex items-center gap-1 px-2.5 py-1 rounded-lg bg-amber-500/10 border border-amber-500/30"
+        >
+          <Building2 className="size-3.5" />
+          <span>Отвори Студиото на цял екран (/studio) ↗</span>
+        </Link>
       </div>
 
       {activeTasks.length > 0 && (
@@ -2241,7 +2270,11 @@ function AssistantPage() {
         </Card>
       )}
 
-      {viewMode === "team" ? (
+      {viewMode === "office" ? (
+        <VirtualStudioOffice
+          onStartRender={(proposal) => handleConfirmProposal(proposal)}
+        />
+      ) : viewMode === "team" ? (
         <SalafiWorkersTeam
           onStartRender={(proposal) => handleConfirmProposal(proposal)}
         />
