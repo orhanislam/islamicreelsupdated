@@ -29,7 +29,7 @@ export interface AutopilotConfig {
   uploadPostApiKey: string;
   uploadPostUser: string;
   uploadPostPlatforms: Array<"tiktok" | "instagram" | "youtube">;
-  tiktokPostMode?: "DIRECT_POST" | "MEDIA_UPLOAD";
+  tiktokPostMode?: "SELF_ONLY" | "DIRECT_POST" | "MEDIA_UPLOAD";
   lastRunAt?: number;
   lastRunScheduleSlot?: string;
   lastRunStatus?: "idle" | "running" | "completed" | "failed";
@@ -63,7 +63,7 @@ export const DEFAULT_AUTOPILOT_CONFIG: AutopilotConfig = {
   uploadPostApiKey: DEFAULT_UPLOAD_POST_API_KEY,
   uploadPostUser: DEFAULT_UPLOAD_POST_USER,
   uploadPostPlatforms: ["tiktok"],
-  tiktokPostMode: "DIRECT_POST",
+  tiktokPostMode: "SELF_ONLY",
   lastRunStatus: "idle",
   lastRunMessage: "Готов за автоматично генериране и публикуване в TikTok (@orhan.islam).",
   totalAutopilotVideos: 0,
@@ -132,9 +132,11 @@ function normalizeConfig(raw: Partial<AutopilotConfig> | null | undefined): Auto
           ) as Array<"tiktok" | "instagram" | "youtube">)
         : ["tiktok"],
     tiktokPostMode:
-      raw.tiktokPostMode === "MEDIA_UPLOAD" || raw.tiktokPostMode === "DIRECT_POST"
+      raw.tiktokPostMode === "MEDIA_UPLOAD" ||
+      raw.tiktokPostMode === "DIRECT_POST" ||
+      raw.tiktokPostMode === "SELF_ONLY"
         ? raw.tiktokPostMode
-        : "DIRECT_POST",
+        : "SELF_ONLY",
     lastRunAt: typeof raw.lastRunAt === "number" ? raw.lastRunAt : undefined,
     lastRunScheduleSlot: typeof raw.lastRunScheduleSlot === "string" ? raw.lastRunScheduleSlot : undefined,
     lastRunStatus: raw.lastRunStatus || "idle",
@@ -641,24 +643,43 @@ export async function publishVideoViaUploadPostDirect(params: {
     const form = new FormData();
     form.append("user", userHandle);
     form.append("title", captionText);
+    form.append("caption", captionText);
+    form.append("tiktok_title", captionText);
     for (const p of platforms) {
       form.append("platform[]", p);
     }
     if (platforms.includes("tiktok")) {
-      const postMode = cfg.tiktokPostMode === "MEDIA_UPLOAD" ? "MEDIA_UPLOAD" : "DIRECT_POST";
+      const postMode = cfg.tiktokPostMode || "SELF_ONLY";
       if (postMode === "MEDIA_UPLOAD") {
         form.append("post_mode", "MEDIA_UPLOAD");
         form.append("tiktokPostMode", "MEDIA_UPLOAD");
         form.append("tiktokUploadToDraft", "true");
         form.append("upload_to_draft", "true");
+        form.append("cover_timestamp", "0");
+        form.append("video_cover_timestamp_ms", "0");
+      } else if (postMode === "SELF_ONLY") {
+        // "Лична Чернова" - direct post to TikTok with privacy level SELF_ONLY ("Само за мен").
+        // This ensures TikTok retains 100% of the SEO title, full viral caption, hashtags, and custom cover,
+        // while remaining 100% private and visible only to the creator (just like a draft).
+        form.append("post_mode", "DIRECT_POST");
+        form.append("tiktokPostMode", "DIRECT_POST");
+        form.append("privacy_level", "SELF_ONLY");
+        form.append("tiktok_privacy_level", "SELF_ONLY");
+        form.append("disable_duet", "false");
+        form.append("disable_comment", "false");
+        form.append("disable_stitch", "false");
+        form.append("cover_timestamp", "0");
+        form.append("video_cover_timestamp_ms", "0");
       } else {
         form.append("privacy_level", "PUBLIC_TO_EVERYONE");
+        form.append("tiktok_privacy_level", "PUBLIC_TO_EVERYONE");
         form.append("post_mode", "DIRECT_POST");
         form.append("tiktokPostMode", "DIRECT_POST");
         form.append("disable_duet", "false");
         form.append("disable_comment", "false");
         form.append("disable_stitch", "false");
         form.append("cover_timestamp", "0");
+        form.append("video_cover_timestamp_ms", "0");
       }
     }
 
@@ -681,6 +702,8 @@ export async function publishVideoViaUploadPostDirect(params: {
       form.append("cover", coverBlob, `${params.jobId || "islamic_reel"}_cover.jpg`);
       form.append("cover_image", coverBlob, `${params.jobId || "islamic_reel"}_cover.jpg`);
       form.append("thumbnail", coverBlob, `${params.jobId || "islamic_reel"}_cover.jpg`);
+      form.append("tiktok_cover", coverBlob, `${params.jobId || "islamic_reel"}_cover.jpg`);
+      form.append("tiktokCover", coverBlob, `${params.jobId || "islamic_reel"}_cover.jpg`);
     }
 
     const blob = new Blob([new Uint8Array(fileBuf)], { type: "video/mp4" });

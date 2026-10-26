@@ -1880,34 +1880,50 @@ function AssistantPage() {
               </div>
             </div>
 
-            <div className="pt-1 border-t border-border/50 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-              <span className="text-[11px] font-semibold text-emerald-300">
-                🎯 Режим на качване в TikTok (в точния зададен час):
-              </span>
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => handleUpdateAutopilot({ tiktokPostMode: "DIRECT_POST" })}
-                  className={`px-3 py-1.5 rounded-lg text-[11px] font-bold border transition cursor-pointer ${
-                    (autopilotConfig.tiktokPostMode || "DIRECT_POST") === "DIRECT_POST"
-                      ? "bg-emerald-500/25 border-emerald-400 text-emerald-200"
-                      : "bg-background border-border/60 text-muted-foreground"
-                  }`}
-                >
-                  🚀 Директно публикуване (DIRECT_POST HD)
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleUpdateAutopilot({ tiktokPostMode: "MEDIA_UPLOAD" })}
-                  className={`px-3 py-1.5 rounded-lg text-[11px] font-bold border transition cursor-pointer ${
-                    autopilotConfig.tiktokPostMode === "MEDIA_UPLOAD"
-                      ? "bg-amber-500/25 border-amber-400 text-amber-200"
-                      : "bg-background border-border/60 text-muted-foreground"
-                  }`}
-                >
-                  📥 В Чернови / Drafts (MEDIA_UPLOAD)
-                </button>
+            <div className="pt-2 border-t border-border/50 space-y-2">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <span className="text-[11px] font-semibold text-emerald-300">
+                  🎯 Режим на качване в TikTok (в точния зададен час):
+                </span>
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <button
+                    type="button"
+                    onClick={() => handleUpdateAutopilot({ tiktokPostMode: "SELF_ONLY" })}
+                    className={`px-3 py-1.5 rounded-lg text-[11px] font-bold border transition cursor-pointer ${
+                      (autopilotConfig.tiktokPostMode || "SELF_ONLY") === "SELF_ONLY"
+                        ? "bg-amber-500/25 border-amber-400 text-amber-200 ring-2 ring-amber-400/40 shadow-sm"
+                        : "bg-background border-border/60 text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    🔒 Чернова (Само за мен) — с пълен SEO Текст и Корица ✨
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleUpdateAutopilot({ tiktokPostMode: "DIRECT_POST" })}
+                    className={`px-3 py-1.5 rounded-lg text-[11px] font-bold border transition cursor-pointer ${
+                      autopilotConfig.tiktokPostMode === "DIRECT_POST"
+                        ? "bg-emerald-500/25 border-emerald-400 text-emerald-200 ring-2 ring-emerald-400/40 shadow-sm"
+                        : "bg-background border-border/60 text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    🚀 Директно Публично (PUBLIC)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleUpdateAutopilot({ tiktokPostMode: "MEDIA_UPLOAD" })}
+                    className={`px-3 py-1.5 rounded-lg text-[11px] font-bold border transition cursor-pointer ${
+                      autopilotConfig.tiktokPostMode === "MEDIA_UPLOAD"
+                        ? "bg-sky-500/25 border-sky-400 text-sky-200 ring-2 ring-sky-400/40 shadow-sm"
+                        : "bg-background border-border/60 text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    📥 TikTok Inbox Чернова (MEDIA_UPLOAD)
+                  </button>
+                </div>
               </div>
+              <p className="text-[10px] text-muted-foreground bg-black/40 p-2 rounded-lg border border-border/40">
+                💡 <strong>Препоръчан режим за чернови:</strong> Изберете <em>„🔒 Чернова (Само за мен)“</em>! Поради официалните правила на TikTok API, само при този режим TikTok автоматично записва 100% от SEO заглавието, виралното описание, хаштаговете и корицата, като видеото остава скрито в профила Ви (с катинарче 🔒) и никой не го вижда, докато не натиснете да стане публично.
+              </p>
             </div>
           </div>
 
