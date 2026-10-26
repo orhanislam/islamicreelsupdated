@@ -1,7 +1,8 @@
 import { CarouselRendererButton } from "@/components/CarouselRendererButton";
+import { SalafiWorkersTeam } from "@/components/SalafiWorkersTeam";
 import React, { useState, useEffect, useRef } from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { Bot, Send, Loader2, Sparkles, Download, CheckCircle2, Video, Pencil, Brain, Trash2, Plus, Copy, Image as ImageIcon, BookOpen, ScrollText, ShieldCheck, History, X, Clock } from "lucide-react";
+import { Bot, Send, Loader2, Sparkles, Download, CheckCircle2, Video, Pencil, Brain, Trash2, Plus, Copy, Image as ImageIcon, BookOpen, ScrollText, ShieldCheck, History, X, Clock, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
@@ -20,6 +21,9 @@ import { playStudioClick } from "@/lib/sfx";
 import { getNextTawheedTopic, getTawheedTaxonomy } from "@/lib/tawheed-taxonomy";
 
 export const Route = createFileRoute("/_app/assistant")({
+  validateSearch: (search: Record<string, unknown>) => ({
+    tab: typeof search.tab === "string" ? search.tab : "team",
+  }),
   component: AssistantPage,
 });
 
@@ -78,7 +82,18 @@ export const EXPLAINED_VIDEO_THEME_PILLS = [
 ];
 
 function AssistantPage() {
+  const search = Route.useSearch();
   const navigate = useNavigate();
+  const [viewMode, setViewMode] = useState<"chat" | "team">(search?.tab === "chat" ? "chat" : "team");
+
+  useEffect(() => {
+    if (search?.tab === "chat") {
+      setViewMode("chat");
+    } else if (search?.tab === "team") {
+      setViewMode("team");
+    }
+  }, [search?.tab]);
+
   const [prompt, setPrompt] = useState("");
   const [loading, setLoading] = useState(false);
   const [batchLoading, setBatchLoading] = useState(false);
@@ -1428,6 +1443,47 @@ function AssistantPage() {
         </div>
       </div>
 
+      {/* Visual Workspace Switcher: 👥 Екип от AI Работници vs 💬 Чат с Главния Мениджър */}
+      <div className="mb-6 flex items-center justify-between border-b border-border/60 pb-3 flex-wrap gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          <button
+            type="button"
+            onClick={() => {
+              setViewMode("team");
+              if (typeof window !== "undefined") {
+                window.history.replaceState(null, "", "?tab=team");
+              }
+            }}
+            className={`flex items-center gap-2 px-3.5 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer ${
+              viewMode === "team"
+                ? "bg-gradient-to-r from-emerald-600 via-teal-600 to-indigo-600 text-white shadow-md shadow-emerald-700/25 ring-2 ring-emerald-500/50"
+                : "bg-secondary/40 text-muted-foreground hover:text-foreground hover:bg-secondary/70"
+            }`}
+          >
+            <Users className="size-4 text-emerald-300" />
+            <span>👥 Екип от AI Работници (Визуален Студиен Панел)</span>
+            <span className="text-[10px] bg-emerald-400 text-black px-1.5 py-0.2 rounded-full font-extrabold uppercase">Активно</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setViewMode("chat");
+              if (typeof window !== "undefined") {
+                window.history.replaceState(null, "", "?tab=chat");
+              }
+            }}
+            className={`flex items-center gap-2 px-3.5 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer ${
+              viewMode === "chat"
+                ? "bg-gradient-to-r from-emerald-600 via-teal-600 to-indigo-600 text-white shadow-md shadow-emerald-700/25 ring-2 ring-emerald-500/50"
+                : "bg-secondary/40 text-muted-foreground hover:text-foreground hover:bg-secondary/70"
+            }`}
+          >
+            <Bot className="size-4" />
+            <span>💬 Чат с Главния Мениджър</span>
+          </button>
+        </div>
+      </div>
+
       {activeTasks.length > 0 && (
         <Card className="mb-6 border-amber-500/50 bg-amber-500/10 p-4 rounded-2xl shadow-md space-y-2 animate-pulse">
           <div className="flex items-center justify-between">
@@ -2185,8 +2241,14 @@ function AssistantPage() {
         </Card>
       )}
 
-      {/* Banner Cards Container with responsive spacing */}
-      <div className="space-y-3 sm:space-y-4 mb-3 sm:mb-4">
+      {viewMode === "team" ? (
+        <SalafiWorkersTeam
+          onStartRender={(proposal) => handleConfirmProposal(proposal)}
+        />
+      ) : (
+        <>
+          {/* Banner Cards Container with responsive spacing */}
+          <div className="space-y-3 sm:space-y-4 mb-3 sm:mb-4">
 
 
         {/* Batch Viral Hadith Generator Card */}
@@ -3688,6 +3750,8 @@ function AssistantPage() {
           </Button>
         </form>
       </Card>
+        </>
+      )}
     </div>
   );
 }

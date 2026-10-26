@@ -1,5 +1,5 @@
 import { createFileRoute, Outlet, Link } from "@tanstack/react-router";
-import { PlusCircle, Bot, History, Download } from "lucide-react";
+import { PlusCircle, Bot, History, Download, Users } from "lucide-react";
 
 export const Route = createFileRoute("/_app")({
   ssr: false,
@@ -18,11 +18,21 @@ function AppShell() {
           <nav className="font-ui flex items-center gap-1 sm:gap-1.5 text-xs sm:text-sm overflow-x-auto py-0.5 no-scrollbar">
             <Link
               to="/assistant"
+              search={{ tab: "team" }}
+              className="rounded-md px-2.5 sm:px-3 py-1.5 sm:py-2 hover:bg-secondary whitespace-nowrap flex items-center gap-1.5 transition-colors [&.active]:bg-secondary [&.active]:text-primary"
+              activeProps={{ className: "active" }}
+            >
+              <Users className="size-4 text-emerald-400 shrink-0" />
+              <span>Екип Работници</span>
+            </Link>
+            <Link
+              to="/assistant"
+              search={{ tab: "chat" }}
               className="rounded-md px-2.5 sm:px-3 py-1.5 sm:py-2 hover:bg-secondary whitespace-nowrap flex items-center gap-1.5 transition-colors [&.active]:bg-secondary [&.active]:text-primary"
               activeProps={{ className: "active" }}
             >
               <Bot className="size-4 text-primary shrink-0" />
-              <span>AI Асистент</span>
+              <span>AI Чат</span>
             </Link>
             <Link
               to="/create"

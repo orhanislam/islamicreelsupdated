@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { BookOpen, Sparkles, Video, History, Bot } from "lucide-react";
+import { BookOpen, Sparkles, Video, History, Bot, Users } from "lucide-react";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -29,10 +29,19 @@ function Landing() {
           <nav className="flex items-center gap-2 sm:gap-3">
             <Link
               to="/assistant"
+              search={{ tab: "team" }}
+              className="font-ui hidden sm:flex items-center gap-1.5 px-3 py-2 text-sm font-semibold text-emerald-400 hover:text-emerald-300 transition-colors"
+            >
+              <Users className="size-4 text-emerald-400" />
+              Екип Работници
+            </Link>
+            <Link
+              to="/assistant"
+              search={{ tab: "chat" }}
               className="font-ui hidden sm:flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
             >
               <Bot className="size-4 text-primary" />
-              AI Асистент
+              AI Чат
             </Link>
             <Link
               to="/history"
