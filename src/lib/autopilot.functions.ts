@@ -251,9 +251,13 @@ export const testAutopilotWebhook = createServerFn({ method: "POST" })
 /**
  * Ensures any MP4 file sent to Upload-Post / TikTok Direct Post API is encoded
  * in True H.264 High Profile (High@L4.1, 1080x1920, CABAC, B-frames, <=12 Mbps sweet spot)
- * so TikTok's server-side ingestion never triggers its penalty downscaler.
+ * and has the viral cover art attached as the MP4 container's official poster image
+ * (stream disposition attached_pic), so TikTok and video galleries display the viral thumbnail.
  */
-async function ensureHighProfileMasterForUploadPost(mp4FilePath: string): Promise<void> {
+async function ensureHighProfileMasterForUploadPost(
+  mp4FilePath: string,
+  coverImagePath?: string,
+): Promise<void> {
   try {
     const { execFile } = await import("child_process");
     const util = await import("util");
@@ -280,19 +284,13 @@ async function ensureHighProfileMasterForUploadPost(mp4FilePath: string): Promis
     const height = Number(stream.height) || 0;
     const bitRate = Number(stream.bit_rate) || 0;
 
+    const hasCoverImage = Boolean(coverImagePath && (await fs.stat(coverImagePath).catch(() => null)));
+
     const isOptimalHighProfile =
       profile.toLowerCase().includes("high") &&
       width === 1080 &&
       height === 1920 &&
       (bitRate === 0 || bitRate <= 13_500_000);
-
-    if (isOptimalHighProfile) {
-      return;
-    }
-
-    console.log(
-      `[upload-post] Remastering ${mp4FilePath} from (${profile}, ${width}x${height}, ${(bitRate / 1e6).toFixed(1)} Mbps) -> High@L4.1 1080p HD for zero-loss TikTok upload...`,
-    );
 
     let ffmpegPath = "ffmpeg";
     try {
@@ -301,11 +299,76 @@ async function ensureHighProfileMasterForUploadPost(mp4FilePath: string): Promis
       if (installer?.path) ffmpegPath = installer.path;
     } catch {}
 
+    if (isOptimalHighProfile) {
+      // If already optimal 1080p High profile, check if attached_pic cover art is already present
+      if (hasCoverImage && coverImagePath) {
+        try {
+          const { stdout: probeStreams } = await execFileAsync("ffprobe", [
+            "-v",
+            "error",
+            "-show_entries",
+            "stream=index,codec_name,disposition",
+            "-of",
+            "json",
+            mp4FilePath,
+          ]);
+          const probeJson = JSON.parse(probeStreams || "{}");
+          const alreadyHasCover = (probeJson.streams || []).some(
+            (s: any) => s.disposition?.attached_pic === 1 || s.codec_name === "mjpeg",
+          );
+          if (!alreadyHasCover) {
+            console.log(
+              `[upload-post] Embedding viral cover image into MP4 container as attached_pic: ${mp4FilePath}`,
+            );
+            const coverMuxedPath = `${mp4FilePath}.with_cover.mp4`;
+            await execFileAsync(ffmpegPath, [
+              "-y",
+              "-i",
+              mp4FilePath,
+              "-i",
+              coverImagePath,
+              "-map",
+              "0:v:0",
+              "-map",
+              "0:a?",
+              "-map",
+              "1:v:0",
+              "-c",
+              "copy",
+              "-disposition:v:1",
+              "attached_pic",
+              coverMuxedPath,
+            ]);
+            const statMux = await fs.stat(coverMuxedPath).catch(() => null);
+            if (statMux && statMux.size > 50_000) {
+              await fs.rename(coverMuxedPath, mp4FilePath);
+            } else {
+              await fs.unlink(coverMuxedPath).catch(() => {});
+            }
+          }
+        } catch (embedErr) {
+          console.warn("[upload-post] MP4 cover stream embedding non-fatal warning:", embedErr);
+        }
+      }
+      return;
+    }
+
+    console.log(
+      `[upload-post] Remastering ${mp4FilePath} from (${profile}, ${width}x${height}, ${(bitRate / 1e6).toFixed(1)} Mbps) -> High@L4.1 1080p HD with cover art...`,
+    );
+
     const remasteredPath = `${mp4FilePath}.hq_remaster.mp4`;
-    await execFileAsync(ffmpegPath, [
+    const ffmpegArgs = [
       "-y",
       "-i",
       mp4FilePath,
+    ];
+
+    if (hasCoverImage && coverImagePath) {
+      ffmpegArgs.push("-i", coverImagePath);
+    }
+
+    ffmpegArgs.push(
       "-vf",
       "scale=1080:1920:force_original_aspect_ratio=increase:flags=lanczos,crop=1080:1920,unsharp=3:3:0.35:3:3:0.0",
       "-c:v",
@@ -356,14 +419,31 @@ async function ensureHighProfileMasterForUploadPost(mp4FilePath: string): Promis
       "48000",
       "-ac",
       "2",
-      remasteredPath,
-    ]);
+    );
+
+    if (hasCoverImage && coverImagePath) {
+      ffmpegArgs.push(
+        "-map",
+        "0:v:0",
+        "-map",
+        "0:a?",
+        "-map",
+        "1:v:0",
+        "-c:v:1",
+        "copy",
+        "-disposition:v:1",
+        "attached_pic",
+      );
+    }
+
+    ffmpegArgs.push(remasteredPath);
+    await execFileAsync(ffmpegPath, ffmpegArgs);
 
     const stat = await fs.stat(remasteredPath).catch(() => null);
     if (stat && stat.size > 50_000) {
       await fs.rename(remasteredPath, mp4FilePath);
       console.log(
-        `[upload-post] Remastered ${mp4FilePath} to High@L4.1 1080p (${(stat.size / (1024 * 1024)).toFixed(1)} MB).`,
+        `[upload-post] Remastered ${mp4FilePath} to High@L4.1 1080p with cover art (${(stat.size / (1024 * 1024)).toFixed(1)} MB).`,
       );
     } else {
       await fs.unlink(remasteredPath).catch(() => {});
@@ -374,8 +454,119 @@ async function ensureHighProfileMasterForUploadPost(mp4FilePath: string): Promis
 }
 
 /**
+ * Stages a local cover image on Upload-Post's Cloudflare R2 infrastructure
+ * via Upload-Post MCP staging endpoints (create_media_upload -> PUT -> complete_media_upload).
+ * Returns the signed public HTTPS media_url (valid for 6 hours) that can be passed to
+ * tiktokCoverImageUrl, instagramCoverUrl, and youtubeThumbnailUrl.
+ */
+export async function stageCoverImageViaUploadPostDirect(params: {
+  coverBuffer: Buffer;
+  apiKey: string;
+}): Promise<string | null> {
+  const rawKey = params.apiKey.trim().replace(/^ApiKey\s+/i, "");
+  if (!rawKey) return null;
+
+  try {
+    const initRes = await fetch("https://mcp.upload-post.com/mcp", {
+      method: "POST",
+      headers: {
+        Authorization: "ApiKey " + rawKey,
+        "Content-Type": "application/json",
+        Accept: "application/json, text/event-stream",
+      },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "initialize",
+        params: {
+          protocolVersion: "2024-11-05",
+          capabilities: {},
+          clientInfo: { name: "islamic-reels", version: "1" },
+        },
+      }),
+    });
+    const sessionId = initRes.headers.get("mcp-session-id");
+
+    const createRes = await fetch("https://mcp.upload-post.com/mcp", {
+      method: "POST",
+      headers: {
+        Authorization: "ApiKey " + rawKey,
+        "Content-Type": "application/json",
+        Accept: "application/json, text/event-stream",
+        ...(sessionId ? { "mcp-session-id": sessionId } : {}),
+      },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: 2,
+        method: "tools/call",
+        params: {
+          name: "create_media_upload",
+          arguments: {
+            filename: "cover.jpg",
+            contentType: "image/jpeg",
+            contentLength: params.coverBuffer.length,
+            mediaType: "image",
+          },
+        },
+      }),
+    });
+
+    const createText = await createRes.text();
+    const match = createText.match(/data:\s*(\{.*\})/);
+    if (!match) return null;
+    const data = JSON.parse(match[1]);
+    const parsed = data?.result?.structuredContent?.result;
+    if (!parsed || !parsed.upload_url || !parsed.upload_id) return null;
+
+    // PUT cover bytes to presigned Cloudflare R2 URL
+    const putRes = await fetch(parsed.upload_url, {
+      method: "PUT",
+      headers: { "Content-Type": "image/jpeg" },
+      body: new Uint8Array(params.coverBuffer),
+    });
+    if (!putRes.ok) return null;
+
+    // Complete media upload to get signed public media_url
+    const compRes = await fetch("https://mcp.upload-post.com/mcp", {
+      method: "POST",
+      headers: {
+        Authorization: "ApiKey " + rawKey,
+        "Content-Type": "application/json",
+        Accept: "application/json, text/event-stream",
+        ...(sessionId ? { "mcp-session-id": sessionId } : {}),
+      },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: 3,
+        method: "tools/call",
+        params: {
+          name: "complete_media_upload",
+          arguments: {
+            uploadId: parsed.upload_id,
+          },
+        },
+      }),
+    });
+
+    const compText = await compRes.text();
+    const compMatch = compText.match(/data:\s*(\{.*\})/);
+    if (!compMatch) return null;
+    const compData = JSON.parse(compMatch[1]);
+    const mediaUrl = compData?.result?.structuredContent?.result?.media_url;
+    if (mediaUrl) {
+      console.log(`[upload-post] Staged viral cover image on Cloudflare R2: ${mediaUrl.slice(0, 80)}...`);
+      return mediaUrl;
+    }
+  } catch (err) {
+    console.warn("[upload-post] Failed to stage cover image via MCP:", err);
+  }
+  return null;
+}
+
+/**
  * Direct Upload-Post.com API Integration (https://app.upload-post.com)
- * Sends the rendered MP4 video file + full TikTok caption directly to TikTok / Instagram / YouTube.
+ * Sends the rendered MP4 video file + full TikTok caption directly to TikTok / Instagram / YouTube,
+ * automatically creating, staging, and attaching the viral cover thumbnail.
  */
 export async function publishVideoViaUploadPostDirect(params: {
   jobId: string;
@@ -385,11 +576,14 @@ export async function publishVideoViaUploadPostDirect(params: {
   apiKey?: string;
   user?: string;
   platforms?: Array<"tiktok" | "instagram" | "youtube">;
+  coverImagePath?: string;
 }): Promise<{
   published: boolean;
   status?: number;
   requestId?: string;
   error?: string;
+  coverStaged?: boolean;
+  coverMediaUrl?: string;
 }> {
   const cfg = await readAutopilotConfigDirect();
   const rawKey = (
@@ -415,7 +609,33 @@ export async function publishVideoViaUploadPostDirect(params: {
   }
 
   try {
-    await ensureHighProfileMasterForUploadPost(params.mp4FilePath);
+    // 1. Generate or load server viral thumbnail for this job
+    let coverPath = params.coverImagePath;
+    let coverBuf: Buffer | null = null;
+    let stagedCoverUrl: string | null = null;
+
+    try {
+      const { ensureJobThumbnailOnDisk } = await import("./thumbnail.functions");
+      const thumbInfo = await ensureJobThumbnailOnDisk({
+        jobId: params.jobId,
+        title: params.title,
+      });
+      coverPath = thumbInfo.filePath;
+      coverBuf = thumbInfo.buffer;
+    } catch (tErr) {
+      console.warn("[upload-post] Thumbnail retrieval non-fatal warning:", tErr);
+    }
+
+    // 2. Embed cover art into MP4 file & ensure 1080p High@L4.1 master profile
+    await ensureHighProfileMasterForUploadPost(params.mp4FilePath, coverPath);
+
+    // 3. Stage cover image on Upload-Post Cloudflare R2 infrastructure
+    if (coverBuf && rawKey) {
+      stagedCoverUrl = await stageCoverImageViaUploadPostDirect({
+        coverBuffer: coverBuf,
+        apiKey: rawKey,
+      });
+    }
 
     const fs = (await import("fs")).promises;
     const fileBuf = await fs.readFile(params.mp4FilePath);
@@ -433,7 +653,22 @@ export async function publishVideoViaUploadPostDirect(params: {
       form.append("disable_duet", "false");
       form.append("disable_comment", "false");
       form.append("disable_stitch", "false");
-      form.append("cover_timestamp", "1000");
+      form.append("cover_timestamp", "0");
+    }
+
+    if (stagedCoverUrl) {
+      form.append("cover_image_url", stagedCoverUrl);
+      form.append("tiktok_cover_image_url", stagedCoverUrl);
+      form.append("tiktokCoverImageUrl", stagedCoverUrl);
+      form.append("instagram_cover_url", stagedCoverUrl);
+      form.append("youtube_thumbnail_url", stagedCoverUrl);
+    }
+
+    if (coverBuf) {
+      const coverBlob = new Blob([new Uint8Array(coverBuf)], { type: "image/jpeg" });
+      form.append("cover", coverBlob, `${params.jobId || "islamic_reel"}_cover.jpg`);
+      form.append("cover_image", coverBlob, `${params.jobId || "islamic_reel"}_cover.jpg`);
+      form.append("thumbnail", coverBlob, `${params.jobId || "islamic_reel"}_cover.jpg`);
     }
 
     const blob = new Blob([new Uint8Array(fileBuf)], { type: "video/mp4" });
@@ -463,6 +698,8 @@ export async function publishVideoViaUploadPostDirect(params: {
       published: true,
       status: res.status,
       requestId: bodyJson?.request_id || bodyJson?.id,
+      coverStaged: Boolean(stagedCoverUrl),
+      coverMediaUrl: stagedCoverUrl || undefined,
     };
   } catch (err: any) {
     return {

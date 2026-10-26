@@ -15,7 +15,7 @@ import {
   cleanServerDiskSpace,
   type ServerJobRecord as ServerJob,
 } from "@/lib/render.functions";
-import { generateViralThumbnail } from "@/lib/thumbnail.functions";
+import { generateViralThumbnail, getServerJobThumbnail } from "@/lib/thumbnail.functions";
 import { formatViralSocialCaption, generateTikTokSEOTitle } from "@/lib/caption.functions";
 import { cleanProposalTitle, clearAllBackgroundTasks } from "@/lib/assistant.functions";
 import { getAutopilotConfig, publishServerJobToUploadPost, type AutopilotConfig } from "@/lib/autopilot.functions";
@@ -373,9 +373,17 @@ function DownloadsPage() {
         folder.file(`${folderName}_tiktok_caption.txt`, captionText);
         try {
           const thumbTitle = getThumbTitle(job.title, job.data?.viralTitle || job.payload?.data?.viralTitle);
-          const thumbRes = await generateViralThumbnail({ data: { title: thumbTitle } });
-          if (thumbRes && thumbRes.dataUrl && thumbRes.dataUrl.includes("base64,")) {
-            const thumbBase64 = thumbRes.dataUrl.split("base64,")[1];
+          let thumbDataUrl = job.thumbnailDataUrl;
+          if (!thumbDataUrl) {
+            const srvThumb = await getServerJobThumbnail({ data: { jobId: job.id, title: job.title } }).catch(() => null);
+            thumbDataUrl = srvThumb?.dataUrl;
+          }
+          if (!thumbDataUrl) {
+            const thumbRes = await generateViralThumbnail({ data: { title: thumbTitle } }).catch(() => null);
+            thumbDataUrl = thumbRes?.dataUrl;
+          }
+          if (thumbDataUrl && thumbDataUrl.includes("base64,")) {
+            const thumbBase64 = thumbDataUrl.split("base64,")[1];
             folder.file(`${folderName}_thumbnail.jpg`, thumbBase64, { base64: true });
           }
         } catch {}
@@ -422,9 +430,17 @@ function DownloadsPage() {
 
       try {
         const thumbTitle = getThumbTitle(job.title, job.payload?.data?.viralTitle);
-        const thumbRes = await generateViralThumbnail({ data: { title: thumbTitle } });
-        if (thumbRes && thumbRes.dataUrl && thumbRes.dataUrl.includes("base64,")) {
-          const thumbBase64 = thumbRes.dataUrl.split("base64,")[1];
+        let thumbDataUrl = job.thumbnailDataUrl;
+        if (!thumbDataUrl) {
+          const srvThumb = await getServerJobThumbnail({ data: { jobId: job.id, title: job.title } }).catch(() => null);
+          thumbDataUrl = srvThumb?.dataUrl;
+        }
+        if (!thumbDataUrl) {
+          const thumbRes = await generateViralThumbnail({ data: { title: thumbTitle } }).catch(() => null);
+          thumbDataUrl = thumbRes?.dataUrl;
+        }
+        if (thumbDataUrl && thumbDataUrl.includes("base64,")) {
+          const thumbBase64 = thumbDataUrl.split("base64,")[1];
           folder.file(`${folderName}_thumbnail.jpg`, thumbBase64, { base64: true });
         }
       } catch {}
@@ -474,14 +490,23 @@ function DownloadsPage() {
   const handleDownloadThumbnail = async (id: string, title: string, payloadViralTitle?: string) => {
     try {
       setGeneratingThumbId(id);
-      toast.message("Генериране на професионална вайръл корица (Thumbnail)...");
-      const thumbTitle = getThumbTitle(title, payloadViralTitle);
-      const res = await generateViralThumbnail({ data: { title: thumbTitle } });
-      const safeTitle = (title || "islamic-reel").replace(/[<>:"/\\|?*]+/g, "_").trim();
-      const fetchRes = await fetch(res.dataUrl);
-      const blob = await fetchRes.blob();
-      await saveMediaBlob(blob, `${safeTitle}_thumbnail.jpg`, "image/jpeg");
-      toast.success("Вайръл корицата е свалена успешно!");
+      toast.message("Зареждане на професионална вайръл корица (Thumbnail)...");
+      let dataUrl: string | undefined;
+      const srvThumb = await getServerJobThumbnail({ data: { jobId: id, title } }).catch(() => null);
+      if (srvThumb?.dataUrl) {
+        dataUrl = srvThumb.dataUrl;
+      } else {
+        const thumbTitle = getThumbTitle(title, payloadViralTitle);
+        const res = await generateViralThumbnail({ data: { title: thumbTitle } });
+        dataUrl = res.dataUrl;
+      }
+      if (dataUrl) {
+        const safeTitle = (title || "islamic-reel").replace(/[<>:"/\\|?*]+/g, "_").trim();
+        const fetchRes = await fetch(dataUrl);
+        const blob = await fetchRes.blob();
+        await saveMediaBlob(blob, `${safeTitle}_thumbnail.jpg`, "image/jpeg");
+        toast.success("Вайръл корицата е свалена успешно!");
+      }
     } catch (e) {
       toast.error("Не успях да създам корицата");
     } finally {

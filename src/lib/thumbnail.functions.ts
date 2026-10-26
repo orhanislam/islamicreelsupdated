@@ -171,3 +171,87 @@ export const generateViralThumbnail = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     return generateViralThumbnailCore(data);
   });
+
+/**
+ * Ensures a high-resolution viral thumbnail exists on disk for a given render job.
+ * If not already present, generates it using generateViralThumbnailCore and saves it
+ * to `<jobsDir>/<jobId>_thumbnail.jpg`. Returns the local path, buffer, base64 and dataUrl.
+ */
+export async function ensureJobThumbnailOnDisk(params: {
+  jobId: string;
+  title: string;
+  category?: string;
+  jobData?: any;
+}): Promise<{
+  filePath: string;
+  buffer: Buffer;
+  base64: string;
+  dataUrl: string;
+}> {
+  const fs = (await import("fs")).promises;
+  const path = await import("path");
+  const os = await import("os");
+
+  const jobsDir = path.join(os.homedir(), ".islamicreels_jobs");
+  await fs.mkdir(jobsDir, { recursive: true }).catch(() => {});
+  const filePath = path.join(jobsDir, `${params.jobId}_thumbnail.jpg`);
+
+  const stat = await fs.stat(filePath).catch(() => null);
+  if (stat && stat.size > 5000) {
+    const buffer = await fs.readFile(filePath);
+    const base64 = buffer.toString("base64");
+    return {
+      filePath,
+      buffer,
+      base64,
+      dataUrl: `data:image/jpeg;base64,${base64}`,
+    };
+  }
+
+  // Extract clean viral headline for the thumbnail
+  let rawTitle = params.title || params.jobData?.topic || "Ислямска мъдрост";
+  if (rawTitle.includes("•")) {
+    const parts = rawTitle.split("•").map((s: string) => s.trim()).filter(Boolean);
+    if (parts.length > 1) rawTitle = parts[1];
+  }
+  if (rawTitle.includes("]")) {
+    const after = rawTitle.split("]").slice(1).join("]").replace(/^[:\-–—\s]+/, "").trim();
+    if (after) rawTitle = after;
+  }
+  const thumbTitle = rawTitle.replace(/^["„“'«»\s]+|["„“'«»\s]+$/g, "").trim().toUpperCase() || "ИСЛЯМСКА МЪДРОСТ";
+
+  const isQuran = !/бухари|муслим|тирмизи|навауи|науауи|хадис|bukhari|muslim|tirmidhi|nawawi/i.test(
+    `${params.title} ${params.jobData?.scriptureReference || ""}`,
+  );
+  const category =
+    params.category || (isQuran ? "СВЕЩЕН КОРАН • ТЕФСИР" : "СВЕЩЕН ХАДИС • TIKTOK VIRAL");
+
+  const thumbRes = await generateViralThumbnailCore({
+    title: thumbTitle,
+    category,
+    subtitle: "ISLAMIC REELS STUDIO",
+    accentColor: "#FFD700",
+    profile: "tiktok",
+    customBackgroundUrl: params.jobData?.backgroundUrl || params.jobData?.backgroundVideoUrl,
+  });
+
+  const buffer = Buffer.from(thumbRes.base64, "base64");
+  await fs.writeFile(filePath, buffer);
+  console.log(
+    `[thumbnail] Generated and cached server thumbnail for ${params.jobId}: ${filePath} (${buffer.length} bytes)`,
+  );
+
+  return {
+    filePath,
+    buffer,
+    base64: thumbRes.base64,
+    dataUrl: thumbRes.dataUrl,
+  };
+}
+
+export const getServerJobThumbnail = createServerFn({ method: "POST" })
+  .validator((input: { jobId: string; title?: string }) => input)
+  .handler(async ({ data: { jobId, title } }) => {
+    return ensureJobThumbnailOnDisk({ jobId, title: title || "Ислямска мъдрост" });
+  });
+

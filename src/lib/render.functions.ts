@@ -1581,6 +1581,9 @@ export type ServerJobRecord = {
   tiktokPublished?: boolean;
   tiktokPublishRequestId?: string;
   tiktokPublishError?: string;
+  thumbnailDataUrl?: string;
+  hasThumbnail?: boolean;
+  stagedCoverUrl?: string;
 };
 
 export async function generateAndStorePostRenderSocialKit(params: {
@@ -1597,6 +1600,8 @@ export async function generateAndStorePostRenderSocialKit(params: {
   tiktokPublished?: boolean;
   tiktokPublishRequestId?: string;
   tiktokPublishError?: string;
+  thumbnailDataUrl?: string;
+  stagedCoverUrl?: string;
 }> {
   const { generateTikTokSEOTitle, formatViralSocialCaption } = await import("./caption.functions");
   const rawTitle = params.title || params.jobData?.scriptureReference || params.jobData?.topic || "Ислямска мъдрост";
@@ -1629,6 +1634,24 @@ export async function generateAndStorePostRenderSocialKit(params: {
     console.warn("[social-kit] Could not write caption file:", e);
   }
 
+  // Pre-generate server viral cover thumbnail (JPEG 1080x1920) on disk for 1-click download & auto-post
+  let thumbnailDataUrl: string | undefined;
+  let thumbnailFilePath: string | undefined;
+  let stagedCoverUrl: string | undefined;
+
+  try {
+    const { ensureJobThumbnailOnDisk } = await import("./thumbnail.functions");
+    const thumb = await ensureJobThumbnailOnDisk({
+      jobId: params.jobId,
+      title: rawTitle,
+      jobData: params.jobData,
+    });
+    thumbnailDataUrl = thumb.dataUrl;
+    thumbnailFilePath = thumb.filePath;
+  } catch (tErr) {
+    console.warn("[social-kit] Failed to generate server thumbnail:", tErr);
+  }
+
   let webhookDispatched = false;
   let tiktokPublished = false;
   let tiktokPublishRequestId: string | undefined;
@@ -1655,7 +1678,7 @@ export async function generateAndStorePostRenderSocialKit(params: {
       });
       webhookDispatched = whRes.sent;
 
-      // Automatic Upload-Post.com Direct TikTok / Reels / Shorts Publishing
+      // Automatic Upload-Post.com Direct TikTok / Reels / Shorts Publishing with Cover Image
       const cfg = await readAutopilotConfigDirect();
       if (
         cfg.uploadPostEnabled &&
@@ -1663,20 +1686,24 @@ export async function generateAndStorePostRenderSocialKit(params: {
         cfg.uploadPostUser &&
         params.mp4FilePath
       ) {
-        console.log(`[upload-post] Auto-publishing ${params.jobId} to ${cfg.uploadPostPlatforms.join(", ")}...`);
+        console.log(`[upload-post] Auto-publishing ${params.jobId} with cover to ${cfg.uploadPostPlatforms.join(", ")}...`);
         const upRes = await publishVideoViaUploadPostDirect({
           jobId: params.jobId,
           mp4FilePath: params.mp4FilePath,
           title: rawTitle,
           caption: viralCaption,
+          coverImagePath: thumbnailFilePath,
         });
         tiktokPublished = upRes.published;
         tiktokPublishRequestId = upRes.requestId;
+        if (upRes.coverMediaUrl) {
+          stagedCoverUrl = upRes.coverMediaUrl;
+        }
         if (!upRes.published && upRes.error) {
           tiktokPublishError = upRes.error;
           console.warn(`[upload-post] Auto-publish warning for ${params.jobId}:`, upRes.error);
         } else {
-          console.log(`[upload-post] Successfully auto-published ${params.jobId} to TikTok!`);
+          console.log(`[upload-post] Successfully auto-published ${params.jobId} to TikTok with cover!`);
         }
       }
     } catch (whErr) {
@@ -1691,6 +1718,8 @@ export async function generateAndStorePostRenderSocialKit(params: {
     tiktokPublished,
     tiktokPublishRequestId,
     tiktokPublishError,
+    thumbnailDataUrl,
+    stagedCoverUrl,
   };
 }
 
@@ -1877,6 +1906,13 @@ async function processRenderQueue() {
           curJobs[idx].seoTitle = socialKit.seoTitle;
           curJobs[idx].viralCaption = socialKit.viralCaption;
           curJobs[idx].webhookDispatched = socialKit.webhookDispatched;
+          if (socialKit.thumbnailDataUrl) {
+            curJobs[idx].thumbnailDataUrl = socialKit.thumbnailDataUrl;
+            curJobs[idx].hasThumbnail = true;
+          }
+          if (socialKit.stagedCoverUrl) {
+            curJobs[idx].stagedCoverUrl = socialKit.stagedCoverUrl;
+          }
           if (socialKit.tiktokPublished) {
             curJobs[idx].tiktokPublished = true;
             curJobs[idx].tiktokPublishRequestId = socialKit.tiktokPublishRequestId;

@@ -10,7 +10,7 @@ import { toast } from "sonner";
 import { chatWithAssistant, suggestViralProposal, suggestExplainedVideoProposal, refineExplainedScriptSection, suggestAlternativeProposal, suggestBatchViralProposals, confirmAndGenerateVideo, startBatchViralSeries, startBatchViralHadithSeries, getAssistantHistory, saveAssistantHistory, clearAssistantHistory, startBackgroundPlanGeneration, startBackgroundBatchGeneration, checkActiveBackgroundTasks, cleanProposalTitle, extractTopic, detectActionOrDuaLabel, cleanScriptPrefixes, stripScholarAttribution, runFull100PercentAuditEngine, auditCustomText100Percent, type VideoProposal, type ExplainedVideoScript, type ManagerAction, type CustomTextAuditResult } from "@/lib/assistant.functions";
 import { getAiMemory, updateAiMemory, type AiMemory } from "@/lib/memory.functions";
 import { getOneMonthCooldownSummary, recordRejectedProposalToHistory } from "@/lib/generation-history.functions";
-import { generateViralThumbnail } from "@/lib/thumbnail.functions";
+import { generateViralThumbnail, getServerJobThumbnail } from "@/lib/thumbnail.functions";
 import { formatViralSocialCaption, generateTikTokSEOTitle } from "@/lib/caption.functions";
 import { getAutopilotConfig, updateAutopilotConfig, triggerAutopilotCycleNow, testAutopilotWebhook, type AutopilotConfig } from "@/lib/autopilot.functions";
 import { listServerRenderJobs } from "@/lib/render.functions";
@@ -313,15 +313,24 @@ function AssistantPage() {
       setGeneratingThumbTitle(title);
       toast.message("Генериране на професионална вайръл корица (Thumbnail)...");
       const thumbTitle = getThumbTitle(title);
-      const res = await generateViralThumbnail({ data: { title: thumbTitle } });
-      const a = document.createElement("a");
-      a.href = res.dataUrl;
-      const safeTitle = (title || "islamic-reel").replace(/[<>:"/\\|?*]+/g, "_").trim();
-      a.download = `${safeTitle}_thumbnail.jpg`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      toast.success("Вайръл корицата е свалена успешно!");
+      let dataUrl: string | undefined;
+      const srvThumb = await getServerJobThumbnail({ data: { jobId: sanitizeFilename(title), title } }).catch(() => null);
+      if (srvThumb?.dataUrl) {
+        dataUrl = srvThumb.dataUrl;
+      } else {
+        const res = await generateViralThumbnail({ data: { title: thumbTitle } });
+        dataUrl = res.dataUrl;
+      }
+      if (dataUrl) {
+        const a = document.createElement("a");
+        a.href = dataUrl;
+        const safeTitle = (title || "islamic-reel").replace(/[<>:"/\\|?*]+/g, "_").trim();
+        a.download = `${safeTitle}_thumbnail.jpg`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        toast.success("Вайръл корицата е свалена успешно!");
+      }
     } catch (err) {
       toast.error("Не успях да създам корицата");
     } finally {

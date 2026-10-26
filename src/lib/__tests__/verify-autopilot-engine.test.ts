@@ -191,11 +191,105 @@ async function testUltraHdQualityPipeline() {
   console.log("✔ Ultra-HD 1080p High-Profile Quality Pipeline & Pexels 4K/60fps Selection verified!");
 }
 
+async function testViralCoverGenerationAndVideoEmbedding() {
+  console.log("5. Testing Viral Cover Thumbnail Generation, MP4 Container Embedding, and Upload-Post Staging...");
+  const { ensureJobThumbnailOnDisk } = await import("../thumbnail.functions");
+  const { stageCoverImageViaUploadPostDirect } = await import("../autopilot.functions");
+  const fs = (await import("fs")).promises;
+  const path = await import("path");
+  const { execFile } = await import("child_process");
+  const util = await import("util");
+  const execFileAsync = util.promisify(execFile);
+
+  const testJobId = `test_cover_job_${Date.now()}`;
+  const testTitle = "[40 Хадиса на ан-Науауи #19] Пази заповедите на Аллах и Той ще те пази";
+
+  // 1. Generate & cache server thumbnail
+  const thumb = await ensureJobThumbnailOnDisk({
+    jobId: testJobId,
+    title: testTitle,
+  });
+
+  if (!thumb.filePath || !thumb.buffer || thumb.buffer.length < 5000 || !thumb.dataUrl.startsWith("data:image/jpeg;base64,")) {
+    throw new Error(`Invalid generated thumbnail: ${JSON.stringify(thumb)}`);
+  }
+
+  const statThumb = await fs.stat(thumb.filePath);
+  if (statThumb.size !== thumb.buffer.length) {
+    throw new Error(`Disk thumbnail size mismatch: ${statThumb.size} vs ${thumb.buffer.length}`);
+  }
+
+  // 2. Test MP4 attached_pic cover embedding
+  let ffmpegPath = "ffmpeg";
+  try {
+    const installerMod = await import("@ffmpeg-installer/ffmpeg");
+    const installer = installerMod.default || installerMod;
+    if (installer?.path) ffmpegPath = installer.path;
+  } catch {}
+
+  const dir = await getJobsDir();
+  const dummyMp4 = path.join(dir, `${testJobId}_raw.mp4`);
+  await execFileAsync(ffmpegPath, [
+    "-y",
+    "-f", "lavfi", "-i", "color=c=black:s=1080x1920:d=1",
+    "-f", "lavfi", "-i", "sine=frequency=1000:duration=1",
+    "-c:v", "libx264", "-c:a", "aac", "-pix_fmt", "yuv420p",
+    dummyMp4,
+  ]);
+
+  // Embed cover using ensureHighProfileMasterForUploadPost logic
+  const targetCoveredMp4 = path.join(dir, `${testJobId}_covered.mp4`);
+  await execFileAsync(ffmpegPath, [
+    "-y",
+    "-i", dummyMp4,
+    "-i", thumb.filePath,
+    "-map", "0:v:0",
+    "-map", "0:a?",
+    "-map", "1:v:0",
+    "-c", "copy",
+    "-disposition:v:1", "attached_pic",
+    targetCoveredMp4,
+  ]);
+
+  const { stdout: probeOut } = await execFileAsync("ffprobe", [
+    "-v", "error",
+    "-show_entries", "stream=index,codec_name,disposition",
+    "-of", "json",
+    targetCoveredMp4,
+  ]);
+  const probeData = JSON.parse(probeOut || "{}");
+  const coverStream = (probeData.streams || []).find(
+    (s: any) => s.codec_name === "mjpeg" || s.disposition?.attached_pic === 1,
+  );
+  if (!coverStream) {
+    throw new Error(`MP4 container does not contain attached_pic cover stream: ${probeOut}`);
+  }
+
+  // 3. Test Upload-Post cover staging via MCP
+  const testApiKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJlbWFpbCI6Im5heWRlbnRhc2hrb3ZAZ21haWwuY29tIiwiZXhwIjo0OTQ2NTcwMTE5LCJqdGkiOiJkY2U1Yzg3Yi03NzQ2LTRlOWEtYjg2ZS1lYzdkNjk1MjBjOTcifQ.SQviBwJALtBFxyEG7pL2Aou09bRpE2LqRyySdJ7gVlE";
+  const stagedUrl = await stageCoverImageViaUploadPostDirect({
+    coverBuffer: thumb.buffer,
+    apiKey: testApiKey,
+  });
+
+  if (!stagedUrl || !stagedUrl.startsWith("https://")) {
+    throw new Error(`Expected valid HTTPS staged cover URL, got: ${stagedUrl}`);
+  }
+
+  // Cleanup test artifacts
+  await fs.unlink(dummyMp4).catch(() => {});
+  await fs.unlink(targetCoveredMp4).catch(() => {});
+  await fs.unlink(thumb.filePath).catch(() => {});
+
+  console.log("✔ Viral Cover Thumbnail Generation, MP4 Container Embedding, and Upload-Post Staging verified 100%!");
+}
+
 async function main() {
   console.log("=== Running Autopilot Engine Verification Suite ===");
   await testAutopilotConfigPersistence();
   await testPostRenderSocialKitAndCaptionGeneration();
   await testUltraHdQualityPipeline();
+  await testViralCoverGenerationAndVideoEmbedding();
   await testAutonomousCycleDryRun();
   console.log("✔ ALL AUTOPILOT ENGINE TESTS PASSED SUCCESSFULLY!");
   process.exit(0);
