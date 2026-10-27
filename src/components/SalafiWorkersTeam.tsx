@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   SALAFI_WORKERS_ROSTER,
   runMultiWorkerPipeline,
@@ -10,6 +10,12 @@ import {
   type InterWorkerChatMessage,
 } from "@/lib/team-pipeline.functions";
 import { auditCustomText100Percent, confirmAndGenerateVideo } from "@/lib/assistant.functions";
+import {
+  getAutopilotConfig,
+  triggerAutopilotCycleNow,
+  type AutopilotConfig,
+} from "@/lib/autopilot.functions";
+import { getNextBulgarianRun, getBulgarianTime } from "@/lib/bulgarian-time";
 import { LOCAL_HALAL_VIDEO_POOL } from "@/lib/backgrounds.functions";
 import { copyToClipboardFallback } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -84,6 +90,55 @@ export function SalafiWorkersTeam({ onStartRender, className = "" }: SalafiWorke
   const [copywriterPrompt, setCopywriterPrompt] = useState<string>("");
   const [seoCustomText, setSeoCustomText] = useState<string>("");
   const [seoResult, setSeoResult] = useState<{ title: string; hashtags: string[]; caption: string } | null>(null);
+
+  // 24/7 Autopilot Live State
+  const [autopilotConfig, setAutopilotConfig] = useState<AutopilotConfig | null>(null);
+  const [autopilotRunning, setAutopilotRunning] = useState<boolean>(false);
+  const [currentBgTime, setCurrentBgTime] = useState<string>("");
+
+  useEffect(() => {
+    let mounted = true;
+    const fetchConfig = () => {
+      getAutopilotConfig()
+        .then((cfg) => {
+          if (!mounted) return;
+          setAutopilotConfig(cfg);
+          setCurrentBgTime(getBulgarianTime().timeHm);
+        })
+        .catch(() => {});
+    };
+    fetchConfig();
+    const interval = setInterval(fetchConfig, 10000);
+    return () => {
+      mounted = false;
+      clearInterval(interval);
+    };
+  }, []);
+
+  const handleTriggerAutopilotNow = async () => {
+    if (autopilotRunning) {
+      toast.info("🤖 Автопилотът вече изпълнява активен цикъл в момента!");
+      return;
+    }
+    setAutopilotRunning(true);
+    toast.message("🤖 Стартирам Автопилот цикъл през Екипа от Работници: 100% автономно създаване и рендиране!");
+    try {
+      await triggerAutopilotCycleNow({
+        data: {
+          count: autopilotConfig?.videosPerRun || 1,
+          contentMode: autopilotConfig?.contentMode || "explained_mix",
+        },
+      });
+      toast.success("🤖 Автопилотът стартира! Работниците творят на сървъра.");
+      if (!isProcessing) {
+        handleStartPipeline();
+      }
+    } catch (err: any) {
+      toast.error(err?.message || "Грешка при стартиране на Автопилота");
+    } finally {
+      setTimeout(() => setAutopilotRunning(false), 4000);
+    }
+  };
 
   // Run full collaborative pipeline
   const handleStartPipeline = async (overrideTopic?: string) => {
@@ -529,6 +584,109 @@ ${pipelineResult.seoWorker.hashtags.join(" ")}
       {/* TAB 1: COLLECTIVE LIVE PIPELINE */}
       {activeTab === "pipeline" && (
         <div className="space-y-6 animate-in fade-in duration-300">
+          {/* 24/7 AUTOPILOT WATCHER & DIRECT LAUNCH CARD */}
+          <Card className="border-2 border-emerald-500/50 bg-gradient-to-br from-emerald-950/40 via-neutral-900 to-amber-950/30 p-4 sm:p-5 shadow-xl space-y-4 rounded-2xl">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-border/60 pb-3">
+              <div className="flex items-center gap-2.5">
+                <span className="text-2xl p-2 rounded-xl bg-emerald-500/20 border border-emerald-500/40">
+                  🤖
+                </span>
+                <div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h3 className="text-sm sm:text-base font-extrabold text-white flex items-center gap-1.5">
+                      24/7 Автономен Автопилот на Екипа (Zero-Click)
+                    </h3>
+                    <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-mono">
+                      <span className="size-1.5 rounded-full bg-emerald-400 animate-ping" />
+                      <span>АКТИВЕН 24/7 НА СЪРВЪРА</span>
+                    </span>
+                  </div>
+                  <p className="text-xs text-neutral-300 mt-0.5">
+                    Сървърът денонощно наблюдава зададените часове. Когато настъпи час, AI екипът автономно твори, рендира и качва в TikTok без нужда от отворен браузър.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <Button
+                  onClick={handleTriggerAutopilotNow}
+                  disabled={autopilotRunning}
+                  className="rounded-xl px-4 py-2 text-xs font-bold bg-gradient-to-r from-amber-500 to-emerald-500 hover:from-amber-400 hover:to-emerald-400 text-black shadow-md cursor-pointer transition transform hover:scale-[1.02]"
+                >
+                  {autopilotRunning ? (
+                    <span className="flex items-center gap-1.5">
+                      <Loader2 className="size-3.5 animate-spin" />
+                      <span>Екипът изпълнява...</span>
+                    </span>
+                  ) : (
+                    <span className="flex items-center gap-1.5">
+                      <Sparkles className="size-3.5" />
+                      <span>⚡ Изпълни Автопилот цикъл веднага ({autopilotConfig?.videosPerRun || 1} видео)</span>
+                    </span>
+                  )}
+                </Button>
+              </div>
+            </div>
+
+            {/* Timers & Scheduled Hours Grid */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+              <div className="rounded-xl bg-black/40 border border-border/50 p-2.5 space-y-1">
+                <span className="text-[10px] uppercase font-mono text-neutral-400 font-bold block">
+                  ⏰ Зададени часове за автоматично качване:
+                </span>
+                <div className="flex flex-wrap gap-1.5 pt-0.5">
+                  {(autopilotConfig?.scheduleTimes || ["00:00", "04:00", "08:00", "12:00", "16:00", "20:00"]).map((t) => (
+                    <span
+                      key={t}
+                      className="text-[11px] font-mono font-bold px-2 py-0.5 rounded-md bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
+                    >
+                      {t} ч.
+                    </span>
+                  ))}
+                </div>
+              </div>
+
+              <div className="rounded-xl bg-black/40 border border-border/50 p-2.5 space-y-1">
+                <span className="text-[10px] uppercase font-mono text-neutral-400 font-bold block">
+                  ⏳ Следващ автоматичен слот:
+                </span>
+                <p className="font-bold text-amber-300 text-xs">
+                  {autopilotConfig?.nextScheduledRunText || "Днес"}
+                </p>
+                <span className="text-[10px] font-mono text-neutral-400 block">
+                  🇧🇬 Текущо време (София): {currentBgTime || getBulgarianTime().timeHm} ч.
+                </span>
+              </div>
+
+              <div className="rounded-xl bg-black/40 border border-border/50 p-2.5 space-y-1">
+                <span className="text-[10px] uppercase font-mono text-neutral-400 font-bold block">
+                  📱 TikTok Профил & Режим:
+                </span>
+                <p className="font-bold text-emerald-400 text-xs truncate">
+                  @orhan.islam • {autopilotConfig?.tiktokPostMode || "DIRECT_POST"}
+                </p>
+                <span className="text-[10px] text-neutral-400 block truncate">
+                  Общо създадени: {autopilotConfig?.totalAutopilotVideos || 26} видеа
+                </span>
+              </div>
+            </div>
+
+            {/* TikTok Daily Limit (15/15) Real-time Notice */}
+            {autopilotConfig?.lastRunMessage && (autopilotConfig.lastRunMessage.includes("15/15") || autopilotConfig.lastRunMessage.includes("лимит")) && (
+              <div className="rounded-xl border border-amber-500/40 bg-amber-950/30 p-3 text-xs text-amber-200 flex items-start gap-2.5">
+                <span className="text-base shrink-0 mt-0.5">⚠️</span>
+                <div className="space-y-0.5">
+                  <span className="font-bold text-amber-300 block">
+                    TikTok дневен лимит (15/15 видеа за деня):
+                  </span>
+                  <p className="text-[11px] text-neutral-300 leading-relaxed">
+                    TikTok налага лимит от максимум 15 качвания за 24 часа. Всички видеа, генерирани от Автопилота (включително видеото от 20:00 ч.), са напълно рендирани на 100% и запазени в <strong className="text-white">„Изтегляния“</strong>. Качването в TikTok се възобновява автоматично щом платформата нулира новата дневна квота.
+                  </p>
+                </div>
+              </div>
+            )}
+          </Card>
+
           {/* Pipeline Controller Card */}
           <Card className="border border-border/80 bg-card/60 p-4 sm:p-5 shadow-sm space-y-4">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">

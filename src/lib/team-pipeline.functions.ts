@@ -520,7 +520,7 @@ export async function runMultiWorkerPipelineDirect(input?: {
   topic?: string;
   sourcePreference?: "auto" | "quran" | "hadith";
 }): Promise<MultiWorkerCollaborationResult> {
-  if (!import.meta.env.SSR) {
+  if (typeof window !== "undefined" && !import.meta.env?.SSR) {
     throw new Error("runMultiWorkerPipelineDirect is a server-only function");
   }
 

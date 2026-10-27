@@ -727,6 +727,42 @@ function DownloadsPage() {
                   </div>
                 )}
 
+                {job.status === "completed" && job.tiktokPublishError && (
+                  <div className="my-2 rounded-xl border border-amber-500/40 bg-amber-950/25 p-3 text-xs text-amber-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2.5">
+                    <div className="space-y-0.5">
+                      <div className="flex items-center gap-1.5 font-bold text-amber-300">
+                        <span>⚠️</span>
+                        <span>
+                          {job.tiktokPublishError.includes("15/15") || job.tiktokPublishError.includes("daily posting cap")
+                            ? "Достигнат дневен лимит на TikTok (15/15 видеа за деня)"
+                            : "TikTok съобщение"}
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-neutral-300">
+                        {job.tiktokPublishError.includes("15/15") || job.tiktokPublishError.includes("daily posting cap")
+                          ? "Видеото е напълно готово и запазено на сървъра. TikTok налага максимум 15 качвания за 24ч. Опитайте пак веднага след нулиране на лимита!"
+                          : job.tiktokPublishError}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handlePublishToTikTok(job)}
+                      disabled={publishingJobId === job.id}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-black font-bold text-xs shrink-0 cursor-pointer shadow transition"
+                    >
+                      {publishingJobId === job.id ? <Loader2 className="size-3.5 animate-spin" /> : <Sparkles className="size-3.5" />}
+                      <span>Опитай качване отново</span>
+                    </button>
+                  </div>
+                )}
+
+                {job.status === "completed" && job.tiktokPublished && (
+                  <div className="my-1.5 rounded-xl border border-emerald-500/40 bg-emerald-950/30 px-3 py-1.5 text-xs text-emerald-300 flex items-center gap-2 font-medium">
+                    <CheckCircle2 className="size-3.5 text-emerald-400" />
+                    <span>Качено автоматично в TikTok (@orhan.islam) ✓</span>
+                  </div>
+                )}
+
                 <div className="mt-auto flex flex-wrap items-center gap-2 pt-2">
                   {job.status === "completed" ? (
                     <>

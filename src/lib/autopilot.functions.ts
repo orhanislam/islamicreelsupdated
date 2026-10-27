@@ -875,7 +875,7 @@ export async function runAutopilotCycleDirect(options?: {
   proposals: any[];
   message: string;
 }> {
-  if (!import.meta.env.SSR) {
+  if (typeof window !== "undefined" && !import.meta.env?.SSR) {
     throw new Error("runAutopilotCycleDirect can only be called on server");
   }
   if (isAutopilotCycleRunning) {
@@ -948,23 +948,43 @@ export async function runAutopilotCycleDirect(options?: {
       const stepPct = Math.round(15 + (i / count) * 75);
       await updateTask(task.id, {
         progress: stepPct,
-        message: `[${i + 1}/${count}] Изготвяне и 100% одит на ${sourcePreference === "quran" ? "Коран с Тефсир ас-Са'ди" : "Сахих Хадис с Шарх"}...`,
+        message: `[${i + 1}/${count}] Екипът от 4 работници и Управителят творят ${sourcePreference === "quran" ? "Коран с Тефсир ас-Са'ди" : "Сахих Хадис с Шарх"}...`,
       });
 
-      const genRes = await generateExplainedVideoProposalDirect({
-        topic: rotatingTopic,
-        sourcePreference,
-      });
-
-      if (!genRes.proposal) {
-        continue;
+      let auditedProposal: any = null;
+      try {
+        const { runMultiWorkerPipelineDirect } = await import("./team-pipeline.functions");
+        const pipelineRes = await runMultiWorkerPipelineDirect({
+          topic: rotatingTopic,
+          sourcePreference,
+        });
+        if (pipelineRes?.finalProposal) {
+          auditedProposal = pipelineRes.finalProposal;
+          auditedProposal.managerDirective = pipelineRes.managerDirective;
+          auditedProposal.skillsExecuted = pipelineRes.skillsExecuted;
+        }
+      } catch (pipeErr) {
+        console.warn("[autopilot] Fallback to direct proposal generator:", pipeErr);
       }
 
-      // Final 5-pass self-healing convergence guarantee before rendering
-      const { proposal: auditedProposal, report } = auditAndRefineProposal(genRes.proposal as any, {
-        maxPasses: 5,
-      });
-      auditedProposal.auditReport = report;
+      if (!auditedProposal) {
+        const genRes = await generateExplainedVideoProposalDirect({
+          topic: rotatingTopic,
+          sourcePreference,
+        });
+
+        if (!genRes.proposal) {
+          continue;
+        }
+
+        // Final 5-pass self-healing convergence guarantee before rendering
+        const { proposal: audited, report } = auditAndRefineProposal(genRes.proposal as any, {
+          maxPasses: 5,
+        });
+        audited.auditReport = report;
+        auditedProposal = audited;
+      }
+
       generatedProposals.push(auditedProposal);
       titles.push(auditedProposal.title || `Ислямско видео #${i + 1}`);
 
@@ -1141,7 +1161,7 @@ export async function checkAndTriggerScheduledAutopilotDirect(): Promise<{
   slot?: string;
   bgTime?: string;
 }> {
-  if (!import.meta.env.SSR) {
+  if (typeof window !== "undefined" && !import.meta.env?.SSR) {
     return { triggered: false, reason: "Client environment" };
   }
   const cfg = await readAutopilotConfigDirect();
@@ -1201,7 +1221,7 @@ export const checkAndTriggerScheduledAutopilot = createServerFn({ method: "POST"
   });
 
 export function initAutopilotScheduler() {
-  if (!import.meta.env.SSR) return;
+  if (typeof window !== "undefined" && !import.meta.env?.SSR) return;
   const globalForAutopilot = globalThis as unknown as {
     __autopilotSchedulerStarted?: boolean;
     __autopilotCheckInterval?: any;

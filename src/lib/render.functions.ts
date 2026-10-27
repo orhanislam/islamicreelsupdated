@@ -1716,6 +1716,14 @@ export async function generateAndStorePostRenderSocialKit(params: {
         if (!upRes.published && upRes.error) {
           tiktokPublishError = upRes.error;
           console.warn(`[upload-post] Auto-publish warning for ${params.jobId}:`, upRes.error);
+          if (upRes.error.includes("daily posting cap") || upRes.error.includes("15/15")) {
+            try {
+              const { writeAutopilotConfigDirect } = await import("./autopilot.functions");
+              await writeAutopilotConfigDirect({
+                lastRunMessage: `⚠️ Видеото е рендирано на 100%, но TikTok върна ограничение: Достигнат е лимитът от 15 видеа за деня (15/15). Видеото е запазено в „Изтегляния“!`,
+              });
+            } catch {}
+          }
         } else {
           console.log(`[upload-post] Successfully auto-published ${params.jobId} to TikTok with cover!`);
         }
