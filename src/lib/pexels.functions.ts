@@ -1366,9 +1366,10 @@ export async function analyzeVisualThemes(text: string, avoid: string[] = []): P
 // 8. PEXELS API CLIENT & SCORING
 // ============================================================================
 
-export async function pexelsPhotoQuery(key: string, query: string, perPage = 9) {
+export async function pexelsPhotoQuery(key: string, query: string, perPage = 25, page = 1) {
   const safeQuery = sanitizeSearchQuery(query);
-  const url = `https://api.pexels.com/v1/search?query=${encodeURIComponent(safeQuery)}&orientation=portrait&size=large&per_page=${perPage}`;
+  const pageParam = Math.max(1, Number(page) || 1);
+  const url = `https://api.pexels.com/v1/search?query=${encodeURIComponent(safeQuery)}&orientation=portrait&size=large&per_page=${perPage}&page=${pageParam}`;
   const res = await fetch(url, { headers: { Authorization: key } });
   if (!res.ok) throw new Error(`Pexels грешка ${res.status}`);
   const j = await res.json();

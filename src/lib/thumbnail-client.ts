@@ -8,6 +8,13 @@ export interface ThumbnailRequest {
   accentColor?: string;
   profile?: string;
   customBackgroundUrl?: string;
+  jobId?: string;
+  topic?: string;
+  summaryBg?: string;
+  themeBg?: string;
+  searchQuery?: string;
+  mp4FilePath?: string;
+  batchIndex?: number;
 }
 
 export const HARAM_THUMB_METADATA_REGEX =

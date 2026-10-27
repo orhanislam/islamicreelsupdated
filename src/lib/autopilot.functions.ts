@@ -618,6 +618,9 @@ export async function publishVideoViaUploadPostDirect(params: {
       const thumbInfo = await ensureJobThumbnailOnDisk({
         jobId: params.jobId,
         title: params.title,
+        caption: params.caption,
+        mp4FilePath: params.mp4FilePath,
+        jobData: (params as any).jobData,
       });
       coverPath = thumbInfo.filePath;
       coverBuf = thumbInfo.buffer;

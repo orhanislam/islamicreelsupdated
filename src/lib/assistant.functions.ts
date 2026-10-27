@@ -2528,6 +2528,8 @@ export function buildExplainedNarrationText(params: {
   return sanitizeTheologicalRespect(joined);
 }
 
+const recentlyUsedBatchVideoUrls = new Set<string>();
+
 export async function confirmAndGenerateVideoDirect(input: {
   proposal: VideoProposal;
   force?: boolean;
@@ -2874,7 +2876,14 @@ export async function confirmAndGenerateVideoDirect(input: {
         minDuration: 30,
       });
       if (vidSearch.videos && vidSearch.videos.length > 0) {
-        bestVid = vidSearch.videos[0].link;
+        // Pick an unused video if available to guarantee distinct backgrounds across batch runs
+        const unused = vidSearch.videos.find((v) => !recentlyUsedBatchVideoUrls.has(v.link));
+        bestVid = unused?.link || vidSearch.videos[0].link;
+        recentlyUsedBatchVideoUrls.add(bestVid);
+        if (recentlyUsedBatchVideoUrls.size > 100) {
+          const first = recentlyUsedBatchVideoUrls.values().next().value;
+          if (first) recentlyUsedBatchVideoUrls.delete(first);
+        }
       }
     } catch (err) {
       console.warn("[assistant] Pexels search failed, using fallback bg:", err);
@@ -2898,7 +2907,9 @@ export async function confirmAndGenerateVideoDirect(input: {
         if (bRollResult.segments && bRollResult.segments.length > 0) {
           bRollSegments = bRollResult.segments;
         }
-        bestVid = bRollResult.clips[0] || bestVid;
+        const unusedClip = bRollResult.clips.find((c) => !recentlyUsedBatchVideoUrls.has(c));
+        bestVid = unusedClip || bRollResult.clips[0] || bestVid;
+        recentlyUsedBatchVideoUrls.add(bestVid);
       }
     } catch (e) {
       console.warn("[assistant] Could not fetch multi-scene B-Roll:", e);
