@@ -2183,7 +2183,7 @@ export function scheduleServerMaintenance() {
 }
 
 if (
-  import.meta.env.SSR &&
+  import.meta.env?.SSR &&
   typeof process !== "undefined" &&
   process.env.NODE_ENV !== "test" &&
   !process.argv?.some?.((a) => a.includes("test")) &&
