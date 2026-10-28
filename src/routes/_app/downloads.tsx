@@ -80,13 +80,25 @@ function DownloadsPage() {
   const preloadingRef = useRef<Set<string>>(new Set());
   const autoDownloadingRef = useRef<Set<string>>(new Set());
 
-  const handlePublishToTikTok = async (job: ServerJob) => {
+  const handlePublishToTikTok = async (job: ServerJob, force = false) => {
+    if (job.tiktokPublished && !force) {
+      const ok = window.confirm(
+        `⚠️ Внимание: Това видео („${job.title}“) вече е успешно качено в TikTok (@orhan.islam)!\n\nСигурни ли сте, че искате да го качите повторно? (Може да се дублира в профила ви)`
+      );
+      if (!ok) return;
+      force = true;
+    }
+
     try {
       setPublishingJobId(job.id);
       toast.message(`📲 Качване и публикуване на „${job.title}“ в TikTok чрез Upload-Post.com...`);
-      const res = await publishServerJobToUploadPost({ data: { jobId: job.id } });
+      const res = await publishServerJobToUploadPost({ data: { jobId: job.id, force } });
       if (res.published) {
-        toast.success(`✅ Видеото е изпратено успешно за публикуване в TikTok (Upload-Post)!`);
+        if ((res as any).alreadyPublished) {
+          toast.info(`ℹ️ Видеото вече е успешно качено в TikTok! Предотвратено е повторно дублиране.`);
+        } else {
+          toast.success(`✅ Видеото е изпратено успешно за публикуване в TikTok (Upload-Post)!`);
+        }
         loadAll();
       } else {
         toast.error(`❌ Грешка от Upload-Post.com: ${res.error || "Проверете API Key и User в Автопилота"}`);
@@ -727,7 +739,7 @@ function DownloadsPage() {
                   </div>
                 )}
 
-                {job.status === "completed" && job.tiktokPublishError && (
+                {job.status === "completed" && job.tiktokPublishError && !job.tiktokPublished && (
                   <div className="my-2 rounded-xl border border-amber-500/40 bg-amber-950/25 p-3 text-xs text-amber-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2.5">
                     <div className="space-y-0.5">
                       <div className="flex items-center gap-1.5 font-bold text-amber-300">
@@ -746,7 +758,7 @@ function DownloadsPage() {
                     </div>
                     <button
                       type="button"
-                      onClick={() => handlePublishToTikTok(job)}
+                      onClick={() => handlePublishToTikTok(job, false)}
                       disabled={publishingJobId === job.id}
                       className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-black font-bold text-xs shrink-0 cursor-pointer shadow transition"
                     >
@@ -757,9 +769,14 @@ function DownloadsPage() {
                 )}
 
                 {job.status === "completed" && job.tiktokPublished && (
-                  <div className="my-1.5 rounded-xl border border-emerald-500/40 bg-emerald-950/30 px-3 py-1.5 text-xs text-emerald-300 flex items-center gap-2 font-medium">
-                    <CheckCircle2 className="size-3.5 text-emerald-400" />
-                    <span>Качено автоматично в TikTok (@orhan.islam) ✓</span>
+                  <div className="my-1.5 rounded-xl border border-emerald-500/40 bg-emerald-950/30 px-3 py-1.5 text-xs text-emerald-300 flex items-center justify-between gap-2 font-medium">
+                    <div className="flex items-center gap-2">
+                      <CheckCircle2 className="size-3.5 text-emerald-400 shrink-0" />
+                      <span>Качено автоматично в TikTok (@orhan.islam) ✓</span>
+                    </div>
+                    <span className="text-[10px] text-emerald-400/80 bg-emerald-900/40 px-2 py-0.5 rounded-full border border-emerald-500/30 font-mono">
+                      Защитено от дублиране
+                    </span>
                   </div>
                 )}
 
@@ -815,16 +832,22 @@ function DownloadsPage() {
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end" className="w-56">
                           <DropdownMenuItem
-                            onClick={() => handlePublishToTikTok(job)}
+                            onClick={() => handlePublishToTikTok(job, false)}
                             disabled={publishingJobId === job.id}
-                            className="cursor-pointer font-semibold text-emerald-400"
+                            className={job.tiktokPublished ? "cursor-pointer font-medium text-emerald-400/90" : "cursor-pointer font-semibold text-emerald-400"}
                           >
                             {publishingJobId === job.id ? (
                               <Loader2 className="size-4 mr-2 animate-spin" />
+                            ) : job.tiktokPublished ? (
+                              <CheckCircle2 className="size-4 mr-2 text-emerald-400" />
                             ) : (
                               <Sparkles className="size-4 mr-2 text-emerald-400" />
                             )}
-                            <span>Публикувай в TikTok (Upload-Post)</span>
+                            <span>
+                              {job.tiktokPublished
+                                ? "Вече е в TikTok (Повторно)"
+                                : "Публикувай в TikTok (Upload-Post)"}
+                            </span>
                           </DropdownMenuItem>
                           <DropdownMenuItem
                             onSelect={(e) => {

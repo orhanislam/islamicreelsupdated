@@ -1595,6 +1595,7 @@ export type ServerJobRecord = {
   tiktokPublished?: boolean;
   tiktokPublishRequestId?: string;
   tiktokPublishError?: string;
+  tiktokPublishedAt?: number;
   thumbnailDataUrl?: string;
   hasThumbnail?: boolean;
   stagedCoverUrl?: string;
@@ -1614,6 +1615,7 @@ export async function generateAndStorePostRenderSocialKit(params: {
   tiktokPublished?: boolean;
   tiktokPublishRequestId?: string;
   tiktokPublishError?: string;
+  tiktokPublishedAt?: number;
   thumbnailDataUrl?: string;
   stagedCoverUrl?: string;
 }> {
@@ -1700,32 +1702,41 @@ export async function generateAndStorePostRenderSocialKit(params: {
         cfg.uploadPostUser &&
         params.mp4FilePath
       ) {
-        console.log(`[upload-post] Auto-publishing ${params.jobId} with cover to ${cfg.uploadPostPlatforms.join(", ")}...`);
-        const upRes = await publishVideoViaUploadPostDirect({
-          jobId: params.jobId,
-          mp4FilePath: params.mp4FilePath,
-          title: rawTitle,
-          caption: viralCaption,
-          coverImagePath: thumbnailFilePath,
-        });
-        tiktokPublished = upRes.published;
-        tiktokPublishRequestId = upRes.requestId;
-        if (upRes.coverMediaUrl) {
-          stagedCoverUrl = upRes.coverMediaUrl;
-        }
-        if (!upRes.published && upRes.error) {
-          tiktokPublishError = upRes.error;
-          console.warn(`[upload-post] Auto-publish warning for ${params.jobId}:`, upRes.error);
-          if (upRes.error.includes("daily posting cap") || upRes.error.includes("15/15")) {
-            try {
-              const { writeAutopilotConfigDirect } = await import("./autopilot.functions");
-              await writeAutopilotConfigDirect({
-                lastRunMessage: `⚠️ Видеото е рендирано на 100%, но TikTok върна ограничение: Достигнат е лимитът от 15 видеа за деня (15/15). Видеото е запазено в „Изтегляния“!`,
-              });
-            } catch {}
-          }
+        const isAlreadyPublished = Boolean(
+          params.jobData?.tiktokPublished ||
+          (params as any).tiktokPublished
+        );
+        if (isAlreadyPublished) {
+          console.log(`[upload-post] Job ${params.jobId} is already marked as published. Skipping auto-publish.`);
+          tiktokPublished = true;
         } else {
-          console.log(`[upload-post] Successfully auto-published ${params.jobId} to TikTok with cover!`);
+          console.log(`[upload-post] Auto-publishing ${params.jobId} with cover to ${cfg.uploadPostPlatforms.join(", ")}...`);
+          const upRes = await publishVideoViaUploadPostDirect({
+            jobId: params.jobId,
+            mp4FilePath: params.mp4FilePath,
+            title: rawTitle,
+            caption: viralCaption,
+            coverImagePath: thumbnailFilePath,
+          });
+          tiktokPublished = upRes.published;
+          tiktokPublishRequestId = upRes.requestId;
+          if (upRes.coverMediaUrl) {
+            stagedCoverUrl = upRes.coverMediaUrl;
+          }
+          if (!upRes.published && upRes.error) {
+            tiktokPublishError = upRes.error;
+            console.warn(`[upload-post] Auto-publish warning for ${params.jobId}:`, upRes.error);
+            if (upRes.error.includes("daily posting cap") || upRes.error.includes("15/15")) {
+              try {
+                const { writeAutopilotConfigDirect } = await import("./autopilot.functions");
+                await writeAutopilotConfigDirect({
+                  lastRunMessage: `⚠️ Видеото е рендирано на 100%, но TikTok върна ограничение: Достигнат е лимитът от 15 видеа за деня (15/15). Видеото е запазено в „Изтегляния“!`,
+                });
+              } catch {}
+            }
+          } else {
+            console.log(`[upload-post] Successfully auto-published ${params.jobId} to TikTok with cover!`);
+          }
         }
       }
     } catch (whErr) {
@@ -1938,8 +1949,9 @@ async function processRenderQueue() {
           if (socialKit.tiktokPublished) {
             curJobs[idx].tiktokPublished = true;
             curJobs[idx].tiktokPublishRequestId = socialKit.tiktokPublishRequestId;
-          }
-          if (socialKit.tiktokPublishError) {
+            curJobs[idx].tiktokPublishError = undefined;
+            curJobs[idx].tiktokPublishedAt = Date.now();
+          } else if (socialKit.tiktokPublishError) {
             curJobs[idx].tiktokPublishError = socialKit.tiktokPublishError;
           }
           if (item.data?.isAutopilot) {

@@ -560,10 +560,13 @@ export async function stageCoverImageViaUploadPostDirect(params: {
   return null;
 }
 
+const activePublishingJobIds = new Set<string>();
+
 /**
  * Direct Upload-Post.com API Integration (https://app.upload-post.com)
  * Sends the rendered MP4 video file + full TikTok caption directly to TikTok / Instagram / YouTube,
  * automatically creating, staging, and attaching the viral cover thumbnail.
+ * Includes concurrency locking and strict deduplication guards to ensure a video is never posted twice.
  */
 export async function publishVideoViaUploadPostDirect(params: {
   jobId: string;
@@ -576,6 +579,7 @@ export async function publishVideoViaUploadPostDirect(params: {
   coverImagePath?: string;
   scheduledDate?: string | Date | number;
   timezone?: string;
+  force?: boolean;
 }): Promise<{
   published: boolean;
   status?: number;
@@ -583,31 +587,73 @@ export async function publishVideoViaUploadPostDirect(params: {
   error?: string;
   coverStaged?: boolean;
   coverMediaUrl?: string;
+  alreadyPublished?: boolean;
 }> {
-  const cfg = await readAutopilotConfigDirect();
-  const rawKey = (
-    params.apiKey !== undefined ? params.apiKey : cfg.uploadPostApiKey || DEFAULT_UPLOAD_POST_API_KEY
-  )
-    .trim()
-    .replace(/^ApiKey\s+/i, "");
-  const userHandle = (
-    params.user !== undefined ? params.user : cfg.uploadPostUser || DEFAULT_UPLOAD_POST_USER
-  ).trim();
-  const platforms =
-    params.platforms && params.platforms.length > 0
-      ? params.platforms
-      : cfg.uploadPostPlatforms?.length > 0
-      ? cfg.uploadPostPlatforms
-      : (["tiktok"] as Array<"tiktok" | "instagram" | "youtube">);
-
-  if (!rawKey) {
-    return { published: false, error: "Липсва Upload-Post API Key." };
+  // 1. In-flight concurrency lock: Prevents concurrent requests for the same video
+  if (params.jobId && activePublishingJobIds.has(params.jobId)) {
+    return {
+      published: false,
+      error: "В момента вече се извършва качване на това видео в TikTok. Моля, изчакайте да завърши.",
+    };
   }
-  if (!userHandle) {
-    return { published: false, error: "Липсва Upload-Post профил (user)." };
+
+  // 2. Strict deduplication guard: Checks if the video has already been published to TikTok
+  if (params.jobId && !params.force) {
+    try {
+      const fs = (await import("fs")).promises;
+      const path = await import("path");
+      const dir = await getJobsDir();
+      const jobsFile = path.join(dir, "jobs.json");
+      const jobsRaw = await fs.readFile(jobsFile, "utf-8").catch(() => "[]");
+      const jobs = JSON.parse(jobsRaw);
+      const existing = Array.isArray(jobs) ? jobs.find((j: any) => j.id === params.jobId) : null;
+      if (existing && (existing.tiktokPublished || existing.tiktokPublishRequestId)) {
+        console.log(
+          `[upload-post] Video ${params.jobId} is ALREADY published to TikTok (requestId: ${existing.tiktokPublishRequestId}). Blocking duplicate upload.`,
+        );
+        return {
+          published: true,
+          alreadyPublished: true,
+          status: 200,
+          requestId: existing.tiktokPublishRequestId,
+          coverStaged: Boolean(existing.stagedCoverUrl),
+          coverMediaUrl: existing.stagedCoverUrl,
+          error: undefined,
+        };
+      }
+    } catch (e) {
+      // Non-fatal check error
+    }
+  }
+
+  if (params.jobId) {
+    activePublishingJobIds.add(params.jobId);
   }
 
   try {
+    const cfg = await readAutopilotConfigDirect();
+    const rawKey = (
+      params.apiKey !== undefined ? params.apiKey : cfg.uploadPostApiKey || DEFAULT_UPLOAD_POST_API_KEY
+    )
+      .trim()
+      .replace(/^ApiKey\s+/i, "");
+    const userHandle = (
+      params.user !== undefined ? params.user : cfg.uploadPostUser || DEFAULT_UPLOAD_POST_USER
+    ).trim();
+    const platforms =
+      params.platforms && params.platforms.length > 0
+        ? params.platforms
+        : cfg.uploadPostPlatforms?.length > 0
+        ? cfg.uploadPostPlatforms
+        : (["tiktok"] as Array<"tiktok" | "instagram" | "youtube">);
+
+    if (!rawKey) {
+      return { published: false, error: "Липсва Upload-Post API Key." };
+    }
+    if (!userHandle) {
+      return { published: false, error: "Липсва Upload-Post профил (user)." };
+    }
+
     // 1. Generate or load server viral thumbnail for this job
     let coverPath = params.coverImagePath;
     let coverBuf: Buffer | null = null;
@@ -744,6 +790,10 @@ export async function publishVideoViaUploadPostDirect(params: {
       published: false,
       error: String(err?.message || err),
     };
+  } finally {
+    if (params.jobId) {
+      activePublishingJobIds.delete(params.jobId);
+    }
   }
 }
 
@@ -754,6 +804,7 @@ export const publishServerJobToUploadPost = createServerFn({ method: "POST" })
       apiKey?: string;
       user?: string;
       platforms?: Array<"tiktok" | "instagram" | "youtube">;
+      force?: boolean;
     }) => input,
   )
   .handler(async ({ data }) => {
@@ -769,14 +820,34 @@ export const publishServerJobToUploadPost = createServerFn({ method: "POST" })
     const jobsFile = path.join(dir, "jobs.json");
     let jobTitle = "Ислямска мъдрост";
     let jobCaption = "";
+    let isAlreadyPublished = false;
+    let existingRequestId: string | undefined;
+
     try {
       const jobs = JSON.parse(await fs.readFile(jobsFile, "utf-8"));
       const found = Array.isArray(jobs) ? jobs.find((j: any) => j.id === data.jobId) : null;
       if (found) {
         jobTitle = found.title || jobTitle;
         jobCaption = found.viralCaption || "";
+        if (found.tiktokPublished || found.tiktokPublishRequestId) {
+          isAlreadyPublished = true;
+          existingRequestId = found.tiktokPublishRequestId;
+        }
       }
     } catch {}
+
+    // Deduplication check: Do NOT re-upload unless explicitly forced by user
+    if (isAlreadyPublished && !data.force) {
+      console.log(`[upload-post] Prevented duplicate publish for ${data.jobId} (already published).`);
+      return {
+        published: true,
+        alreadyPublished: true,
+        status: 200,
+        requestId: existingRequestId,
+        error: undefined,
+        message: "Видеото вече е успешно публикувано в TikTok (@orhan.islam)!",
+      };
+    }
 
     if (!jobCaption) {
       jobCaption = formatViralSocialCaption(jobTitle);
@@ -790,6 +861,7 @@ export const publishServerJobToUploadPost = createServerFn({ method: "POST" })
       apiKey: data.apiKey,
       user: data.user,
       platforms: data.platforms,
+      force: data.force,
     });
 
     if (res.published) {
@@ -801,6 +873,20 @@ export const publishServerJobToUploadPost = createServerFn({ method: "POST" })
           if (idx !== -1) {
             jobs[idx].tiktokPublished = true;
             jobs[idx].tiktokPublishRequestId = res.requestId;
+            jobs[idx].tiktokPublishError = undefined; // Clear error on success
+            jobs[idx].tiktokPublishedAt = Date.now();
+            await fs.writeFile(jobsFile, JSON.stringify(jobs, null, 2), "utf-8");
+          }
+        });
+      } catch {}
+    } else if (res.error) {
+      try {
+        const { withJobsLock } = await import("./render.functions");
+        await withJobsLock(async () => {
+          const jobs = JSON.parse(await fs.readFile(jobsFile, "utf-8"));
+          const idx = Array.isArray(jobs) ? jobs.findIndex((j: any) => j.id === data.jobId) : -1;
+          if (idx !== -1) {
+            jobs[idx].tiktokPublishError = res.error;
             await fs.writeFile(jobsFile, JSON.stringify(jobs, null, 2), "utf-8");
           }
         });
