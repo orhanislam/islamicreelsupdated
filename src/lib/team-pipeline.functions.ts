@@ -4,6 +4,7 @@ import {
   generateExplainedVideoProposalDirect,
   type VideoProposal,
 } from "./assistant.functions";
+import { selectGuaranteedUniqueScriptureDirect } from "./scripture-selector";
 import {
   auditAndRefineProposal,
   auditAndRefineBulgarianGrammar,
@@ -215,6 +216,16 @@ export const SALAFI_WORKERS_ROSTER: WorkerInfo[] = [
       { label: "Филтър за ширк/бид'а", value: "Максимален (Активен)" },
     ],
     skills: [
+      {
+        id: "hodja_30day_cooldown_verification",
+        name: "30-Дневен Филтър за Уникалност на Далила",
+        icon: "⏳",
+        category: "theology",
+        level: "Strict",
+        description: "Проверява далила в 30-дневния регистър ПЪРВО преди написване на сценария, предотвратявайки повторения и гарантирайки разнообразие от различни хадиси.",
+        executionDetail: "Филтрира последните 30 дни от историята и допуска хадиса/аята само при 100% уникалност.",
+        activeInPipeline: true,
+      },
       {
         id: "hodja_daleel_authentication",
         name: "Верификация на Автентичността на Далила",
@@ -573,10 +584,28 @@ export async function runMultiWorkerPipelineDirect(input?: {
     "applied"
   );
 
+  // 1.5. HODJA / THEOLOGIAN: 30-DAY DEDUPLICATION CHECK & SCRIPTURE LOCK FIRST
+  // Checks the 30-day history FIRST before proceeding to the next step, ensuring diverse rotation without delay
+  const preSelectedScripture = await selectGuaranteedUniqueScriptureDirect({
+    topic: userTopic,
+    sourcePreference: sourcePref,
+  });
+
+  recordSkill(
+    "hodja",
+    "Проверяващ Салафи Ходжа",
+    "hodja_30day_cooldown_verification",
+    "30-Дневен Филтър за Уникалност на Далила",
+    "🛡️",
+    `Проверен е 30-дневният регистър: Далилът „${preSelectedScripture.title}“ е 100% уникален и неповторен! Преминаване към написване на сценария.`,
+    "verified"
+  );
+
   // 2. COPYWRITER GENERATES 4-STEP SCRIPT
   const { proposal: rawProposal } = await generateExplainedVideoProposalDirect({
     topic: userTopic,
     sourcePreference: sourcePref,
+    preSelectedScripture,
   });
 
   if (!rawProposal) {

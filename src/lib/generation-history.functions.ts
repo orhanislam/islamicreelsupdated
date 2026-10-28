@@ -314,6 +314,10 @@ async function _syncHistoryWithSources(
           if (!id || deletedIds.has(id)) continue;
 
           const hasMp4 = mp4Files.has(`${id}.mp4`);
+          if (!hasMp4 && !itemMap.has(id)) {
+            // Chat suggestions that were never rendered into an MP4 video should not pollute the video generation history
+            continue;
+          }
           const status = hasMp4 ? "completed" : "completed";
           const title =
             prop?.title ||
