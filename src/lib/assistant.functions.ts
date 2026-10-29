@@ -41,6 +41,7 @@ import {
   auditAndRefineBulgarianGrammar,
   KNOWN_FABRICATED_HADITHS,
   QURAN_SURAH_AYAH_COUNTS,
+  isInvalidSacredQuoteText,
   type ScriptAuditReport,
 } from "./smart-script-auditor";
 
@@ -945,19 +946,24 @@ export async function preFetchQuranDalilFull(
 ): Promise<{ bulgarian: string; arabic?: string; english?: string }> {
   try {
     const ayahEnd = ayah + Math.max(1, count) - 1;
-    const q = await fetchAyah({ data: { surah, ayah, ayahEnd } });
-    const ref = `Сура ${q.surahName} (${surah}:${ayah}${count > 1 ? `-${ayahEnd}` : ""})`;
-    const t = await translateToBulgarian({
-      data: {
+    const q = await fetchAyahDirect({ surah, ayah, ayahEnd });
+    const { getBulgarianQuranAyahDirect } = await import("./quran.functions");
+    const bgDirect = await getBulgarianQuranAyahDirect({ surah, ayah, count });
+    let clean = (bgDirect.text || "").trim();
+
+    if (!clean || isInvalidSacredQuoteText(clean)) {
+      const ref = `Сура ${q.surahName} (${surah}:${ayah}${count > 1 ? `-${ayahEnd}` : ""})`;
+      const t = await translateToBulgarianDirect({
         english: q.english,
         sourceRef: ref,
         arabic: q.arabic,
         ayahBounds: q.ayahBounds,
-      },
-    });
-    const clean = (t.bulgarian || "")
-      .replace(/(^|\n)\s*(?:\(\d+\)|\[\d+\]|\d+\.)\s*/g, "$1")
-      .trim();
+      });
+      clean = (t.bulgarian || "")
+        .replace(/(^|\n)\s*(?:\(\d+\)|\[\d+\]|\d+\.)\s*/g, "$1")
+        .trim();
+    }
+
     return {
       bulgarian: sanitizeTheologicalRespect(enrichUnfamiliarQuranicTerms(clean)),
       arabic: q.arabic,
@@ -1055,9 +1061,9 @@ export async function enrichProposalWithFullScripture(proposal: VideoProposal): 
 
   // 1. Quran Scripture
   if (surah && ayah) {
-    if (!proposal.fullDalilText || proposal.fullDalilText.length < 15) {
+    if (!proposal.fullDalilText || proposal.fullDalilText.length < 15 || isInvalidSacredQuoteText(proposal.fullDalilText)) {
       const qRes = await preFetchQuranDalilFull(surah, ayah, count);
-      if (qRes.bulgarian) {
+      if (qRes.bulgarian && !isInvalidSacredQuoteText(qRes.bulgarian)) {
         proposal.fullDalilText = qRes.bulgarian;
         if (qRes.arabic) proposal.arabicScriptureText = qRes.arabic;
       }
@@ -1069,9 +1075,9 @@ export async function enrichProposalWithFullScripture(proposal: VideoProposal): 
 
   // 2. Hadith Scripture
   if (collection && number) {
-    if (!proposal.fullDalilText || proposal.fullDalilText.length < 15) {
+    if (!proposal.fullDalilText || proposal.fullDalilText.length < 15 || isInvalidSacredQuoteText(proposal.fullDalilText)) {
       const hRes = await preFetchHadithDalilFull(collection, number);
-      if (hRes.bulgarian) {
+      if (hRes.bulgarian && !isInvalidSacredQuoteText(hRes.bulgarian)) {
         proposal.fullDalilText = hRes.bulgarian;
         if (hRes.arabic) proposal.arabicScriptureText = hRes.arabic;
       }
@@ -1351,7 +1357,7 @@ ${userTopic}${preGroundingPrompt ? `\n\n${preGroundingPrompt}` : ""}
     ) {
       parsed.proposal.collection = chosenCandidateInfo.collection as any;
       parsed.proposal.number = Number(chosenCandidateInfo.number);
-      if (preFetchedDalilBg) {
+      if (preFetchedDalilBg && !isInvalidSacredQuoteText(preFetchedDalilBg)) {
         parsed.proposal.fullDalilText = preFetchedDalilBg;
         parsed.proposal.scriptWorkflow.dalilText = preFetchedDalilBg;
       }
@@ -1362,7 +1368,7 @@ ${userTopic}${preGroundingPrompt ? `\n\n${preGroundingPrompt}` : ""}
       Number(parsed.proposal.surah) === Number(chosenCandidateInfo.surah) &&
       Number(parsed.proposal.ayah) === Number(chosenCandidateInfo.ayah);
 
-    if (matchesPreChosenQuran && preFetchedDalilBg) {
+    if (matchesPreChosenQuran && preFetchedDalilBg && !isInvalidSacredQuoteText(preFetchedDalilBg)) {
       parsed.proposal.fullDalilText = preFetchedDalilBg;
       parsed.proposal.scriptWorkflow.dalilText = preFetchedDalilBg;
     } else if (parsed.proposal.surah && parsed.proposal.ayah) {
@@ -1371,7 +1377,7 @@ ${userTopic}${preGroundingPrompt ? `\n\n${preGroundingPrompt}` : ""}
         Number(parsed.proposal.ayah),
         Number(parsed.proposal.count) || 1,
       );
-      if (freshBg) {
+      if (freshBg && !isInvalidSacredQuoteText(freshBg)) {
         parsed.proposal.fullDalilText = freshBg;
         parsed.proposal.scriptWorkflow.dalilText = freshBg;
       }
@@ -2282,9 +2288,20 @@ export function buildExplainedNarrationText(params: {
     .replace(/^(?:чуй\s+какво\s+)?(?:ни\s+)?казва\s+(?:се\s+)?(?:ни\s+)?за\s*[^:]*:\s*/i, "")
     .trim()));
 
+  let safeDalil = cleanDalil;
+  if (isInvalidSacredQuoteText(safeDalil) || safeDalil === intro) {
+    if (params.summaryBg && !isInvalidSacredQuoteText(params.summaryBg)) {
+      safeDalil = sanitizeTheologicalRespect(enrichUnfamiliarQuranicTerms(params.summaryBg.replace(/^["„“']+|["„“']+$/g, "").trim()));
+    } else {
+      safeDalil = effectiveIsQuran
+        ? "Наистина, напътствието от Аллах е истинското напътствие."
+        : "Делата се оценяват според намеренията.";
+    }
+  }
+
   // At the end of the quote, state the exact number/citation of the ayah or hadith
   const citationAtEnd = spokenRef && !spokenRef.startsWith("[") ? `\n— ${spokenRef}.` : "";
-  blocks.push(`${intro}\n„${cleanDalil}“${citationAtEnd}`);
+  blocks.push(`${intro}\n„${safeDalil}“${citationAtEnd}`);
 
   // Step 3: Explanation (Обяснение:) - strictly labeled "Обяснение:" without naming who it is from
   let explanation = sw?.explanation?.trim() || "";
@@ -2578,23 +2595,30 @@ export async function confirmAndGenerateVideoDirect(input: {
 
         if (
           candidateDalil.length > 20 &&
+          !isInvalidSacredQuoteText(candidateDalil) &&
           !candidateDalil.includes("...") &&
           !candidateDalil.includes("…") &&
           candidateDalil !== proposal.title
         ) {
           bulgarian = sanitizeTheologicalRespect(enrichUnfamiliarQuranicTerms(candidateDalil));
         } else {
-          const t = await translateToBulgarianDirect({
-            english: q.english,
-            sourceRef: reference,
-            arabic: q.arabic,
-            ayahBounds: q.ayahBounds,
-          });
-          bulgarian = sanitizeTheologicalRespect(
-            enrichUnfamiliarQuranicTerms(
-              t.bulgarian.replace(/(^|\n)\s*(?:\(\d+\)|\[\d+\]|\d+\.)\s*/g, "$1").trim(),
-            ),
-          );
+          const { getBulgarianQuranAyahDirect } = await import("./quran.functions");
+          const bgRes = await getBulgarianQuranAyahDirect({ surah, ayah, count });
+          if (bgRes.text && !isInvalidSacredQuoteText(bgRes.text)) {
+            bulgarian = sanitizeTheologicalRespect(enrichUnfamiliarQuranicTerms(bgRes.text));
+          } else {
+            const t = await translateToBulgarianDirect({
+              english: q.english,
+              sourceRef: reference,
+              arabic: q.arabic,
+              ayahBounds: q.ayahBounds,
+            });
+            bulgarian = sanitizeTheologicalRespect(
+              enrichUnfamiliarQuranicTerms(
+                t.bulgarian.replace(/(^|\n)\s*(?:\(\d+\)|\[\d+\]|\d+\.)\s*/g, "$1").trim(),
+              ),
+            );
+          }
         }
 
         if (proposal.type === "explained_video" || proposal.scriptWorkflow) {

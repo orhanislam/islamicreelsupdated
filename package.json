@@ -4,6 +4,7 @@
   "sideEffects": false,
   "type": "module",
   "scripts": {
+    "car-studio": "node car-video-studio/server.js",
     "dev": "vite dev --host --port 8080",
     "build": "vite build && node scripts/fix-nitro-runtime.cjs",
     "start": "node .output/server/index.mjs",
@@ -14,6 +15,7 @@
     "test:carousel": "jiti src/lib/__tests__/verify-tawheed-carousel.test.ts",
     "test:viral": "jiti src/lib/__tests__/verify-viral-carousel.test.ts",
     "test:big-letters": "jiti src/lib/__tests__/verify-big-letters-text.test.ts",
+    "test:quran": "jiti src/lib/__tests__/verify-quran-ayah-fix.test.ts",
     "test:salawat": "npx tsx --test src/lib/__tests__/verify-salawat-phonetics.test.ts",
     "test": "jiti src/lib/__tests__/verify-big-letters-text.test.ts && jiti src/lib/__tests__/verify-tawheed-carousel.test.ts && jiti src/lib/__tests__/verify-sync.test.ts && jiti src/lib/__tests__/verify-goal-fixes.test.ts && npx tsx --test src/lib/__tests__/verify-salawat-phonetics.test.ts"
   },

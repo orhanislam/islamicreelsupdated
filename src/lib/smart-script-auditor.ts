@@ -12,7 +12,30 @@ import { sanitizeTheologicalRespect, detectAndHealSalafiTheologicalDeviations } 
 export { detectAndHealSalafiTheologicalDeviations };
 import { enrichUnfamiliarQuranicTerms } from "./islamic-glossary";
 import verifiedSharhData from "./data/verified-hadith-sharh.json";
+import verifiedQuranData from "./data/verified-quran-verses.json";
 import { geminiChat } from "./gemini";
+
+/**
+ * Checks if a text string is empty, too short, or merely an intro formula
+ * (e.g. "В Свещения Коран, Аллах Всевишният повелява:") rather than actual Ayah / Hadith text.
+ */
+export function isInvalidSacredQuoteText(text: string | undefined | null): boolean {
+  if (!text) return true;
+  const clean = text
+    .replace(/^["„“'«»\s]+|["„“'«»\s]+$/g, "")
+    .replace(/^(?:чуй\s+какво\s+)?(?:ни\s+)?казва\s+(?:се\s+)?(?:ни\s+)?за\s*[^:]*:\s*/i, "")
+    .trim();
+  if (clean.length < 15) return true;
+  const introPatterns = [
+    /^(?:в\s+свещения\s+коран[,\s]+)?(?:аллах\s+всевишният\s+повелява:?)$/i,
+    /^(?:чуй\s+какво\s+казва\s+аллах(?:\s+всевишният)?(?:\s+в\s+корана)?:?)$/i,
+    /^(?:пратеникът\s+на\s+аллах\s*(?:ﷺ|\(с\.а\.с\.?\))?\s*ни\s*учи(?:\s+с\s+достоверен\s+сахих\s+хадис)?:?)$/i,
+    /^(?:в\s+свещения\s+коран:?)$/i,
+  ];
+  if (introPatterns.some((p) => p.test(clean))) return true;
+  return false;
+}
+
 
 export interface ScriptAuditReport {
   timestamp: number;
@@ -368,6 +391,26 @@ export function validateAndHealQuranDaleel(proposal: AuditedProposalInput): {
       proposal.title = proposal.title.replace(/\[\s*(?:коран|сура)[^\]]+\]/i, expectedRef);
     } else {
       proposal.title = `${expectedRef} ${proposal.title}`.trim();
+    }
+  }
+
+  // Cross-check against verified database (verified-quran-verses.json)
+  const quranMatch = (verifiedQuranData as Array<{ surah: number; ayah: number; count?: number; ayahTextBg?: string }>).find(
+    (q) => q.surah === surah && q.ayah === ayah && (!q.count || q.count === count),
+  );
+
+  if (quranMatch?.ayahTextBg) {
+    if (!proposal.fullDalilText || isInvalidSacredQuoteText(proposal.fullDalilText)) {
+      proposal.fullDalilText = quranMatch.ayahTextBg;
+      healed = true;
+      fixes.push(`Инжектиран 100% автентичен проверен български превод за [Коран ${surah}:${ayah}]`);
+    }
+    if (proposal.scriptWorkflow) {
+      if (!proposal.scriptWorkflow.dalilText || isInvalidSacredQuoteText(proposal.scriptWorkflow.dalilText)) {
+        proposal.scriptWorkflow.dalilText = quranMatch.ayahTextBg;
+        healed = true;
+        fixes.push(`Инжектиран 100% автентичен български далил текст за видео сценария [Коран ${surah}:${ayah}]`);
+      }
     }
   }
 
@@ -1213,14 +1256,26 @@ export function auditAndRefineProposal(
       }
 
       // Synchronize fullDalilText and scriptWorkflow.dalilText 1:1 so the AI Assistant UI preview and video audio/subtitles NEVER diverge
-      const fullClean = (p.fullDalilText || "").replace(/^["„“']+|["„“']+$/g, "").trim();
-      const swClean = (p.scriptWorkflow.dalilText || "").replace(/^["„“']+|["„“']+$/g, "").trim();
-      if (fullClean.length > swClean.length && !fullClean.includes("...")) {
-        p.scriptWorkflow.dalilText = fullClean;
-        p.fullDalilText = fullClean;
-      } else if (swClean.length > 0 && (!fullClean || swClean.length >= fullClean.length)) {
+      let fullClean = (p.fullDalilText || "").replace(/^["„“']+|["„“']+$/g, "").trim();
+      let swClean = (p.scriptWorkflow.dalilText || "").replace(/^["„“']+|["„“']+$/g, "").trim();
+
+      const fullIsInvalid = isInvalidSacredQuoteText(fullClean);
+      const swIsInvalid = isInvalidSacredQuoteText(swClean);
+
+      if (fullIsInvalid && !swIsInvalid) {
         p.fullDalilText = swClean;
-        p.scriptWorkflow.dalilText = swClean;
+        fullClean = swClean;
+      } else if (!fullIsInvalid && swIsInvalid) {
+        p.scriptWorkflow.dalilText = fullClean;
+        swClean = fullClean;
+      } else if (!fullIsInvalid && !swIsInvalid) {
+        if (fullClean.length > swClean.length && !fullClean.includes("...")) {
+          p.scriptWorkflow.dalilText = fullClean;
+          p.fullDalilText = fullClean;
+        } else if (swClean.length > 0 && swClean.length >= fullClean.length) {
+          p.fullDalilText = swClean;
+          p.scriptWorkflow.dalilText = swClean;
+        }
       }
     }
 

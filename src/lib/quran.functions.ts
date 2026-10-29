@@ -361,3 +361,64 @@ export const fetchAyah = createServerFn({ method: "POST" })
   .handler(async ({ data }): Promise<AyahData> => {
     return await fetchAyahDirect(data);
   });
+
+export async function getBulgarianQuranAyahDirect(input: {
+  surah: number;
+  ayah: number;
+  count?: number;
+}): Promise<{ text: string }> {
+  const surah = Math.floor(Number(input.surah));
+  const ayah = Math.floor(Number(input.ayah));
+  const count = Math.max(1, Math.floor(Number(input.count) || 1));
+
+  // 1. Check verified pre-stored verses first
+  try {
+    const verifiedVerses: Array<{ surah: number; ayah: number; count?: number; ayahTextBg?: string }> =
+      (await import("./data/verified-quran-verses.json")).default;
+    const match = verifiedVerses.find(
+      (v) => v.surah === surah && v.ayah === ayah && (!v.count || v.count === count),
+    );
+    if (match?.ayahTextBg) {
+      return { text: match.ayahTextBg };
+    }
+  } catch {}
+
+  // 2. Fetch from api.alquran.cloud bg.theophanov
+  try {
+    const texts: string[] = [];
+    for (let i = 0; i < count; i++) {
+      const a = ayah + i;
+      const res = await fetchJsonWithRetry(`https://api.alquran.cloud/v1/ayah/${surah}:${a}/bg.theophanov`);
+      if (res?.data?.text) {
+        texts.push(res.data.text.trim());
+      }
+    }
+    if (texts.length > 0) {
+      return { text: texts.join(" ") };
+    }
+  } catch {}
+
+  // 3. Fallback: fetch via fetchAyahDirect and translate
+  try {
+    const q = await fetchAyahDirect({ surah, ayah, ayahEnd: ayah + count - 1 });
+    const { translateToBulgarianDirect } = await import("./translate.functions");
+    const t = await translateToBulgarianDirect({
+      english: q.english,
+      sourceRef: `Сура ${q.surahName} (${surah}:${ayah}${count > 1 ? `-${ayah + count - 1}` : ""})`,
+      arabic: q.arabic,
+      ayahBounds: q.ayahBounds,
+    });
+    if (t?.bulgarian) {
+      return { text: t.bulgarian.replace(/(^|\n)\s*(?:\(\d+\)|\[\d+\]|\d+\.)\s*/g, "$1").trim() };
+    }
+  } catch {}
+
+  return { text: "" };
+}
+
+export const getBulgarianQuranAyah = createServerFn({ method: "POST" })
+  .inputValidator((input: { surah: number; ayah: number; count?: number }) => input)
+  .handler(async ({ data }) => {
+    return await getBulgarianQuranAyahDirect(data);
+  });
+
