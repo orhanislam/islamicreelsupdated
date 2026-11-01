@@ -21,6 +21,7 @@ export interface AutopilotHistoryEntry {
 export interface AutopilotConfig {
   enabled: boolean;
   scheduleTimes: string[]; // Format: ["09:00", "18:00"]
+  prepareInAdvanceMinutes?: number; // Pre-render and stage video X minutes before post time (default: 60 min)
   videosPerRun: number; // 1 to 5
   contentMode: "explained_mix" | "quran_only" | "hadith_only";
   autoDownloadOnOpen: boolean;
@@ -55,6 +56,7 @@ export const DEFAULT_UPLOAD_POST_USER =
 export const DEFAULT_AUTOPILOT_CONFIG: AutopilotConfig = {
   enabled: true,
   scheduleTimes: ["09:00", "18:00"],
+  prepareInAdvanceMinutes: 60,
   videosPerRun: 2,
   contentMode: "explained_mix",
   autoDownloadOnOpen: true,
@@ -106,6 +108,10 @@ function normalizeConfig(raw: Partial<AutopilotConfig> | null | undefined): Auto
   return {
     enabled: typeof raw.enabled === "boolean" ? raw.enabled : DEFAULT_AUTOPILOT_CONFIG.enabled,
     scheduleTimes: scheduleTimes.length > 0 ? scheduleTimes : ["09:00"],
+    prepareInAdvanceMinutes:
+      typeof raw.prepareInAdvanceMinutes === "number" && raw.prepareInAdvanceMinutes >= 0
+        ? Math.min(180, raw.prepareInAdvanceMinutes)
+        : DEFAULT_AUTOPILOT_CONFIG.prepareInAdvanceMinutes,
     videosPerRun,
     contentMode,
     autoDownloadOnOpen:
@@ -333,15 +339,16 @@ async function ensureHighProfileMasterForUploadPost(
       profile.toLowerCase().includes("high") &&
       width === 1080 &&
       height === 1920 &&
-      (bitRate === 0 || bitRate <= 15_000_000);
+      bitRate > 0 &&
+      bitRate <= 6_500_000;
 
     if (isOptimal1080pHighProfile) {
-      console.log(`[upload-post] ${mp4FilePath} is optimal True 1080p High Profile (1 stream). Ready for TikTok direct ingest.`);
+      console.log(`[upload-post] ${mp4FilePath} is optimal True 1080p High Profile (1 stream, ${(bitRate / 1e6).toFixed(1)} Mbps). Ready for TikTok direct ingest.`);
       return;
     }
 
-    if (hasMultipleVideoStreams && width === 1080 && height === 1920) {
-      // If resolution is already 1080p, cleanly strip out any secondary attached_pic / mjpeg streams without re-encoding!
+    if (hasMultipleVideoStreams && width === 1080 && height === 1920 && bitRate <= 6_500_000) {
+      // If resolution is already 1080p and bitrate is within target, cleanly strip out any secondary attached_pic / mjpeg streams without re-encoding!
       console.log(`[upload-post] Stripping secondary attached_pic video stream from ${mp4FilePath} to prevent TikTok recompression blur...`);
       const cleanedPath = `${mp4FilePath}.clean.mp4`;
       await execFileAsync(ffmpegPath, [
@@ -369,7 +376,7 @@ async function ensureHighProfileMasterForUploadPost(
     }
 
     console.log(
-      `[upload-post] Remastering ${mp4FilePath} from (${profile}, ${width}x${height}, ${(bitRate / 1e6).toFixed(1)} Mbps) -> Clean High@L4.1 1080p HD (Single Stream)...`,
+      `[upload-post] Remastering ${mp4FilePath} from (${profile}, ${width}x${height}, ${(bitRate / 1e6).toFixed(1)} Mbps) -> Clean High@L4.1 1080p HD (Anti-Pixelation Direct Ingest Master)...`,
     );
 
     const remasteredPath = `${mp4FilePath}.hq_remaster.mp4`;
@@ -382,7 +389,7 @@ async function ensureHighProfileMasterForUploadPost(
       "-map",
       "0:a?",
       "-vf",
-      "scale=1080:1920:force_original_aspect_ratio=increase:flags=lanczos,crop=1080:1920,unsharp=5:5:0.8:5:5:0.4",
+      "scale=1080:1920:force_original_aspect_ratio=increase:flags=lanczos,crop=1080:1920",
       "-c:v",
       "libx264",
       "-tag:v",
@@ -406,11 +413,11 @@ async function ensureHighProfileMasterForUploadPost(
       "-movflags",
       "+faststart",
       "-crf",
-      "16",
+      "20",
       "-maxrate",
-      "14M",
+      "6M",
       "-bufsize",
-      "28M",
+      "6M",
       "-refs",
       "3",
       "-bf",
@@ -418,15 +425,15 @@ async function ensureHighProfileMasterForUploadPost(
       "-g",
       "60",
       "-keyint_min",
-      "60",
+      "30",
       "-sc_threshold",
       "0",
       "-x264-params",
-      "aq-mode=3:aq-strength=0.9",
+      "deblock=0,0:aq-mode=2:aq-strength=1.0",
       "-c:a",
       "aac",
       "-b:a",
-      "320k",
+      "192k",
       "-ar",
       "48000",
       "-ac",
@@ -952,6 +959,8 @@ export async function runAutopilotCycleDirect(options?: {
   topic?: string;
   contentMode?: "explained_mix" | "quran_only" | "hadith_only";
   triggerSource?: "schedule" | "manual";
+  targetScheduledSlot?: string;
+  scheduledDate?: string | Date | number;
   skipRender?: boolean;
 }): Promise<{
   success: boolean;
@@ -1084,6 +1093,7 @@ export async function runAutopilotCycleDirect(options?: {
           proposal: auditedProposal as any,
           force: true,
           isAutopilot: true,
+          scheduledDate: options?.scheduledDate,
         });
 
         if (renderRes?.jobId) {
@@ -1264,36 +1274,77 @@ export async function checkAndTriggerScheduledAutopilotDirect(): Promise<{
     const [sH, sM] = slot.split(":").map(Number);
     if (isNaN(sH) || isNaN(sM)) continue;
     const slotMinutes = sH * 60 + sM;
-    const diff = (bgNow.totalMinutes - slotMinutes + 1440) % 1440;
+    const advanceMinutes = cfg.prepareInAdvanceMinutes ?? 60; // Default: 60 minutes before post time
+    const prepMinutes = (slotMinutes - advanceMinutes + 1440) % 1440;
 
-    // Trigger if within a 120-minute window from the scheduled Bulgarian time
-    // and either this slot has not run yet, or its previous attempt failed
-    if (diff >= 0 && diff <= 120) {
-      const expectedSlotKey = bgNow.slotKey(slot);
-      const shouldRunSlot =
-        cfg.lastRunScheduleSlot !== expectedSlotKey ||
-        (cfg.lastRunScheduleSlot === expectedSlotKey && cfg.lastRunStatus === "failed");
+    const diffPrep = (bgNow.totalMinutes - prepMinutes + 1440) % 1440;
+    const diffPost = (bgNow.totalMinutes - slotMinutes + 1440) % 1440;
 
-      if (shouldRunSlot) {
-        console.log(
-          `[autopilot-scheduler] 🇧🇬 Bulgarian slot ${slot} matched at ${bgNow.timeHm} (slotKey: ${expectedSlotKey})! Starting autonomous cycle...`,
-        );
-        // Mark slot key and set status to running immediately to prevent duplicate runs
-        await writeAutopilotConfigDirect({
-          lastRunScheduleSlot: expectedSlotKey,
-          lastRunStatus: "running",
-          uploadPostEnabled: Boolean(cfg.uploadPostApiKey) || cfg.uploadPostEnabled,
-        });
+    const prepSlotKey = `${bgNow.dateKey}_prep_${slot}`;
+    const postSlotKey = bgNow.slotKey(slot);
 
-        // Fire autonomous cycle
-        runAutopilotCycleDirect({
-          count: cfg.videosPerRun,
-          contentMode: cfg.contentMode,
-          triggerSource: "schedule",
-        }).catch((e) => console.error("[autopilot-scheduler] Scheduled cycle error:", e));
+    // 1. Advance Preparation Trigger (e.g. at 15:00 for a 16:00 post):
+    // Pre-renders video, Borislav voice, Pexels B-Roll, and stages viral thumbnail 1 hour in advance
+    const isInPrepWindow = diffPrep >= 0 && diffPrep < Math.max(15, advanceMinutes);
+    const shouldRunPrep =
+      isInPrepWindow &&
+      cfg.lastRunScheduleSlot !== prepSlotKey &&
+      cfg.lastRunScheduleSlot !== postSlotKey;
 
-        return { triggered: true, slot, bgTime: bgNow.timeHm };
-      }
+    if (shouldRunPrep) {
+      console.log(
+        `[autopilot-scheduler] 🇧🇬 Advance Preparation active! Preparing everything 1 hour before posting ${slot} (current time: ${bgNow.timeHm})...`,
+      );
+
+      // Build target scheduled post ISO in Europe/Sofia timezone
+      const targetDateIso = new Date(
+        `${bgNow.year}-${bgNow.month}-${bgNow.day}T${String(sH).padStart(2, "0")}:${String(sM).padStart(2, "0")}:00+02:00`,
+      ).toISOString();
+
+      await writeAutopilotConfigDirect({
+        lastRunScheduleSlot: prepSlotKey,
+        lastRunStatus: "running",
+        lastRunMessage: `Предварителна подготовка 1 час преди публикуване в ${slot} ч. (рендиране и качване на корица в ход)...`,
+        uploadPostEnabled: Boolean(cfg.uploadPostApiKey) || cfg.uploadPostEnabled,
+      });
+
+      runAutopilotCycleDirect({
+        count: cfg.videosPerRun,
+        contentMode: cfg.contentMode,
+        triggerSource: "schedule",
+        targetScheduledSlot: slot,
+        scheduledDate: targetDateIso,
+      }).catch((e) => console.error("[autopilot-scheduler] Advance prep error:", e));
+
+      return { triggered: true, slot, bgTime: bgNow.timeHm, reason: `Подготовка 1 час предварително за ${slot}` };
+    }
+
+    // 2. Direct Fallback Trigger (if computer was asleep at T-60 and woke up at post time):
+    const isInPostWindow = diffPost >= 0 && diffPost <= 120;
+    const shouldRunPostFallback =
+      isInPostWindow &&
+      cfg.lastRunScheduleSlot !== postSlotKey &&
+      cfg.lastRunScheduleSlot !== prepSlotKey;
+
+    if (shouldRunPostFallback) {
+      console.log(
+        `[autopilot-scheduler] 🇧🇬 Slot ${slot} reached at ${bgNow.timeHm}! Starting immediate render & publish cycle...`,
+      );
+
+      await writeAutopilotConfigDirect({
+        lastRunScheduleSlot: postSlotKey,
+        lastRunStatus: "running",
+        uploadPostEnabled: Boolean(cfg.uploadPostApiKey) || cfg.uploadPostEnabled,
+      });
+
+      runAutopilotCycleDirect({
+        count: cfg.videosPerRun,
+        contentMode: cfg.contentMode,
+        triggerSource: "schedule",
+        targetScheduledSlot: slot,
+      }).catch((e) => console.error("[autopilot-scheduler] Scheduled cycle error:", e));
+
+      return { triggered: true, slot, bgTime: bgNow.timeHm };
     }
   }
 

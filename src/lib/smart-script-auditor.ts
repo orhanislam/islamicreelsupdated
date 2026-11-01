@@ -11,6 +11,7 @@
 import { sanitizeTheologicalRespect, detectAndHealSalafiTheologicalDeviations } from "./theological-sanitizer";
 export { detectAndHealSalafiTheologicalDeviations };
 import { enrichUnfamiliarQuranicTerms } from "./islamic-glossary";
+import { convertBulgarianNumberWordsToDigits } from "./bulgarian-numbers";
 import verifiedSharhData from "./data/verified-hadith-sharh.json";
 import verifiedQuranData from "./data/verified-quran-verses.json";
 import { geminiChat } from "./gemini";
@@ -898,6 +899,13 @@ export function auditAndRefineBulgarianGrammar(
   s = s.replace(/([.,!?:;])(?=[а-яА-ЯёЁa-zA-Z])/g, "$1 ");
   if (s !== beforePunct) {
     fixes.push("Изчистена пунктуация, забранена за рендиране на субтитри");
+  }
+
+  // 8. Convert spelled-out number words to numeric digits (e.g. "пет стълба" -> "5 стълба", "три признака" -> "3 признака")
+  const beforeDigits = s;
+  s = convertBulgarianNumberWordsToDigits(s);
+  if (s !== beforeDigits) {
+    fixes.push("Преобразувани изписани с букви числа в точни цифри");
   }
 
   return { refinedText: s.trim(), fixes };

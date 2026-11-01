@@ -1406,11 +1406,11 @@ export function scoreVideo(v: PexelsVideo, file: PexelsVideoFile, targetMin = 30
   const aspect = file.width > 0 ? file.height / file.width : 0;
   s += Math.max(0, 10 - Math.abs(aspect - 16 / 9) * 8);
   if (file.height >= 1920 && file.width >= 1080) {
-    s += 25; // Strongly reward true Full HD 1080p+ vertical streams
-  } else if (file.height >= 1280) {
-    s -= 10; // Penalize 720p streams when 1080p streams exist
+    s += 35; // Strongly reward true Full HD 1080p+ vertical streams (crystal clear)
+  } else if (file.height >= 1280 && file.width >= 720) {
+    s -= 80; // Heavily penalize 720p streams when 1080p streams exist
   } else {
-    s -= 35; // Heavily penalize SD (<720p) streams
+    return -999; // Hard reject sub-720p / SD clips to prevent pixelation on repost platforms
   }
   if (file.height >= 3840) s += 10;
   if ((file.fps ?? 0) >= 30) s += 5;

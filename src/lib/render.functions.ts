@@ -1158,7 +1158,7 @@ export async function executeRenderTask(opts: any): Promise<any> {
                       "-c:v libx264",
                       "-preset fast",
                       "-profile:v high",
-                      "-crf 12",
+                      "-crf 18",
                       "-pix_fmt yuv420p",
                       "-an",
                     ])
@@ -1250,8 +1250,8 @@ export async function executeRenderTask(opts: any): Promise<any> {
 
         cmd
           .complexFilter([
-            // Crisp 1080p Lanczos scaling + optical micro-sharpening + BT.709 color grade + burned-in 76px TikTok subtitles
-            `[0:v]crop='min(iw,ih*9/16)':'min(iw*16/9,ih)',scale=${width}:${height}:force_original_aspect_ratio=increase:flags=lanczos,crop=${width}:${height},unsharp=5:5:0.85:5:5:0.45,eq=contrast=1.04:saturation=1.08,subtitles='${escapedAssPath}'[v]`,
+            // Smooth 1080p Lanczos scaling + natural color grading + burned-in 76px TikTok subtitles (Zero macroblock pixelation)
+            `[0:v]crop='min(iw,ih*9/16)':'min(iw*16/9,ih)',scale=${width}:${height}:force_original_aspect_ratio=increase:flags=lanczos,crop=${width}:${height},eq=contrast=1.03:saturation=1.05,subtitles='${escapedAssPath}'[v]`,
             `[1:a]highpass=f=45,treble=g=2:f=3500:w=0.7,acompressor=threshold=-18dB:ratio=2.5:attack=5:release=50,bass=g=3:f=110:w=0.6,loudnorm=I=-14:LRA=9:TP=-1.0,apad[a]`,
           ])
           .outputOptions([
@@ -1268,20 +1268,20 @@ export async function executeRenderTask(opts: any): Promise<any> {
             "-color_primaries bt709",
             "-color_range tv",
             "-movflags +faststart",
-            "-crf 17",
-            "-maxrate 8M",
-            "-bufsize 16M",
+            "-crf 20",
+            "-maxrate 6M",
+            "-bufsize 6M",
             "-refs 3",
             "-bf 3",
             "-r 30",
             "-vsync cfr",
             "-g 60",
-            "-keyint_min 60",
+            "-keyint_min 30",
             "-sc_threshold 0",
-            "-x264-params aq-mode=3:aq-strength=0.85:deblock=-1,-1",
+            "-x264-params deblock=0,0:aq-mode=2:aq-strength=1.0",
             "-c:a aac",
             "-profile:a aac_low",
-            "-b:a 320k",
+            "-b:a 192k",
             "-ar 48000",
             "-ac 2",
             `-t ${Number(audioDur).toFixed(2)}`,
@@ -1717,6 +1717,7 @@ export async function generateAndStorePostRenderSocialKit(params: {
             title: rawTitle,
             caption: viralCaption,
             coverImagePath: thumbnailFilePath,
+            scheduledDate: params.jobData?.scheduledDate || (params as any).scheduledDate,
           });
           tiktokPublished = upRes.published;
           tiktokPublishRequestId = upRes.requestId;

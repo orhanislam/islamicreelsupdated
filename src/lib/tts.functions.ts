@@ -236,97 +236,88 @@ export async function synthesizeHadithNarrationDirect(
   }
 
   if (!audioBuffer) {
-    const { EdgeTTS } = await import("node-edge-tts");
-    const tts = new EdgeTTS({
-      voice: "bg-BG-BorislavNeural", // Premium natural male voice for Bulgarian
-      lang: "bg-BG",
-      outputFormat: "audio-24khz-48kbitrate-mono-mp3",
-      rate: "-2%",
-      pitch: "-2Hz",
-    });
+    const os = await import("os");
+    const path = await import("path");
+    const fs = await import("fs/promises");
+    const { execFile } = await import("child_process");
+    const util = await import("util");
+    const execFileAsync = util.promisify(execFile);
+
+    const cleanForEdge = cleaned
+      .replace(/<break[^>]*\/>/gi, ",\n\n")
+      .replace(/<[^>]+>/g, " ")
+      .replace(/\[(?:tiktok|carousel|карусел|видео|кука|далил|обяснение|напътствие|hook|dalil|explanation|guidance|action)[^\]]*\]/gi, " ")
+      .replace(/[\[\]]/g, " ")
+      .replace(/\.{2,}/g, ", ")
+      .replace(/…+/g, ", ")
+      .replace(/,\s*,+/g, ", ")
+      .replace(/\s{2,}/g, " ")
+      .trim();
+
+    // 1. PRIMARY ENGINE: Python edge-tts CLI (v7.3.1) with authentic Bulgarian male voice BorislavNeural
+    // Provides full-length natural speech and exact word-level VTT subtitle timestamps (strictly no female voice, no 200-char truncation)
+    const tmpBase = `tts-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const tmpTxtPath = path.join(os.tmpdir(), `${tmpBase}.txt`);
+    const tmpPyPath = path.join(os.tmpdir(), `${tmpBase}.mp3`);
+    const tmpVttPath = path.join(os.tmpdir(), `${tmpBase}.vtt`);
 
     try {
-      const os = await import("os");
-      const path = await import("path");
-      const fs = await import("fs/promises");
+      await fs.writeFile(tmpTxtPath, cleanForEdge, "utf-8");
+      const args = [
+        "--voice",
+        "bg-BG-BorislavNeural",
+        "--rate=-2%",
+        "--pitch=-2Hz",
+        "--file",
+        tmpTxtPath,
+        "--write-media",
+        tmpPyPath,
+        "--write-subtitles",
+        tmpVttPath,
+      ];
 
-      const tmpPath = path.join(os.tmpdir(), `tts-${Date.now()}-${Math.random().toString(36).slice(2)}.mp3`);
-      const cleanForEdge = cleaned
-        .replace(/<break[^>]*\/>/gi, ",\n\n")
-        .replace(/<[^>]+>/g, " ")
-        .replace(/\[(?:tiktok|carousel|карусел|видео|кука|далил|обяснение|напътствие|hook|dalil|explanation|guidance|action)[^\]]*\]/gi, " ")
-        .replace(/[\[\]]/g, " ")
-        .replace(/\.{2,}/g, ", ")
-        .replace(/…+/g, ", ")
-        .replace(/,\s*,+/g, ", ")
-        .replace(/\s{2,}/g, " ")
-        .trim();
-      await tts.ttsPromise(cleanForEdge, tmpPath);
-      audioBuffer = await fs.readFile(tmpPath);
-      await fs.unlink(tmpPath).catch(() => {});
-    } catch (e: any) {
-      console.warn("[tts] Node EdgeTTS failed, trying Python edge-tts realistic male voice:", e);
       try {
-        const os = await import("os");
-        const path = await import("path");
-        const fs = await import("fs/promises");
-        const { execFile } = await import("child_process");
-        const util = await import("util");
-        const execFileAsync = util.promisify(execFile);
+        await execFileAsync("edge-tts", args);
+      } catch (cliErr: any) {
+        // Fallback to python -m edge_tts if edge-tts binary alias is not in PATH
+        await execFileAsync("python", ["-m", "edge_tts", ...args]);
+      }
 
-        const tmpPyPath = path.join(os.tmpdir(), `py-tts-${Date.now()}.mp3`);
-        const tmpVttPath = path.join(os.tmpdir(), `py-tts-${Date.now()}.vtt`);
-        const cleanForEdge = cleaned
-          .replace(/<break[^>]*\/>/gi, ",\n\n")
-          .replace(/<[^>]+>/g, " ")
-          .replace(/\[(?:tiktok|carousel|карусел|видео|кука|далил|обяснение|напътствие|hook|dalil|explanation|guidance|action)[^\]]*\]/gi, " ")
-          .replace(/[\[\]]/g, " ")
-          .replace(/\.{2,}/g, ", ")
-          .replace(/…+/g, ", ")
-          .replace(/,\s*,+/g, ", ")
-          .replace(/\s{2,}/g, " ")
-          .trim();
-        await execFileAsync("edge-tts", [
-          "--voice", "bg-BG-BorislavNeural",
-          "--text", cleanForEdge,
-          "--write-media", tmpPyPath,
-          "--write-subtitles", tmpVttPath
-        ]);
+      const fileStat = await fs.stat(tmpPyPath).catch(() => null);
+      if (fileStat && fileStat.size > 0) {
         audioBuffer = await fs.readFile(tmpPyPath);
         try {
           const vttContent = await fs.readFile(tmpVttPath, "utf-8");
           const parsedVtt = parseVttTimings(vttContent);
           if (parsedVtt.length > 0) {
             exactWordTimings = parsedVtt;
+            console.log(`[tts] Generated ${exactWordTimings.length} exact word timestamps via Python edge-tts (BorislavNeural)`);
           }
         } catch { /* ignore vtt parse errors */ }
-        await fs.unlink(tmpPyPath).catch(() => {});
-        await fs.unlink(tmpVttPath).catch(() => {});
-      } catch (pyErr) {
-        console.warn("[tts] Python edge-tts failed, falling back to Google TTS:", pyErr);
-        try {
-          const cleanForGoogle = cleaned
-            .replace(/<break[^>]*\/>/gi, ", ")
-            .replace(/<[^>]+>/g, " ")
-            .replace(/\[(?:tiktok|carousel|карусел|видео|кука|далил|обяснение|напътствие|hook|dalil|explanation|guidance|action)[^\]]*\]/gi, " ")
-            .replace(/[\[\]]/g, " ")
-            .replace(/\.{2,}/g, ", ")
-            .replace(/…+/g, ", ")
-            .replace(/,\s*,+/g, ", ")
-            .replace(/\s{2,}/g, " ")
-            .trim();
-          const googleTTS = await import("google-tts-api");
-          const base64Audio = await googleTTS.getAudioBase64(cleanForGoogle.slice(0, 200), {
-            lang: "bg",
-            slow: false,
-            host: "https://translate.google.com",
-            timeout: 10000,
-          });
-          audioBuffer = BufferMod.from(base64Audio, "base64");
-        } catch (gErr: any) {
-          throw new Error("Грешка при генериране на аудио озвучаване: " + (e?.message || gErr?.message || "Неуспешен запис"));
-        }
       }
+    } catch (pyErr) {
+      console.warn("[tts] Primary Python edge-tts failed, trying node-edge-tts fallback:", pyErr);
+      try {
+        const { EdgeTTS } = await import("node-edge-tts");
+        const tts = new EdgeTTS({
+          voice: "bg-BG-BorislavNeural",
+          lang: "bg-BG",
+          outputFormat: "audio-24khz-48kbitrate-mono-mp3",
+          rate: "-2%",
+          pitch: "-2Hz",
+        });
+        const tmpNodePath = path.join(os.tmpdir(), `node-${tmpBase}.mp3`);
+        await tts.ttsPromise(cleanForEdge, tmpNodePath);
+        audioBuffer = await fs.readFile(tmpNodePath);
+        await fs.unlink(tmpNodePath).catch(() => {});
+      } catch (nodeErr) {
+        console.error("[tts] Both Python edge-tts and node-edge-tts failed:", nodeErr);
+        throw new Error("Грешка при генериране на мъжки глас (EdgeTTS/ElevenLabs): " + ((pyErr as any)?.message || (nodeErr as any)?.message || "Неуспешен запис"));
+      }
+    } finally {
+      await fs.unlink(tmpTxtPath).catch(() => {});
+      await fs.unlink(tmpPyPath).catch(() => {});
+      await fs.unlink(tmpVttPath).catch(() => {});
     }
   }
 

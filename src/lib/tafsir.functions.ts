@@ -37,6 +37,106 @@ const getTafsirCachePath = () => {
   return path.join(dir, "tafsir_cache.json");
 };
 
+const getHadeethEncCachePath = () => {
+  const dir = path.join(os.homedir(), ".islamicreels_jobs");
+  return path.join(dir, "hadeethenc_cache.json");
+};
+
+export interface HadeethEncDetails {
+  id: string;
+  title: string;
+  hadeeth: string;
+  attribution: string;
+  grade: string;
+  explanation: string;
+  hints: string[];
+  arabicText?: string;
+}
+
+/**
+ * Fetches 100% verified authentic Hadith with official scholarly explanation (Sharh),
+ * spiritual hints, attribution, and Arabic text directly from HadeethEnc API (Encyclopedia of Translated Prophetic Hadiths).
+ */
+export async function fetchHadeethEncHadithDirect(id: string): Promise<HadeethEncDetails | null> {
+  const cleanId = String(id || "").trim();
+  if (!cleanId) return null;
+
+  try {
+    await ensureDir();
+    const cachePath = getHadeethEncCachePath();
+    const raw = await fs.readFile(cachePath, "utf-8").catch(() => "{}");
+    const cache: Record<string, HadeethEncDetails> = JSON.parse(raw);
+    if (cache[cleanId]) {
+      return cache[cleanId];
+    }
+
+    const [enRes, arRes] = await Promise.all([
+      fetch(`https://hadeethenc.com/api/v1/hadeeths/one/?language=en&id=${encodeURIComponent(cleanId)}`),
+      fetch(`https://hadeethenc.com/api/v1/hadeeths/one/?language=ar&id=${encodeURIComponent(cleanId)}`).catch(() => null),
+    ]);
+
+    if (!enRes.ok) return null;
+    const enJson = await enRes.json();
+    if (!enJson || !enJson.hadeeth) return null;
+
+    let arabicText: string | undefined;
+    if (arRes && arRes.ok) {
+      try {
+        const arJson = await arRes.json();
+        arabicText = arJson?.hadeeth;
+      } catch {}
+    }
+
+    const details: HadeethEncDetails = {
+      id: cleanId,
+      title: enJson.title || "",
+      hadeeth: enJson.hadeeth || "",
+      attribution: enJson.attribution || "",
+      grade: enJson.grade || "Authentic",
+      explanation: enJson.explanation || "",
+      hints: Array.isArray(enJson.hints) ? enJson.hints : [],
+      arabicText,
+    };
+
+    cache[cleanId] = details;
+    const tmp = `${cachePath}.tmp.${Date.now()}`;
+    await fs.writeFile(tmp, JSON.stringify(cache, null, 2), "utf-8");
+    await fs.rename(tmp, cachePath);
+
+    return details;
+  } catch (err) {
+    console.warn(`[hadeethenc-api] Failed to fetch hadith #${cleanId}:`, err);
+    return null;
+  }
+}
+
+/**
+ * Lists authentic Hadiths from HadeethEnc API for spiritual needs of Muslims
+ * (Categories: 3 = Creed/Tawheed, 5 = Virtues & Manners, 1 = Quran).
+ */
+export async function fetchBeneficialHadithsFromHadeethEncDirect(options?: {
+  categoryId?: number;
+  page?: number;
+  perPage?: number;
+}): Promise<Array<{ id: string; title: string }>> {
+  const categoryId = options?.categoryId || 5;
+  const page = options?.page || 1;
+  const perPage = options?.perPage || 20;
+
+  try {
+    const res = await fetch(
+      `https://hadeethenc.com/api/v1/hadeeths/list/?language=en&category_id=${categoryId}&page=${page}&per_page=${perPage}`,
+      { headers: { Accept: "application/json" } }
+    );
+    if (!res.ok) return [];
+    const json = await res.json();
+    return Array.isArray(json?.data) ? json.data : [];
+  } catch (err) {
+    console.warn("[hadeethenc-api] Failed to fetch category hadiths:", err);
+    return [];
+  }
+}
+
 async function ensureDir() {
   const dir = path.join(os.homedir(), ".islamicreels_jobs");
   await fs.mkdir(dir, { recursive: true }).catch(() => {});

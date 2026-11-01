@@ -38,4 +38,8 @@ jobs_raw.txt
 update-env.cjs
 .agents/
 ssh_deploy.*
+car-video-studio/
+cloudflared.exe
+scratch*
+scratch/
 

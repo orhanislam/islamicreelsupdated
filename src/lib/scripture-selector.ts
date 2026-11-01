@@ -44,6 +44,48 @@ export interface SelectedUniqueScripture {
 }
 
 /**
+ * Calculates a dynamic score for how profoundly an Ayah or Hadith directly helps Muslims
+ * in their real-life spiritual crises (anxiety, sins, depression, sustenance, loneliness, trials).
+ */
+export function calculateSpiritualBenefitScore(text: string): number {
+  if (!text) return 0;
+  const s = text.toLowerCase();
+  let score = 10; // base score
+
+  // 1. Heart Healing & Sakina (Freedom from anxiety, depression, chest tightness, fear):
+  if (/покой|сърц[еа]|тревог|депреси|страх|скръб|сакина|зикр|успокоява|гърди|тежест|облекчени|лекарств|паник|споко/i.test(s)) {
+    score += 60;
+  }
+
+  // 2. Forgiveness & Tawbah (Removing guilt, sins, despair of Allah's mercy):
+  if (/прошк|покаяни|тауб|грях|грехов|милост|надежд|истигфар|опрощава|грешник/i.test(s)) {
+    score += 55;
+  }
+
+  // 3. Sustenance & Tawakkul (Relief from debt, poverty, hardship, unemployment):
+  if (/препитани|ризк|изход|уповани|тауаккул|благодарност|шукр|трудност|берекет|изпитани/i.test(s)) {
+    score += 55;
+  }
+
+  // 4. Dua & Closeness to Allah (Answering prayers, night prayer, reassurance):
+  if (/дуа|ду'а|зов|отклик|близо|нощ|молитв|откликва|моли се/i.test(s)) {
+    score += 50;
+  }
+
+  // 5. Pure Tawheed & Protection from evil/shirk:
+  if (/таухид|курси|ихлас|творец|защит|пази|единствен|създател/i.test(s)) {
+    score += 50;
+  }
+
+  // 6. Good Manners & Controlling Anger/Tongue (Family harmony, patience):
+  if (/език|гняв|търпени|сабр|нрав|мълчи|добродетел|брат/i.test(s)) {
+    score += 45;
+  }
+
+  return score;
+}
+
+/**
  * Ultra-fast scripture selector and 30-day deduplication guard.
  * Checks the entire 30-day history FIRST before any LLM prompt, video creation,
  * or history write. Guarantees that different authentic Hadiths and Ayahs are
@@ -205,8 +247,14 @@ export async function selectGuaranteedUniqueScriptureDirect(options?: {
       }
     }
 
-    // Pick a random unexcluded hadith from the filtered pool
-    const selected = pool[Math.floor(Math.random() * pool.length)];
+    // Rank unexcluded hadiths by Spiritual Benefit Score (helping Muslims the most)
+    const scoredPool = pool.map((h) => ({
+      item: h,
+      score: calculateSpiritualBenefitScore(`${h.topic} ${h.hadithTextBg || ""} ${h.text || ""}`),
+    }));
+    scoredPool.sort((a, b) => b.score - a.score);
+    const topPool = scoredPool.slice(0, Math.min(6, scoredPool.length));
+    const selected = topPool[Math.floor(Math.random() * topPool.length)].item;
     const collName =
       selected.collection === "nawawi40"
         ? "40 Хадиса на ан-Науауи"
@@ -256,7 +304,14 @@ export async function selectGuaranteedUniqueScriptureDirect(options?: {
       }
     }
 
-    const selected = pool[Math.floor(Math.random() * pool.length)];
+    // Rank unexcluded ayahs by Spiritual Benefit Score (helping Muslims the most)
+    const scoredAyahs = pool.map((v) => ({
+      item: v,
+      score: calculateSpiritualBenefitScore(`${v.title} ${v.keywords} ${v.ayahTextBg || ""}`),
+    }));
+    scoredAyahs.sort((a, b) => b.score - a.score);
+    const topAyahs = scoredAyahs.slice(0, Math.min(6, scoredAyahs.length));
+    const selected = topAyahs[Math.floor(Math.random() * topAyahs.length)].item;
     let dalilBg = (selected.ayahTextBg || "").trim();
     if (!dalilBg || isInvalidSacredQuoteText(dalilBg)) {
       dalilBg = await preFetchQuranDalilBg(selected.surah, selected.ayah, selected.count || 1);

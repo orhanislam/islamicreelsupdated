@@ -266,19 +266,166 @@ const SPELLED_CITATION_NUMBERS: Record<string, string> = {
 };
 
 /**
- * Converts spelled-out Bulgarian number words in citations into direct digits.
- * E.g. "хадис номер едно" -> "хадис номер 1", "сура втора" -> "сура 2", "аят първи" -> "аят 1".
+ * Converts spelled-out Bulgarian number words into direct digits.
+ * Fulfills the user requirement:
+ * "трябва вместо да пише цифрите със букви да ги пише със цифри"
+ * (Numbers must be written directly as digits, never expanded into spelled-out letter words).
+ * 
+ * Handles:
+ * 1. Citations: "хадис номер едно" -> "хадис номер 1", "сура втора" -> "сура 2", "аят първи" -> "аят 1"
+ * 2. Multi-word numbers: "деветдесет и девет" -> "99", "двадесет и пет" -> "25"
+ * 3. Countable nouns: "пет стълба" -> "5 стълба", "три признака" -> "3 признака", "сто пъти" -> "100 пъти", "една минута" -> "1 минута"
+ * 4. Ordinals: "първа стъпка" -> "1-ва стъпка", "втори признак" -> "2-ри признак", "трето правило" -> "3-то правило"
+ * 5. Enumeration heads: "Първо:" -> "1.", "Второ:" -> "2."
  */
 export function convertBulgarianNumberWordsToDigits(text: string): string {
   if (!text) return "";
   let res = text;
 
+  // 1. Direct compound numbers like "деветдесет и девет" -> "99", "двадесет и пет" -> "25"
+  const tensWords: Record<string, number> = {
+    двадесет: 20,
+    двайсет: 20,
+    тридесет: 30,
+    трийсет: 30,
+    четиридесет: 40,
+    четирийсет: 40,
+    петдесет: 50,
+    шестдесет: 60,
+    седемдесет: 70,
+    осемдесет: 80,
+    деветдесет: 90,
+  };
+  const unitWords: Record<string, number> = {
+    едно: 1,
+    една: 1,
+    един: 1,
+    две: 2,
+    два: 2,
+    три: 3,
+    четири: 4,
+    пет: 5,
+    шест: 6,
+    седем: 7,
+    осем: 8,
+    девет: 9,
+  };
+
+  const compoundPattern = new RegExp(
+    `(?<=^|[^\\p{L}\\p{N}])(${Object.keys(tensWords).join("|")})\\s+и\\s+(${Object.keys(unitWords).join("|")})(?=[^\\p{L}\\p{N}]|$)`,
+    "gui"
+  );
+  res = res.replace(compoundPattern, (_m, tWord, uWord) => {
+    const t = tensWords[tWord.toLowerCase()] || 0;
+    const u = unitWords[uWord.toLowerCase()] || 0;
+    return String(t + u);
+  });
+
+  // 2. Ordinals before words or punctuation: "първа стъпка" -> "1-ва стъпка", "първи стълб" -> "1-ви стълб"
+  const ORDINAL_MAP: Record<string, string> = {
+    "първи": "1-ви",
+    "първия": "1-ви",
+    "първият": "1-ви",
+    "първа": "1-ва",
+    "първата": "1-ва",
+    "първо": "1-во",
+    "първото": "1-во",
+    "втори": "2-ри",
+    "втория": "2-ри",
+    "вторият": "2-ри",
+    "втора": "2-ра",
+    "втората": "2-ра",
+    "второ": "2-ро",
+    "второто": "2-ро",
+    "трети": "3-ти",
+    "третия": "3-ти",
+    "третият": "3-ти",
+    "трета": "3-та",
+    "третата": "3-та",
+    "трето": "3-то",
+    "третото": "3-то",
+    "четвърти": "4-ти",
+    "четвъртия": "4-ти",
+    "четвъртият": "4-ти",
+    "четвърта": "4-та",
+    "четвъртата": "4-та",
+    "четвърто": "4-то",
+    "пети": "5-ти",
+    "петия": "5-ти",
+    "петият": "5-ти",
+    "пета": "5-та",
+    "петата": "5-та",
+    "пето": "5-то",
+  };
+  const ordinalKeys = Object.keys(ORDINAL_MAP).join("|");
+  res = res.replace(
+    new RegExp(
+      `(?<=^|[^\\p{L}\\p{N}])(${ordinalKeys})(?=\\s+(?:стъпка|стълб|признак|правило|част|ниво|въпрос|точка|етап|начин|дело)|[:\\-–])`,
+      "gui"
+    ),
+    (m) => ORDINAL_MAP[m.toLowerCase()] || m
+  );
+
+  // 3. Spelled citation numbers (e.g. "хадис номер едно" -> "хадис номер 1", "сура втора" -> "сура 2")
   const spelledKeys = Object.keys(SPELLED_CITATION_NUMBERS).join("|");
-  const pattern = new RegExp(
+  const citationPattern = new RegExp(
     `(?<=(?:^|[^\\p{L}\\p{N}])(?:номер|хадис|аят|сура|част|епизод|точка|т\\.)\\s+)(${spelledKeys})(?=[^\\p{L}\\p{N}]|$)`,
     "gui"
   );
-  res = res.replace(pattern, (m) => SPELLED_CITATION_NUMBERS[m.toLowerCase()] || m);
+  res = res.replace(citationPattern, (m) => SPELLED_CITATION_NUMBERS[m.toLowerCase()] || m);
+
+  // 4. Quantities before countable nouns / time units / steps / items:
+  // e.g. "пет стълба" -> "5 стълба", "три признака" -> "3 признака", "сто пъти" -> "100 пъти", "една минута" -> "1 минута"
+  const COUNTABLE_NOUNS = [
+    "стълба",
+    "стълб",
+    "признака",
+    "признак",
+    "пъти",
+    "път",
+    "минути",
+    "минута",
+    "секунди",
+    "секунда",
+    "часа",
+    "час",
+    "дни",
+    "години",
+    "година",
+    "души",
+    "човека",
+    "стъпки",
+    "стъпка",
+    "правила",
+    "правило",
+    "неща",
+    "дела",
+    "дело",
+    "грехове",
+    "грях",
+    "причини",
+    "причина",
+    "начина",
+    "начин",
+    "въпроса",
+    "въпрос",
+    "имена",
+    "име",
+    "аята",
+    "аят",
+    "хадиса",
+    "хадис",
+    "ракаата",
+    "ракаат",
+    "молитви",
+    "молитва",
+  ].join("|");
+
+  const quantityPattern = new RegExp(
+    `(?<=^|[^\\p{L}\\p{N}])(${spelledKeys})(?=\\s+(?:${COUNTABLE_NOUNS})(?:[^\\p{L}\\p{N}]|$))`,
+    "gui"
+  );
+  res = res.replace(quantityPattern, (m) => SPELLED_CITATION_NUMBERS[m.toLowerCase()] || m);
 
   return res;
 }
