@@ -1,8 +1,14 @@
 /// <reference path="../types/declarations.d.ts" />
 import { createServerFn } from "@tanstack/react-start";
 import { sanitizeTheologicalRespect } from "./theological-sanitizer";
-import { normalizeBulgarianNumbersForTts, integerToBulgarianWords } from "./bulgarian-numbers";
 import {
+  normalizeBulgarianNumbersForTts,
+  integerToBulgarianWords,
+  convertBulgarianDigitsToWordsForTts,
+  alignSpokenTimingsToDisplayTokens,
+} from "./bulgarian-numbers";
+import {
+  localizeLatinSurahNamesToBulgarian,
   normalizeAllIslamicPhonetics,
   normalizeIslamicPhoneticsToDisplayWord,
   normalizeIslamicArabicPhoneticsForTts,
@@ -14,6 +20,9 @@ import { remapSalawatTimingsToBulgarian } from "./salawat-timings";
 export {
   normalizeBulgarianNumbersForTts,
   integerToBulgarianWords,
+  convertBulgarianDigitsToWordsForTts,
+  alignSpokenTimingsToDisplayTokens,
+  localizeLatinSurahNamesToBulgarian,
   normalizeAllIslamicPhonetics,
   normalizeIslamicPhoneticsToDisplayWord,
   normalizeIslamicArabicPhoneticsForTts,
@@ -175,10 +184,34 @@ export async function synthesizeHadithNarrationDirect(
   if (!textInput) throw new Error("Празен текст за озвучаване");
   if (textInput.length > 4500) throw new Error("Текстът е твърде дълъг за един запис");
 
+  // Localize any English/Latin Surah names (e.g. "Сура At-Tawba") into canonical Bulgarian Cyrillic ("Сура Ат-Тауба")
+  const localizedInput = localizeLatinSurahNamesToBulgarian(textInput);
+
+  // Clean display reference text (preserves Bulgarian Salawat "мир да бъде с него", digits "9", "129", "1-ви",
+  // and hyphenated Surah names "Ат-Тауба", without TTS-only stretched Arabic vowels or split articles)
+  const displayReferenceText = normalizeBulgarianNumbersForTts(
+    sanitizeTheologicalRespect(localizedInput),
+  );
+
   // Authentically normalize Islamic Arabic terminology for Salafi Arabic diction
-  let cleaned = normalizeIslamicArabicPhoneticsForTts(textInput);
+  let cleaned = normalizeIslamicArabicPhoneticsForTts(localizedInput);
   // Explicitly normalize Bulgarian numbers, citations, and symbols (#1, №1, 2:255, ordinals, percentages) for natural verbalization
   cleaned = normalizeBulgarianNumbersForTts(cleaned);
+  // Fully verbalize all numbers, citations, and ordinals into spoken Bulgarian words so TTS engines (EdgeTTS & ElevenLabs) speak natural Bulgarian words
+  const spokenForTts = convertBulgarianDigitsToWordsForTts(cleaned);
+
+  const cleanSpokenForEngine = spokenForTts
+    .replace(/<break[^>]*\/>/gi, "\n\n")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/\[(?:tiktok|carousel|карусел|видео|кука|далил|обяснение|напътствие|hook|dalil|explanation|guidance|action)[^\]]*\]/gi, " ")
+    .replace(/[\[\]]/g, " ")
+    .replace(/\.{2,}/g, ", ")
+    .replace(/…+/g, ", ")
+    .replace(/,\s*,+/g, ", ")
+    .replace(/[ \t]{2,}/g, " ")
+    .replace(/\n[ \t]+/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
 
   let audioBuffer: any = null;
   let exactWordTimings: WordTiming[] | null = null;
@@ -190,16 +223,7 @@ export async function synthesizeHadithNarrationDirect(
   if (elevenKey) {
     try {
       console.log("[tts] Synthesizing with ElevenLabs API (with-timestamps)...");
-      const cleanForEleven = cleaned
-        .replace(/<break[^>]*\/>/gi, ",\n\n")
-        .replace(/<[^>]+>/g, " ")
-        .replace(/\[(?:tiktok|carousel|карусел|видео|кука|далил|обяснение|напътствие|hook|dalil|explanation|guidance|action)[^\]]*\]/gi, " ")
-        .replace(/[\[\]]/g, " ")
-        .replace(/\.{2,}/g, ", ")
-        .replace(/…+/g, ", ")
-        .replace(/,\s*,+/g, ", ")
-        .replace(/\s{2,}/g, " ")
-        .trim();
+      const cleanForEleven = cleanSpokenForEngine;
       const res = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${elevenVoice}/with-timestamps`, {
         method: "POST",
         headers: {
@@ -243,74 +267,128 @@ export async function synthesizeHadithNarrationDirect(
     const util = await import("util");
     const execFileAsync = util.promisify(execFile);
 
-    const cleanForEdge = cleaned
-      .replace(/<break[^>]*\/>/gi, ",\n\n")
-      .replace(/<[^>]+>/g, " ")
-      .replace(/\[(?:tiktok|carousel|карусел|видео|кука|далил|обяснение|напътствие|hook|dalil|explanation|guidance|action)[^\]]*\]/gi, " ")
-      .replace(/[\[\]]/g, " ")
-      .replace(/\.{2,}/g, ", ")
-      .replace(/…+/g, ", ")
-      .replace(/,\s*,+/g, ", ")
-      .replace(/\s{2,}/g, " ")
-      .trim();
+    const cleanForEdge = cleanSpokenForEngine;
 
-    // 1. PRIMARY ENGINE: Python edge-tts CLI (v7.3.1) with authentic Bulgarian male voice BorislavNeural
-    // Provides full-length natural speech and exact word-level VTT subtitle timestamps (strictly no female voice, no 200-char truncation)
+    // 1. PRIMARY ENGINE: Python edge_tts_align.py with authentic Bulgarian male voice BorislavNeural
+    // Provides full-length natural speech and exact millisecond WordBoundary subtitle timestamps
     const tmpBase = `tts-${Date.now()}-${Math.random().toString(36).slice(2)}`;
     const tmpTxtPath = path.join(os.tmpdir(), `${tmpBase}.txt`);
     const tmpPyPath = path.join(os.tmpdir(), `${tmpBase}.mp3`);
+    const tmpJsonPath = path.join(os.tmpdir(), `${tmpBase}.json`);
     const tmpVttPath = path.join(os.tmpdir(), `${tmpBase}.vtt`);
 
     try {
       await fs.writeFile(tmpTxtPath, cleanForEdge, "utf-8");
-      const args = [
+      const alignScript = path.resolve(process.cwd(), "scripts", "edge_tts_align.py");
+
+      const alignArgs = [
+        alignScript,
+        "--text-file",
+        tmpTxtPath,
         "--voice",
         "bg-BG-BorislavNeural",
         "--rate=-5%",
         "--pitch=-2Hz",
-        "--file",
-        tmpTxtPath,
         "--write-media",
         tmpPyPath,
-        "--write-subtitles",
-        tmpVttPath,
+        "--write-json",
+        tmpJsonPath,
       ];
 
-      const binariesToTry: [string, string[]][] = [
-        ["edge-tts", args],
-        ["/usr/local/bin/edge-tts", args],
-        ["python3", ["-m", "edge_tts", ...args]],
-        ["python", ["-m", "edge_tts", ...args]],
-      ];
+      const binariesToTry: [string, string[]][] =
+        process.platform === "win32"
+          ? [
+              ["python", alignArgs],
+              ["python3", alignArgs],
+            ]
+          : [
+              ["python3", alignArgs],
+              ["python", alignArgs],
+            ];
 
-      let cliErrLast: any = null;
+      let alignOk = false;
       for (const [bin, bArgs] of binariesToTry) {
         try {
           await execFileAsync(bin, bArgs);
           const st = await fs.stat(tmpPyPath).catch(() => null);
           if (st && st.size > 0) {
-            cliErrLast = null;
+            alignOk = true;
             break;
           }
-        } catch (err: any) {
-          cliErrLast = err;
+        } catch {
+          // try next binary
         }
       }
-      if (cliErrLast) {
-        throw cliErrLast;
-      }
 
-      const fileStat = await fs.stat(tmpPyPath).catch(() => null);
-      if (fileStat && fileStat.size > 0) {
+      if (alignOk) {
         audioBuffer = await fs.readFile(tmpPyPath);
         try {
-          const vttContent = await fs.readFile(tmpVttPath, "utf-8");
-          const parsedVtt = parseVttTimings(vttContent);
-          if (parsedVtt.length > 0) {
-            exactWordTimings = parsedVtt;
-            console.log(`[tts] Generated ${exactWordTimings.length} exact word timestamps via Python edge-tts (BorislavNeural)`);
+          const jsonContent = await fs.readFile(tmpJsonPath, "utf-8");
+          const parsedJson = JSON.parse(jsonContent);
+          if (Array.isArray(parsedJson) && parsedJson.length > 0) {
+            exactWordTimings = parsedJson;
+            console.log(
+              `[tts] Generated ${exactWordTimings.length} exact WordBoundary timestamps via Python edge_tts_align.py (BorislavNeural)`,
+            );
           }
-        } catch { /* ignore vtt parse errors */ }
+        } catch {
+          /* ignore json parse errors */
+        }
+      } else {
+        // Fallback: standard CLI edge-tts with VTT cues
+        const cliArgs = [
+          "--voice",
+          "bg-BG-BorislavNeural",
+          "--rate=-5%",
+          "--pitch=-2Hz",
+          "--file",
+          tmpTxtPath,
+          "--write-media",
+          tmpPyPath,
+          "--write-subtitles",
+          tmpVttPath,
+        ];
+
+        const cliBinaries: [string, string[]][] = [
+          ["edge-tts", cliArgs],
+          ["/usr/local/bin/edge-tts", cliArgs],
+          ["python3", ["-m", "edge_tts", ...cliArgs]],
+          ["python", ["-m", "edge_tts", ...cliArgs]],
+        ];
+
+        let cliErrLast: any = null;
+        for (const [bin, bArgs] of cliBinaries) {
+          try {
+            await execFileAsync(bin, bArgs);
+            const st = await fs.stat(tmpPyPath).catch(() => null);
+            if (st && st.size > 0) {
+              cliErrLast = null;
+              break;
+            }
+          } catch (err: any) {
+            cliErrLast = err;
+          }
+        }
+        if (cliErrLast) {
+          throw cliErrLast;
+        }
+
+        const fileStat = await fs.stat(tmpPyPath).catch(() => null);
+        if (fileStat && fileStat.size > 0) {
+          audioBuffer = await fs.readFile(tmpPyPath);
+          try {
+            const vttContent = await fs.readFile(tmpVttPath, "utf-8");
+            const parsedVtt = parseVttTimings(vttContent);
+            if (parsedVtt.length > 0) {
+              exactWordTimings = parsedVtt;
+              console.log(
+                `[tts] Generated ${exactWordTimings.length} word timestamps via Python edge-tts CLI fallback`,
+              );
+            }
+          } catch {
+            /* ignore vtt parse errors */
+          }
+        }
       }
     } catch (pyErr) {
       console.warn("[tts] Primary Python edge-tts failed, trying node-edge-tts fallback:", pyErr);
@@ -329,11 +407,15 @@ export async function synthesizeHadithNarrationDirect(
         await fs.unlink(tmpNodePath).catch(() => {});
       } catch (nodeErr) {
         console.error("[tts] Both Python edge-tts and node-edge-tts failed:", nodeErr);
-        throw new Error("Грешка при генериране на мъжки глас (EdgeTTS/ElevenLabs): " + ((pyErr as any)?.message || (nodeErr as any)?.message || "Неуспешен запис"));
+        throw new Error(
+          "Грешка при генериране на мъжки глас (EdgeTTS/ElevenLabs): " +
+            ((pyErr as any)?.message || (nodeErr as any)?.message || "Неуспешен запис"),
+        );
       }
     } finally {
       await fs.unlink(tmpTxtPath).catch(() => {});
       await fs.unlink(tmpPyPath).catch(() => {});
+      await fs.unlink(tmpJsonPath).catch(() => {});
       await fs.unlink(tmpVttPath).catch(() => {});
     }
   }
@@ -373,7 +455,7 @@ export async function synthesizeHadithNarrationDirect(
     }
   }
 
-  let wordTimings = exactWordTimings || estimateWordTimings(cleaned, duration);
+  let wordTimings = exactWordTimings || estimateWordTimings(cleanSpokenForEngine, duration);
 
   if (!exactWordTimings) {
     try {
@@ -390,6 +472,9 @@ export async function synthesizeHadithNarrationDirect(
 
   // Remap spoken Arabic Salawat & Sahabah timings back to Bulgarian meaning words ("мир да бъде с него")
   wordTimings = remapSalawatTimingsToBulgarian(wordTimings);
+
+  // Deterministically align spoken timings back to clean display tokens (e.g. "5", "255", "1-ви", "Ат-Тауба")
+  wordTimings = alignSpokenTimingsToDisplayTokens(wordTimings, displayReferenceText);
 
   const { verifyAndCorrectSubtitleSync } = await import("./subtitle-sync.functions");
   const verified = verifyAndCorrectSubtitleSync(wordTimings, duration);

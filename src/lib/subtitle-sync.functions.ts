@@ -84,9 +84,9 @@ export function verifyAndCorrectSubtitleSync(
         if (drift > maxDriftMs) maxDriftMs = drift;
         start = prev.end;
         if (end <= start) end = start + 0.16;
-      } else if (start - prev.end > 0 && start - prev.end <= 0.80) {
-        // PRO STUDIO GAP SMOOTHING: If gap between words is <= 800ms, bridge prev.end to start
-        // This eliminates distracting screen flicker between words in the same spoken phrase!
+      } else if (start - prev.end > 0 && start - prev.end <= 0.35) {
+        // PRO STUDIO GAP SMOOTHING: Bridge micro articulation gaps (<= 350ms) to eliminate flicker
+        // while preserving genuine speaker breath/sentence pauses (> 350ms) for natural phrase boundaries!
         prev.end = Number(start.toFixed(3));
       }
     }

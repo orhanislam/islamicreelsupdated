@@ -233,7 +233,11 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
       .replace(/\.{2,}/g, "")
       .replace(/…+/g, "")
       .trim();
-    let words = data.bulgarian.replace(/[()]/g, "").split(/\s+/).filter(Boolean).map((w: string) => w.toUpperCase());
+    let words = data.bulgarian
+      .replace(/[()]/g, "")
+      .split(/\s+/)
+      .map((w: string) => w.toUpperCase())
+      .filter((w: string) => /[\p{L}\p{N}]/u.test(w));
     let timings = data.bulgarianWordTimings;
     if (timings && timings.length > 0) {
       timings = remapSalawatTimingsToBulgarian(timings);
@@ -274,6 +278,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             if (!t.word) return false;
             const w = t.word.toLowerCase();
             return (
+              /[\p{L}\p{N}]/u.test(w) &&
               !w.includes("<") &&
               !w.includes(">") &&
               !w.includes("time=") &&
@@ -281,9 +286,11 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
               !/^\(?(?:\d+[:.]\d+)\)?$/.test(w)
             );
           });
-        words = timings.map((t: any) => t.word);
       }
-      if (timings.length !== words.length) {
+      if (timings.length > 0) {
+        words = timings.map((t: any) => String(t.word || "").toUpperCase());
+      }
+      if (timings.length === 0 || timings.length !== words.length) {
         const ratio = audioDur / Math.max(1, words.length);
         timings = words.map((_w: string, i: number) => ({
           word: _w,
@@ -517,14 +524,25 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 
       const cleanBulgarian = (data.bulgarian || "").replace(/<[^>]+>/g, "").trim();
       const textParts = cleanBulgarian.split(/\n\n+/);
-      const hasTitle = textParts.length > 1;
-      const titleWordCount = hasTitle
-        ? textParts[0]
-            .replace(/[^\p{L}\p{N}\s]/gu, " ")
-            .trim()
-            .split(/\s+/)
-            .filter(Boolean).length
-        : 0;
+      const cleanViralTitle = String(data.viralTitle || data.topic || "")
+        .replace(/[^\p{L}\p{N}\s]/gu, " ")
+        .trim()
+        .replace(/\s+/g, " ")
+        .toUpperCase();
+      const firstPartNorm = (textParts[0] || "")
+        .replace(/[^\p{L}\p{N}\s]/gu, " ")
+        .trim()
+        .replace(/\s+/g, " ")
+        .toUpperCase();
+      const firstPartWordList = firstPartNorm.split(/\s+/).filter(Boolean);
+      const hasTitle =
+        textParts.length > 1 &&
+        firstPartWordList.length > 0 &&
+        firstPartWordList.length <= 10 &&
+        (cleanViralTitle.length > 0
+          ? firstPartNorm === cleanViralTitle
+          : !/[.!?…]$/.test((textParts[0] || "").trim()));
+      const titleWordCount = hasTitle ? firstPartWordList.length : 0;
 
       type Phrase = { words: string[]; startIdx: number; endIdx: number; isTitle: boolean };
       const phrases: Phrase[] = [];
@@ -562,8 +580,8 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 
         if (!isSingleWordMode && cur.length >= MIN_CLAUSE_WORDS && timings[i] && timings[i - 1]) {
           const gap = timings[i].start - timings[i - 1].end;
-          // Only split on audio gap if it's a major pause (>= 0.65s) and we have a full clause
-          if (gap >= 0.65) {
+          // Split on genuine speaker breath/sentence pause (>= 0.50s) when we have a full clause
+          if (gap >= 0.50) {
             flush();
           }
         }
@@ -932,8 +950,38 @@ export async function executeRenderTask(opts: any): Promise<any> {
 
       console.log(`[server-render] Final video duration configured: ${audioDur.toFixed(2)} seconds`);
 
+      // Helper: Verify video stream is True Full HD+ (width >= 1080 && height >= 1920)
+      // Catches disguised 720x1280 Pexels clips (e.g. *-hd_1080_1920_30fps.mp4 that are actually 720p)
+      const isTrueFullHdVideoFile = async (clipPath: string): Promise<boolean> => {
+        try {
+          const { execFile } = await import("child_process");
+          const util = await import("util");
+          const execFileAsync = util.promisify(execFile);
+          const { stdout } = await execFileAsync("ffprobe", [
+            "-v",
+            "error",
+            "-select_streams",
+            "v:0",
+            "-show_entries",
+            "stream=width,height",
+            "-of",
+            "json",
+            clipPath,
+          ]);
+          const parsed = JSON.parse(stdout || "{}");
+          const s = parsed?.streams?.[0];
+          if (s && Number(s.width) > 0 && Number(s.height) > 0) {
+            return Number(s.width) >= 1080 && Number(s.height) >= 1920;
+          }
+          return true;
+        } catch {
+          return true;
+        }
+      };
+
       // 2. Download/Save Background
       let isVideoBg = false;
+      let isPreNormalized1080p = false;
       let finalBgPath = bgPath;
       const bgUrl = data.backgroundVideoUrl || data.backgroundUrl;
       if (!bgUrl) throw new Error("No background provided");
@@ -967,6 +1015,20 @@ export async function executeRenderTask(opts: any): Promise<any> {
           const arrayBuf = await res.arrayBuffer();
           await fs.writeFile(finalBgPath, BufferMod.from(arrayBuf));
           sessionTempFiles.add(finalBgPath);
+          if (isVideoBg && !(await isTrueFullHdVideoFile(finalBgPath))) {
+            console.warn(
+              `[server-render] Primary bg ${bgUrl} is sub-1080p! Replacing with True 1080p Halal master...`,
+            );
+            const { getHalalVideoByConceptId } = await import("./backgrounds.functions");
+            const hqUrl = getHalalVideoByConceptId(undefined, 0).url;
+            const hqRes = await fetch(hqUrl, {
+              headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" },
+            }).catch(() => null);
+            if (hqRes && hqRes.ok) {
+              const hqBuf = await hqRes.arrayBuffer();
+              await fs.writeFile(finalBgPath, BufferMod.from(hqBuf));
+            }
+          }
         } catch (fetchErr) {
           console.warn(
             "[server-render] Primary background fetch failed, using reliable fallback video:",
@@ -1140,6 +1202,18 @@ export async function executeRenderTask(opts: any): Promise<any> {
                 if (r && r.ok) {
                   const buf = await r.arrayBuffer();
                   await fs.writeFile(p, BufferMod.from(buf));
+                  if (!(await isTrueFullHdVideoFile(p))) {
+                    const fbUrl = getHalalVideoByConceptId(undefined, i).url;
+                    console.warn(
+                      `[server-render] B-Roll scene ${i} (${targetSegUrl}) is sub-1080p! Replacing with True 1080p Halal clip ${fbUrl}`,
+                    );
+                    const fbRes = await fetch(fbUrl, { headers: { "User-Agent": "Mozilla/5.0" } }).catch(() => null);
+                    if (fbRes && fbRes.ok) {
+                      const fbBuf = await fbRes.arrayBuffer();
+                      await fs.writeFile(p, BufferMod.from(fbBuf));
+                      targetSegUrl = fbUrl;
+                    }
+                  }
                   rawClipPath = p;
                   downloadedByUrl.set(targetSegUrl, p);
                   bRollFiles.push(p);
@@ -1156,11 +1230,11 @@ export async function executeRenderTask(opts: any): Promise<any> {
                     .inputOptions(["-stream_loop -1"])
                     .outputOptions([
                       `-t ${seg.duration.toFixed(2)}`,
-                      "-vf scale=1080:1920:force_original_aspect_ratio=increase:flags=lanczos,crop=1080:1920,fps=30,format=yuv420p",
+                      "-vf scale=1080:1920:force_original_aspect_ratio=increase:flags=lanczos+accurate_rnd+full_chroma_int,crop=1080:1920,fps=30,setsar=1,format=yuv420p",
                       "-c:v libx264",
-                      "-preset fast",
+                      "-preset ultrafast",
                       "-profile:v high",
-                      "-crf 18",
+                      "-crf 10",
                       "-pix_fmt yuv420p",
                       "-an",
                     ])
@@ -1197,6 +1271,7 @@ export async function executeRenderTask(opts: any): Promise<any> {
               finalBgPath = multiSceneBg;
               sessionTempFiles.add(finalBgPath);
               isVideoBg = true;
+              isPreNormalized1080p = true;
               console.log(
                 "[server-render] Semantic text-synced B-Roll successfully built:",
                 finalBgPath,
@@ -1249,11 +1324,15 @@ export async function executeRenderTask(opts: any): Promise<any> {
         const height = is1080p ? 1920 : 1280;
 
         let ffmpegStderr = "";
+        const videoFilterChain =
+          isPreNormalized1080p && is1080p
+            ? `[0:v]unsharp=3:3:0.3:3:3:0.0,eq=contrast=1.02:saturation=1.04,subtitles='${escapedAssPath}'[v]`
+            : `[0:v]crop='min(iw,ih*9/16)':'min(iw*16/9,ih)',scale=${width}:${height}:force_original_aspect_ratio=increase:flags=lanczos+accurate_rnd+full_chroma_int,crop=${width}:${height},setsar=1,unsharp=3:3:0.3:3:3:0.0,eq=contrast=1.02:saturation=1.04,subtitles='${escapedAssPath}'[v]`;
 
         cmd
           .complexFilter([
-            // Smooth 1080p Lanczos scaling + natural color grading + burned-in 76px TikTok subtitles (Zero macroblock pixelation)
-            `[0:v]crop='min(iw,ih*9/16)':'min(iw*16/9,ih)',scale=${width}:${height}:force_original_aspect_ratio=increase:flags=lanczos,crop=${width}:${height},eq=contrast=1.03:saturation=1.05,subtitles='${escapedAssPath}'[v]`,
+            // Single-encode True 1080p Lanczos master + subtle detail crispness + burned-in TikTok subtitles (Zero macroblock pixelation)
+            videoFilterChain,
             `[1:a]highpass=f=45,treble=g=2:f=3500:w=0.7,acompressor=threshold=-18dB:ratio=2.5:attack=5:release=50,bass=g=3:f=110:w=0.6,loudnorm=I=-14:LRA=9:TP=-1.0,apad[a]`,
           ])
           .outputOptions([
@@ -1261,7 +1340,7 @@ export async function executeRenderTask(opts: any): Promise<any> {
             "-map [a]",
             "-c:v libx264",
             "-tag:v avc1",
-            "-preset fast",
+            "-preset medium",
             "-profile:v high",
             "-level 4.1",
             "-pix_fmt yuv420p",
@@ -1270,9 +1349,9 @@ export async function executeRenderTask(opts: any): Promise<any> {
             "-color_primaries bt709",
             "-color_range tv",
             "-movflags +faststart",
-            "-crf 20",
-            "-maxrate 6M",
-            "-bufsize 6M",
+            "-crf 17",
+            "-maxrate 12M",
+            "-bufsize 24M",
             "-refs 3",
             "-bf 3",
             "-r 30",
@@ -1280,7 +1359,7 @@ export async function executeRenderTask(opts: any): Promise<any> {
             "-g 60",
             "-keyint_min 30",
             "-sc_threshold 0",
-            "-x264-params deblock=0,0:aq-mode=2:aq-strength=1.0",
+            "-x264-params ref=3:bframes=3:aq-mode=3:aq-strength=0.9:deblock=-1,-1",
             "-c:a aac",
             "-profile:a aac_low",
             "-b:a 192k",

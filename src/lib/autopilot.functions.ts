@@ -340,14 +340,14 @@ async function ensureHighProfileMasterForUploadPost(
       width === 1080 &&
       height === 1920 &&
       bitRate > 0 &&
-      bitRate <= 6_500_000;
+      bitRate <= 14_500_000;
 
     if (isOptimal1080pHighProfile) {
       console.log(`[upload-post] ${mp4FilePath} is optimal True 1080p High Profile (1 stream, ${(bitRate / 1e6).toFixed(1)} Mbps). Ready for TikTok direct ingest.`);
       return;
     }
 
-    if (hasMultipleVideoStreams && width === 1080 && height === 1920 && bitRate <= 6_500_000) {
+    if (hasMultipleVideoStreams && width === 1080 && height === 1920 && bitRate <= 14_500_000) {
       // If resolution is already 1080p and bitrate is within target, cleanly strip out any secondary attached_pic / mjpeg streams without re-encoding!
       console.log(`[upload-post] Stripping secondary attached_pic video stream from ${mp4FilePath} to prevent TikTok recompression blur...`);
       const cleanedPath = `${mp4FilePath}.clean.mp4`;
@@ -395,7 +395,7 @@ async function ensureHighProfileMasterForUploadPost(
       "-tag:v",
       "avc1",
       "-preset",
-      "fast",
+      "medium",
       "-profile:v",
       "high",
       "-level",
@@ -413,11 +413,11 @@ async function ensureHighProfileMasterForUploadPost(
       "-movflags",
       "+faststart",
       "-crf",
-      "20",
+      "17",
       "-maxrate",
-      "6M",
+      "12M",
       "-bufsize",
-      "6M",
+      "24M",
       "-refs",
       "3",
       "-bf",
@@ -429,7 +429,7 @@ async function ensureHighProfileMasterForUploadPost(
       "-sc_threshold",
       "0",
       "-x264-params",
-      "deblock=0,0:aq-mode=2:aq-strength=1.0",
+      "ref=3:bframes=3:aq-mode=3:aq-strength=0.9:deblock=-1,-1",
       "-c:a",
       "aac",
       "-b:a",

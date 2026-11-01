@@ -979,6 +979,25 @@ export function detectSlideRole(
 
 const GENERIC_HEART_SOUL_STEMS = new Set(["сърца", "сърцата", "душата", "сърце", "душа"]);
 
+function escapeRegexLiteral(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function matchesConceptKeyword(normText: string, kw: string): boolean {
+  const trimmed = kw.trim().toLowerCase();
+  if (!trimmed) return false;
+  const esc = escapeRegexLiteral(trimmed);
+  // Short stems (<= 4 chars, e.g. "ад", "ада", "рай", "рая", "зов", "дуа") require full word boundaries
+  // so "ад"/"ада" NEVER falsely matches "садака", "над", "радост", and "рай" NEVER matches "край"/"безкрай"!
+  if (trimmed.length <= 4) {
+    const re = new RegExp(`(?<=^|[^\\p{L}\\p{N}])${esc}(?=[^\\p{L}\\p{N}]|$)`, "u");
+    return re.test(normText);
+  }
+  // Longer stems (>= 5 chars, e.g. "огън", "милост", "прошка") require start-of-word boundary
+  const re = new RegExp(`(?<=^|[^\\p{L}\\p{N}])${esc}`, "u");
+  return re.test(normText);
+}
+
 export function matchTheologicalConcept(text: string): TheologicalConcept | null {
   if (!text) return null;
   const norm = text.toLowerCase();
@@ -988,7 +1007,7 @@ export function matchTheologicalConcept(text: string): TheologicalConcept | null
   for (const concept of THEOLOGICAL_CONCEPT_MAP) {
     let score = 0;
     for (const kw of concept.keywords) {
-      if (norm.includes(kw)) {
+      if (matchesConceptKeyword(norm, kw)) {
         // Give concrete physical/theological imagery higher weight than generic "сърце/душа"
         if (concept.id === "sakina" && GENERIC_HEART_SOUL_STEMS.has(kw)) {
           score += 3;
@@ -1008,7 +1027,7 @@ export function matchTheologicalConcept(text: string): TheologicalConcept | null
       }
     }
     for (const ar of concept.arabicTerms) {
-      if (norm.includes(ar)) {
+      if (matchesConceptKeyword(norm, ar)) {
         score += 12;
       }
     }
@@ -1403,16 +1422,27 @@ export function scoreVideo(v: PexelsVideo, file: PexelsVideoFile, targetMin = 30
   ) {
     s -= 40;
   }
+  // Hard-reject sub-1080p (720p/540p/SD) and landscape streams to guarantee ZERO upscaling pixelation
+  if (file.width < 1080 || file.height < 1920 || file.width > file.height) {
+    return -999;
+  }
+
+  // If file byte size & duration are present in metadata, reject heavily compressed low-bitrate web transcodes
+  if (file.size && file.size > 0 && (v.duration ?? 0) > 0) {
+    const bps = (file.size * 8) / (v.duration || 10);
+    const minBps = (file.fps ?? 30) >= 50 ? 6_000_000 : 4_500_000;
+    if (bps < minBps) {
+      return -999;
+    }
+  }
+
   const aspect = file.width > 0 ? file.height / file.width : 0;
   s += Math.max(0, 10 - Math.abs(aspect - 16 / 9) * 8);
-  if (file.height >= 1920 && file.width >= 1080) {
-    s += 35; // Strongly reward true Full HD 1080p+ vertical streams (crystal clear)
-  } else if (file.height >= 1280 && file.width >= 720) {
-    s -= 80; // Heavily penalize 720p streams when 1080p streams exist
-  } else {
-    return -999; // Hard reject sub-720p / SD clips to prevent pixelation on repost platforms
+  if (file.height >= 2560 && file.height <= 3840 && file.width >= 1440) {
+    s += 48; // Strongly reward 2K/4K UHD vertical masters (Lanczos downscale to 1080p yields razor-sharp detail)
+  } else if (file.height >= 1920 && file.width >= 1080) {
+    s += 35; // Reward True Full HD 1080p vertical streams
   }
-  if (file.height >= 3840) s += 10;
   if ((file.fps ?? 0) >= 30) s += 5;
   if ((file.fps ?? 0) >= 60) s += 4;
 
@@ -1451,11 +1481,21 @@ export function pickBestFile(v: PexelsVideo): PexelsVideoFile | undefined {
     const bIsFullHdPlus = b.height >= 1920 && b.width >= 1080 ? 1 : 0;
     if (aIsFullHdPlus !== bIsFullHdPlus) return bIsFullHdPlus - aIsFullHdPlus;
 
-    // 3. Among Full HD+ files: prefer native 1080x1920 or clean 2K/4K master, then higher FPS and bitrate
+    // 3. Among Full HD+ files: prefer 2K/4K UHD masters (up to 3840px height) over heavily-compressed 1080p web transcodes!
+    // Lanczos downscaling a 12-30 Mbps 2K/4K source to 1080x1920 eliminates Pexels' 2.5 Mbps 1080p web macroblocking.
     if (aIsFullHdPlus && bIsFullHdPlus) {
-      const aDiff = Math.abs(a.height - 1920);
-      const bDiff = Math.abs(b.height - 1920);
-      if (aDiff !== bDiff) return aDiff - bDiff;
+      const resTier = (f: PexelsVideoFile) => {
+        if (f.height >= 2160 && f.height <= 3840 && f.width >= 1440) return 3; // 2K / 4K UHD Master (Sweet spot)
+        if (f.height >= 1920 && f.height <= 2160 && f.width >= 1080) return 2; // Native 1080p Full HD
+        return 1; // >4K oversized
+      };
+      const aTier = resTier(a);
+      const bTier = resTier(b);
+      if (aTier !== bTier) return bTier - aTier;
+      if ((a.size || 0) > 0 && (b.size || 0) > 0 && a.size !== b.size) {
+        return (b.size || 0) - (a.size || 0);
+      }
+      if (a.height !== b.height) return b.height - a.height;
       const aFps = Math.min(60, a.fps || 30);
       const bFps = Math.min(60, b.fps || 30);
       if (aFps !== bFps) return bFps - aFps;
@@ -1500,19 +1540,71 @@ export function buildOut(vs: PexelsVideo[], targetMin = 30): Out[] {
   return pool;
 }
 
+/**
+ * Fast HTTP HEAD bitrate guard for Pexels CDN streams.
+ * Rejects heavily-compressed web transcodes (< 4.5 Mbps at 30fps, or < 6.0 Mbps at 50-60fps)
+ * before downloading, preventing source macroblocking. Fails open on non-Pexels / offline test URLs.
+ */
+export async function isHighBitrateVideoStream(
+  url: string,
+  durationSec: number,
+  fps = 30,
+): Promise<boolean> {
+  if (!url || !url.includes("videos.pexels.com") || !(durationSec > 0)) {
+    return true;
+  }
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 2500);
+    let res: Response | null = null;
+    try {
+      res = await fetch(url, {
+        method: "HEAD",
+        headers: { "User-Agent": "Mozilla/5.0" },
+        signal: controller.signal,
+      });
+    } finally {
+      clearTimeout(timer);
+    }
+    if (!res || !res.ok) return true;
+    const lenHeader = res.headers?.get?.("content-length");
+    const bytes = Number(lenHeader || 0);
+    if (!(bytes > 0)) return true;
+    const mbps = (bytes * 8) / durationSec / 1_000_000;
+    const minMbps = fps >= 50 ? 6.0 : 4.5;
+    if (mbps < minMbps) {
+      console.warn(
+        `[pexels-bitrate-guard] Rejecting low-bitrate stream (${mbps.toFixed(2)} Mbps < ${minMbps} Mbps @ ${fps}fps): ${url}`,
+      );
+      return false;
+    }
+    return true;
+  } catch {
+    return true;
+  }
+}
+
 export async function getHalalVideos(
   vs: PexelsVideo[],
   targetMin: number,
   neededCount = 3,
 ): Promise<Out[]> {
   const built = buildOut(vs, targetMin);
-  const candidates = built.slice(0, Math.max(neededCount * 3, 8));
+  const candidates = built.slice(0, Math.max(neededCount * 3, 10));
 
   const safeVideos: Out[] = [];
   for (const outVid of candidates) {
     if (safeVideos.length >= neededCount) break;
     const originalPexelsVideo = vs.find((v) => v.id === outVid.id);
     if (!originalPexelsVideo) continue;
+    const pickedFile = pickBestFile(originalPexelsVideo);
+    const fps = pickedFile?.fps ?? (outVid.link.includes("60fps") ? 60 : 30);
+    const bitrateOk = await isHighBitrateVideoStream(
+      outVid.link,
+      outVid.duration || originalPexelsVideo.duration || 10,
+      fps,
+    );
+    if (!bitrateOk) continue;
     const isHaram = await checkVideoForHaram(originalPexelsVideo);
     if (!isHaram) {
       safeVideos.push(outVid);
@@ -1924,6 +2016,15 @@ Return JSON ONLY: { "theme": string (Bulgarian), "queries": string[] }`;
             if (usedVideoUrls.has(cand.link)) continue; // Cross-slide deduplication
 
             const originalVid = vs.find((v) => v.id === cand.id);
+            const pickedFile = originalVid ? pickBestFile(originalVid) : undefined;
+            const fps = pickedFile?.fps ?? (cand.link.includes("60fps") ? 60 : 30);
+            const bitrateOk = await isHighBitrateVideoStream(
+              cand.link,
+              cand.duration || originalVid?.duration || 10,
+              fps,
+            );
+            if (!bitrateOk) continue;
+
             if (originalVid) {
               const isHaram = await checkVideoForHaram(originalVid);
               if (isHaram) continue;

@@ -33,6 +33,7 @@ import {
   getVerifiedHadithCatalogPrompt,
 } from "./tafsir.functions";
 import { sanitizeTheologicalRespect } from "./theological-sanitizer";
+import { localizeLatinSurahNamesToBulgarian, QURAN_SURAHS_PHONETICS } from "./islamic-phonetics";
 import { enrichUnfamiliarQuranicTerms } from "./islamic-glossary";
 import {
   auditAndRefineProposal,
@@ -1919,9 +1920,9 @@ ${getVerifiedHadithCatalogPrompt()}
 
 export function formatSpokenCitation(rawRef: string, isQuran: boolean): string {
   if (!rawRef) return "";
-  let ref = rawRef.trim();
+  let ref = localizeLatinSurahNamesToBulgarian(rawRef.trim());
   if (ref.startsWith("[") && ref.endsWith("]")) {
-    ref = ref.slice(1, -1).trim();
+    ref = localizeLatinSurahNamesToBulgarian(ref.slice(1, -1).trim());
   }
 
   if (isQuran) {
@@ -1931,6 +1932,10 @@ export function formatSpokenCitation(rawRef: string, isQuran: boolean): string {
     if (m1) {
       let name = (m1[1] || "").trim().replace(/^Сура\s+/i, "").replace(/[-–—•\s]+$/, "").trim();
       const surahNum = m1[2] || m1[4];
+      if (surahNum && /[A-Za-z]/.test(name)) {
+        const entry = QURAN_SURAHS_PHONETICS[Number(surahNum) - 1];
+        if (entry) name = entry.displayWord;
+      }
       let ayahNum = m1[3] || m1[5];
       if (ayahNum && ayahNum.includes("-")) {
         ayahNum = "аяти " + ayahNum.replace("-", " до ");

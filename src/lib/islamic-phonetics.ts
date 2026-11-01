@@ -266,14 +266,36 @@ export function normalizeAllIslamicPhonetics(text: string): string {
 }
 
 /**
+ * Converts any English/Latin Quran Surah names (e.g. "Сура At-Tawba", "Surah An-Nahl", "Yusuf")
+ * into clean literary Bulgarian Cyrillic ("Сура Ат-Тауба", "Сура Ан-Нахл", "Юсуф") for display and subtitles.
+ */
+export function localizeLatinSurahNamesToBulgarian(text: string): string {
+  if (!text || !/[A-Za-z]/.test(text)) return text || "";
+  let res = text;
+  for (const surah of QURAN_SURAHS_PHONETICS) {
+    res = res.replace(
+      new RegExp(`(?<=^|[^\\p{L}\\p{N}])(Сура|сура|Surah?|Surat)\\s+(?:${surah.pattern})(?=[^\\p{L}\\p{N}]|$)`, "gui"),
+      (_m, pref) => {
+        const isCap = pref[0] === pref[0].toUpperCase();
+        return `${isCap ? "Сура" : "сура"} ${surah.displayWord}`;
+      },
+    );
+  }
+  return res;
+}
+
+/**
  * Maps phonetic Arabic TTS words back to clean readable Bulgarian subtitle words.
  */
 export function normalizeIslamicPhoneticsToDisplayWord(word: string): string {
   if (!word) return "";
   let clean = word;
+  const stripped = clean.replace(/^[^\p{L}\p{N}']+|[^\p{L}\p{N}']+$/gu, "");
+  const lead = clean.slice(0, clean.indexOf(stripped));
+  const trail = stripped ? clean.slice(clean.indexOf(stripped) + stripped.length) : "";
   for (const surah of QURAN_SURAHS_PHONETICS) {
-    if (clean.toLowerCase() === surah.phoneticTts.toLowerCase()) {
-      return surah.displayWord;
+    if (stripped.toLowerCase() === surah.phoneticTts.toLowerCase()) {
+      return `${lead}${surah.displayWord}${trail}`;
     }
   }
   return clean;

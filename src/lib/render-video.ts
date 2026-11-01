@@ -769,10 +769,16 @@ export async function renderVideo(opts: VideoOptions): Promise<{ blob: Blob; mim
       .replace(/\.{2,}/g, " ")
       .replace(/…+/g, " ")
       .trim();
-    const allWords = cleanBulgarianText
-      .split(/\s+/)
-      .filter(Boolean)
-      .map((w) => w.toUpperCase());
+    const hasExplicitTimings = Array.isArray(opts.bulgarianWordTimings) && opts.bulgarianWordTimings.length > 0;
+    const filteredExplicitTimings = hasExplicitTimings
+      ? (opts.bulgarianWordTimings as any[]).filter((t) => /[\p{L}\p{N}]/u.test(String(t?.word || "")))
+      : [];
+    const allWords = filteredExplicitTimings.length > 0
+      ? filteredExplicitTimings.map((t) => String(t.word || "").toUpperCase())
+      : cleanBulgarianText
+          .split(/\s+/)
+          .filter((w) => /[\p{L}\p{N}]/u.test(w))
+          .map((w) => w.toUpperCase());
     const maxW = Math.min(sz.W_SAFE, Math.round(680 * scale));
     const verticalForText = sz.H_SAFE;
     const UNIFORM_CANVAS_FS = Math.round(76 * scale);
@@ -878,6 +884,15 @@ export async function renderVideo(opts: VideoOptions): Promise<{ blob: Blob; mim
           flush();
         }
 
+        if (
+          cur.length >= 3 &&
+          filteredExplicitTimings[i] &&
+          filteredExplicitTimings[i - 1] &&
+          Number(filteredExplicitTimings[i].start) - Number(filteredExplicitTimings[i - 1].end) >= 0.50
+        ) {
+          flush();
+        }
+
         cur.push(w);
         const endsSentence = /[.!?…]$/.test(w);
         const endsClause = /[,;:—]$/.test(w) && cur.length >= MIN_WORDS_PER_PHRASE;
@@ -896,7 +911,7 @@ export async function renderVideo(opts: VideoOptions): Promise<{ blob: Blob; mim
     //   1) Bulgarian per-word timings from ElevenLabs (best accuracy)
     //   2) Arabic per-word timings from Quran.com (for ayah recitations)
     //   3) Weighted-cost heuristic distributed across the audio duration
-    const bgSegs = (opts.bulgarianWordTimings ?? [])
+    const bgSegs = (filteredExplicitTimings.length > 0 ? filteredExplicitTimings : (opts.bulgarianWordTimings ?? []))
       .filter((s) => Number.isFinite(s.start) && Number.isFinite(s.end))
       .slice(0, allWords.length);
     const hasBgSegments = bgSegs.length > 0;
@@ -1387,8 +1402,12 @@ export async function renderVideo(opts: VideoOptions): Promise<{ blob: Blob; mim
             const wordStr = lineWords[wIdx].toUpperCase();
             const globalIdx = activePhrase.startWord + currentWordOffset + wIdx;
             const wTiming = wordTimes[globalIdx];
-            const isActive = wTiming && elapsed >= wTiming.start && elapsed <= wTiming.end;
-            const isKeyword = HIGHLIGHT_KEYWORDS.test(wordStr);
+            const activeEnd =
+              globalIdx + 1 < activePhrase.endWord && wordTimes[globalIdx + 1]
+                ? Math.max(wTiming?.end ?? 0, wordTimes[globalIdx + 1].start)
+                : (wTiming?.end ?? 0);
+            const isActive = Boolean(wTiming && elapsed >= wTiming.start && elapsed < activeEnd + 0.02);
+            const isKeyword = !hasBgSegments && HIGHLIGHT_KEYWORDS.test(wordStr);
 
             const wordWidth = ctx.measureText(wordStr).width;
             const centerX = cursorX + wordWidth / 2;
