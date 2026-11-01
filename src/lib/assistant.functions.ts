@@ -2473,12 +2473,28 @@ export async function confirmAndGenerateVideoDirect(input: {
       bulgarian = sanitizeTheologicalRespect(bulgarian);
       bulgarian = auditAndRefineNarrationScript(bulgarian).refinedNarration;
 
-      try {
-        const narr = await synthesizeHadithNarrationDirect(bulgarian);
-        audioUrl = `data:${narr.mimeType || "audio/mp3"};base64,${narr.base64}`;
-        bulgarianWordTimings = narr.wordTimings;
-      } catch (e) {
-        console.warn("Could not narrate hadith:", e);
+      let hadithTtsSuccess = false;
+      let lastHadithTtsErr: any = null;
+      for (let attempt = 1; attempt <= 3; attempt++) {
+        try {
+          const narr = await synthesizeHadithNarrationDirect(bulgarian);
+          if (narr && narr.base64 && narr.wordTimings && narr.wordTimings.length > 0) {
+            audioUrl = `data:${narr.mimeType || "audio/mp3"};base64,${narr.base64}`;
+            bulgarianWordTimings = narr.wordTimings;
+            hadithTtsSuccess = true;
+            break;
+          }
+        } catch (e) {
+          lastHadithTtsErr = e;
+          console.warn(`[assistant] Hadith narration attempt ${attempt} failed:`, e);
+          await new Promise((r) => setTimeout(r, 1000));
+        }
+      }
+
+      if (!hadithTtsSuccess || !audioUrl) {
+        throw new Error(
+          `Критична грешка при дикторския глас за хадиса: ${lastHadithTtsErr?.message || "Липсва аудио"}. Видеото не може да бъде създадено без валиден дикторски глас.`
+        );
       }
     } else if (
       proposal.type === "tiktok" ||
@@ -2512,12 +2528,28 @@ export async function confirmAndGenerateVideoDirect(input: {
       bulgarian = sanitizeTheologicalRespect(bulgarian);
       bulgarian = auditAndRefineNarrationScript(bulgarian).refinedNarration;
 
-      try {
-        const narr = await synthesizeHadithNarrationDirect(bulgarian);
-        audioUrl = `data:${narr.mimeType || "audio/mp3"};base64,${narr.base64}`;
-        bulgarianWordTimings = narr.wordTimings;
-      } catch (e) {
-        console.warn("Could not narrate tiktok topic:", e);
+      let hadithTtsSuccess = false;
+      let lastHadithTtsErr: any = null;
+      for (let attempt = 1; attempt <= 3; attempt++) {
+        try {
+          const narr = await synthesizeHadithNarrationDirect(bulgarian);
+          if (narr && narr.base64 && narr.wordTimings && narr.wordTimings.length > 0) {
+            audioUrl = `data:${narr.mimeType || "audio/mp3"};base64,${narr.base64}`;
+            bulgarianWordTimings = narr.wordTimings;
+            hadithTtsSuccess = true;
+            break;
+          }
+        } catch (e) {
+          lastHadithTtsErr = e;
+          console.warn(`[assistant] Hadith TTS narration attempt ${attempt} failed:`, e);
+          await new Promise((r) => setTimeout(r, 1000));
+        }
+      }
+
+      if (!hadithTtsSuccess || !audioUrl) {
+        throw new Error(
+          `Критична грешка при дикторския глас за хадиса: ${lastHadithTtsErr?.message || "Липсва аудио"}. Видеото не може да бъде създадено без валиден дикторски глас, за да се гарантира точното темпо на субтитрите.`
+        );
       }
     } else {
       let surah = Number(proposal.surah);
@@ -2584,7 +2616,8 @@ export async function confirmAndGenerateVideoDirect(input: {
         arabic = q.arabic;
         english = q.english;
         reference = `Сура ${q.surahName} (${surah}:${ayah}${count > 1 ? `-${ayah + count - 1}` : ""})`;
-        audioUrl = q.audioUrl;
+        // Strictly DO NOT assign audioUrl = q.audioUrl here: q.audioUrl is a short Arabic recitation
+        // of only the verse, whereas the video has full Bulgarian narration (hook, quote, tafsir, action).
         wordSegments = q.wordSegments;
         ayahBounds = q.ayahBounds;
         arabicWordCount = q.arabicWordCount;
@@ -2651,12 +2684,28 @@ export async function confirmAndGenerateVideoDirect(input: {
         bulgarian = sanitizeTheologicalRespect(bulgarian);
         bulgarian = auditAndRefineNarrationScript(bulgarian).refinedNarration;
 
-        try {
-          const narr = await synthesizeHadithNarrationDirect(bulgarian);
-          audioUrl = `data:${narr.mimeType || "audio/mp3"};base64,${narr.base64}`;
-          bulgarianWordTimings = narr.wordTimings;
-        } catch (e) {
-          console.warn("Could not narrate Quran:", e);
+        let quranTtsSuccess = false;
+        let lastQuranTtsErr: any = null;
+        for (let attempt = 1; attempt <= 3; attempt++) {
+          try {
+            const narr = await synthesizeHadithNarrationDirect(bulgarian);
+            if (narr && narr.base64 && narr.wordTimings && narr.wordTimings.length > 0) {
+              audioUrl = `data:${narr.mimeType || "audio/mp3"};base64,${narr.base64}`;
+              bulgarianWordTimings = narr.wordTimings;
+              quranTtsSuccess = true;
+              break;
+            }
+          } catch (e) {
+            lastQuranTtsErr = e;
+            console.warn(`[assistant] Quran TTS narration attempt ${attempt} failed:`, e);
+            await new Promise((r) => setTimeout(r, 1000));
+          }
+        }
+
+        if (!quranTtsSuccess || !audioUrl) {
+          throw new Error(
+            `Критична грешка при дикторския глас за Корана: ${lastQuranTtsErr?.message || "Липсва аудио"}. Видеото не може да бъде създадено без валиден дикторски глас, за да се гарантира нормална скорост на субтитрите.`
+          );
         }
       } catch (err) {
         console.error(

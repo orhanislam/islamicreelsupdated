@@ -398,9 +398,11 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
           const cumCost = [0];
           for (let i = 0; i < costs.length; i++) cumCost.push(cumCost[i] + costs[i]);
           const totalCost = cumCost[cumCost.length - 1] || 1;
+          const minRequiredSpeechDur = words.length * 0.38;
+          const safeAudioDur = Math.max(audioDur, minRequiredSpeechDur);
           for (let i = 0; i < words.length; i++) {
-            const s = (cumCost[i] / totalCost) * audioDur;
-            const e = (cumCost[i + 1] / totalCost) * audioDur;
+            const s = (cumCost[i] / totalCost) * safeAudioDur;
+            const e = (cumCost[i + 1] / totalCost) * safeAudioDur;
             timings.push({ start: s, end: e });
           }
         }
@@ -509,8 +511,8 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
       }
     } else {
       const isSingleWordMode = data.subtitleSlicingMode === "single";
-      const MAX_WORDS = isSingleWordMode ? 1 : 7;
-      const MIN_CLAUSE_WORDS = isSingleWordMode ? 1 : 2;
+      const MAX_WORDS = isSingleWordMode ? 1 : 6;
+      const MIN_CLAUSE_WORDS = isSingleWordMode ? 1 : 3;
       const safeLineWidth = Math.min(sz.W_SAFE, 640);
 
       const cleanBulgarian = (data.bulgarian || "").replace(/<[^>]+>/g, "").trim();

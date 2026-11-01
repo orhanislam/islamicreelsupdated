@@ -266,7 +266,7 @@ export async function synthesizeHadithNarrationDirect(
       const args = [
         "--voice",
         "bg-BG-BorislavNeural",
-        "--rate=-2%",
+        "--rate=-5%",
         "--pitch=-2Hz",
         "--file",
         tmpTxtPath,
@@ -276,11 +276,28 @@ export async function synthesizeHadithNarrationDirect(
         tmpVttPath,
       ];
 
-      try {
-        await execFileAsync("edge-tts", args);
-      } catch (cliErr: any) {
-        // Fallback to python -m edge_tts if edge-tts binary alias is not in PATH
-        await execFileAsync("python", ["-m", "edge_tts", ...args]);
+      const binariesToTry: [string, string[]][] = [
+        ["edge-tts", args],
+        ["/usr/local/bin/edge-tts", args],
+        ["python3", ["-m", "edge_tts", ...args]],
+        ["python", ["-m", "edge_tts", ...args]],
+      ];
+
+      let cliErrLast: any = null;
+      for (const [bin, bArgs] of binariesToTry) {
+        try {
+          await execFileAsync(bin, bArgs);
+          const st = await fs.stat(tmpPyPath).catch(() => null);
+          if (st && st.size > 0) {
+            cliErrLast = null;
+            break;
+          }
+        } catch (err: any) {
+          cliErrLast = err;
+        }
+      }
+      if (cliErrLast) {
+        throw cliErrLast;
       }
 
       const fileStat = await fs.stat(tmpPyPath).catch(() => null);
@@ -303,7 +320,7 @@ export async function synthesizeHadithNarrationDirect(
           voice: "bg-BG-BorislavNeural",
           lang: "bg-BG",
           outputFormat: "audio-24khz-48kbitrate-mono-mp3",
-          rate: "-2%",
+          rate: "-5%",
           pitch: "-2Hz",
         });
         const tmpNodePath = path.join(os.tmpdir(), `node-${tmpBase}.mp3`);
