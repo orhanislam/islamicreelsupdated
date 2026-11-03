@@ -5,9 +5,11 @@ import {
   matchTheologicalConcept,
   pickBestFile,
   scoreVideo,
+  PIXELATION_PRONE_VIDEO_IDS,
   type PexelsVideo,
   type PexelsVideoFile,
 } from "../pexels.functions";
+import { LOCAL_HALAL_VIDEO_POOL } from "../backgrounds.functions";
 import { buildBulgarianScheduledIso, getBulgarianUtcOffset } from "../bulgarian-time";
 
 async function runTests() {
@@ -149,15 +151,27 @@ async function runTests() {
   assert.ok(!renderSrc.includes("unsharp="), "render.functions.ts must NOT contain unsharp= filter before subtitles");
   assert.ok(!renderSrc.includes("deblock=-1,-1"), "render.functions.ts must NOT contain weakened deblock=-1,-1");
   assert.ok(!autopilotSrc.includes("deblock=-1,-1"), "autopilot.functions.ts must NOT contain weakened deblock=-1,-1");
-  assert.ok(renderSrc.includes("hqdn3d=1.7:1.3:2.8:2.2,gblur=sigma=0.85"), "render.functions.ts must include Dual-Zone background pre-conditioning");
+  assert.ok(renderSrc.includes("hqdn3d=2.2:1.8:3.5:2.8,gblur=sigma=1.15"), "render.functions.ts must include strengthened Dual-Zone background pre-conditioning");
   assert.ok(renderSrc.includes("ScaledBorderAndShadow: yes"), "ASS subtitles must enable ScaledBorderAndShadow: yes");
   assert.ok(renderSrc.includes("\\blur0.45"), "ASS subtitles must apply \\blur0.45 anti-Gibbs edge smoothing");
   assert.ok(renderSrc.includes("-qp 0"), "Multi-scene B-Roll normalization must use lossless -qp 0");
-  assert.ok(renderSrc.includes("-maxrate 6500k"), "Master encode must target <64MB single-chunk sweet spot (-maxrate 6500k)");
+  assert.ok(renderSrc.includes("-maxrate 8000k"), "Master encode must provide 8000k VBV peak headroom for complex B-roll scenes while staying <64MB");
   assert.ok(renderSrc.includes("-flags +cgop"), "Master encode must enforce closed GOPs (-flags +cgop)");
   assert.ok(renderSrc.includes("deblock=0,0"), "Master encode must restore full H.264 in-loop deblocking (deblock=0,0)");
   assert.ok(autopilotSrc.includes("stageVideoViaUploadPostDirect"), "autopilot.functions.ts must stage MP4 video directly onto Cloudflare R2");
   console.log("✔ TEST 8 PASSED: All Dual-Zone Perceptual Mastering & R2 Direct Ingest invariants verified.");
+
+  // TEST 9: Blacklist of high-entropy whitewater/surf/storm Pexels IDs & 24-30fps LOCAL_HALAL_VIDEO_POOL
+  console.log("[TEST 9] Verifying chaotic whitewater/surf Pexels IDs are hard-rejected and local pool is 100% native 24-30fps...");
+  for (const badId of [39772880, 28635672, 35901385, 29999653, 15088644]) {
+    assert.ok(PIXELATION_PRONE_VIDEO_IDS.has(badId), `PIXELATION_PRONE_VIDEO_IDS must blacklist ${badId}`);
+    const badScore = scoreVideo({ ...fakeVideo, id: badId }, hd1080File, 10);
+    assert.strictEqual(badScore, -9999, `Blacklisted chaotic video ${badId} must return -9999`);
+  }
+  for (const item of LOCAL_HALAL_VIDEO_POOL) {
+    assert.ok(!item.url.includes("60fps") && !item.url.includes("120fps"), `LOCAL_HALAL_VIDEO_POOL item ${item.id} must be native 24-30fps, got ${item.url}`);
+  }
+  console.log("✔ TEST 9 PASSED: Chaotic whitewater/surf clips blacklisted and fallback pool is 100% native 24-30fps.");
 
   console.log("\n🎉 ALL ANTI-PIXELATION TESTS PASSED WITH 100% SUCCESS!");
 }

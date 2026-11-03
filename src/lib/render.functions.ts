@@ -1151,8 +1151,8 @@ export async function executeRenderTask(opts: any): Promise<any> {
             }
           }
 
-          // Coalesce schedule to max 3-4 calm semantic scenes so backgrounds do NOT switch every 3s and render in seconds
-          const MAX_BROLL_SCENES = Math.max(6, Math.min(8, Math.ceil(audioDur / 4.0)));
+          // Coalesce schedule to balanced 5-8s semantic scenes so clips neither switch frantically nor stretch to 19s loops
+          const MAX_BROLL_SCENES = Math.max(8, Math.min(12, Math.ceil(audioDur / 5.5)));
           while (schedule.length > MAX_BROLL_SCENES) {
             let shortestIdx = 0;
             let shortestDur = Infinity;
@@ -1185,10 +1185,17 @@ export async function executeRenderTask(opts: any): Promise<any> {
             const concatListPath = path.join(tmpDir, `concat_${Date.now()}.txt`);
             sessionTempFiles.add(concatListPath);
 
+            const PIXELATION_PRONE_URL_RE =
+              /\/(39772880|28635672|35901385|29999653|15088644|34474109|38226014|33942245|32679329)(\/|-)/;
+
             for (let i = 0; i < schedule.length; i++) {
               const seg = schedule[i];
               let targetSegUrl = seg.url;
-              if (!targetSegUrl || targetSegUrl.includes("images.pexels.com/videos/")) {
+              if (
+                !targetSegUrl ||
+                targetSegUrl.includes("images.pexels.com/videos/") ||
+                PIXELATION_PRONE_URL_RE.test(targetSegUrl)
+              ) {
                 targetSegUrl = getHalalVideoByConceptId(undefined, i).url;
               }
               let rawClipPath = downloadedByUrl.get(targetSegUrl);
@@ -1326,11 +1333,12 @@ export async function executeRenderTask(opts: any): Promise<any> {
 
         let ffmpegStderr = "";
         // Dual-Zone Perceptual Background Pre-Conditioning strictly BEFORE burning vector ASS subtitles:
-        // 1. Spatio-temporal denoise (hqdn3d) + subtle perceptual micro-softening (gblur=sigma=0.85) on [0:v]
-        //    calms high-frequency Pexels foliage/water micro-jitter so it doesn't starve TikTok's H.264/HEVC bitrate budget.
+        // 1. Spatio-temporal denoise (hqdn3d=2.2:1.8:3.5:2.8) + perceptual micro-softening (gblur=sigma=1.15) on [0:v]
+        //    calms high-frequency Pexels foliage/water micro-jitter so no single complex B-roll scene can starve
+        //    TikTok's H.264/HEVC bitrate budget or cause macroblocking around the center subtitles.
         // 2. Subtitles are burned AFTER the filter, preserving 100% razor-sharp vector text & zero mosquito-noise halos!
         const bgPerceptualFilter =
-          "hqdn3d=1.7:1.3:2.8:2.2,gblur=sigma=0.85,eq=brightness=-0.02:contrast=1.02:saturation=1.02";
+          "hqdn3d=2.2:1.8:3.5:2.8,gblur=sigma=1.15,eq=brightness=-0.03:contrast=1.02:saturation=1.02";
         const videoFilterChain =
           isPreNormalized1080p && is1080p
             ? `[0:v]${bgPerceptualFilter},subtitles='${escapedAssPath}'[v]`
@@ -1357,8 +1365,8 @@ export async function executeRenderTask(opts: any): Promise<any> {
             "-color_range tv",
             "-movflags +faststart",
             "-crf 18",
-            "-maxrate 6500k",
-            "-bufsize 13000k",
+            "-maxrate 8000k",
+            "-bufsize 16000k",
             "-refs 4",
             "-bf 2",
             "-r 30",

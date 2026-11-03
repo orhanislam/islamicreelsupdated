@@ -350,14 +350,14 @@ async function ensureHighProfileMasterForUploadPost(
       width === 1080 &&
       height === 1920 &&
       bitRate > 0 &&
-      bitRate <= 8_800_000;
+      bitRate <= 9_500_000;
 
     if (isOptimal1080pHighProfile) {
       console.log(`[upload-post] ${mp4FilePath} is optimal True 1080p High Profile (1 stream, ${(bitRate / 1e6).toFixed(1)} Mbps, <64MB single-chunk sweet spot). Ready for TikTok direct ingest.`);
       return;
     }
 
-    if (hasMultipleVideoStreams && width === 1080 && height === 1920 && bitRate <= 8_800_000) {
+    if (hasMultipleVideoStreams && width === 1080 && height === 1920 && bitRate <= 9_500_000) {
       // If resolution is already 1080p and bitrate is within target, cleanly strip out any secondary attached_pic / mjpeg streams without re-encoding!
       console.log(`[upload-post] Stripping secondary attached_pic video stream from ${mp4FilePath} to prevent TikTok recompression blur...`);
       const cleanedPath = `${mp4FilePath}.clean.mp4`;
@@ -386,7 +386,7 @@ async function ensureHighProfileMasterForUploadPost(
     }
 
     console.log(
-      `[upload-post] Remastering ${mp4FilePath} from (${profile}, ${width}x${height}, ${(bitRate / 1e6).toFixed(1)} Mbps) -> Clean High@L4.1 1080p HD (6.5M <64MB Single-Chunk Anti-Pixelation Master)...`,
+      `[upload-post] Remastering ${mp4FilePath} from (${profile}, ${width}x${height}, ${(bitRate / 1e6).toFixed(1)} Mbps) -> Clean High@L4.1 1080p HD (8.0M Peak <64MB Single-Chunk Anti-Pixelation Master)...`,
     );
 
     const remasteredPath = `${mp4FilePath}.hq_remaster.mp4`;
@@ -425,9 +425,9 @@ async function ensureHighProfileMasterForUploadPost(
       "-crf",
       "18",
       "-maxrate",
-      "6500k",
+      "8000k",
       "-bufsize",
-      "13000k",
+      "16000k",
       "-refs",
       "4",
       "-bf",

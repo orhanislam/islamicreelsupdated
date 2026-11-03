@@ -534,8 +534,8 @@ export const THEOLOGICAL_CONCEPT_MAP: TheologicalConcept[] = [
         "dense tropical paradise waterfall sunlight vertical",
       ],
       context: [
-        "crystal clear river green valley landscape vertical",
-        "flowing fresh stream mossy stones forest vertical",
+        "tranquil emerald mountain lake reflection nature vertical",
+        "serene sunlit green valley morning mist landscape vertical",
       ],
       dalil: [
         "vibrant blooming garden sunbeams landscape vertical",
@@ -566,12 +566,12 @@ export const THEOLOGICAL_CONCEPT_MAP: TheologicalConcept[] = [
     mood: "solemn",
     roleQueries: {
       hook: [
-        "solitary pine tree mountain storm vertical",
+        "majestic misty mountain peak dramatic clouds vertical",
         "dark misty mountain peak fog dramatic vertical",
       ],
       context: [
-        "rugged stone cliff waves landscape vertical",
-        "rocky coast turbulent sea calm horizon vertical",
+        "ancient stone canyon dramatic clouds twilight vertical",
+        "majestic sea cliff calm ocean horizon twilight vertical",
       ],
       dalil: [
         "sunbeams breaking through storm clouds vertical",
@@ -777,7 +777,7 @@ export const THEOLOGICAL_CONCEPT_MAP: TheologicalConcept[] = [
       ],
       dalil: [
         "massive rock cliff unshakable calm sea vertical",
-        "solid sea cliff enduring ocean waves vertical",
+        "majestic mountain cliff above clouds golden light vertical",
       ],
       cta: [
         "serene mountain valley golden horizon vertical",
@@ -798,7 +798,7 @@ export const THEOLOGICAL_CONCEPT_MAP: TheologicalConcept[] = [
       ],
       context: [
         "pure mountain spring water ripples vertical",
-        "crystal clear river stones ripples nature vertical",
+        "tranquil mirror lake dawn mist reflection vertical",
       ],
       dalil: [
         "white sunbeam shining through deep forest vertical",
@@ -1404,10 +1404,28 @@ export async function pexelsVideoQuery(key: string, query: string, perPage = 80)
   return (j.videos ?? []) as PexelsVideo[];
 }
 
+/**
+ * Hard blacklist of Pexels video IDs empirically verified to contain either:
+ * 1. Extreme spatial/temporal micro-entropy (chaotic whitewater rapids over pebbles, crashing surf foam,
+ *    60fps fast drone pine needles) that saturates H.264/HEVC VBV buffers and pixelates burned-in subtitles; or
+ * 2. Out-of-focus close-up ripples / human-made dock chairs.
+ */
+export const PIXELATION_PRONE_VIDEO_IDS = new Set<number>([
+  39772880, // Chaotic whitewater rapids over thousands of wet pebbles (causes severe macroblocking & subtitle pixelation)
+  28635672, // 60fps crashing surf foam on jagged rocks (high temporal entropy)
+  35901385, // 60fps fast storm drone flight over dense pine needles (high spatial-temporal entropy)
+  29999653, // Blurry out-of-focus close-up water ripples
+  15088644, // Lake dock with two wooden chairs (furniture distraction)
+  34474109, // 120fps high-motion clip
+  38226014, // 60fps high-motion ocean waves
+  33942245, // 60fps chaotic sparks/flames
+  32679329, // 60fps high-frequency rain splash
+]);
+
 export function scoreVideo(v: PexelsVideo, file: PexelsVideoFile, targetMin = 30): number {
   let s = 0;
-  // Tier 2: Hard blacklist check
-  if (isMetadataHaram(v)) {
+  // Tier 2: Hard blacklist check (Salafi compliance + anti-pixelation high-entropy IDs)
+  if (isMetadataHaram(v) || PIXELATION_PRONE_VIDEO_IDS.has(Number(v?.id))) {
     return -9999;
   }
 
@@ -1422,15 +1440,31 @@ export function scoreVideo(v: PexelsVideo, file: PexelsVideoFile, targetMin = 30
   ) {
     s -= 40;
   }
+  // Penalize chaotic whitewater/surf/blizzard/furniture clips that starve H.264 macroblock bits from subtitles
+  if (
+    meta.includes("rapids") ||
+    meta.includes("whitewater") ||
+    meta.includes("turbulent") ||
+    meta.includes("rough sea") ||
+    meta.includes("crashing waves") ||
+    meta.includes("blizzard") ||
+    meta.includes("chair") ||
+    meta.includes("chairs") ||
+    meta.includes("bench") ||
+    meta.includes("furniture")
+  ) {
+    s -= 45;
+  }
   // Hard-reject sub-1080p (720p/540p/SD) and landscape streams to guarantee ZERO upscaling pixelation
   if (file.width < 1080 || file.height < 1920 || file.width > file.height) {
     return -999;
   }
 
   // If file byte size & duration are present in metadata, reject heavily compressed low-bitrate web transcodes
+  const fps = file.fps ?? (String(file.link || "").includes("60fps") ? 60 : 30);
   if (file.size && file.size > 0 && (v.duration ?? 0) > 0) {
     const bps = (file.size * 8) / (v.duration || 10);
-    const minBps = (file.fps ?? 30) >= 50 ? 6_000_000 : 4_500_000;
+    const minBps = fps >= 50 ? 8_000_000 : 4_500_000;
     if (bps < minBps) {
       return -999;
     }
@@ -1443,10 +1477,11 @@ export function scoreVideo(v: PexelsVideo, file: PexelsVideoFile, targetMin = 30
   } else if (file.height >= 1920 && file.width >= 1080) {
     s += 35; // Reward True Full HD 1080p vertical streams
   }
-  const fps = file.fps ?? 30;
   if (fps >= 24 && fps <= 31) {
-    s += 8; // Prefer native 24-30fps progressive cadence (matches 30fps CFR output with zero frame-drop judder)
-  } else if (fps > 31) {
+    s += 18; // Strongly prefer native 24-30fps progressive cadence (matches 30fps CFR output with zero frame-drop judder)
+  } else if (fps >= 50) {
+    s -= 12; // Penalize 50/60/120fps sources (dropping every 2nd frame at 30fps CFR doubles inter-frame motion entropy)
+  } else {
     s += 4;
   }
 
@@ -1569,6 +1604,11 @@ export async function isHighBitrateVideoStream(
   if (!url || !url.includes("videos.pexels.com") || !(durationSec > 0)) {
     return true;
   }
+  for (const badId of PIXELATION_PRONE_VIDEO_IDS) {
+    if (url.includes(`/${badId}/`) || url.includes(`/${badId}-`)) {
+      return false;
+    }
+  }
   try {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 2500);
@@ -1587,7 +1627,7 @@ export async function isHighBitrateVideoStream(
     const bytes = Number(lenHeader || 0);
     if (!(bytes > 0)) return true;
     const mbps = (bytes * 8) / durationSec / 1_000_000;
-    const minMbps = fps >= 50 ? 6.0 : 4.5;
+    const minMbps = fps >= 50 ? 8.0 : 4.5;
     if (mbps < minMbps) {
       console.warn(
         `[pexels-bitrate-guard] Rejecting low-bitrate stream (${mbps.toFixed(2)} Mbps < ${minMbps} Mbps @ ${fps}fps): ${url}`,
