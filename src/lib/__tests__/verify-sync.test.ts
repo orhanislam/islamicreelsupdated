@@ -497,6 +497,38 @@ async function testQuranSurahsAndIslamicPhonetics() {
     }
   }
 
+  // 2.5 Verify "Ал-" / "Ал " is converted to soft "Аль " for TTS so Bulgarian TTS (BorislavNeural)
+  // NEVER expands "Ал" as the abbreviation "Александър" ("Александър Бакара"), while display subtitles stay "Ал-Бакара"!
+  const baqaraVariants = ["Сура Ал-Бакара", "Сура Ал Бакара", "Сура ал-Бакара", "Ал. Бакара"];
+  for (const v of baqaraVariants) {
+    const ttsOut = normalizeIslamicArabicPhoneticsForTts(v);
+    if (!ttsOut.includes("Аль Бакара") || /(?<=^|\s)(?:Ал|ал)(?:\s|-)/u.test(ttsOut)) {
+      throw new Error(`"Ал" -> "Александър" prevention failed for "${v}"! Expected "Аль Бакара", got: "${ttsOut}"`);
+    }
+  }
+  const { alignSpokenTimingsToDisplayTokens, localizeLatinSurahNamesToBulgarian } = await import("../tts.functions");
+  const localizedBaqara = localizeLatinSurahNamesToBulgarian("В Сура Ал Бакара, аят 286");
+  if (!localizedBaqara.includes("Сура Ал-Бакара")) {
+    throw new Error(`Expected canonical hyphenated 'Сура Ал-Бакара', got: '${localizedBaqara}'`);
+  }
+  const alignedBaqara = alignSpokenTimingsToDisplayTokens(
+    [
+      { word: "В", start: 0.0, end: 0.1 },
+      { word: "Суура", start: 0.1, end: 0.5 },
+      { word: "Аль", start: 0.5, end: 0.63 },
+      { word: "Бакара", start: 0.63, end: 1.2 },
+      { word: "аяат", start: 1.2, end: 1.6 },
+      { word: "двеста", start: 1.6, end: 2.0 },
+      { word: "осемдесет", start: 2.0, end: 2.5 },
+      { word: "и", start: 2.5, end: 2.55 },
+      { word: "шест", start: 2.55, end: 2.95 },
+    ],
+    localizedBaqara,
+  );
+  if (alignedBaqara[2]?.word !== "Ал-Бакара," || alignedBaqara[2]?.start !== 0.5 || alignedBaqara[2]?.end !== 1.2) {
+    throw new Error(`Expected 'Ал-Бакара,' aligned across [0.5, 1.2], got: ${JSON.stringify(alignedBaqara[2])}`);
+  }
+
   // 3. Test authentic Islamic terminologies and formulas
   const termTests: [string, string][] = [
     ["Ас-саляму алейкум", "Саляяму 'алейкум"],

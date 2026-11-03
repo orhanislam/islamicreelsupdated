@@ -270,7 +270,7 @@ export function normalizeAllIslamicPhonetics(text: string): string {
  * into clean literary Bulgarian Cyrillic ("Сура Ат-Тауба", "Сура Ан-Нахл", "Юсуф") for display and subtitles.
  */
 export function localizeLatinSurahNamesToBulgarian(text: string): string {
-  if (!text || !/[A-Za-z]/.test(text)) return text || "";
+  if (!text) return "";
   let res = text;
   for (const surah of QURAN_SURAHS_PHONETICS) {
     res = res.replace(
@@ -280,6 +280,16 @@ export function localizeLatinSurahNamesToBulgarian(text: string): string {
         return `${isCap ? "Сура" : "сура"} ${surah.displayWord}`;
       },
     );
+    // Also canonicalize unhyphenated "Ал Бакара" / "Ал. Бакара" -> "Ал-Бакара" for display
+    if (surah.displayWord.includes("-")) {
+      const [art, rest] = surah.displayWord.split("-");
+      if (art && rest) {
+        res = res.replace(
+          new RegExp(`(?<=^|[^\\p{L}\\p{N}])${art}(?:\\.|\\s+|\\.\\s+)${rest}(?=[^\\p{L}\\p{N}]|$)`, "gui"),
+          surah.displayWord,
+        );
+      }
+    }
   }
   return res;
 }
@@ -440,15 +450,21 @@ export function normalizeIslamicArabicPhoneticsForTts(text: string): string {
   replaceWord("(?:ibn\\s+uthaymeen|ibn\\s+uthaimeen|ибн\\s+усеймин|ибн\\s+утаймин)", "Ибн Усаймийн");
 
   // 8. Fix Arabic prefixes that cause Bulgarian TTS to expand them as abbreviations
+  // CRITICAL FIX: In Bulgarian TTS (bg-BG-BorislavNeural / KalinaNeural), standalone "Ал" or "Ал-"
+  // before a word (e.g. "Ал-Бакара", "Ал Бакара", "Ал-Бухари") is expanded by Microsoft's Bulgarian
+  // abbreviation dictionary as "Ал." -> "Александър" ("Александър Бакара")!
+  // Converting the Arabic article "Ал-" / "Ал " to soft "Аль " completely prevents the "Александър"
+  // expansion and produces an authentic 0.13s Arabic soft-lam (ال) pronunciation.
   replaceWord("(?:Ар-Ра'д|Ar-Ra'd|Ра'д|Ra'd)", "Ар-Раад");
   res = res
-    .replace(/(?<=^|[^\p{L}\p{N}])(А|а)л-(?=\p{L})/gu, "$1л ")
-    .replace(/(?<=^|[^\p{L}\p{N}])(А|а)т-(?=\p{L})/gu, "$1т ")
-    .replace(/(?<=^|[^\p{L}\p{N}])(А|а)н-(?=\p{L})/gu, "$1н ")
-    .replace(/(?<=^|[^\p{L}\p{N}])(А|а)з-(?=\p{L})/gu, "$1з ")
-    .replace(/(?<=^|[^\p{L}\p{N}])(А|а)с-(?=\p{L})/gu, "$1с ")
-    .replace(/(?<=^|[^\p{L}\p{N}])(А|а)ш-(?=\p{L})/gu, "$1ш ")
-    .replace(/(?<=^|[^\p{L}\p{N}])(А|а)д-(?=\p{L})/gu, "$1д ")
+    .replace(/(?<=^|[^\p{L}\p{N}])(А|а)л(?:-|(?:\.?\s+))(?=['’ʼ`]?\p{L})/gu, "$1ль ")
+    .replace(/(?<=^|[^\p{L}\p{N}])(А|а)т-(?=['’ʼ`]?\p{L})/gu, "$1т ")
+    .replace(/(?<=^|[^\p{L}\p{N}])(А|а)н-(?=['’ʼ`]?\p{L})/gu, "$1н ")
+    .replace(/(?<=^|[^\p{L}\p{N}])(А|а)р-(?=['’ʼ`]?\p{L})/gu, "$1р ")
+    .replace(/(?<=^|[^\p{L}\p{N}])(А|а)з-(?=['’ʼ`]?\p{L})/gu, "$1з ")
+    .replace(/(?<=^|[^\p{L}\p{N}])(А|а)с-(?=['’ʼ`]?\p{L})/gu, "$1с ")
+    .replace(/(?<=^|[^\p{L}\p{N}])(А|а)ш-(?=['’ʼ`]?\p{L})/gu, "$1ш ")
+    .replace(/(?<=^|[^\p{L}\p{N}])(А|а)д-(?=['’ʼ`]?\p{L})/gu, "$1д ")
     .replace(/[_…]+/g, ", ")
     .replace(/\.{2,}/g, ", ")
     .replace(/,\s*,+/g, ", ")
@@ -462,6 +478,9 @@ export function normalizePhoneticsToDisplayWord(word: string): string {
   if (!word) return "";
   let clean = word.replace(/[\[\]]/g, "").trim();
   clean = clean.replace(/^\.{2,}|\.{2,}$/g, "").replace(/\.{2,}/g, "").trim();
+  clean = clean
+    .replace(/(?<=^|[^\p{L}\p{N}])(А|а)ль-(?=['’ʼ`]?\p{L})/gu, "$1л-")
+    .replace(/(?<=^|[^\p{L}\p{N}])(А|а)ль(?=[^\p{L}\p{N}]|$)/gu, "$1л");
   clean = clean.replace(/(?<=^|[^\p{L}\p{N}])Ар-Раад(?=[^\p{L}\p{N}]|$)/gui, "Ар-Ра'д");
   clean = normalizeIslamicPhoneticsToDisplayWord(clean);
   return clean

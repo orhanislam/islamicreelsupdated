@@ -589,6 +589,7 @@ export function convertBulgarianDigitsToWordsForTts(text: string): string {
 function normalizeLettersForAlignment(raw: string): string {
   return (raw || "")
     .toLowerCase()
+    .replace(/ь/g, "")
     .replace(/йу+/g, "ю")
     .replace(/йа+/g, "я")
     .replace(/([аеиоуъюя])\1+/g, "$1")
