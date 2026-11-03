@@ -1443,8 +1443,12 @@ export function scoreVideo(v: PexelsVideo, file: PexelsVideoFile, targetMin = 30
   } else if (file.height >= 1920 && file.width >= 1080) {
     s += 35; // Reward True Full HD 1080p vertical streams
   }
-  if ((file.fps ?? 0) >= 30) s += 5;
-  if ((file.fps ?? 0) >= 60) s += 4;
+  const fps = file.fps ?? 30;
+  if (fps >= 24 && fps <= 31) {
+    s += 8; // Prefer native 24-30fps progressive cadence (matches 30fps CFR output with zero frame-drop judder)
+  } else if (fps > 31) {
+    s += 4;
+  }
 
   const d = v.duration ?? 10;
   if (d >= targetMin) s += 20;
@@ -1492,13 +1496,25 @@ export function pickBestFile(v: PexelsVideo): PexelsVideoFile | undefined {
       const aTier = resTier(a);
       const bTier = resTier(b);
       if (aTier !== bTier) return bTier - aTier;
+
+      // Within the same resolution tier & height, if both streams have healthy bitrate (or unknown size),
+      // prefer native 24-30fps progressive cadence over 60fps so FFmpeg's 30fps CFR master does not drop every 2nd frame.
+      const dur = Math.max(5, v.duration || 15);
+      const aHealthy = !a.size || (a.size * 8) / dur >= 5_500_000;
+      const bHealthy = !b.size || (b.size * 8) / dur >= 5_500_000;
+      if (aHealthy && bHealthy && a.height === b.height) {
+        const aNative30 = (a.fps || 30) >= 24 && (a.fps || 30) <= 31 ? 1 : 0;
+        const bNative30 = (b.fps || 30) >= 24 && (b.fps || 30) <= 31 ? 1 : 0;
+        if (aNative30 !== bNative30) return bNative30 - aNative30;
+      }
+
       if ((a.size || 0) > 0 && (b.size || 0) > 0 && a.size !== b.size) {
         return (b.size || 0) - (a.size || 0);
       }
       if (a.height !== b.height) return b.height - a.height;
-      const aFps = Math.min(60, a.fps || 30);
-      const bFps = Math.min(60, b.fps || 30);
-      if (aFps !== bFps) return bFps - aFps;
+      const aNative30Fallback = (a.fps || 30) >= 24 && (a.fps || 30) <= 31 ? 1 : 0;
+      const bNative30Fallback = (b.fps || 30) >= 24 && (b.fps || 30) <= 31 ? 1 : 0;
+      if (aNative30Fallback !== bNative30Fallback) return bNative30Fallback - aNative30Fallback;
       return (b.size || 0) - (a.size || 0);
     }
 

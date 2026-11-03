@@ -1921,8 +1921,8 @@ function AssistantPage() {
                   </button>
                 </div>
               </div>
-              <p className="text-[10px] text-muted-foreground bg-black/40 p-2 rounded-lg border border-border/40">
-                💡 <strong>Препоръчан режим за чернови:</strong> Изберете <em>„🔒 Чернова (Само за мен)“</em>! Поради официалните правила на TikTok API, само при този режим TikTok автоматично записва 100% от SEO заглавието, виралното описание, хаштаговете и корицата, като видеото остава скрито в профила Ви (с катинарче 🔒) и никой не го вижда, докато не натиснете да стане публично.
+              <p className="text-[10px] text-muted-foreground bg-black/40 p-2.5 rounded-lg border border-border/40 leading-relaxed">
+                💡 <strong>Анти-Пикселизация & HD Режими:</strong> При <em>„🔒 Чернова (Само за мен)“</em> и <em>„🚀 Директно Публично“</em> системата автоматично прилага <strong>Dual-Zone Perceptual HD мастеринг (&lt;64 MB single-chunk)</strong>, качва видеото директно през <strong>Cloudflare R2</strong> и измества точните часове (<code>:00</code>/<code>:30</code>) с <code>+13 мин.</code> извън глобалния пик, за да получи 1080p HEVC в TikTok със 100% запазени SEO заглавие, описание и корица. Ако желаете 1-клик мобилен <em>Allow High-Quality Upload</em> през телефона, изберете <em>„📥 TikTok Inbox Чернова“</em>.
               </p>
             </div>
           </div>

@@ -135,8 +135,8 @@ export function generateAssSubtitles(data: any, audioDur: number): string {
   const tiktokTheme = data.tiktokTheme || "hormozi";
   const UNIFORM_TIKTOK_FS = 76;
   const outlineColor = "&H00000000";
-  const outlineWidth = "5.0";
-  const shadowSize = "4.0";
+  const outlineWidth = "5.8";
+  const shadowSize = "3.0";
   let highlightColor = "&H00D7FF&"; // Default Hormozi vibrant gold/yellow
   const borderStyle = "1";
   const backColor = "&HAA000000";
@@ -157,12 +157,13 @@ export function generateAssSubtitles(data: any, audioDur: number): string {
 ScriptType: v4.00+
 PlayResX: ${sz.W}
 PlayResY: ${sz.H}
+ScaledBorderAndShadow: yes
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
 Style: Arabic,Scheherazade New,100,&H00FFFFFF,&H000000FF,&H00000000,&H80000000,-1,0,0,0,100,100,0,0,1,3,0,8,${placement.marginL},${placement.marginR},${sz.SAFE_TOP},1
 Style: Bulgarian,Outfit,${UNIFORM_TIKTOK_FS},&H00FFFFFF,&H0000D7FF,${outlineColor},${backColor},-1,0,0,0,100,100,0,0,${borderStyle},${outlineWidth},${shadowSize},${placement.alignment},${placement.marginL},${placement.marginR},${placement.marginV},1
-Style: Reference,Outfit,64,&H00FFFFFF,&H000000FF,&H00000000,&HAA000000,-1,0,0,0,100,100,1,0,1,5.0,4,8,180,180,${sz.SAFE_TOP + 30},1
+Style: Reference,Outfit,64,&H00FFFFFF,&H000000FF,&H00000000,&HAA000000,-1,0,0,0,100,100,1,0,1,5.8,3.0,8,180,180,${sz.SAFE_TOP + 30},1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
@@ -221,7 +222,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
       topFs = Math.max(46, Math.floor(topFs * (maxTopWidth / longestLineWidth)));
     }
     const formattedTop = topLines.join("\\N");
-    ass += `Dialogue: 0,0:00:00.00,${formatTime(audioDur)},Reference,,0,0,0,,{\\an8\\pos(540,${sz.SAFE_TOP + 30})\\fs${topFs}}${formattedTop}\n`;
+    ass += `Dialogue: 0,0:00:00.00,${formatTime(audioDur)},Reference,,0,0,0,,{\\an8\\pos(540,${sz.SAFE_TOP + 30})\\fs${topFs}\\blur0.45}${formattedTop}\n`;
   }
 
   if (data.bulgarian) {
@@ -510,7 +511,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                 : wrapTextToSafeWidth(sp, fs, maxLineWidth);
             const formattedText = lines.join("\\N");
             const useAnim = isLast && sIdx === subPhrases.length - 1 ? `\\fad(0,120)` : ``;
-            const ayahStyleTag = `{${posTag}\\blur0\\fs${fs}\\1c&H00FFFFFF&${useAnim}}`;
+            const ayahStyleTag = `{${posTag}\\blur0.45\\fs${fs}\\1c&H00FFFFFF&${useAnim}}`;
 
             ass += `Dialogue: 0,${formatTime(sStart)},${formatTime(sEnd)},Bulgarian,,0,0,0,,${ayahStyleTag}${formattedText}\n`;
           }
@@ -667,7 +668,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
           if (sliceEnd <= sliceStart) continue;
 
           const useAnim = isLastPhrase && wIdx === p.words.length - 1 ? `\\fad(0,100)` : ``;
-          const phraseStyleTag = `{${posTag}\\fs${phraseFs}\\blur0${useAnim}}`;
+          const phraseStyleTag = `{${posTag}\\fs${phraseFs}\\blur0.45${useAnim}}`;
 
           let wordCounter = 0;
           const formattedLineStrings = linesOfWords.map((lineStr) => {
@@ -1233,8 +1234,8 @@ export async function executeRenderTask(opts: any): Promise<any> {
                       "-vf scale=1080:1920:force_original_aspect_ratio=increase:flags=lanczos+accurate_rnd+full_chroma_int,crop=1080:1920,fps=30,setsar=1,format=yuv420p",
                       "-c:v libx264",
                       "-preset ultrafast",
-                      "-profile:v high",
-                      "-crf 10",
+                      "-profile:v high444",
+                      "-qp 0",
                       "-pix_fmt yuv420p",
                       "-an",
                     ])
@@ -1324,14 +1325,20 @@ export async function executeRenderTask(opts: any): Promise<any> {
         const height = is1080p ? 1920 : 1280;
 
         let ffmpegStderr = "";
+        // Dual-Zone Perceptual Background Pre-Conditioning strictly BEFORE burning vector ASS subtitles:
+        // 1. Spatio-temporal denoise (hqdn3d) + subtle perceptual micro-softening (gblur=sigma=0.85) on [0:v]
+        //    calms high-frequency Pexels foliage/water micro-jitter so it doesn't starve TikTok's H.264/HEVC bitrate budget.
+        // 2. Subtitles are burned AFTER the filter, preserving 100% razor-sharp vector text & zero mosquito-noise halos!
+        const bgPerceptualFilter =
+          "hqdn3d=1.7:1.3:2.8:2.2,gblur=sigma=0.85,eq=brightness=-0.02:contrast=1.02:saturation=1.02";
         const videoFilterChain =
           isPreNormalized1080p && is1080p
-            ? `[0:v]unsharp=3:3:0.3:3:3:0.0,eq=contrast=1.02:saturation=1.04,subtitles='${escapedAssPath}'[v]`
-            : `[0:v]crop='min(iw,ih*9/16)':'min(iw*16/9,ih)',scale=${width}:${height}:force_original_aspect_ratio=increase:flags=lanczos+accurate_rnd+full_chroma_int,crop=${width}:${height},setsar=1,unsharp=3:3:0.3:3:3:0.0,eq=contrast=1.02:saturation=1.04,subtitles='${escapedAssPath}'[v]`;
+            ? `[0:v]${bgPerceptualFilter},subtitles='${escapedAssPath}'[v]`
+            : `[0:v]crop='min(iw,ih*9/16)':'min(iw*16/9,ih)',scale=${width}:${height}:force_original_aspect_ratio=increase:flags=lanczos+accurate_rnd+full_chroma_int,crop=${width}:${height},setsar=1,${bgPerceptualFilter},subtitles='${escapedAssPath}'[v]`;
 
         cmd
           .complexFilter([
-            // Single-encode True 1080p Lanczos master + subtle detail crispness + burned-in TikTok subtitles (Zero macroblock pixelation)
+            // Single-encode True 1080p Dual-Zone Perceptual Master + burned-in vector TikTok subtitles (Zero macroblock pixelation)
             videoFilterChain,
             `[1:a]highpass=f=45,treble=g=2:f=3500:w=0.7,acompressor=threshold=-18dB:ratio=2.5:attack=5:release=50,bass=g=3:f=110:w=0.6,loudnorm=I=-14:LRA=9:TP=-1.0,apad[a]`,
           ])
@@ -1349,21 +1356,22 @@ export async function executeRenderTask(opts: any): Promise<any> {
             "-color_primaries bt709",
             "-color_range tv",
             "-movflags +faststart",
-            "-crf 17",
-            "-maxrate 12M",
-            "-bufsize 24M",
-            "-refs 3",
-            "-bf 3",
+            "-crf 18",
+            "-maxrate 6500k",
+            "-bufsize 13000k",
+            "-refs 4",
+            "-bf 2",
             "-r 30",
             "-vsync cfr",
             "-g 60",
-            "-keyint_min 30",
+            "-keyint_min 60",
             "-sc_threshold 0",
-            "-x264-params ref=3:bframes=3:aq-mode=3:aq-strength=0.9:deblock=-1,-1",
+            "-flags +cgop",
+            "-x264-params ref=4:bframes=2:aq-mode=2:aq-strength=0.85:psy-rd=1.0,0.10:deblock=0,0:rc-lookahead=40:me=umh:subme=8:trellis=2",
             "-c:a aac",
             "-profile:a aac_low",
             "-b:a 192k",
-            "-ar 48000",
+            "-ar 44100",
             "-ac 2",
             `-t ${Number(audioDur).toFixed(2)}`,
           ])

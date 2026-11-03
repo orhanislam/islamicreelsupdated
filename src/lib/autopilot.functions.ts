@@ -43,8 +43,18 @@ export interface AutopilotConfig {
   nextScheduledRunText?: string;
 }
 
-import { getBulgarianTime, getNextBulgarianRun } from "./bulgarian-time";
-export { getBulgarianTime, getNextBulgarianRun };
+import {
+  getBulgarianTime,
+  getNextBulgarianRun,
+  buildBulgarianScheduledIso,
+  getBulgarianUtcOffset,
+} from "./bulgarian-time";
+export {
+  getBulgarianTime,
+  getNextBulgarianRun,
+  buildBulgarianScheduledIso,
+  getBulgarianUtcOffset,
+};
 
 export const DEFAULT_UPLOAD_POST_API_KEY =
   (typeof process !== "undefined" && process.env?.UPLOAD_POST_API_KEY) ||
@@ -340,14 +350,14 @@ async function ensureHighProfileMasterForUploadPost(
       width === 1080 &&
       height === 1920 &&
       bitRate > 0 &&
-      bitRate <= 14_500_000;
+      bitRate <= 8_800_000;
 
     if (isOptimal1080pHighProfile) {
-      console.log(`[upload-post] ${mp4FilePath} is optimal True 1080p High Profile (1 stream, ${(bitRate / 1e6).toFixed(1)} Mbps). Ready for TikTok direct ingest.`);
+      console.log(`[upload-post] ${mp4FilePath} is optimal True 1080p High Profile (1 stream, ${(bitRate / 1e6).toFixed(1)} Mbps, <64MB single-chunk sweet spot). Ready for TikTok direct ingest.`);
       return;
     }
 
-    if (hasMultipleVideoStreams && width === 1080 && height === 1920 && bitRate <= 14_500_000) {
+    if (hasMultipleVideoStreams && width === 1080 && height === 1920 && bitRate <= 8_800_000) {
       // If resolution is already 1080p and bitrate is within target, cleanly strip out any secondary attached_pic / mjpeg streams without re-encoding!
       console.log(`[upload-post] Stripping secondary attached_pic video stream from ${mp4FilePath} to prevent TikTok recompression blur...`);
       const cleanedPath = `${mp4FilePath}.clean.mp4`;
@@ -376,7 +386,7 @@ async function ensureHighProfileMasterForUploadPost(
     }
 
     console.log(
-      `[upload-post] Remastering ${mp4FilePath} from (${profile}, ${width}x${height}, ${(bitRate / 1e6).toFixed(1)} Mbps) -> Clean High@L4.1 1080p HD (Anti-Pixelation Direct Ingest Master)...`,
+      `[upload-post] Remastering ${mp4FilePath} from (${profile}, ${width}x${height}, ${(bitRate / 1e6).toFixed(1)} Mbps) -> Clean High@L4.1 1080p HD (6.5M <64MB Single-Chunk Anti-Pixelation Master)...`,
     );
 
     const remasteredPath = `${mp4FilePath}.hq_remaster.mp4`;
@@ -389,7 +399,7 @@ async function ensureHighProfileMasterForUploadPost(
       "-map",
       "0:a?",
       "-vf",
-      "scale=1080:1920:force_original_aspect_ratio=increase:flags=lanczos,crop=1080:1920",
+      "scale=1080:1920:force_original_aspect_ratio=increase:flags=lanczos+accurate_rnd+full_chroma_int,crop=1080:1920,setsar=1",
       "-c:v",
       "libx264",
       "-tag:v",
@@ -413,29 +423,33 @@ async function ensureHighProfileMasterForUploadPost(
       "-movflags",
       "+faststart",
       "-crf",
-      "17",
+      "18",
       "-maxrate",
-      "12M",
+      "6500k",
       "-bufsize",
-      "24M",
+      "13000k",
       "-refs",
-      "3",
+      "4",
       "-bf",
-      "3",
+      "2",
+      "-r",
+      "30",
       "-g",
       "60",
       "-keyint_min",
-      "30",
+      "60",
       "-sc_threshold",
       "0",
+      "-flags",
+      "+cgop",
       "-x264-params",
-      "ref=3:bframes=3:aq-mode=3:aq-strength=0.9:deblock=-1,-1",
+      "ref=4:bframes=2:aq-mode=2:aq-strength=0.85:psy-rd=1.0,0.10:deblock=0,0:rc-lookahead=40:me=umh:subme=8:trellis=2",
       "-c:a",
       "aac",
       "-b:a",
       "192k",
       "-ar",
-      "48000",
+      "44100",
       "-ac",
       "2",
       remasteredPath,
@@ -563,6 +577,117 @@ export async function stageCoverImageViaUploadPostDirect(params: {
     }
   } catch (err) {
     console.warn("[upload-post] Failed to stage cover image via MCP:", err);
+  }
+  return null;
+}
+
+/**
+ * Stages a rendered MP4 master video directly onto Upload-Post's Cloudflare R2 storage
+ * via presigned PUT (create_media_upload -> PUT -> complete_media_upload).
+ * Passing the resulting signed R2 media_url eliminates multipart/form-data binary bloat
+ * and ensures Upload-Post's worker pulls the exact bit-identical <64MB master at edge speed.
+ */
+export async function stageVideoViaUploadPostDirect(params: {
+  videoBuffer: Buffer;
+  apiKey: string;
+  filename?: string;
+}): Promise<string | null> {
+  const rawKey = params.apiKey.trim().replace(/^ApiKey\s+/i, "");
+  if (!rawKey || !params.videoBuffer || params.videoBuffer.length === 0) return null;
+
+  try {
+    const initRes = await fetch("https://mcp.upload-post.com/mcp", {
+      method: "POST",
+      headers: {
+        Authorization: "ApiKey " + rawKey,
+        "Content-Type": "application/json",
+        Accept: "application/json, text/event-stream",
+      },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "initialize",
+        params: {
+          protocolVersion: "2024-11-05",
+          capabilities: {},
+          clientInfo: { name: "islamic-reels", version: "1" },
+        },
+      }),
+    });
+    const sessionId = initRes.headers.get("mcp-session-id");
+
+    const createRes = await fetch("https://mcp.upload-post.com/mcp", {
+      method: "POST",
+      headers: {
+        Authorization: "ApiKey " + rawKey,
+        "Content-Type": "application/json",
+        Accept: "application/json, text/event-stream",
+        ...(sessionId ? { "mcp-session-id": sessionId } : {}),
+      },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: 2,
+        method: "tools/call",
+        params: {
+          name: "create_media_upload",
+          arguments: {
+            filename: params.filename || "islamic_reel_master.mp4",
+            contentType: "video/mp4",
+            contentLength: params.videoBuffer.length,
+            mediaType: "video",
+          },
+        },
+      }),
+    });
+
+    const createText = await createRes.text();
+    const match = createText.match(/data:\s*(\{.*\})/);
+    if (!match) return null;
+    const data = JSON.parse(match[1]);
+    const parsed = data?.result?.structuredContent?.result;
+    if (!parsed || !parsed.upload_url || !parsed.upload_id) return null;
+
+    const putRes = await fetch(parsed.upload_url, {
+      method: "PUT",
+      headers: { "Content-Type": "video/mp4" },
+      body: new Uint8Array(params.videoBuffer),
+    });
+    if (!putRes.ok) return null;
+
+    const compRes = await fetch("https://mcp.upload-post.com/mcp", {
+      method: "POST",
+      headers: {
+        Authorization: "ApiKey " + rawKey,
+        "Content-Type": "application/json",
+        Accept: "application/json, text/event-stream",
+        ...(sessionId ? { "mcp-session-id": sessionId } : {}),
+      },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: 3,
+        method: "tools/call",
+        params: {
+          name: "complete_media_upload",
+          arguments: {
+            uploadId: parsed.upload_id,
+          },
+        },
+      }),
+    });
+
+    const compText = await compRes.text();
+    const compMatch = compText.match(/data:\s*(\{.*\})/);
+    if (!compMatch) return null;
+    const compData = JSON.parse(compMatch[1]);
+    const mediaUrl = compData?.result?.structuredContent?.result?.media_url;
+    if (mediaUrl) {
+      console.log(
+        `[upload-post] Staged HD master video (${(params.videoBuffer.length / (1024 * 1024)).toFixed(1)} MB) on Cloudflare R2: ${mediaUrl.slice(0, 80)}...`,
+      );
+      return mediaUrl;
+    }
+  } catch (err) {
+    console.warn("[upload-post] Non-fatal R2 video staging warning (will use direct binary fallback):", err);
   }
   return null;
 }
@@ -696,6 +821,16 @@ export async function publishVideoViaUploadPostDirect(params: {
     const fileBuf = await fs.readFile(params.mp4FilePath);
     const captionText = (params.caption || params.title || "Ислямска мъдрост").slice(0, 2200);
 
+    // 4. Stage MP4 master video on Upload-Post Cloudflare R2 for zero-bloat direct edge ingest
+    let stagedVideoUrl: string | null = null;
+    if (rawKey && fileBuf.length > 0) {
+      stagedVideoUrl = await stageVideoViaUploadPostDirect({
+        videoBuffer: fileBuf,
+        apiKey: rawKey,
+        filename: `${params.jobId || "islamic_reel"}.mp4`,
+      });
+    }
+
     const form = new FormData();
     form.append("user", userHandle);
     form.append("title", captionText);
@@ -704,8 +839,8 @@ export async function publishVideoViaUploadPostDirect(params: {
     for (const p of platforms) {
       form.append("platform[]", p);
     }
+    const postMode = cfg.tiktokPostMode || "SELF_ONLY";
     if (platforms.includes("tiktok")) {
-      const postMode = cfg.tiktokPostMode || "SELF_ONLY";
       if (postMode === "MEDIA_UPLOAD") {
         form.append("post_mode", "MEDIA_UPLOAD");
         form.append("tiktokPostMode", "MEDIA_UPLOAD");
@@ -740,7 +875,18 @@ export async function publishVideoViaUploadPostDirect(params: {
     }
 
     if (params.scheduledDate) {
-      const scheduledIso = new Date(params.scheduledDate).toISOString();
+      const schedDateObj = new Date(params.scheduledDate);
+      // Anti-Stampede Guard: If scheduled on exact :00 or :30 minutes for DIRECT_POST / SELF_ONLY,
+      // shift by +13 minutes so TikTok's v26300gc API cluster promotes the video to 1080p HEVC (adapt_lowest_1080_1)
+      // instead of dropping it during the global top-of-hour scheduler burst!
+      if (
+        postMode !== "MEDIA_UPLOAD" &&
+        !isNaN(schedDateObj.getTime()) &&
+        (schedDateObj.getUTCMinutes() === 0 || schedDateObj.getUTCMinutes() === 30)
+      ) {
+        schedDateObj.setUTCMinutes(schedDateObj.getUTCMinutes() + 13);
+      }
+      const scheduledIso = schedDateObj.toISOString();
       form.append("scheduled_date", scheduledIso);
       form.append("timezone", params.timezone || "Europe/Sofia");
     }
@@ -751,9 +897,7 @@ export async function publishVideoViaUploadPostDirect(params: {
       form.append("tiktokCoverImageUrl", stagedCoverUrl);
       form.append("instagram_cover_url", stagedCoverUrl);
       form.append("youtube_thumbnail_url", stagedCoverUrl);
-    }
-
-    if (coverBuf) {
+    } else if (coverBuf) {
       const coverBlob = new Blob([new Uint8Array(coverBuf)], { type: "image/jpeg" });
       form.append("cover", coverBlob, `${params.jobId || "islamic_reel"}_cover.jpg`);
       form.append("cover_image", coverBlob, `${params.jobId || "islamic_reel"}_cover.jpg`);
@@ -762,8 +906,12 @@ export async function publishVideoViaUploadPostDirect(params: {
       form.append("tiktokCover", coverBlob, `${params.jobId || "islamic_reel"}_cover.jpg`);
     }
 
-    const blob = new Blob([new Uint8Array(fileBuf)], { type: "video/mp4" });
-    form.append("video", blob, `${params.jobId || "islamic_reel"}.mp4`);
+    if (stagedVideoUrl) {
+      form.append("video", stagedVideoUrl);
+    } else {
+      const blob = new Blob([new Uint8Array(fileBuf)], { type: "video/mp4" });
+      form.append("video", blob, `${params.jobId || "islamic_reel"}.mp4`);
+    }
 
     const res = await fetch("https://api.upload-post.com/api/upload", {
       method: "POST",
@@ -1296,10 +1444,15 @@ export async function checkAndTriggerScheduledAutopilotDirect(): Promise<{
         `[autopilot-scheduler] 🇧🇬 Advance Preparation active! Preparing everything 1 hour before posting ${slot} (current time: ${bgNow.timeHm})...`,
       );
 
-      // Build target scheduled post ISO in Europe/Sofia timezone
-      const targetDateIso = new Date(
-        `${bgNow.year}-${bgNow.month}-${bgNow.day}T${String(sH).padStart(2, "0")}:${String(sM).padStart(2, "0")}:00+02:00`,
-      ).toISOString();
+      // Build target scheduled post ISO in Europe/Sofia timezone (with dynamic DST + anti-stampede offset)
+      const targetDateIso = buildBulgarianScheduledIso({
+        year: bgNow.year,
+        month: bgNow.month,
+        day: bgNow.day,
+        hour: sH,
+        minute: sM,
+        avoidTopOfHourStampede: (cfg.tiktokPostMode || "SELF_ONLY") !== "MEDIA_UPLOAD",
+      });
 
       await writeAutopilotConfigDirect({
         lastRunScheduleSlot: prepSlotKey,

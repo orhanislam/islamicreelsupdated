@@ -1,4 +1,6 @@
 import assert from "node:assert";
+import fs from "node:fs";
+import path from "node:path";
 import {
   matchTheologicalConcept,
   pickBestFile,
@@ -6,6 +8,7 @@ import {
   type PexelsVideo,
   type PexelsVideoFile,
 } from "../pexels.functions";
+import { buildBulgarianScheduledIso, getBulgarianUtcOffset } from "../bulgarian-time";
 
 async function runTests() {
   console.log("=== RUNNING ANTI-PIXELATION VIDEO OPTIMIZATION VERIFICATION ===");
@@ -103,6 +106,58 @@ async function runTests() {
   const actualHellfire = matchTheologicalConcept("Пазете се от огъня на Ада дори с половин фурма.");
   assert.strictEqual(actualHellfire?.id, "jahannam", "Explicit mention of 'огъня на Ада' must match jahannam");
   console.log("✔ TEST 5 PASSED: Word-boundary theological matching is 100% accurate.");
+
+  // TEST 6: pickBestFile prefers native 30fps progressive over 60fps within the same resolution tier when both have healthy bitrates
+  console.log("[TEST 6] Verifying native 30fps progressive cadence is preferred over 60fps frame-drop judder...");
+  const cadenceVideo: PexelsVideo = {
+    id: 10002,
+    duration: 15,
+    video_files: [
+      { quality: "uhd", width: 2160, height: 3840, fps: 60, size: 35_000_000, link: "https://test.cdn/2160_60fps.mp4", file_type: "video/mp4" },
+      { quality: "uhd", width: 2160, height: 3840, fps: 30, size: 22_000_000, link: "https://test.cdn/2160_30fps_native.mp4", file_type: "video/mp4" },
+    ],
+    video_pictures: [],
+  };
+  const bestCadence = pickBestFile(cadenceVideo);
+  assert.strictEqual(bestCadence?.link, "https://test.cdn/2160_30fps_native.mp4", "Native 30fps UHD stream must be preferred over 60fps to prevent 50% frame dropping");
+  console.log("✔ TEST 6 PASSED: Native 30fps progressive stream selected with zero frame-drop judder.");
+
+  // TEST 7: Anti-stampede scheduling & dynamic Bulgarian EET/EEST offset
+  console.log("[TEST 7] Verifying anti-stampede scheduling (+13m off :00/:30) and dynamic Europe/Sofia DST...");
+  const winterOffset = getBulgarianUtcOffset(new Date("2026-01-15T12:00:00Z"));
+  const summerOffset = getBulgarianUtcOffset(new Date("2026-07-15T12:00:00Z"));
+  assert.strictEqual(winterOffset, "+02:00", "Winter Sofia offset must be +02:00 (EET)");
+  assert.strictEqual(summerOffset, "+03:00", "Summer Sofia offset must be +03:00 (EEST)");
+
+  const stampededIso = buildBulgarianScheduledIso({
+    year: 2026,
+    month: "01",
+    day: "15",
+    hour: 12,
+    minute: 0,
+    avoidTopOfHourStampede: true,
+  });
+  const stampededDate = new Date(stampededIso);
+  assert.strictEqual(stampededDate.getUTCMinutes(), 13, "Exact :00 slot must be shifted to :13 to bypass TikTok v26300gc top-of-hour API queue congestion");
+  console.log("✔ TEST 7 PASSED: Anti-stampede (+13m) & dynamic Europe/Sofia DST offset verified.");
+
+  // TEST 8: Verify Dual-Zone Perceptual FFmpeg pipeline & Cloudflare R2 video staging invariants
+  console.log("[TEST 8] Verifying Dual-Zone Perceptual FFmpeg pipeline & R2 staging invariants...");
+  const renderSrc = fs.readFileSync(path.resolve(process.cwd(), "src/lib/render.functions.ts"), "utf-8");
+  const autopilotSrc = fs.readFileSync(path.resolve(process.cwd(), "src/lib/autopilot.functions.ts"), "utf-8");
+
+  assert.ok(!renderSrc.includes("unsharp="), "render.functions.ts must NOT contain unsharp= filter before subtitles");
+  assert.ok(!renderSrc.includes("deblock=-1,-1"), "render.functions.ts must NOT contain weakened deblock=-1,-1");
+  assert.ok(!autopilotSrc.includes("deblock=-1,-1"), "autopilot.functions.ts must NOT contain weakened deblock=-1,-1");
+  assert.ok(renderSrc.includes("hqdn3d=1.7:1.3:2.8:2.2,gblur=sigma=0.85"), "render.functions.ts must include Dual-Zone background pre-conditioning");
+  assert.ok(renderSrc.includes("ScaledBorderAndShadow: yes"), "ASS subtitles must enable ScaledBorderAndShadow: yes");
+  assert.ok(renderSrc.includes("\\blur0.45"), "ASS subtitles must apply \\blur0.45 anti-Gibbs edge smoothing");
+  assert.ok(renderSrc.includes("-qp 0"), "Multi-scene B-Roll normalization must use lossless -qp 0");
+  assert.ok(renderSrc.includes("-maxrate 6500k"), "Master encode must target <64MB single-chunk sweet spot (-maxrate 6500k)");
+  assert.ok(renderSrc.includes("-flags +cgop"), "Master encode must enforce closed GOPs (-flags +cgop)");
+  assert.ok(renderSrc.includes("deblock=0,0"), "Master encode must restore full H.264 in-loop deblocking (deblock=0,0)");
+  assert.ok(autopilotSrc.includes("stageVideoViaUploadPostDirect"), "autopilot.functions.ts must stage MP4 video directly onto Cloudflare R2");
+  console.log("✔ TEST 8 PASSED: All Dual-Zone Perceptual Mastering & R2 Direct Ingest invariants verified.");
 
   console.log("\n🎉 ALL ANTI-PIXELATION TESTS PASSED WITH 100% SUCCESS!");
 }

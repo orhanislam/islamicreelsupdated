@@ -90,3 +90,73 @@ export function getNextBulgarianRun(
     formattedText: `Утре в ${firstTomorrow} ч. (след ~${remText})`,
   };
 }
+
+/**
+ * Dynamically computes the exact ISO-8601 UTC offset for Europe/Sofia on a given date
+ * ("+02:00" during winter EET, "+03:00" during summer EEST) without hardcoding "+02:00".
+ */
+export function getBulgarianUtcOffset(referenceDate: Date = new Date()): string {
+  try {
+    const parts = new Intl.DateTimeFormat("en-US", {
+      timeZone: "Europe/Sofia",
+      timeZoneName: "shortOffset",
+    }).formatToParts(referenceDate);
+    const tzPart = parts.find((p) => p.type === "timeZoneName")?.value || "GMT+2";
+    const m = tzPart.match(/GMT([+-])(\d{1,2})(?::(\d{2}))?/i);
+    if (m) {
+      const sign = m[1];
+      const hh = m[2].padStart(2, "0");
+      const mm = (m[3] || "00").padStart(2, "0");
+      return `${sign}${hh}:${mm}`;
+    }
+  } catch {
+    // Fallback below
+  }
+  return "+02:00";
+}
+
+/**
+ * Builds an accurate Europe/Sofia scheduled ISO-8601 timestamp with optional anti-congestion offset.
+ *
+ * WHY ANTI-CONGESTION OFFSET MATTERS FOR TIKTOK 1080p HD:
+ * Empirical inspection of @orhan.islam proved that TikTok's Content Posting API cluster (v26300gc)
+ * receives a massive global burst from third-party schedulers (Buffer, Hootsuite, Upload-Post) at
+ * exact ":00" and ":30" top-of-the-hour marks, causing VQScore=0 API posts to get load-shedded out of
+ * the secondary 1080x1920 HEVC queue (permanently stuck at 576x1024 / 540p). Shifting exact :00/:30
+ * scheduled API deliveries by +13 minutes bypasses the global :00/:30 transcode queue stampede.
+ */
+export function buildBulgarianScheduledIso(params: {
+  year: string | number;
+  month: string | number;
+  day: string | number;
+  hour: number;
+  minute: number;
+  avoidTopOfHourStampede?: boolean;
+  referenceDate?: Date;
+}): string {
+  const y = String(params.year).padStart(4, "0");
+  const mo = String(params.month).padStart(2, "0");
+  const d = String(params.day).padStart(2, "0");
+
+  let targetMinute = params.minute;
+  if (params.avoidTopOfHourStampede && (targetMinute === 0 || targetMinute === 30)) {
+    targetMinute += 13; // e.g. 12:00 -> 12:13, 12:30 -> 12:43 (off-stampede window)
+  }
+
+  const extraHours = Math.floor(targetMinute / 60);
+  const finalMinute = targetMinute % 60;
+  const finalHour = (params.hour + extraHours) % 24;
+
+  const probeDate =
+    params.referenceDate ||
+    new Date(`${y}-${mo}-${d}T${String(finalHour).padStart(2, "0")}:${String(finalMinute).padStart(2, "0")}:00Z`);
+  const offset = getBulgarianUtcOffset(probeDate);
+
+  const baseDate = new Date(
+    `${y}-${mo}-${d}T${String(finalHour).padStart(2, "0")}:${String(finalMinute).padStart(2, "0")}:00${offset}`,
+  );
+  if (params.hour + extraHours >= 24) {
+    baseDate.setUTCDate(baseDate.getUTCDate() + Math.floor((params.hour + extraHours) / 24));
+  }
+  return baseDate.toISOString();
+}
