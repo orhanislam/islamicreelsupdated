@@ -151,27 +151,40 @@ async function runTests() {
   assert.ok(!renderSrc.includes("unsharp="), "render.functions.ts must NOT contain unsharp= filter before subtitles");
   assert.ok(!renderSrc.includes("deblock=-1,-1"), "render.functions.ts must NOT contain weakened deblock=-1,-1");
   assert.ok(!autopilotSrc.includes("deblock=-1,-1"), "autopilot.functions.ts must NOT contain weakened deblock=-1,-1");
-  assert.ok(renderSrc.includes("hqdn3d=2.2:1.8:3.5:2.8,gblur=sigma=1.15"), "render.functions.ts must include strengthened Dual-Zone background pre-conditioning");
+  assert.ok(renderSrc.includes("hqdn3d=3.2:2.6:4.8:3.8,gblur=sigma=1.85,eq=brightness=-0.05:contrast=0.94:saturation=0.98"), "render.functions.ts must include strengthened Dual-Zone optical bokeh & contrast-scrim pre-conditioning");
+  assert.ok(renderSrc.includes("42_000_000"), "render.functions.ts must include automatic lossless entropy circuit-breaker");
   assert.ok(renderSrc.includes("ScaledBorderAndShadow: yes"), "ASS subtitles must enable ScaledBorderAndShadow: yes");
   assert.ok(renderSrc.includes("\\blur0.45"), "ASS subtitles must apply \\blur0.45 anti-Gibbs edge smoothing");
   assert.ok(renderSrc.includes("-qp 0"), "Multi-scene B-Roll normalization must use lossless -qp 0");
+  assert.ok(renderSrc.includes("-crf 17"), "Master encode must use -crf 17");
+  assert.ok(renderSrc.includes("aq-mode=3:aq-strength=1.0"), "Master encode must use dark-biased auto-variance AQ (aq-mode=3)");
   assert.ok(renderSrc.includes("-maxrate 8000k"), "Master encode must provide 8000k VBV peak headroom for complex B-roll scenes while staying <64MB");
   assert.ok(renderSrc.includes("-flags +cgop"), "Master encode must enforce closed GOPs (-flags +cgop)");
   assert.ok(renderSrc.includes("deblock=0,0"), "Master encode must restore full H.264 in-loop deblocking (deblock=0,0)");
   assert.ok(autopilotSrc.includes("stageVideoViaUploadPostDirect"), "autopilot.functions.ts must stage MP4 video directly onto Cloudflare R2");
   console.log("✔ TEST 8 PASSED: All Dual-Zone Perceptual Mastering & R2 Direct Ingest invariants verified.");
 
-  // TEST 9: Blacklist of high-entropy whitewater/surf/storm Pexels IDs & 24-30fps LOCAL_HALAL_VIDEO_POOL
-  console.log("[TEST 9] Verifying chaotic whitewater/surf Pexels IDs are hard-rejected and local pool is 100% native 24-30fps...");
-  for (const badId of [39772880, 28635672, 35901385, 29999653, 15088644]) {
+  // TEST 9: Blacklist of high-entropy whitewater/surf/puddle/ripple Pexels IDs & 24-30fps LOCAL_HALAL_VIDEO_POOL
+  console.log("[TEST 9] Verifying chaotic whitewater/puddle/ripple Pexels IDs are hard-rejected and local pool is 100% native 24-30fps...");
+  for (const badId of [39772880, 28635672, 35901385, 29999653, 15088644, 36078797, 13723991, 9831984, 32320169, 39731443, 30875569, 9920799, 38857411, 38182932]) {
     assert.ok(PIXELATION_PRONE_VIDEO_IDS.has(badId), `PIXELATION_PRONE_VIDEO_IDS must blacklist ${badId}`);
     const badScore = scoreVideo({ ...fakeVideo, id: badId }, hd1080File, 10);
     assert.strictEqual(badScore, -9999, `Blacklisted chaotic video ${badId} must return -9999`);
   }
+  const highBitrate60fpsFile: PexelsVideoFile = {
+    quality: "uhd",
+    width: 2160,
+    height: 3840,
+    fps: 60,
+    size: 35_000_000,
+    link: "https://test.cdn/2160_60fps.mp4",
+    file_type: "video/mp4",
+  };
+  assert.strictEqual(scoreVideo(fakeVideo, highBitrate60fpsFile, 10), -999, "50/60fps streams must be hard-rejected in scoreVideo to prevent 30fps frame-drop entropy spikes");
   for (const item of LOCAL_HALAL_VIDEO_POOL) {
     assert.ok(!item.url.includes("60fps") && !item.url.includes("120fps"), `LOCAL_HALAL_VIDEO_POOL item ${item.id} must be native 24-30fps, got ${item.url}`);
   }
-  console.log("✔ TEST 9 PASSED: Chaotic whitewater/surf clips blacklisted and fallback pool is 100% native 24-30fps.");
+  console.log("✔ TEST 9 PASSED: Chaotic whitewater/puddle/ripple clips & 60fps streams blacklisted and fallback pool is 100% native 24-30fps.");
 
   console.log("\n🎉 ALL ANTI-PIXELATION TESTS PASSED WITH 100% SUCCESS!");
 }

@@ -423,7 +423,7 @@ async function ensureHighProfileMasterForUploadPost(
       "-movflags",
       "+faststart",
       "-crf",
-      "18",
+      "17",
       "-maxrate",
       "8000k",
       "-bufsize",
@@ -443,7 +443,7 @@ async function ensureHighProfileMasterForUploadPost(
       "-flags",
       "+cgop",
       "-x264-params",
-      "ref=4:bframes=2:aq-mode=2:aq-strength=0.85:psy-rd=1.0,0.10:deblock=0,0:rc-lookahead=40:me=umh:subme=8:trellis=2",
+      "ref=4:bframes=2:aq-mode=3:aq-strength=1.0:psy-rd=1.0,0.10:deblock=0,0:rc-lookahead=40:me=umh:subme=8:trellis=2",
       "-c:a",
       "aac",
       "-b:a",
@@ -886,9 +886,17 @@ export async function publishVideoViaUploadPostDirect(params: {
       ) {
         schedDateObj.setUTCMinutes(schedDateObj.getUTCMinutes() + 13);
       }
-      const scheduledIso = schedDateObj.toISOString();
-      form.append("scheduled_date", scheduledIso);
-      form.append("timezone", params.timezone || "Europe/Sofia");
+      // Only attach scheduled_date if it is strictly >5 minutes in the future after FFmpeg render completes;
+      // otherwise omit scheduled_date so Upload-Post publishes immediately instead of rejecting with "Scheduled date must be in the future."
+      if (!isNaN(schedDateObj.getTime()) && schedDateObj.getTime() > Date.now() + 5 * 60 * 1000) {
+        const scheduledIso = schedDateObj.toISOString();
+        form.append("scheduled_date", scheduledIso);
+        form.append("timezone", params.timezone || "Europe/Sofia");
+      } else {
+        console.log(
+          `[upload-post] Scheduled slot (${params.scheduledDate}) has already arrived during render; publishing immediately.`,
+        );
+      }
     }
 
     if (stagedCoverUrl) {

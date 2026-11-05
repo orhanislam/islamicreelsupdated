@@ -469,7 +469,7 @@ export const THEOLOGICAL_CONCEPT_MAP: TheologicalConcept[] = [
         "calm glass water reflecting warm sunrise sky vertical",
       ],
       cta: [
-        "peaceful sunset calm water gentle ripples nature vertical",
+        "peaceful sunset calm mirror lake twilight nature vertical",
         "golden serene sunset over tranquil lake vertical",
       ],
     },
@@ -497,7 +497,7 @@ export const THEOLOGICAL_CONCEPT_MAP: TheologicalConcept[] = [
         "dramatic sun setting horizon vast desert landscape vertical",
       ],
       context: [
-        "wind blowing sand ripples desert sunset vertical",
+        "vast desert dunes golden sunset horizon vertical",
         "ancient sand dunes golden sunset twilight shadows vertical",
       ],
       dalil: [
@@ -638,8 +638,8 @@ export const THEOLOGICAL_CONCEPT_MAP: TheologicalConcept[] = [
     mood: "calm",
     roleQueries: {
       hook: [
-        "gentle rain falling ripples pond vertical",
-        "raindrops rippling calm puddle nature vertical",
+        "calm misty mountain valley morning light vertical",
+        "soft morning fog over tranquil forest dawn vertical",
       ],
       context: [
         "dark clouds clearing golden sunlight vertical",
@@ -647,7 +647,7 @@ export const THEOLOGICAL_CONCEPT_MAP: TheologicalConcept[] = [
       ],
       dalil: [
         "morning dew fresh green leaves dawn vertical",
-        "pure water droplet rippling clear stream vertical",
+        "golden sunbeams piercing misty forest canopy vertical",
       ],
       cta: [
         "calm misty forest sunrise pure light vertical",
@@ -716,7 +716,7 @@ export const THEOLOGICAL_CONCEPT_MAP: TheologicalConcept[] = [
       ],
       dalil: [
         "vast golden desert sand dunes sunset vertical",
-        "rippled golden sand dunes sunset shadows vertical",
+        "serene golden sand dunes twilight horizon vertical",
       ],
       cta: [
         "timeless mountain landscape morning dawn vertical",
@@ -751,8 +751,8 @@ export const THEOLOGICAL_CONCEPT_MAP: TheologicalConcept[] = [
         "lush green agricultural terrace hills mist vertical",
       ],
       dalil: [
-        "flowing fresh natural spring stream vertical",
-        "crystal mountain river waterfall pure water vertical",
+        "tranquil alpine lake reflecting green mountains vertical",
+        "serene sunlit green meadow morning mist vertical",
       ],
       cta: [
         "bountiful sunlit orchard green hills vertical",
@@ -797,7 +797,7 @@ export const THEOLOGICAL_CONCEPT_MAP: TheologicalConcept[] = [
         "solitary warm lantern glow dark night vertical",
       ],
       context: [
-        "pure mountain spring water ripples vertical",
+        "calm alpine mirror lake morning mist vertical",
         "tranquil mirror lake dawn mist reflection vertical",
       ],
       dalil: [
@@ -826,8 +826,8 @@ export const THEOLOGICAL_CONCEPT_MAP: TheologicalConcept[] = [
         "dewy green grass hills sunbeams vertical",
       ],
       dalil: [
-        "golden sun gentle waterfall rainbow vertical",
-        "sunlight reflecting waterfall rainbow mist vertical",
+        "golden sunbeams over lush green valley mist vertical",
+        "sunlight illuminating peaceful mountain valley vertical",
       ],
       cta: [
         "warm sunset over calm ocean horizon vertical",
@@ -847,7 +847,7 @@ export const THEOLOGICAL_CONCEPT_MAP: TheologicalConcept[] = [
         "high mountain summit sunset vista vertical",
       ],
       context: [
-        "desert sand ripples golden hour sunset vertical",
+        "golden desert horizon twilight sky vertical",
         "vast golden sand dunes twilight horizon vertical",
       ],
       dalil: [
@@ -914,20 +914,20 @@ export const THEOLOGICAL_CONCEPT_MAP: TheologicalConcept[] = [
     mood: "majestic",
     roleQueries: {
       hook: [
-        "calm turquoise ocean sunset waves nature vertical",
-        "deep blue ocean waves horizon landscape vertical",
+        "calm turquoise ocean sunset horizon nature vertical",
+        "deep blue ocean horizon twilight sky vertical",
       ],
       context: [
-        "gentle ocean waves rolling sandy shore sunset vertical",
-        "crystal turquoise sea waves aerial nature vertical",
+        "majestic sea cliff calm ocean horizon twilight vertical",
+        "serene turquoise lagoon aerial landscape vertical",
       ],
       dalil: [
         "majestic ocean horizon golden sunbeams clouds vertical",
-        "vast blue sea sunlight reflection nature vertical",
+        "vast blue sea golden hour horizon sky vertical",
       ],
       cta: [
         "peaceful serene sea morning light landscape vertical",
-        "calm ocean sunset golden ripples vertical",
+        "warm sunset over calm ocean horizon vertical",
       ],
     },
   },
@@ -1411,7 +1411,7 @@ export async function pexelsVideoQuery(key: string, query: string, perPage = 80)
  * 2. Out-of-focus close-up ripples / human-made dock chairs.
  */
 export const PIXELATION_PRONE_VIDEO_IDS = new Set<number>([
-  39772880, // Chaotic whitewater rapids over thousands of wet pebbles (causes severe macroblocking & subtitle pixelation)
+  39772880, // Chaotic whitewater rapids over thousands of wet pebbles (8.68 Mbps GOP, severe subtitle pixelation)
   28635672, // 60fps crashing surf foam on jagged rocks (high temporal entropy)
   35901385, // 60fps fast storm drone flight over dense pine needles (high spatial-temporal entropy)
   29999653, // Blurry out-of-focus close-up water ripples
@@ -1420,6 +1420,27 @@ export const PIXELATION_PRONE_VIDEO_IDS = new Set<number>([
   38226014, // 60fps high-motion ocean waves
   33942245, // 60fps chaotic sparks/flames
   32679329, // 60fps high-frequency rain splash
+  36078797, // Muddy puddle raindrop concentric ripples across 100% of frame (8.32 Mbps GOP, macroblocks subtitles)
+  13723991, // Raindrops splashing on shallow gravelly stream with tree reflections (7.77 Mbps GOP)
+  9831984, // Fast shimmering sun-glitter ocean ripples across 100% of frame (8.50 Mbps GOP)
+  32320169, // High-frequency dense foliage/water texture (6.94 Mbps GOP)
+  39731443, // High-entropy water/foliage texture (6.97 Mbps GOP)
+  30875569, // High-entropy fast texture (7.20 Mbps GOP)
+  9920799, // High-entropy shimmering texture (8.21 Mbps GOP)
+  38857411, // High-entropy texture (8.01 Mbps GOP)
+  38182932, // High-entropy texture (7.65 Mbps GOP)
+  35212859, // High-entropy texture (6.39 Mbps GOP)
+  5969139, // High-entropy texture (6.53 Mbps GOP)
+  34142319, // 60fps clip causing frame-drop motion spikes at 30fps CFR
+  13443135, // 60fps clip causing frame-drop motion spikes at 30fps CFR
+  36296502, // 50fps clip causing uneven cadence judder at 30fps CFR
+  17582441, // 60fps clip causing frame-drop motion spikes at 30fps CFR
+  15593080, // 60fps clip causing frame-drop motion spikes at 30fps CFR
+  31907443, // 60fps clip causing frame-drop motion spikes at 30fps CFR
+  35297740, // 60fps clip causing frame-drop motion spikes at 30fps CFR
+  35495654, // 50fps clip causing uneven cadence judder at 30fps CFR
+  35072872, // 60fps clip causing frame-drop motion spikes at 30fps CFR
+  39054616, // 60fps clip causing frame-drop motion spikes at 30fps CFR
 ]);
 
 export function scoreVideo(v: PexelsVideo, file: PexelsVideoFile, targetMin = 30): number {
@@ -1440,7 +1461,7 @@ export function scoreVideo(v: PexelsVideo, file: PexelsVideoFile, targetMin = 30
   ) {
     s -= 40;
   }
-  // Penalize chaotic whitewater/surf/blizzard/furniture clips that starve H.264 macroblock bits from subtitles
+  // Penalize chaotic whitewater/surf/puddle-raindrop/pebble/furniture clips that starve H.264 macroblock bits from subtitles
   if (
     meta.includes("rapids") ||
     meta.includes("whitewater") ||
@@ -1448,23 +1469,39 @@ export function scoreVideo(v: PexelsVideo, file: PexelsVideoFile, targetMin = 30
     meta.includes("rough sea") ||
     meta.includes("crashing waves") ||
     meta.includes("blizzard") ||
+    meta.includes("puddle") ||
+    meta.includes("raindrops") ||
+    meta.includes("ripples") ||
+    meta.includes("droplets") ||
+    meta.includes("splashing") ||
+    meta.includes("pebbles") ||
+    meta.includes("gravel") ||
+    meta.includes("shimmering") ||
+    meta.includes("glittering") ||
     meta.includes("chair") ||
     meta.includes("chairs") ||
     meta.includes("bench") ||
     meta.includes("furniture")
   ) {
-    s -= 45;
+    s -= 65;
   }
   // Hard-reject sub-1080p (720p/540p/SD) and landscape streams to guarantee ZERO upscaling pixelation
   if (file.width < 1080 || file.height < 1920 || file.width > file.height) {
     return -999;
   }
 
+  // Hard-reject 50fps/60fps/120fps sources in Pexels search: dropping every 2nd frame at 30fps CFR
+  // doubles inter-frame motion residuals and causes massive P/B-frame bitrate spikes on TikTok
+  const linkStr = String(file.link || "");
+  const fps = file.fps ?? (/[_-](50|60|120)fps/i.test(linkStr) ? 60 : 30);
+  if (fps >= 50 || /[_-](50|60|120)fps/i.test(linkStr)) {
+    return -999;
+  }
+
   // If file byte size & duration are present in metadata, reject heavily compressed low-bitrate web transcodes
-  const fps = file.fps ?? (String(file.link || "").includes("60fps") ? 60 : 30);
   if (file.size && file.size > 0 && (v.duration ?? 0) > 0) {
     const bps = (file.size * 8) / (v.duration || 10);
-    const minBps = fps >= 50 ? 8_000_000 : 4_500_000;
+    const minBps = 4_500_000;
     if (bps < minBps) {
       return -999;
     }
@@ -1479,8 +1516,6 @@ export function scoreVideo(v: PexelsVideo, file: PexelsVideoFile, targetMin = 30
   }
   if (fps >= 24 && fps <= 31) {
     s += 18; // Strongly prefer native 24-30fps progressive cadence (matches 30fps CFR output with zero frame-drop judder)
-  } else if (fps >= 50) {
-    s -= 12; // Penalize 50/60/120fps sources (dropping every 2nd frame at 30fps CFR doubles inter-frame motion entropy)
   } else {
     s += 4;
   }
@@ -1520,9 +1555,19 @@ export function pickBestFile(v: PexelsVideo): PexelsVideoFile | undefined {
     const bIsFullHdPlus = b.height >= 1920 && b.width >= 1080 ? 1 : 0;
     if (aIsFullHdPlus !== bIsFullHdPlus) return bIsFullHdPlus - aIsFullHdPlus;
 
-    // 3. Among Full HD+ files: prefer 2K/4K UHD masters (up to 3840px height) over heavily-compressed 1080p web transcodes!
-    // Lanczos downscaling a 12-30 Mbps 2K/4K source to 1080x1920 eliminates Pexels' 2.5 Mbps 1080p web macroblocking.
+    // 3. Among Full HD+ files: strictly prefer native 24-30fps progressive cadence over 50/60/120fps
+    // so FFmpeg's 30fps CFR master never has to drop 50% of frames (which doubles inter-frame motion entropy).
     if (aIsFullHdPlus && bIsFullHdPlus) {
+      const getFps = (f: PexelsVideoFile) =>
+        f.fps ?? (/[_-](50|60|120)fps/i.test(String(f.link || "")) ? 60 : 30);
+      const aFps = getFps(a);
+      const bFps = getFps(b);
+      const aNative30 = aFps >= 24 && aFps <= 31 ? 1 : 0;
+      const bNative30 = bFps >= 24 && bFps <= 31 ? 1 : 0;
+      if (aNative30 !== bNative30) return bNative30 - aNative30;
+
+      // Prefer 2K/4K UHD masters (up to 3840px height) over heavily-compressed 1080p web transcodes!
+      // Lanczos downscaling a 12-30 Mbps 2K/4K source to 1080x1920 eliminates Pexels' 2.5 Mbps 1080p web macroblocking.
       const resTier = (f: PexelsVideoFile) => {
         if (f.height >= 2160 && f.height <= 3840 && f.width >= 1440) return 3; // 2K / 4K UHD Master (Sweet spot)
         if (f.height >= 1920 && f.height <= 2160 && f.width >= 1080) return 2; // Native 1080p Full HD
@@ -1532,24 +1577,10 @@ export function pickBestFile(v: PexelsVideo): PexelsVideoFile | undefined {
       const bTier = resTier(b);
       if (aTier !== bTier) return bTier - aTier;
 
-      // Within the same resolution tier & height, if both streams have healthy bitrate (or unknown size),
-      // prefer native 24-30fps progressive cadence over 60fps so FFmpeg's 30fps CFR master does not drop every 2nd frame.
-      const dur = Math.max(5, v.duration || 15);
-      const aHealthy = !a.size || (a.size * 8) / dur >= 5_500_000;
-      const bHealthy = !b.size || (b.size * 8) / dur >= 5_500_000;
-      if (aHealthy && bHealthy && a.height === b.height) {
-        const aNative30 = (a.fps || 30) >= 24 && (a.fps || 30) <= 31 ? 1 : 0;
-        const bNative30 = (b.fps || 30) >= 24 && (b.fps || 30) <= 31 ? 1 : 0;
-        if (aNative30 !== bNative30) return bNative30 - aNative30;
-      }
-
       if ((a.size || 0) > 0 && (b.size || 0) > 0 && a.size !== b.size) {
         return (b.size || 0) - (a.size || 0);
       }
       if (a.height !== b.height) return b.height - a.height;
-      const aNative30Fallback = (a.fps || 30) >= 24 && (a.fps || 30) <= 31 ? 1 : 0;
-      const bNative30Fallback = (b.fps || 30) >= 24 && (b.fps || 30) <= 31 ? 1 : 0;
-      if (aNative30Fallback !== bNative30Fallback) return bNative30Fallback - aNative30Fallback;
       return (b.size || 0) - (a.size || 0);
     }
 
@@ -1603,6 +1634,9 @@ export async function isHighBitrateVideoStream(
 ): Promise<boolean> {
   if (!url || !url.includes("videos.pexels.com") || !(durationSec > 0)) {
     return true;
+  }
+  if (/[_-](50|60|120)fps/i.test(url) || fps >= 50) {
+    return false;
   }
   for (const badId of PIXELATION_PRONE_VIDEO_IDS) {
     if (url.includes(`/${badId}/`) || url.includes(`/${badId}-`)) {

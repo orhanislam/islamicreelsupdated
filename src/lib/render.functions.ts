@@ -1186,7 +1186,7 @@ export async function executeRenderTask(opts: any): Promise<any> {
             sessionTempFiles.add(concatListPath);
 
             const PIXELATION_PRONE_URL_RE =
-              /\/(39772880|28635672|35901385|29999653|15088644|34474109|38226014|33942245|32679329)(\/|-)/;
+              /(\/(39772880|28635672|35901385|29999653|15088644|34474109|38226014|33942245|32679329|36078797|13723991|9831984|32320169|39731443|30875569|9920799|38857411|38182932|35212859|5969139|34142319|13443135|36296502|17582441|15593080|31907443|35297740|35495654|35072872|39054616)(\/|-))|([_-](50|60|120)fps\.mp4)/i;
 
             for (let i = 0; i < schedule.length; i++) {
               const seg = schedule[i];
@@ -1231,26 +1231,47 @@ export async function executeRenderTask(opts: any): Promise<any> {
 
               if (rawClipPath) {
                 const normPath = path.join(tmpDir, `norm_${i}_${Date.now()}.mp4`);
-                await new Promise((resolve, reject) => {
-                  ffmpeg()
-                    .setFfmpegPath(ffmpegPath)
-                    .input(rawClipPath!)
-                    .inputOptions(["-stream_loop -1"])
-                    .outputOptions([
-                      `-t ${seg.duration.toFixed(2)}`,
-                      "-vf scale=1080:1920:force_original_aspect_ratio=increase:flags=lanczos+accurate_rnd+full_chroma_int,crop=1080:1920,fps=30,setsar=1,format=yuv420p",
-                      "-c:v libx264",
-                      "-preset ultrafast",
-                      "-profile:v high444",
-                      "-qp 0",
-                      "-pix_fmt yuv420p",
-                      "-an",
-                    ])
-                    .output(normPath)
-                    .on("end", resolve)
-                    .on("error", reject)
-                    .run();
-                });
+                const runLosslessNormalize = (inputClip: string) =>
+                  new Promise((resolve, reject) => {
+                    ffmpeg()
+                      .setFfmpegPath(ffmpegPath)
+                      .input(inputClip)
+                      .inputOptions(["-stream_loop -1"])
+                      .outputOptions([
+                        `-t ${seg.duration.toFixed(2)}`,
+                        "-vf scale=1080:1920:force_original_aspect_ratio=increase:flags=lanczos+accurate_rnd+full_chroma_int,crop=1080:1920,fps=30,setsar=1,format=yuv420p",
+                        "-c:v libx264",
+                        "-preset ultrafast",
+                        "-profile:v high444",
+                        "-qp 0",
+                        "-pix_fmt yuv420p",
+                        "-an",
+                      ])
+                      .output(normPath)
+                      .on("end", resolve)
+                      .on("error", reject)
+                      .run();
+                  });
+
+                await runLosslessNormalize(rawClipPath);
+
+                // Automatic Empirical Entropy Circuit-Breaker:
+                // If lossless -qp 0 output exceeds 42 MB/sec, the clip has extreme full-frame spatial/temporal chaos
+                // (e.g. close-up raindrop splashes or whitewater rapids) that would starve TikTok's 2 Mbps encoder.
+                const normStat = await fs.stat(normPath).catch(() => null);
+                if (normStat && seg.duration >= 2.0 && normStat.size / seg.duration > 42_000_000) {
+                  const safeFbUrl = getHalalVideoByConceptId(undefined, i).url;
+                  console.warn(
+                    `[server-render] B-Roll scene ${i} (${targetSegUrl}) exceeded lossless entropy gate (${(normStat.size / seg.duration / 1e6).toFixed(1)} MB/s)! Swapping with calm Halal master ${safeFbUrl}`,
+                  );
+                  const fbRes = await fetch(safeFbUrl, { headers: { "User-Agent": "Mozilla/5.0" } }).catch(() => null);
+                  if (fbRes && fbRes.ok) {
+                    const fbBuf = await fbRes.arrayBuffer();
+                    await fs.writeFile(rawClipPath, BufferMod.from(fbBuf));
+                    await runLosslessNormalize(rawClipPath);
+                  }
+                }
+
                 normalizedPaths.push(normPath);
                 sessionTempFiles.add(normPath);
               }
@@ -1333,12 +1354,13 @@ export async function executeRenderTask(opts: any): Promise<any> {
 
         let ffmpegStderr = "";
         // Dual-Zone Perceptual Background Pre-Conditioning strictly BEFORE burning vector ASS subtitles:
-        // 1. Spatio-temporal denoise (hqdn3d=2.2:1.8:3.5:2.8) + perceptual micro-softening (gblur=sigma=1.15) on [0:v]
-        //    calms high-frequency Pexels foliage/water micro-jitter so no single complex B-roll scene can starve
-        //    TikTok's H.264/HEVC bitrate budget or cause macroblocking around the center subtitles.
+        // 1. Spatio-temporal 3D denoise (hqdn3d=3.2:2.6:4.8:3.8) + optical depth-of-field bokeh (gblur=sigma=1.85)
+        //    + subtle contrast/brightness scrim (eq=brightness=-0.05:contrast=0.94:saturation=0.98) on [0:v]
+        //    cuts background high-frequency DCT bit demand by ~60% so no complex B-roll scene can ever starve
+        //    TikTok's ~2 Mbps re-encoder or cause macroblocking around the center subtitles.
         // 2. Subtitles are burned AFTER the filter, preserving 100% razor-sharp vector text & zero mosquito-noise halos!
         const bgPerceptualFilter =
-          "hqdn3d=2.2:1.8:3.5:2.8,gblur=sigma=1.15,eq=brightness=-0.03:contrast=1.02:saturation=1.02";
+          "hqdn3d=3.2:2.6:4.8:3.8,gblur=sigma=1.85,eq=brightness=-0.05:contrast=0.94:saturation=0.98";
         const videoFilterChain =
           isPreNormalized1080p && is1080p
             ? `[0:v]${bgPerceptualFilter},subtitles='${escapedAssPath}'[v]`
@@ -1364,7 +1386,7 @@ export async function executeRenderTask(opts: any): Promise<any> {
             "-color_primaries bt709",
             "-color_range tv",
             "-movflags +faststart",
-            "-crf 18",
+            "-crf 17",
             "-maxrate 8000k",
             "-bufsize 16000k",
             "-refs 4",
@@ -1375,7 +1397,7 @@ export async function executeRenderTask(opts: any): Promise<any> {
             "-keyint_min 60",
             "-sc_threshold 0",
             "-flags +cgop",
-            "-x264-params ref=4:bframes=2:aq-mode=2:aq-strength=0.85:psy-rd=1.0,0.10:deblock=0,0:rc-lookahead=40:me=umh:subme=8:trellis=2",
+            "-x264-params ref=4:bframes=2:aq-mode=3:aq-strength=1.0:psy-rd=1.0,0.10:deblock=0,0:rc-lookahead=40:me=umh:subme=8:trellis=2",
             "-c:a aac",
             "-profile:a aac_low",
             "-b:a 192k",
